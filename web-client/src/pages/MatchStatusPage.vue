@@ -89,9 +89,6 @@
           </div>
 
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
-            <div v-if="matchMapBackdropUrl" class="match-list-loading-screen" aria-hidden="true">
-              <img :src="matchMapBackdropUrl" alt="" />
-            </div>
             <TeamColumn
               v-for="team in viewModels.teams"
               :key="team.teamId"
@@ -290,7 +287,6 @@ import {
   compareSquadMembers,
 } from "../utils/squad-admin-adapter";
 import { 获取战斗群旗帜, getFactionFromTeamId, getFlagUrl } from "../shared/faction-assets/faction-data";
-import { resolveTacticalMapKey, TACTICAL_MAP_CONFIGS } from "../shared/tactical-map-data";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
@@ -494,36 +490,7 @@ const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.upda
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
-const matchMapBackdropUrl = computed(() => {
-  const serverStatus = matchSnapshot.value?.serverStatus ?? {};
-  const fields = serverStatus.fields ?? {};
-  const stableServer = server.snapshot ?? {};
-  const webStatus = stableServer.webStatus ?? {};
 
-  const candidates = [
-    serverStatus.layerName,
-    serverStatus.layer,
-    serverStatus.mapName,
-    serverStatus.map,
-    fields.NextLayer_s,
-    fields.MapName_s,
-    stableServer.currentLayer,
-    stableServer.layer,
-    stableServer.mapName,
-    stableServer.map,
-    webStatus.currentLayer,
-    webStatus.layerName,
-    webStatus.mapName,
-    webStatus.map,
-  ];
-
-  for (const candidate of candidates) {
-    const mapKey = resolveTacticalMapKey(String(candidate ?? ""));
-    const image = mapKey ? TACTICAL_MAP_CONFIGS[mapKey]?.image : null;
-    if (image) return image;
-  }
-  return "";
-});
 
 const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
@@ -3298,66 +3265,5 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 
-/* Use the map loading screen as a visible, low-contrast backdrop for the team list. */
-.squad-main-content {
-  position: relative !important;
-  isolation: isolate;
-  overflow: hidden;
-  background: var(--color-bg-page);
-}
-
-.match-list-loading-screen {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: .24;
-  mix-blend-mode: screen;
-}
-
-.match-list-loading-screen::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--color-bg-page) 24%, transparent) 0%,
-      transparent 42%,
-      color-mix(in srgb, var(--color-bg-page) 20%, transparent) 100%
-    ),
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-bg-page) 34%, transparent),
-      transparent 34%,
-      color-mix(in srgb, var(--color-bg-page) 28%, transparent)
-    );
-}
-
-.match-list-loading-screen img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  object-position: center 44%;
-  filter: blur(.7px) saturate(1.08) contrast(1.04) brightness(1.08);
-  transform: scale(1.035);
-}
-
-.squad-main-content > :not(.match-list-loading-screen) {
-  position: relative;
-  z-index: 1;
-}
-
-@media (max-width: 720px) {
-  .match-list-loading-screen {
-    opacity: .18;
-  }
-
-  .match-list-loading-screen img {
-    object-position: center;
-  }
-}
 
 </style>
