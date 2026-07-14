@@ -48,9 +48,7 @@
           </button>
           <span class="match-chip">{{ matchTpsLabel }}</span>
           <span class="topbar-sys-divider"></span>
-          <span class="match-chip sys-metric" :title="`Uptime: ${sysUptimeLabel}`">↑ {{ sysUptimeLabel }}</span>
           <span class="match-chip sys-metric" :title="`Memory RSS: ${sysMemLabel}`">{{ sysMemLabel }}</span>
-          <span class="match-chip sys-metric" :title="`Net ▼${sysNetInLabel} ▲${sysNetOutLabel}`">▼{{ sysNetInLabel }} ▲{{ sysNetOutLabel }}</span>
         </div>
       </div>
 
@@ -68,7 +66,6 @@
           @open-plugin-center="emit('open-plugin-center')"
           @open-rcon-modal="emit('open-rcon-modal')"
         />
-        <span class="metric updated-metric">{{ matchUpdatedLabel }}</span>
       </div>
     </div>
     <MobileBottomSheet
@@ -87,7 +84,6 @@
         <div class="mobile-status-item"><span class="mobile-status-label">Memory</span><strong>{{ sysMemLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Network In</span><strong>{{ sysNetInLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Network Out</span><strong>{{ sysNetOutLabel }}</strong></div>
-        <div class="mobile-status-item"><span class="mobile-status-label">Updated</span><strong>{{ matchUpdatedLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Queue</span><strong>{{ matchQueueLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Time</span><strong>{{ matchTimeLabel }}</strong></div>
       </div>
@@ -253,7 +249,7 @@ const matchRconStatus = computed(() => String(
 const matchLogsStatus = computed(() => (runtime.lastError ? "stale" : "live"));
 const rconHealthTone = computed(() => statusTone(matchRconStatus.value) === "ok" ? "ok" : "error");
 const logHealthTone = computed(() => statusTone(matchLogsStatus.value) === "ok" ? "ok" : "error");
-const mergedClockLabel = computed(() => `RCON ${formatMatchTime(matchMatchTimeSeconds.value)} / Log ${logClockLabel.value}`);
+const mergedClockLabel = computed(() => `R ${formatMatchTime(matchMatchTimeSeconds.value)} / L ${logClockLabel.value}`);
 const matchUpdatedAt = computed(() => Math.max(
   server.updatedAt,
   players.updatedAt,
@@ -1033,4 +1029,90 @@ function toggleSidebar() {
     border-radius: 10px;
   }
 }
+
+
+/* The primary top navigation stays one row; narrow widths clip/condense instead of stacking. */
+.topbar {
+  box-sizing: border-box !important;
+  height: calc(54px + var(--safe-top)) !important;
+  min-height: calc(54px + var(--safe-top)) !important;
+  max-height: calc(54px + var(--safe-top)) !important;
+  overflow: hidden !important;
+  padding: calc(5px + var(--safe-top)) 10px 5px !important;
+}
+
+.topbar-grid {
+  height: 100% !important;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(210px, 1.55fr) auto !important;
+  grid-template-areas: none !important;
+  gap: 7px !important;
+  overflow: hidden !important;
+}
+
+.topbar-brand,
+.topbar-center,
+.topbar-actions {
+  min-width: 0 !important;
+  grid-area: auto !important;
+}
+
+.topbar-brand {
+  gap: 7px !important;
+  overflow: hidden !important;
+}
+
+.topbar-center {
+  overflow: hidden !important;
+}
+
+.match-summary {
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+  gap: 4px !important;
+  white-space: nowrap !important;
+}
+
+.match-chip {
+  min-height: 20px !important;
+  padding-inline: 6px !important;
+}
+
+.topbar-actions {
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+
+.updated-metric {
+  display: none !important;
+}
+
+@media (max-width: 1180px) {
+  .topbar-grid {
+    grid-template-columns: minmax(130px, 0.85fr) minmax(190px, 1.45fr) auto !important;
+    grid-template-areas: none !important;
+  }
+}
+
+@media (max-width: 780px) {
+  .topbar {
+    padding-inline: 6px !important;
+  }
+
+  .topbar-grid {
+    grid-template-columns: minmax(112px, 0.8fr) minmax(170px, 1.35fr) auto !important;
+    grid-template-areas: none !important;
+    gap: 4px !important;
+  }
+
+  .match-summary {
+    gap: 3px !important;
+  }
+
+  .match-summary > :nth-child(n + 4) {
+    display: none !important;
+  }
+}
+
 </style>
