@@ -2558,7 +2558,7 @@ function onWheel(e: WheelEvent) {
   const factor = 1.15;
   let nextZoom = camera.zoom.value;
   if (e.deltaY < 0) {
-    nextZoom = Math.min(32, camera.zoom.value * factor);
+    nextZoom = Math.min(64, camera.zoom.value * factor);
   } else {
     nextZoom = Math.max(0.35, camera.zoom.value / factor);
   }
@@ -2568,11 +2568,11 @@ function onWheel(e: WheelEvent) {
 
 function zoomIn() {
   if (!containerRef.value) {
-    camera.setZoom(Math.min(32, camera.zoom.value * 1.25), 0, 0);
+    camera.setZoom(Math.min(64, camera.zoom.value * 1.25), 0, 0);
     return;
   }
   const rect = containerRef.value.getBoundingClientRect();
-  camera.setZoom(Math.min(32, camera.zoom.value * 1.25), rect.width / 2, rect.height / 2);
+  camera.setZoom(Math.min(64, camera.zoom.value * 1.25), rect.width / 2, rect.height / 2);
 }
 function zoomOut() {
   if (!containerRef.value) {
@@ -2624,7 +2624,7 @@ function toggleSquadFocus(squadId: number) {
 
 function panToMapPercent(mapX: number, mapY: number, targetZoom?: number) {
   const zoomTarget = targetZoom ?? camera.zoom.value;
-  const clampedZoom = Math.max(0.35, Math.min(32, zoomTarget));
+  const clampedZoom = Math.max(0.35, Math.min(64, zoomTarget));
   if (!containerRef.value) return;
   const mapSize = 1000;
   const viewWidth = containerRef.value.clientWidth;
