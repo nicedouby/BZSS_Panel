@@ -960,4 +960,174 @@ function displayRole(role: string | null | undefined) {
   opacity: .16 !important;
 }
 
+
+
+/* Final presentation pass: clearer identity / status / score hierarchy. */
+.squad-player-row.player-row {
+  grid-template-columns: 46px minmax(0, 1fr) !important;
+  min-height: 72px !important;
+  padding: 8px 11px 8px 9px !important;
+  gap: 10px !important;
+  border-radius: 13px !important;
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 11%, transparent),
+      transparent 38%
+    ),
+    var(--color-bg-card, var(--color-bg-panel)) !important;
+}
+
+.squad-player-row.player-row::before {
+  background:
+    radial-gradient(
+      circle at 0% 50%,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 18%, transparent),
+      transparent 52%
+    ) !important;
+  opacity: .9 !important;
+}
+
+.squad-player-row.player-row::after {
+  width: 48% !important;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-text-primary) 5%, transparent)
+  ) !important;
+  opacity: .7 !important;
+}
+
+.squad-player-row .player-avatar {
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 13px !important;
+}
+
+.squad-player-row .player-main {
+  gap: 4px !important;
+  align-content: center !important;
+}
+
+.squad-player-row .player-title-line {
+  gap: 6px !important;
+  min-height: 18px !important;
+}
+
+.squad-player-row .player-name {
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
+}
+
+.squad-player-row .player-sub-line {
+  font-size: 9px !important;
+  letter-spacing: .02em !important;
+  opacity: .72 !important;
+}
+
+.squad-player-row .role-chip,
+.squad-player-row .playtime-chip,
+.squad-player-row .bzss-core-ft-badge {
+  min-height: 17px !important;
+  padding-inline: 7px !important;
+  border-radius: 6px !important;
+  font-size: 9px !important;
+  line-height: 17px !important;
+}
+
+.squad-player-row .scoreboard-line {
+  gap: 5px !important;
+  overflow: visible !important;
+}
+
+.squad-player-row .scoreboard-chip {
+  position: relative;
+  min-height: 19px !important;
+  padding: 2px 6px !important;
+  gap: 4px !important;
+  border-radius: 6px !important;
+  background: color-mix(in srgb, var(--color-bg-elevated) 78%, transparent) !important;
+  transition: transform .15s ease, border-color .15s ease, background-color .15s ease !important;
+}
+
+.squad-player-row .scoreboard-chip:hover {
+  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 12%, var(--color-bg-elevated)) !important;
+}
+
+.squad-player-row .scoreboard-chip .label {
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+  letter-spacing: .06em !important;
+}
+
+.squad-player-row .scoreboard-chip .value {
+  font-size: 10px !important;
+  font-weight: 850 !important;
+}
+
+.squad-player-row .scoreboard-chip.kills {
+  border-color: color-mix(in srgb, var(--color-status-online) 38%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.deaths {
+  border-color: color-mix(in srgb, var(--color-status-error) 38%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.woundeds {
+  border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.tk {
+  border-color: color-mix(in srgb, var(--color-status-error) 46%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.revived {
+  border-color: color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 40%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .player-steam-bg {
+  width: 110px !important;
+  opacity: .18 !important;
+  -webkit-mask-image: linear-gradient(110deg, transparent 0%, rgba(0,0,0,.08) 28%, rgba(0,0,0,.85) 100%) !important;
+  mask-image: linear-gradient(110deg, transparent 0%, rgba(0,0,0,.08) 28%, rgba(0,0,0,.85) 100%) !important;
+}
+
+.squad-player-row .player-steam-bg-img {
+  filter: saturate(.65) contrast(.92) brightness(.9) !important;
+}
+
+.squad-player-row:hover .player-steam-bg {
+  width: 124px !important;
+  opacity: .32 !important;
+}
+
+.squad-player-row:hover .player-steam-bg-img {
+  filter: saturate(.85) contrast(1) brightness(1) !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    grid-template-columns: 40px minmax(0, 1fr) !important;
+    min-height: 66px !important;
+    padding: 7px 8px !important;
+    gap: 8px !important;
+  }
+
+  .squad-player-row .player-avatar {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .squad-player-row .scoreboard-line {
+    gap: 3px !important;
+  }
+
+  .squad-player-row .scoreboard-chip {
+    padding-inline: 5px !important;
+  }
+}
+
 </style>
