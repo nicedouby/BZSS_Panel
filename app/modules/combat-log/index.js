@@ -145,13 +145,34 @@ export function createCombatLogModule({ core, modules, config, logger }) {
   }
 
   function buildEventKey(record, event) {
-    return String(
-      record?.sourceEventId
-      ?? record?.eventId
-      ?? record?.id
-      ?? event?.eventId
-      ?? `${record?.serverId ?? event?.serverId ?? ""}:${record?.time ?? event?.time ?? Date.now()}:${Math.random().toString(16).slice(2)}`,
-    ).trim();
+    // CombatState emits the raw record first, then CombatClean emits the
+    // enriched record. The clean record carries the original identifier under
+    // raw.sourceEventId, so both layers must resolve to the same key.
+    const explicitKey = [
+      record?.sourceEventId,
+      record?.raw?.sourceEventId,
+      record?.eventId,
+      event?.sourceEventId,
+      event?.eventId,
+      event?.record?.sourceEventId,
+      event?.record?.raw?.sourceEventId,
+    ].find((value) => String(value ?? "").trim());
+    if (explicitKey) return String(explicitKey).trim();
+
+    // Older parser events may have no id. rawLog is still stable across the
+    // raw and cleaned representations and is safer than a random key.
+    const serverId = record?.serverId ?? event?.serverId ?? "";
+    const time = record?.time ?? event?.time ?? "";
+    const rawLog = record?.rawLog ?? record?.raw?.rawLog ?? event?.rawLog ?? "";
+    if (String(rawLog).trim()) {
+      return `raw:${serverId}:${time}:${rawLog}`.trim();
+    }
+
+    const type = record?.type ?? record?.eventType ?? "";
+    const victim = record?.victimName ?? record?.victim?.name ?? record?.victim?.displayName ?? "";
+    const damage = record?.damage ?? "";
+    const weapon = record?.weaponName ?? record?.weapon?.displayName ?? record?.weapon ?? record?.causedBy ?? "";
+    return `fallback:${serverId}:${time}:${type}:${victim}:${damage}:${weapon}`.trim();
   }
 
   function sanitizeLineValue(value) {
