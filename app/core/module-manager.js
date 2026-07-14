@@ -43,7 +43,6 @@ import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
-import { createTacticalMapReplayModule } from "../modules/tactical-map-replay/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
@@ -108,7 +107,6 @@ export class ModuleManager {
       createBzssCoreMonitorModule,
       createTacticalStateModule,
       createTacticalStateV2Module,
-      createTacticalMapReplayModule,
       createNetworkStatsModule,
     ];
 
