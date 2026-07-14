@@ -191,13 +191,11 @@ const secondaryIdentityText = computed(() => {
     if (normalized && normalized !== displayName.value) return normalized;
   }
 
-  const steamId = String(props.player.steamId ?? "").trim();
-  if (steamId) return steamId;
-
+  // Do not expose the player's Steam64 identifier in the compact list.
   return "";
 });
 
-const scoreboardItems = computed(() => buildCombatScoreboardItems(props.combatStats));
+const scoreboardItems = computed(() => buildCombatScoreboardItems(props.combatStats, true, bzssCorePing.value));
 const normalizedHealth = computed(() => {
   if (props.health == null || !Number.isFinite(Number(props.health))) return null;
   return Math.max(0, Math.min(100, Number(props.health)));
@@ -1123,6 +1121,101 @@ function displayRole(role: string | null | undefined) {
 
   .squad-player-row .scoreboard-line {
     gap: 3px !important;
+  }
+
+  .squad-player-row .scoreboard-chip {
+    padding-inline: 5px !important;
+  }
+}
+
+
+
+/* Match-performance view: remove the left glow and emphasize the right Steam avatar. */
+.squad-player-row.player-row::before {
+  display: none !important;
+  background: none !important;
+  opacity: 0 !important;
+}
+
+.squad-player-row.player-row::after {
+  background: linear-gradient(
+    90deg,
+    transparent 48%,
+    color-mix(in srgb, var(--color-text-primary) 5%, transparent)
+  ) !important;
+  opacity: .45 !important;
+}
+
+.squad-player-row .player-steam-bg {
+  width: 148px !important;
+  opacity: .42 !important;
+  -webkit-mask-image: linear-gradient(108deg, transparent 0%, rgba(0,0,0,.22) 26%, rgba(0,0,0,.92) 78%, #000 100%) !important;
+  mask-image: linear-gradient(108deg, transparent 0%, rgba(0,0,0,.22) 26%, rgba(0,0,0,.92) 78%, #000 100%) !important;
+}
+
+.squad-player-row .player-steam-bg-img {
+  filter: saturate(.9) contrast(1.02) brightness(.98) !important;
+}
+
+.squad-player-row:hover .player-steam-bg {
+  width: 164px !important;
+  opacity: .58 !important;
+}
+
+.squad-player-row:hover .player-steam-bg-img {
+  filter: saturate(1.08) contrast(1.04) brightness(1.04) !important;
+}
+
+.squad-player-row.player-row {
+  min-height: 84px !important;
+  padding-block: 9px !important;
+}
+
+.squad-player-row .player-main {
+  gap: 4px !important;
+}
+
+.squad-player-row .scoreboard-line {
+  flex-wrap: wrap !important;
+  row-gap: 4px !important;
+  column-gap: 5px !important;
+  max-height: 39px;
+  overflow: hidden !important;
+  padding-right: 6px;
+}
+
+.squad-player-row .scoreboard-chip {
+  min-height: 18px !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+}
+
+.squad-player-row .scoreboard-chip .label {
+  font-size: 8px !important;
+}
+
+.squad-player-row .scoreboard-chip .value {
+  font-size: 10px !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    min-height: 78px !important;
+    padding-block: 7px !important;
+  }
+
+  .squad-player-row .player-steam-bg {
+    width: 116px !important;
+    opacity: .34 !important;
+  }
+
+  .squad-player-row:hover .player-steam-bg {
+    width: 128px !important;
+    opacity: .48 !important;
+  }
+
+  .squad-player-row .scoreboard-line {
+    column-gap: 3px !important;
   }
 
   .squad-player-row .scoreboard-chip {
