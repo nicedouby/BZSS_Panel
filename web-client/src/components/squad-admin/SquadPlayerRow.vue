@@ -1393,4 +1393,44 @@ function displayRole(role: string | null | undefined) {
     0 -2px 6px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 30%, transparent) inset !important;
 }
 
+
+/* Enlarged role avatar: nearly fills the player tile while staying square. */
+.squad-player-row.player-row {
+  grid-template-columns: 66px minmax(0, 1fr) !important;
+}
+
+.squad-player-row .player-avatar {
+  width: 62px !important;
+  height: 62px !important;
+  border-radius: 2px !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 58%, transparent),
+    0 0 10px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 34%, transparent),
+    0 0 22px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 12%, transparent) !important;
+}
+
+.squad-player-row .player-avatar-image {
+  filter:
+    drop-shadow(0 0 4px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 72%, transparent))
+    drop-shadow(0 0 9px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 34%, transparent)) !important;
+}
+
+.squad-player-row .player-avatar-text {
+  text-shadow:
+    0 0 5px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 78%, transparent),
+    0 0 12px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 38%, transparent) !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    grid-template-columns: 62px minmax(0, 1fr) !important;
+  }
+
+  .squad-player-row .player-avatar {
+    width: 58px !important;
+    height: 58px !important;
+  }
+}
+
 </style>
