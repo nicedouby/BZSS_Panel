@@ -1223,4 +1223,22 @@ function displayRole(role: string | null | undefined) {
   }
 }
 
+
+
+/* Player role avatar stays square across desktop and mobile. */
+.squad-player-row .player-avatar {
+  border-radius: 2px !important;
+}
+
+.squad-player-row .player-avatar::after,
+.squad-player-row .player-avatar .health-liquid {
+  border-radius: 0 !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row .player-avatar {
+    border-radius: 2px !important;
+  }
+}
+
 </style>
