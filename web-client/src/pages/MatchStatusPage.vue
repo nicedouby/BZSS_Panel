@@ -286,7 +286,7 @@ import {
   filterTeamsBySearch,
   compareSquadMembers,
 } from "../utils/squad-admin-adapter";
-import { 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
+import { 获取战斗群旗帜, getFactionFromTeamId } from "../shared/faction-assets/faction-data";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
@@ -680,9 +680,22 @@ const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
 const viewerAutoSwapEnabled = computed(() => auth.user?.viewerTeamAutoSwapEnabled !== false);
 
 const rawTeams = computed(() => {
+  const serverFields = matchSnapshot.value?.serverStatus?.fields ?? {};
+  const teamFactionIds = {
+    1: serverFields.TeamOne_s,
+    2: serverFields.TeamTwo_s,
+  } as Record<number, string | undefined>;
+
   return match.teams.map((team) => {
     const ticketCount = team.teamID === 1 ? remoteTicketCounts.value.team1 : remoteTicketCounts.value.team2;
-    return adaptTeam(team, {}, squadLifecycleLookup.value, {}, ticketCount);
+    const adaptedTeam = adaptTeam(team, {}, squadLifecycleLookup.value, {}, ticketCount);
+    const factionCode = getFactionFromTeamId(teamFactionIds[team.teamID]);
+
+    return {
+      ...adaptedTeam,
+      // ShowServerInfo is authoritative; adaptTeam remains the fallback for older snapshots.
+      factionCode: factionCode ?? adaptedTeam.factionCode,
+    };
   });
 });
 
