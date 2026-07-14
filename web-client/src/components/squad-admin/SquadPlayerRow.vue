@@ -740,4 +740,171 @@ function displayRole(role: string | null | undefined) {
   }
 }
 
+
+
+/* Balanced density + theme-safe surfaces. */
+.squad-player-row.player-row {
+  grid-template-columns: 44px minmax(0, 1fr) !important;
+  gap: 9px !important;
+  min-height: 64px !important;
+  padding: 7px 10px 7px 8px !important;
+  border: 1px solid var(--color-border-default) !important;
+  border-left: 3px solid var(--player-accent, var(--color-brand-primary)) !important;
+  border-radius: 11px !important;
+  background:
+    linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 10%, transparent),
+      transparent 42%
+    ),
+    var(--color-bg-card, var(--color-bg-panel)) !important;
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--color-bg-page) 28%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 7%, transparent) !important;
+}
+
+.squad-player-row.player-row:hover {
+  background:
+    linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 16%, transparent),
+      transparent 48%
+    ),
+    var(--color-bg-elevated, var(--color-bg-card)) !important;
+  border-color: color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 52%, var(--color-border-default)) !important;
+  box-shadow:
+    0 7px 18px color-mix(in srgb, var(--color-bg-page) 34%, transparent),
+    0 0 14px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 10%, transparent) !important;
+}
+
+.squad-player-row.player-row.selected {
+  border-color: color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 68%, var(--color-border-default)) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 24%, transparent),
+    0 7px 18px color-mix(in srgb, var(--color-bg-page) 30%, transparent) !important;
+}
+
+.squad-player-row .player-avatar {
+  width: 40px !important;
+  height: 40px !important;
+  border: 1px solid color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 52%, var(--color-border-default)) !important;
+  border-radius: 12px !important;
+  background: var(--color-bg-page, var(--color-bg-panel)) !important;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-bg-page) 55%, transparent),
+    0 0 12px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 12%, transparent) !important;
+}
+
+.squad-player-row .player-main {
+  gap: 3px !important;
+}
+
+.squad-player-row .player-title-line {
+  gap: 5px !important;
+  min-height: 17px !important;
+}
+
+.squad-player-row .player-name {
+  color: var(--color-text-primary) !important;
+  font-size: 12px !important;
+  text-shadow: none !important;
+}
+
+.squad-player-row .player-sub-line {
+  display: block !important;
+  color: var(--color-text-muted) !important;
+  font-size: 9px !important;
+  opacity: .82;
+}
+
+.squad-player-row .role-chip,
+.squad-player-row .playtime-chip,
+.squad-player-row .bzss-core-ft-badge {
+  min-height: 16px !important;
+  padding-inline: 6px !important;
+  color: var(--color-text-secondary) !important;
+  border-color: var(--color-border-soft) !important;
+  background: color-mix(in srgb, var(--color-bg-elevated) 72%, transparent) !important;
+  font-size: 8px !important;
+  line-height: 16px !important;
+}
+
+.squad-player-row .role-chip.leader {
+  color: var(--color-status-warning, var(--color-text-primary)) !important;
+  border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-default)) !important;
+  background: color-mix(in srgb, var(--color-status-warning) 12%, transparent) !important;
+  box-shadow: none !important;
+}
+
+.squad-player-row .scoreboard-line {
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+}
+
+.squad-player-row .scoreboard-chip {
+  min-height: 16px !important;
+  padding: 1px 5px !important;
+  gap: 3px !important;
+  border-color: var(--color-border-soft) !important;
+  border-radius: 5px !important;
+  background: color-mix(in srgb, var(--color-bg-elevated) 70%, transparent) !important;
+}
+
+.squad-player-row .scoreboard-chip .label {
+  color: var(--color-text-muted) !important;
+  font-size: 8px !important;
+}
+
+.squad-player-row .scoreboard-chip .value {
+  color: var(--color-text-primary) !important;
+  font-size: 10px !important;
+}
+
+.squad-player-row .scoreboard-chip.kills,
+.squad-player-row .scoreboard-chip.deaths {
+  border-color: color-mix(in srgb, var(--color-status-error) 32%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.kills .value,
+.squad-player-row .scoreboard-chip.deaths .value {
+  color: var(--color-status-error, var(--color-text-primary)) !important;
+}
+
+.squad-player-row .scoreboard-chip.woundeds,
+.squad-player-row .scoreboard-chip.revived {
+  border-color: color-mix(in srgb, var(--color-status-online) 30%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.woundeds .value,
+.squad-player-row .scoreboard-chip.revived .value {
+  color: var(--color-status-online, var(--color-text-primary)) !important;
+}
+
+.squad-player-row .scoreboard-chip.tk {
+  border-color: color-mix(in srgb, var(--color-status-warning) 34%, var(--color-border-soft)) !important;
+}
+
+.squad-player-row .scoreboard-chip.tk .value {
+  color: var(--color-status-warning, var(--color-text-primary)) !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    grid-template-columns: 40px minmax(0, 1fr) !important;
+    min-height: 60px !important;
+    padding: 6px 8px !important;
+  }
+
+  .squad-player-row .player-avatar {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .squad-player-row .player-sub-line {
+    font-size: 8px !important;
+  }
+}
+
 </style>
