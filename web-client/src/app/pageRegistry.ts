@@ -403,17 +403,6 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
-    name: "tactical-map-replay",
-    path: "/analytics/tactical-map-replay",
-    component: () => import("../pages/TacticalMapReplayPage.vue"),
-    title: "战术地图回放",
-    category: "plugin",
-    refreshPolicy: "manual",
-    nav: { section: "analytics", label: "战术地图回放", icon: "⏪", order: 15 },
-    requiredPermission: "tactical_map_replay.view",
-    ...workspacePage,
-  },
-  {
     name: "match-snapshots",
     path: "/debug/match-snapshots",
     component: () => import("../pages/MatchSnapshotDebugPage.vue"),
