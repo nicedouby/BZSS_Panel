@@ -486,4 +486,30 @@ function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: M
   font-size: 10px;
   border-left: 2px solid rgba(245, 158, 11, 0.6);
 }
+
+/* Keep only the hierarchy lines; do not place an opaque layer over the Loading Screen. */
+.squad-card {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.squad-card:hover,
+.squad-card.selected {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.squad-header,
+.squad-header:hover {
+  background: color-mix(in srgb, var(--color-bg-panel) 14%, transparent) !important;
+}
+
+.squad-card.team1-context {
+  --player-accent: var(--color-team1-primary, #37c8ff);
+}
+
+.squad-card.team2-context {
+  --player-accent: var(--color-team2-primary, #ff9b45);
+}
+
 </style>
