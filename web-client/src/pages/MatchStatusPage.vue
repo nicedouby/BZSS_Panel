@@ -502,15 +502,31 @@ const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? sna
 const matchLoadingScreenUrl = computed(() => {
   const serverStatus = matchSnapshot.value?.serverStatus ?? {};
   const fields = serverStatus.fields ?? {};
-  return resolveLoadingScreenUrl(
-    serverStatus.layerName
-      ?? serverStatus.layer
-      ?? serverStatus.mapName
-      ?? serverStatus.map
-      ?? fields.NextLayer_s
-      ?? fields.MapName_s
-      ?? "",
-  );
+  const stableServer = server.snapshot ?? {};
+  const webStatus = stableServer.webStatus ?? {};
+
+  const candidates = [
+    serverStatus.layerName,
+    serverStatus.layer,
+    serverStatus.mapName,
+    serverStatus.map,
+    fields.NextLayer_s,
+    fields.MapName_s,
+    stableServer.currentLayer,
+    stableServer.layer,
+    stableServer.mapName,
+    stableServer.map,
+    webStatus.currentLayer,
+    webStatus.layerName,
+    webStatus.mapName,
+    webStatus.map,
+  ];
+
+  for (const candidate of candidates) {
+    const url = resolveLoadingScreenUrl(candidate);
+    if (url) return url;
+  }
+  return "";
 });
 
 const remoteTelemetryQuery = useQuery({
@@ -3297,10 +3313,11 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .match-list-loading-screen {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 2;
   overflow: hidden;
   pointer-events: none;
-  opacity: .62;
+  opacity: .24;
+  mix-blend-mode: screen;
 }
 
 .match-list-loading-screen::after {
@@ -3328,7 +3345,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   display: block;
   object-fit: cover;
   object-position: center 44%;
-  filter: blur(1px) saturate(.92) contrast(.98);
+  filter: blur(.7px) saturate(1.08) contrast(1.04) brightness(1.08);
   transform: scale(1.035);
 }
 
@@ -3339,7 +3356,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 @media (max-width: 720px) {
   .match-list-loading-screen {
-    opacity: .48;
+    opacity: .18;
   }
 
   .match-list-loading-screen img {
