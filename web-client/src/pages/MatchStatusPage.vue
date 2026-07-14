@@ -527,7 +527,7 @@ watch(matchLoadingScreenUrl, () => {
 function resolveMatchLoadingScreenUrl(mapOrLayer: string) {
   const mapKey = String(mapOrLayer ?? "")
     .trim()
-    .split(/[\\s_\\-/]+/)[0]
+    .split(/[\\s_/-]+/)[0]
     .replace(/[^a-zA-Z0-9]/g, "");
   return mapKey ? `/MapScene/LoadingScreen_${mapKey}_DQHD.PNG` : "";
 }
