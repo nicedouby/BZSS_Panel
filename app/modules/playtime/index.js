@@ -833,7 +833,14 @@ class SteamGameDurationService {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        if (this.usePythonScript) {
+        const effectiveProxy = this.proxyUrl
+          || process.env.HTTPS_PROXY
+          || process.env.https_proxy
+          || process.env.ALL_PROXY
+          || process.env.all_proxy
+          || "";
+        const pythonSupportsProxy = !/^socks[45]?:/i.test(String(effectiveProxy).trim());
+        if (this.usePythonScript && pythonSupportsProxy) {
           try {
             return await this._fetchSteamDurationViaPython(steamID);
           } catch (error) {
