@@ -125,7 +125,7 @@ const isComfortable = computed(() => props.densityMode !== "compact");
 
 const factionFlagUrl = computed(() => {
   // factionCode comes from ShowServerInfo; keep team name as a legacy fallback.
-  return getFlagUrl(props.team.factionCode) ?? 获取战斗群旗帜(props.team.teamName);
+  return getFlagUrl(props.team.factionCode ?? "") ?? 获取战斗群旗帜(props.team.teamName);
 });
 const unitIconUrl = computed(() => {
   return getUnitIconUrlByTeamName(props.team.teamName);
