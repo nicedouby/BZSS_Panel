@@ -769,5 +769,137 @@ const teamAveragePingText = computed(() => {
     opacity: .14;
   }
 }
+
+/* ─── 高密度布局：最大化玩家列表可用空间 ─────────────────────────────────── */
+.team-column {
+  gap: 4px !important;
+  padding: 4px !important;
+  border-radius: 9px !important;
+  box-shadow: none !important;
+}
+
+.team-column-header {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 5px 7px !important;
+  border-radius: 7px !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05) !important;
+}
+
+.team-column-main {
+  gap: 4px !important;
+}
+
+.team-header-top-row {
+  min-height: 20px !important;
+  height: 20px !important;
+  gap: 5px !important;
+}
+
+.team-title-line {
+  gap: 4px !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+}
+
+.team-id-badge {
+  height: 16px !important;
+  padding: 0 5px !important;
+  border-radius: 4px !important;
+  font-size: 8px !important;
+}
+
+.team-name {
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+}
+
+.unit-icon {
+  width: 19px !important;
+  height: 19px !important;
+  padding: 2px !important;
+  border-radius: 5px !important;
+}
+
+/* 旗帜只保留为极窄的阵营识别背景 */
+.team-header-flag-bg {
+  width: 58px !important;
+  opacity: .12 !important;
+  mask-image: linear-gradient(90deg, transparent, #000) !important;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000) !important;
+}
+
+.team-secondary-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 3px !important;
+}
+
+.team-stat-chip {
+  height: 21px !important;
+  min-height: 21px !important;
+  padding: 0 4px !important;
+  border-radius: 5px !important;
+  column-gap: 3px !important;
+  box-shadow: none !important;
+}
+
+.team-stat-chip .chip-icon {
+  width: 8px !important;
+  height: 8px !important;
+}
+
+.team-stat-chip .tsc-label {
+  font-size: 6px !important;
+  line-height: 1 !important;
+}
+
+.team-stat-chip .tsc-value {
+  font-size: 8px !important;
+  line-height: 1 !important;
+  font-weight: 800 !important;
+}
+
+/* 让下方小队列表从紧凑头部中获得空间 */
+.team-column .squad-list {
+  gap: 4px !important;
+  padding-right: 1px !important;
+}
+
+.team-column.compact .team-column-header {
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 4px 6px !important;
+}
+
+@media (max-width: 720px) {
+  .team-column {
+    gap: 3px !important;
+    padding: 3px !important;
+  }
+
+  .team-column-header {
+    padding: 4px 6px !important;
+  }
+
+  .team-header-top-row {
+    height: 18px !important;
+    min-height: 18px !important;
+  }
+
+  .team-secondary-stats {
+    gap: 2px !important;
+  }
+
+  .team-stat-chip {
+    height: 19px !important;
+    min-height: 19px !important;
+    padding-inline: 3px !important;
+  }
+
+  .team-stat-chip .chip-icon {
+    display: none;
+  }
+}
 </style>
 
