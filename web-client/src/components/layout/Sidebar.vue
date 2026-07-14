@@ -4,7 +4,6 @@
     <div class="brand">
       <div class="brand-title">
         <strong>BZSS</strong>
-        <span>Vue {{ t("common.panel") }}</span>
       </div>
       <button
         type="button"
@@ -126,11 +125,7 @@ watch(
 );
 
 function handleSectionClick(key: NavSectionKey) {
-  if (ui.sidebarCollapsed && !isNavDrawer.value) {
-    ui.setSidebarCollapsed(false);
-    expandedSectionKey.value = key;
-    return;
-  }
+  // In collapsed desktop mode, keep the rail compact and expand the category in-place.
   expandedSectionKey.value = expandedSectionKey.value === key ? "" : key;
 }
 
@@ -663,5 +658,80 @@ nav::-webkit-scrollbar-thumb {
   }
 }
 
+
+
+
+/* Collapsed rail: category icons remain interactive and reveal compact page labels below. */
+.sidebar.collapsed .brand {
+  padding: 14px 8px !important;
+  gap: 8px !important;
+}
+
+.sidebar.collapsed .brand-title {
+  display: block !important;
+}
+
+.sidebar.collapsed .brand strong {
+  margin: 0 auto !important;
+}
+
+.sidebar.collapsed .section-children-wrap {
+  display: block !important;
+}
+
+.sidebar.collapsed .section-children {
+  display: grid !important;
+  gap: 2px !important;
+  margin: 0 2px 2px !important;
+  padding: 3px 0 3px !important;
+  border-left: 0 !important;
+}
+
+.sidebar.collapsed .child-link {
+  height: auto !important;
+  min-height: 38px !important;
+  padding: 3px 2px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  border-radius: 7px !important;
+  text-align: center !important;
+}
+
+.sidebar.collapsed .child-icon {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 5px !important;
+  font-size: 10px !important;
+}
+
+.sidebar.collapsed .child-label {
+  display: block !important;
+  width: 100% !important;
+  font-size: 9px !important;
+  font-weight: 600 !important;
+  line-height: 1.1 !important;
+  text-align: center !important;
+}
+
+@media (max-width: 1100px) {
+  .sidebar.collapsed .section-children {
+    display: grid !important;
+  }
+
+  .sidebar.collapsed .child-link {
+    flex-direction: row !important;
+    min-height: 32px !important;
+    padding: 0 10px !important;
+    text-align: left !important;
+  }
+
+  .sidebar.collapsed .child-label {
+    width: auto !important;
+    font-size: 12px !important;
+    text-align: left !important;
+  }
+}
 
 </style>
