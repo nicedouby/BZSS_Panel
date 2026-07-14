@@ -1348,4 +1348,49 @@ function displayRole(role: string | null | undefined) {
   background: color-mix(in srgb, var(--color-bg-elevated, var(--color-bg-card)) 60%, transparent) !important;
 }
 
+
+/* True transparency: the loading screen is visible through the squad and every member row. */
+.squad-card.team1-context {
+  --player-accent: var(--color-team1-primary, #37c8ff);
+}
+
+.squad-card.team2-context {
+  --player-accent: var(--color-team2-primary, #ff9b45);
+}
+
+.squad-player-row.player-row,
+.squad-player-row.player-row:hover,
+.squad-player-row.player-row.selected {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.squad-player-row.player-row::after {
+  display: none !important;
+}
+
+.squad-player-row .scoreboard-chip,
+.squad-player-row .role-chip,
+.squad-player-row .playtime-chip,
+.squad-player-row .bzss-core-ft-badge,
+.squad-player-row .player-steam-bg {
+  background: transparent !important;
+}
+
+.squad-player-row .player-avatar {
+  background: color-mix(in srgb, var(--color-bg-page, var(--color-bg-panel)) 22%, transparent) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-bg-page, var(--color-bg-panel)) 42%, transparent),
+    0 0 10px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 42%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 10%, transparent) !important;
+}
+
+.squad-player-row .health-liquid.hp-high,
+.squad-player-row .health-liquid.hp-mid,
+.squad-player-row .health-liquid.hp-low {
+  box-shadow:
+    0 -2px 7px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 42%, transparent),
+    0 -2px 6px color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 30%, transparent) inset !important;
+}
+
 </style>
