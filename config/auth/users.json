@@ -297,7 +297,6 @@
         "plugin:tactical-report:user-codes",
         "plugin:panel-ban:view",
         "server_stats.view",
-        "tactical_map_replay.view",
         "debug.udp_forwarder.view",
         "debug.match_snapshots.view",
         "debug.pjsc_average_duration.view",
