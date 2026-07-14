@@ -492,6 +492,17 @@ export function getFactionFromTeamName(teamName: string): string | null {
   return resolveBattlegroupVisual(teamName)?.faction ?? null;
 }
 
+export function getFactionFromTeamId(teamId: string | null | undefined): string | null {
+  const normalized = String(teamId ?? "").trim().toUpperCase();
+  if (!normalized) return null;
+
+  const direct = normalized.match(/^(PLAAGF|PLANMC|WPMC|MEA|MEI|MIL|VDV|BAF|CAF|USMC|US|RUS|AUS|INS|TALIBAN|IMF|MEA)(?:_|$)/);
+  if (direct?.[1]) return direct[1];
+
+  const prefix = normalized.match(/^([A-Z0-9]+)(?:_|$)/)?.[1] ?? "";
+  return factionFlagBasenames[prefix as FactionCode] ? prefix : null;
+}
+
 export function getFlagUrl(factionCode: string): string | null {
   const normalizedCode = String(factionCode ?? "").trim().toUpperCase() as FactionCode;
   return getAssetUrlByBasename(factionFlagBasenames[normalizedCode] ?? null);
