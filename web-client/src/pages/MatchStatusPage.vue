@@ -89,6 +89,17 @@
           </div>
 
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
+            <div
+              v-if="matchLoadingScreenUrl && !matchLoadingScreenFailed"
+              class="match-list-loading-screen"
+              aria-hidden="true"
+            >
+              <img
+                :src="matchLoadingScreenUrl"
+                alt=""
+                @error="matchLoadingScreenFailed = true"
+              />
+            </div>
             <TeamColumn
               v-for="team in viewModels.teams"
               :key="team.teamId"
@@ -490,6 +501,36 @@ const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.upda
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
+
+const matchLoadingScreenFailed = ref(false);
+const matchLoadingScreenUrl = computed(() => {
+  const serverSnapshot = server.snapshot ?? {};
+  const source = [
+    serverSnapshot.mapName,
+    serverSnapshot.map,
+    serverSnapshot.webStatus?.mapName,
+    serverSnapshot.webStatus?.map,
+    serverSnapshot.currentLayer,
+    serverSnapshot.layer,
+    serverSnapshot.webStatus?.currentLayer,
+    matchSnapshot.value?.mapName,
+    matchSnapshot.value?.map,
+    matchSnapshot.value?.currentLayer,
+  ].find((value) => typeof value === "string" && value.trim());
+  return resolveMatchLoadingScreenUrl(String(source ?? ""));
+});
+
+watch(matchLoadingScreenUrl, () => {
+  matchLoadingScreenFailed.value = false;
+}, { immediate: true });
+
+function resolveMatchLoadingScreenUrl(mapOrLayer: string) {
+  const mapKey = String(mapOrLayer ?? "")
+    .trim()
+    .split(/[\\s_\\-/]+/)[0]
+    .replace(/[^a-zA-Z0-9]/g, "");
+  return mapKey ? `/MapScene/LoadingScreen_${mapKey}_DQHD.PNG` : "";
+}
 
 
 const remoteTelemetryQuery = useQuery({
@@ -2966,6 +3007,45 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   flex-wrap: wrap;
   color: var(--color-text-muted);
   font-size: 11px;
+}
+
+/* Actual Squad loading screen, resolved as /MapScene/LoadingScreen_<Map>_DQHD.PNG. */
+.squad-main-content {
+  position: relative;
+  isolation: isolate;
+}
+
+.match-list-loading-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--color-bg-page);
+}
+
+.match-list-loading-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg-page) 62%, transparent), transparent 48%, color-mix(in srgb, var(--color-bg-page) 44%, transparent)),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg-page) 18%, transparent), color-mix(in srgb, var(--color-bg-page) 48%, transparent));
+}
+
+.match-list-loading-screen img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  opacity: .52;
+  filter: saturate(.82) contrast(1.04) brightness(.78);
+}
+
+.squad-main-content > :not(.match-list-loading-screen) {
+  position: relative;
+  z-index: 1;
 }
 
 .squad-main-content {
