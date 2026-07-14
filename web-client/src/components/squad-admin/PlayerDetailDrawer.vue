@@ -76,6 +76,7 @@
                     <span class="role-icon-wrap" v-html="roleIconSvg"></span>
                     <span class="role-text-lbl">{{ props.player.role }}</span>
                   </div>
+                  <div class="hud-header-actions">
                   <button
                     type="button"
                     class="hud-header-db-btn"
@@ -138,6 +139,8 @@
                     </svg>
                     调试
                   </button>
+
+                  </div>
                 </div>
                 <div class="hud-header-identities">
                   <span
@@ -3397,6 +3400,130 @@ onUnmounted(() => {
 
   .player-detail-floating .drawer-body-hud {
     padding: 9px 10px !important;
+  }
+}
+
+
+/* Compact header: actions no longer enlarge the identity bar. */
+.player-detail-floating .drawer-header-hud {
+  gap: 6px !important;
+  padding: 10px 14px 8px !important;
+}
+
+.player-detail-floating .hud-profile-row {
+  gap: 9px !important;
+}
+
+.player-detail-floating .hud-title-block {
+  gap: 3px !important;
+}
+
+.player-detail-floating .hud-name-row {
+  position: relative;
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  min-height: 24px !important;
+  gap: 5px !important;
+  padding-right: 4px !important;
+}
+
+.player-detail-floating .drawer-player-name {
+  max-width: 210px;
+  font-size: 16px !important;
+}
+
+.player-detail-floating .hud-role-badge,
+.player-detail-floating .bzss-core-ft-badge {
+  flex: 0 0 auto;
+  transform: scale(.92);
+  transform-origin: left center;
+}
+
+.player-detail-floating .hud-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.player-detail-floating .hud-header-actions .hud-header-db-btn {
+  width: 26px !important;
+  min-width: 26px !important;
+  height: 24px !important;
+  padding: 0 !important;
+  justify-content: center;
+  gap: 0 !important;
+  overflow: hidden;
+  font-size: 0 !important;
+  border-radius: 5px !important;
+}
+
+.player-detail-floating .hud-header-actions .hud-header-db-btn .btn-icon,
+.player-detail-floating .hud-header-actions .hud-header-db-btn .refresh-spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+.player-detail-floating .hud-header-actions .hud-header-db-btn:hover {
+  transform: translateY(-1px);
+}
+
+.player-detail-floating .hud-header-identities {
+  min-height: 18px;
+  margin-top: 0 !important;
+  gap: 3px !important;
+  overflow: hidden;
+  flex-wrap: nowrap !important;
+}
+
+.player-detail-floating .hud-header-ident {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 1px 5px !important;
+  line-height: 15px;
+}
+
+.player-detail-floating .hud-session-ctx-grid {
+  gap: 4px !important;
+  padding-top: 2px !important;
+}
+
+.player-detail-floating .hud-ctx-item {
+  min-height: 32px !important;
+  padding: 4px 7px !important;
+}
+
+.player-detail-floating .hud-ctx-item .ctx-lbl {
+  font-size: 8px !important;
+}
+
+.player-detail-floating .hud-ctx-item .ctx-val {
+  font-size: 10px !important;
+}
+
+@media (max-width: 560px) {
+  .player-detail-floating .hud-name-row {
+    flex-wrap: wrap !important;
+  }
+
+  .player-detail-floating .hud-header-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .player-detail-floating .hud-header-actions .hud-header-db-btn {
+    width: 24px !important;
+    min-width: 24px !important;
+    height: 22px !important;
+  }
+
+  .player-detail-floating .hud-header-identities {
+    overflow-x: auto;
   }
 }
 
