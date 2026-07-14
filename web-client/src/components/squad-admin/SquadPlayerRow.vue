@@ -81,32 +81,6 @@
         </span>
       </div>
 
-      <div class="player-stat-line legacy-combat-line">
-        <span class="stat-chip wound" :title="`击倒: ${downs}`">
-          <span class="label">倒</span>
-          <span class="value">{{ downs }}</span>
-        </span>
-        <span class="stat-chip kill" :title="`击杀: ${kills}`">
-          <span class="label">杀</span>
-          <span class="value">{{ kills }}</span>
-        </span>
-        <span class="stat-chip death" :title="`死亡: ${deaths}`">
-          <span class="label">亡</span>
-          <span class="value">{{ deaths }}</span>
-        </span>
-        <span class="stat-chip tk" :title="`TK: ${tk}`">
-          <span class="label">TK</span>
-          <span class="value">{{ tk }}</span>
-        </span>
-        <span class="stat-chip revive" :title="`复苏: ${revives}`">
-          <span class="label">苏</span>
-          <span class="value">{{ revives }}</span>
-        </span>
-        <span v-if="squadlessText" class="stat-chip" :title="`游离时长: ${squadlessText}`">
-          <span class="label">游离</span>
-          <span class="value">{{ squadlessText }}</span>
-        </span>
-      </div>
     </div>
 
     <!-- Steam Avatar - Right side decorative with slanted fade -->
@@ -224,12 +198,6 @@ const secondaryIdentityText = computed(() => {
 });
 
 const scoreboardItems = computed(() => buildCombatScoreboardItems(props.combatStats));
-const kills = computed(() => normalizeStat(props.combatStats?.kills));
-const downs = computed(() => normalizeStat(props.combatStats?.downs));
-const deaths = computed(() => normalizeStat(props.combatStats?.deaths));
-const tk = computed(() => normalizeStat(props.combatStats?.tk));
-const revives = computed(() => normalizeStat(props.combatStats?.revives));
-
 const normalizedHealth = computed(() => {
   if (props.health == null || !Number.isFinite(Number(props.health))) return null;
   return Math.max(0, Math.min(100, Number(props.health)));
@@ -250,12 +218,6 @@ const squadlessText = computed(() => {
   if (!Number.isFinite(seconds) || seconds <= 0) return "";
   return formatDurationShort(seconds);
 });
-
-function normalizeStat(value: unknown) {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return Math.max(0, Math.floor(numeric));
-}
 
 function pingClass(ping: number, loss?: number | null) {
   const lossRate = Number(loss ?? 0);
@@ -692,4 +654,90 @@ function displayRole(role: string | null | undefined) {
     padding-inline: 5px;
   }
 }
+
+
+/* Compact player tile: one identity row plus one scoreboard row. */
+.squad-player-row.player-row {
+  grid-template-columns: 40px minmax(0, 1fr) !important;
+  gap: 7px !important;
+  min-height: 56px !important;
+  padding: 5px 8px 5px 6px !important;
+  border-radius: 9px !important;
+}
+
+.squad-player-row .player-avatar {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+}
+
+.squad-player-row .player-main {
+  gap: 2px !important;
+}
+
+.squad-player-row .player-title-line {
+  gap: 4px !important;
+  min-height: 17px !important;
+}
+
+.squad-player-row .player-name {
+  font-size: 12px !important;
+}
+
+.squad-player-row .role-chip,
+.squad-player-row .playtime-chip,
+.squad-player-row .bzss-core-ft-badge {
+  min-height: 15px !important;
+  padding-inline: 5px !important;
+  font-size: 8px !important;
+  line-height: 15px !important;
+}
+
+.squad-player-row .player-sub-line {
+  display: none !important;
+}
+
+.squad-player-row .scoreboard-line {
+  flex-wrap: nowrap !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+}
+
+.squad-player-row .scoreboard-chip {
+  min-height: 15px !important;
+  padding: 0 4px !important;
+  gap: 2px !important;
+  border-radius: 4px !important;
+  line-height: 1 !important;
+}
+
+.squad-player-row .scoreboard-chip .label {
+  font-size: 8px !important;
+}
+
+.squad-player-row .scoreboard-chip .value {
+  font-size: 9px !important;
+}
+
+.squad-player-row .player-avatar-ping-badge {
+  right: -4px !important;
+  bottom: -4px !important;
+  min-width: 28px !important;
+  padding: 1px 3px !important;
+  font-size: 8px !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    grid-template-columns: 36px minmax(0, 1fr) !important;
+    min-height: 52px !important;
+    padding: 4px 6px !important;
+  }
+
+  .squad-player-row .player-avatar {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+
 </style>
