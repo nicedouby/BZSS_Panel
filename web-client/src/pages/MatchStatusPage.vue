@@ -89,8 +89,8 @@
           </div>
 
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
-            <div v-if="matchLoadingScreenUrl" class="match-list-loading-screen" aria-hidden="true">
-              <img :src="matchLoadingScreenUrl" alt="" />
+            <div v-if="matchMapBackdropUrl" class="match-list-loading-screen" aria-hidden="true">
+              <img :src="matchMapBackdropUrl" alt="" />
             </div>
             <TeamColumn
               v-for="team in viewModels.teams"
@@ -290,6 +290,7 @@ import {
   compareSquadMembers,
 } from "../utils/squad-admin-adapter";
 import { 获取战斗群旗帜, getFactionFromTeamId, getFlagUrl } from "../shared/faction-assets/faction-data";
+import { resolveTacticalMapKey, TACTICAL_MAP_CONFIGS } from "../shared/tactical-map-data";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
@@ -380,12 +381,6 @@ watch(
     }
   }
 );
-
-function resolveLoadingScreenUrl(layerNameValue: unknown): string {
-  const key = String(layerNameValue ?? "").trim().split(/[_\s-]/)[0];
-  if (!key) return "";
-  return `/MapScene/LoadingScreen_${key}_DQHD.PNG`;
-}
 
 function handleViewModeChange(mode: "list" | "map") {
   if (mode === "list") {
@@ -499,7 +494,7 @@ const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.upda
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
-const matchLoadingScreenUrl = computed(() => {
+const matchMapBackdropUrl = computed(() => {
   const serverStatus = matchSnapshot.value?.serverStatus ?? {};
   const fields = serverStatus.fields ?? {};
   const stableServer = server.snapshot ?? {};
@@ -523,8 +518,9 @@ const matchLoadingScreenUrl = computed(() => {
   ];
 
   for (const candidate of candidates) {
-    const url = resolveLoadingScreenUrl(candidate);
-    if (url) return url;
+    const mapKey = resolveTacticalMapKey(String(candidate ?? ""));
+    const image = mapKey ? TACTICAL_MAP_CONFIGS[mapKey]?.image : null;
+    if (image) return image;
   }
   return "";
 });
