@@ -34,13 +34,10 @@
 
     <div class="match-hero-status">
       <span class="status-line" :class="statusTone(props.data.rconStatus)">
-        RCON {{ formatRconStatus(props.data.rconStatus) }}
+        R {{ formatRconStatus(props.data.rconStatus) }}
       </span>
       <span class="status-line" :class="statusTone(props.data.logsStatus)">
-        Log {{ formatLogsStatus(props.data.logsStatus) }}
-      </span>
-      <span class="status-line">
-        Updated {{ formatUpdateTime(props.data.lastUpdateTime) }}
+        L {{ formatLogsStatus(props.data.logsStatus) }}
       </span>
     </div>
   </header>
@@ -80,16 +77,6 @@ function formatLogsStatus(status: string): string {
   return t("common.unknown");
 }
 
-function formatUpdateTime(time: number): string {
-  if (!time) return "--:--:--";
-  const date = new Date(time);
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 function statusTone(status: string): string {
   if (status === "connected" || status === "live") return "ok";
   if (status === "error") return "error";
@@ -102,14 +89,14 @@ function statusTone(status: string): string {
 .match-header-bar {
   display: grid;
   grid-template-columns: minmax(260px, 1.15fr) minmax(420px, 2fr) auto;
-  gap: var(--spacing-lg);
+  gap: 8px;
   align-items: center;
   background:
     radial-gradient(circle at 0% 0%, var(--color-team1-bg), transparent 34%),
     radial-gradient(circle at 100% 0%, var(--color-team2-bg), transparent 34%),
     var(--color-bg-panel);
   border-bottom: 1px solid var(--color-border-default);
-  padding: 14px var(--spacing-lg);
+  padding: 5px 7px;
   flex-shrink: 0;
   min-width: 0;
 }
@@ -117,7 +104,7 @@ function statusTone(status: string): string {
 .match-hero-left {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 2px;
 }
 
 .server-name {
@@ -140,14 +127,14 @@ function statusTone(status: string): string {
 .match-hero-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
 }
 
 .hero-stat {
   flex: 1 1 100px;
   padding: 8px 10px;
-  border-radius: var(--radius-md);
+  border-radius: 5px;
   border: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, 0.025);
 }
@@ -155,7 +142,7 @@ function statusTone(status: string): string {
 .hero-stat span {
   display: block;
   color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
+  font-size: 10px;
 }
 
 .hero-stat strong {
@@ -176,7 +163,7 @@ function statusTone(status: string): string {
 
 .match-hero-status {
   display: grid;
-  gap: 6px;
+  gap: 3px;
   justify-items: end;
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
