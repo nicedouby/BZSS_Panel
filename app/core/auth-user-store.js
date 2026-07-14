@@ -555,8 +555,6 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "settings.manage",
   "admin_users.manage",
   "bzss_core.use",
-  "tactical_map_replay.view",
-  "tactical_map_replay.export",
   ...WEB_PAGE_PERMISSION_MATRIX.map((entry) => String(entry.requiredPermission ?? "").trim()).filter(Boolean),
 ]);
 
