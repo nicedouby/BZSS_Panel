@@ -11,14 +11,14 @@
       <div v-else class="player-avatar-container">
         <div
           class="player-avatar"
-          :title="`${displayRole(player.role)}${health != null ? '  HP: ' + health.toFixed(0) + '%' : ''}`"
+          :title="`${displayRole(player.role)}${health != null ? '  HP: ' + normalizedHealth.toFixed(0) + '%' : ''}`"
         >
           <!-- DNF-style liquid health fill -->
           <div
             v-if="health != null"
             class="health-liquid"
             :class="healthLiquidClass"
-            :style="{ height: `${Math.max(0, Math.min(100, health))}%` }"
+            :style="{ height: `${normalizedHealth ?? 0}%` }"
           />
           <!-- Role icon on top -->
           <img
@@ -230,8 +230,13 @@ const deaths = computed(() => normalizeStat(props.combatStats?.deaths));
 const tk = computed(() => normalizeStat(props.combatStats?.tk));
 const revives = computed(() => normalizeStat(props.combatStats?.revives));
 
+const normalizedHealth = computed(() => {
+  if (props.health == null || !Number.isFinite(Number(props.health))) return null;
+  return Math.max(0, Math.min(100, Number(props.health)));
+});
+
 const healthLiquidClass = computed(() => {
-  const hp = props.health;
+  const hp = normalizedHealth.value;
   if (hp == null) return "";
   if (hp > 70) return "hp-high";
   if (hp > 35) return "hp-mid";
@@ -524,7 +529,7 @@ function displayRole(role: string | null | undefined) {
     0 0 0 3px rgba(2,6,23,.5),
     0 0 15px color-mix(in srgb, var(--player-accent, #94a3b8) 22%, transparent),
     inset 0 1px 0 rgba(255,255,255,.14);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .squad-player-row .player-avatar::after {
