@@ -263,4 +263,26 @@ const playerOccupancyTone = computed(() => {
 .team-player-stat.full .quick-stat-value {
   color: var(--color-status-warning);
 }
+
+/* 紧凑模式：票数与在线控件保持扁平高度 */
+.team-header-actions {
+  height: 21px;
+  min-height: 21px;
+  gap: 3px;
+  align-items: center;
+}
+
+.team-header-actions .team-quick-stat {
+  height: 21px;
+  min-height: 21px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1;
+}
+
+.team-header-actions .team-ticket-stat,
+.team-header-actions .team-player-stat {
+  min-height: 21px;
+  max-height: 21px;
+}
 </style>
