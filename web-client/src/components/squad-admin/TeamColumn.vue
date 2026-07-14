@@ -613,5 +613,41 @@ const teamAveragePingText = computed(() => {
 .team-column.compact .squad-list {
   gap: 6px;
 }
+
+/* ─── 队伍容器重构：身份区 + 核心状态区 + 统计区 ─────────────────────────── */
+.team-column { gap: 10px; padding: 10px; border-radius: 16px; background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012) 24%, transparent 60%), var(--color-bg-panel); box-shadow: 0 14px 34px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.045); }
+.team-column.team1 { border-color: rgba(55,200,255,.34); background: radial-gradient(circle at 0% 0%, rgba(55,200,255,.18), transparent 34%), linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012) 24%, transparent 60%), var(--color-bg-panel); }
+.team-column.team2 { border-color: rgba(255,155,69,.34); background: radial-gradient(circle at 0% 0%, rgba(255,155,69,.16), transparent 34%), linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012) 24%, transparent 60%), var(--color-bg-panel); }
+.team-column-header { min-height: 128px; padding: 12px 13px 11px; border-radius: 13px; display: block; background: linear-gradient(135deg, rgba(255,255,255,.075), rgba(255,255,255,.018) 54%), rgba(7,12,23,.82); box-shadow: 0 8px 20px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.06); }
+.team-column.team1 .team-column-header { border-top: 3px solid var(--color-team1-primary); border-color: rgba(55,200,255,.34); box-shadow: inset 0 1px 0 rgba(55,200,255,.16), 0 0 22px rgba(55,200,255,.08); }
+.team-column.team2 .team-column-header { border-top: 3px solid var(--color-team2-primary); border-color: rgba(255,155,69,.34); box-shadow: inset 0 1px 0 rgba(255,155,69,.16), 0 0 22px rgba(255,155,69,.08); }
+.team-column-main { display: grid; gap: 12px; }
+.team-header-top-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; }
+.team-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 15px; line-height: 1.15; }
+.team-id-badge { height: 22px; padding: 0 8px; border-radius: 6px; font-size: 10px; letter-spacing: .08em; box-shadow: inset 0 1px 0 rgba(255,255,255,.14); }
+.team-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 850; color: #f8fafc; text-shadow: 0 0 14px rgba(255,255,255,.12); }
+.unit-icon { width: 34px; height: 34px; padding: 5px; border-radius: 10px; background: rgba(255,255,255,.07); box-shadow: 0 0 0 1px rgba(255,255,255,.1), 0 0 16px rgba(255,255,255,.08); }
+.team-secondary-stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; align-items: stretch; }
+.team-stat-chip { min-width: 0; height: 34px; padding: 0 7px; display: grid; grid-template-columns: auto minmax(0,1fr); grid-template-rows: auto auto; column-gap: 5px; align-content: center; border-radius: 9px; border: 1px solid rgba(148,163,184,.16); background: rgba(255,255,255,.045); box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+.team-stat-chip .chip-icon { grid-row: 1 / span 2; align-self: center; width: 13px; height: 13px; opacity: .82; }
+.team-stat-chip .tsc-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; line-height: 1; letter-spacing: .04em; }
+.team-stat-chip .tsc-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.1; font-weight: 850; }
+.team-stat-chip.avg { color: #6ee7b7; border-color: rgba(52,211,153,.25); background: linear-gradient(135deg, rgba(52,211,153,.12), rgba(52,211,153,.035)); }
+.team-stat-chip.leader-avg { color: #fde68a; border-color: rgba(250,204,21,.25); background: linear-gradient(135deg, rgba(250,204,21,.11), rgba(250,204,21,.035)); }
+.team-stat-chip.ping-avg { color: #c4b5fd; border-color: rgba(167,139,250,.28); background: linear-gradient(135deg, rgba(167,139,250,.13), rgba(167,139,250,.035)); }
+.team-stat-chip.squads { color: #cbd5e1; border-color: rgba(148,163,184,.22); }
+.team-column.team1 .team-stat-chip.squads { border-color: rgba(55,200,255,.22); background: rgba(55,200,255,.06); }
+.team-column.team2 .team-stat-chip.squads { border-color: rgba(255,155,69,.22); background: rgba(255,155,69,.06); }
+.team-column.compact .team-column-header { min-height: 104px; padding: 9px 10px; }
+.team-column.compact .team-column-main { gap: 8px; }
+.team-column.compact .team-secondary-stats { gap: 4px; }
+.team-column.compact .team-stat-chip { height: 28px; padding-inline: 5px; }
+@media (max-width: 720px) {
+  .team-column { padding: 7px; border-radius: 13px; }
+  .team-column-header { min-height: 0; padding: 10px; }
+  .team-name { font-size: 13px; }
+  .team-secondary-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .team-stat-chip { height: 32px; }
+}
 </style>
 
