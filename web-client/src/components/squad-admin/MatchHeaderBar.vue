@@ -204,4 +204,84 @@ function statusTone(status: string): string {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+/* Keep the match navigation bar single-line and height-stable at every viewport width. */
+.match-header-bar {
+  height: 58px !important;
+  min-height: 58px !important;
+  max-height: 58px !important;
+  box-sizing: border-box !important;
+  grid-template-columns: minmax(150px, 1fr) minmax(250px, 2fr) auto !important;
+  gap: 8px !important;
+  padding: 6px 10px !important;
+  overflow: hidden !important;
+}
+
+.match-hero-left,
+.match-hero-stats,
+.match-hero-status {
+  min-width: 0 !important;
+}
+
+.match-hero-left {
+  gap: 2px !important;
+  overflow: hidden !important;
+}
+
+.match-hero-stats {
+  flex-wrap: nowrap !important;
+  gap: 4px !important;
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+
+.hero-stat {
+  flex: 0 1 auto !important;
+  min-width: 52px !important;
+  padding: 4px 6px !important;
+  overflow: hidden !important;
+}
+
+.hero-stat span,
+.hero-stat strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-hero-status {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 1180px) {
+  .match-header-bar {
+    grid-template-columns: minmax(140px, 1fr) minmax(230px, 2fr) auto !important;
+  }
+
+  .match-hero-status {
+    justify-items: unset !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .match-header-bar {
+    grid-template-columns: minmax(120px, 0.9fr) minmax(210px, 1.6fr) auto !important;
+  }
+
+  .hero-stat {
+    min-width: 46px !important;
+    padding-inline: 4px !important;
+  }
+
+  .match-hero-status {
+    gap: 4px !important;
+  }
+}
+
 </style>
