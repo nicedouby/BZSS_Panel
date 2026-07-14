@@ -3221,4 +3221,183 @@ onUnmounted(() => {
   z-index: 1;
 }
 
+
+/* Compact information hierarchy for the floating player window. */
+.player-detail-floating {
+  width: min(920px, calc(100vw - 32px)) !important;
+  height: min(740px, calc(var(--app-viewport-height) - 32px)) !important;
+  max-height: calc(var(--app-viewport-height) - 32px) !important;
+  border-radius: 16px !important;
+}
+
+.player-detail-floating .drawer-header-hud {
+  gap: 8px !important;
+  padding: 14px 16px 11px !important;
+}
+
+.player-detail-floating .hud-profile-row {
+  gap: 11px !important;
+}
+
+.player-detail-floating .hud-avatar-frame {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 9px !important;
+}
+
+.player-detail-floating .hud-avatar-inner,
+.player-detail-floating .hud-avatar-image-steam {
+  border-radius: 7px !important;
+}
+
+.player-detail-floating .drawer-player-name {
+  font-size: 17px !important;
+}
+
+.player-detail-floating .hud-name-row {
+  gap: 6px !important;
+  row-gap: 5px !important;
+}
+
+.player-detail-floating .hud-header-db-btn {
+  height: 21px !important;
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+  border-radius: 4px !important;
+}
+
+.player-detail-floating .hud-header-identities {
+  gap: 4px !important;
+  margin-top: 2px !important;
+  font-size: 9px !important;
+}
+
+.player-detail-floating .hud-header-ident {
+  padding: 2px 6px !important;
+}
+
+.player-detail-floating .hud-session-ctx-grid {
+  gap: 5px !important;
+}
+
+.player-detail-floating .hud-ctx-item {
+  min-height: 38px !important;
+  padding: 6px 8px !important;
+}
+
+.player-detail-floating .drawer-body-hud {
+  padding: 12px 16px !important;
+}
+
+.player-detail-floating .hud-dashboard-grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr) !important;
+  gap: 10px !important;
+}
+
+.player-detail-floating .hud-column {
+  gap: 10px !important;
+}
+
+.player-detail-floating .hud-pane-section {
+  gap: 8px !important;
+  padding: 11px !important;
+  border-radius: 10px !important;
+}
+
+.player-detail-floating .hud-section-header {
+  padding-left: 6px !important;
+}
+
+.player-detail-floating .hud-section-title {
+  font-size: 10px !important;
+}
+
+.player-detail-floating .kd-hero-block {
+  gap: 12px !important;
+  padding: 11px 13px !important;
+  border-radius: 10px !important;
+}
+
+.player-detail-floating .kd-value {
+  font-size: 27px !important;
+}
+
+.player-detail-floating .kd-breakdown {
+  gap: 4px !important;
+}
+
+.player-detail-floating .combat-scoreboard-grid,
+.player-detail-floating .combat-hud-grid {
+  gap: 5px !important;
+}
+
+.player-detail-floating .combat-scoreboard-card {
+  min-height: 42px !important;
+  padding: 6px 7px !important;
+  gap: 3px !important;
+  border-radius: 7px !important;
+}
+
+.player-detail-floating .combat-scoreboard-value {
+  font-size: 17px !important;
+}
+
+.player-detail-floating .combat-hud-card {
+  padding: 7px 8px !important;
+  gap: 7px !important;
+  border-radius: 8px !important;
+}
+
+.player-detail-floating .hud-action-btn,
+.player-detail-floating .hud-action-btn-styled {
+  min-height: 34px !important;
+  height: 34px !important;
+  padding: 6px 8px !important;
+}
+
+@media (max-width: 920px), (max-height: 700px) {
+  .player-detail-floating {
+    width: calc(100vw - 24px) !important;
+    height: calc(var(--app-viewport-height) - 24px) !important;
+    max-height: calc(var(--app-viewport-height) - 24px) !important;
+  }
+
+  .player-detail-floating .hud-dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .player-detail-floating .hud-column {
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .player-detail-floating .drawer-header-hud {
+    padding: 11px 12px 9px !important;
+  }
+
+  .player-detail-floating .hud-profile-row {
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+
+  .player-detail-floating .hud-avatar-frame {
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .player-detail-floating .drawer-player-name {
+    font-size: 15px !important;
+  }
+
+  .player-detail-floating .hud-header-db-btn {
+    font-size: 9px !important;
+    padding-inline: 5px !important;
+  }
+
+  .player-detail-floating .drawer-body-hud {
+    padding: 9px 10px !important;
+  }
+}
+
 </style>
