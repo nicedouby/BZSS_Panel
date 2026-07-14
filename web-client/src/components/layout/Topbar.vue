@@ -2,9 +2,6 @@
   <header class="topbar">
     <div class="topbar-grid">
       <div class="topbar-brand">
-        <div v-if="loadingScreenUrl" class="topbar-loading-screen" aria-hidden="true">
-          <img :src="loadingScreenUrl" alt="" />
-        </div>
         <button
           type="button"
           class="menu-button"
@@ -155,8 +152,6 @@ const subtitleLabel = computed(() => {
   if (currentMode.value && currentMode.value !== unknownMode) return `${currentLayer.value} / ${currentMode.value}`;
   return currentLayer.value;
 });
-
-const loadingScreenUrl = computed(() => resolveLoadingScreenUrl(currentLayer.value));
 
 const matchServerName = computed(() => stableDisplayValue(
   server.snapshot.serverName,
@@ -549,12 +544,6 @@ function toMillis(value: string | number | null | undefined): number {
   if (!value) return 0;
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function resolveLoadingScreenUrl(layerNameValue: string) {
-  const key = String(layerNameValue ?? "").trim().split(/[_\s-]/)[0];
-  if (!key) return "";
-  return `/MapScene/LoadingScreen_${key}_DQHD.PNG`;
 }
 
 function toggleSidebar() {
@@ -1149,60 +1138,5 @@ function toggleSidebar() {
 }
 
 
-
-/* Map loading screen accent on the left side of the fixed top navigation. */
-.topbar-brand {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  border-radius: 10px;
-}
-
-.topbar-loading-screen {
-  position: absolute;
-  inset: -18px 18% -18px -18px;
-  z-index: -1;
-  pointer-events: none;
-  overflow: hidden;
-  transform: skewX(-8deg);
-  opacity: .42;
-  filter: saturate(.82) contrast(.96);
-}
-
-.topbar-loading-screen::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      108deg,
-      color-mix(in srgb, var(--color-bg-panel) 8%, transparent) 0%,
-      color-mix(in srgb, var(--color-bg-panel) 28%, transparent) 42%,
-      var(--color-bg-panel) 86%,
-      var(--color-bg-panel) 100%
-    );
-}
-
-.topbar-loading-screen img {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  object-position: center 42%;
-  filter: blur(2.2px);
-  transform: skewX(8deg) scale(1.08);
-}
-
-.topbar-brand > :not(.topbar-loading-screen) {
-  position: relative;
-  z-index: 1;
-}
-
-@media (max-width: 780px) {
-  .topbar-loading-screen {
-    inset: -16px 10% -16px -22px;
-    opacity: .3;
-  }
-}
 
 </style>
