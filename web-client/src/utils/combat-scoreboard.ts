@@ -14,9 +14,9 @@ export function buildCombatScoreboardItems(
   latencyMs: number | null | undefined = null
 ): CombatScoreboardItem[] {
   const items: CombatScoreboardItem[] = [
+    { key: "numWoundeds", label: "击倒 / Downs", shortLabel: "w", value: statNumber(stats?.downs), tone: "woundeds" },
     { key: "numKills", label: "击杀 / Kills", shortLabel: "k", value: statNumber(stats?.kills), tone: "kills" },
     { key: "numDeaths", label: "死亡 / Deaths", shortLabel: "d", value: statNumber(stats?.deaths), tone: "deaths" },
-    { key: "numWoundeds", label: "击倒 / Downs", shortLabel: "w", value: statNumber(stats?.downs), tone: "woundeds" },
     { key: "numTeamKills", label: "队友击杀 / TeamKills (TK)", value: statNumber(stats?.tk), shortLabel: "tk", tone: "tk" },
     { key: "revivedPoints", label: "复苏数 / Revives", shortLabel: "r", value: statNumber(stats?.revivedPoints ?? stats?.revives), tone: "revived" },
   ];
