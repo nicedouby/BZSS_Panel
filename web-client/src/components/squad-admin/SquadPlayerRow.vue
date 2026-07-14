@@ -11,7 +11,7 @@
       <div v-else class="player-avatar-container">
         <div
           class="player-avatar"
-          :title="`${displayRole(player.role)}${health != null ? '  HP: ' + normalizedHealth.toFixed(0) + '%' : ''}`"
+          :title="`${displayRole(player.role)}${normalizedHealth != null ? '  HP: ' + normalizedHealth.toFixed(0) + '%' : ''}`"
         >
           <!-- DNF-style liquid health fill -->
           <div
