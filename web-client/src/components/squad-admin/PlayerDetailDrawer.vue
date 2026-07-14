@@ -3149,4 +3149,76 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
 }
+
+/* Glass player detail window: let the Loading Screen remain visible through the panel. */
+.floating-window-layer {
+  background:
+    radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--glow-color, #94a3b8) 12%, transparent), transparent 34%),
+    rgba(15, 22, 36, 0.10) !important;
+  backdrop-filter: blur(3px) saturate(1.08) !important;
+  -webkit-backdrop-filter: blur(3px) saturate(1.08);
+}
+
+.player-detail-floating {
+  isolation: isolate;
+  background:
+    linear-gradient(
+      122deg,
+      color-mix(in srgb, var(--glow-color, #94a3b8) 10%, transparent),
+      transparent 34%,
+      color-mix(in srgb, var(--color-text-primary) 4%, transparent) 68%,
+      transparent
+    ),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-text-primary) 10%, transparent), transparent 22%),
+    color-mix(in srgb, var(--color-bg-card, var(--color-bg-panel)) 34%, transparent) !important;
+  border-color: color-mix(in srgb, var(--glow-color, #94a3b8) 46%, var(--color-border-default)) !important;
+  box-shadow:
+    0 30px 80px color-mix(in srgb, var(--color-bg-page) 54%, transparent),
+    0 0 28px color-mix(in srgb, var(--glow-color, #94a3b8) 16%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 26%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--glow-color, #94a3b8) 18%, transparent) !important;
+  backdrop-filter: blur(18px) saturate(1.42) contrast(1.04) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.42) contrast(1.04);
+}
+
+.player-detail-floating::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      116deg,
+      color-mix(in srgb, var(--color-text-primary) 18%, transparent),
+      transparent 22%,
+      transparent 62%,
+      color-mix(in srgb, var(--glow-color, #94a3b8) 10%, transparent)
+    );
+  opacity: .42;
+  mix-blend-mode: screen;
+}
+
+.player-detail-floating::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    transparent 0 42%,
+    color-mix(in srgb, var(--color-text-primary) 6%, transparent) 50%,
+    transparent 58%
+  );
+  opacity: .32;
+}
+
+.player-detail-floating > * {
+  position: relative;
+  z-index: 1;
+}
+
 </style>
