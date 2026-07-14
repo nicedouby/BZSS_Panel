@@ -496,10 +496,9 @@ export function getFactionFromTeamId(teamId: string | null | undefined): string 
   const normalized = String(teamId ?? "").trim().toUpperCase();
   if (!normalized) return null;
 
-  const direct = normalized.match(/^(PLAAGF|PLANMC|WPMC|MEA|MEI|MIL|VDV|BAF|CAF|USMC|US|RUS|AUS|INS|TALIBAN|IMF|MEA)(?:_|$)/);
-  if (direct?.[1]) return direct[1];
-
-  const prefix = normalized.match(/^([A-Z0-9]+)(?:_|$)/)?.[1] ?? "";
+  // ShowServerInfo returns values such as PLA_S_CombinedArms_Seed.
+  // Only accept prefixes that have a matching flag asset.
+  const prefix = normalized.split("_", 1)[0] ?? "";
   return factionFlagBasenames[prefix as FactionCode] ? prefix : null;
 }
 
