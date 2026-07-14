@@ -1241,4 +1241,65 @@ function displayRole(role: string | null | undefined) {
   }
 }
 
+
+/* Steam profile avatar: compact square thumbnail with the full image visible. */
+.squad-player-row.has-steam-avatar .player-main {
+  padding-right: 48px !important;
+}
+
+.squad-player-row .player-steam-bg {
+  position: absolute !important;
+  top: 50% !important;
+  right: 9px !important;
+  bottom: auto !important;
+  width: 34px !important;
+  height: 34px !important;
+  z-index: 2 !important;
+  display: grid !important;
+  place-items: center !important;
+  overflow: hidden !important;
+  border: 1px solid var(--color-border-default) !important;
+  border-radius: 2px !important;
+  background: var(--color-bg-elevated, var(--color-bg-card)) !important;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-bg-page) 36%, transparent) !important;
+  opacity: 1 !important;
+  transform: translateY(-50%) !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+.squad-player-row .player-steam-bg-img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  filter: none !important;
+}
+
+.squad-player-row:hover .player-steam-bg {
+  width: 34px !important;
+  opacity: 1 !important;
+  transform: translateY(-50%) scale(1.04) !important;
+}
+
+.squad-player-row:hover .player-steam-bg-img {
+  filter: none !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.has-steam-avatar .player-main {
+    padding-right: 42px !important;
+  }
+
+  .squad-player-row .player-steam-bg {
+    right: 7px !important;
+    width: 30px !important;
+    height: 30px !important;
+  }
+
+  .squad-player-row:hover .player-steam-bg {
+    width: 30px !important;
+  }
+}
+
 </style>
