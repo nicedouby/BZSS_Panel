@@ -901,5 +901,62 @@ const teamAveragePingText = computed(() => {
     display: none;
   }
 }
+
+/* ─── 恢复早期旗帜背景，并修正统计区横向排布 ─────────────────────────────── */
+.team-header-flag-bg {
+  top: -42px !important;
+  left: -38px !important;
+  right: auto !important;
+  width: calc(100% + 76px) !important;
+  height: calc(100% + 84px) !important;
+  transform: rotate(-7deg) translate(-5px, 2px) !important;
+  opacity: .22 !important;
+  mask-image: linear-gradient(135deg, rgba(0,0,0,1) 15%, rgba(0,0,0,0) 75%) !important;
+  -webkit-mask-image: linear-gradient(135deg, rgba(0,0,0,1) 15%, rgba(0,0,0,0) 75%) !important;
+}
+
+.team-header-flag-bg .team-faction-bg-img {
+  object-fit: cover !important;
+  object-position: center !important;
+  filter: blur(2px) saturate(.85) brightness(.9) !important;
+}
+
+/* 第一项是票数+在线人数组合，和其余统计项保持一行 */
+.team-secondary-stats {
+  display: grid !important;
+  grid-template-columns: minmax(112px, 1.35fr) repeat(4, minmax(0, 1fr)) !important;
+  grid-auto-flow: row !important;
+  align-items: center !important;
+  gap: 3px !important;
+}
+
+.team-secondary-stats > :deep(.team-header-actions) {
+  min-width: 0;
+  width: 100%;
+}
+
+.team-column.compact .team-secondary-stats {
+  grid-template-columns: minmax(100px, 1.25fr) repeat(4, minmax(0, 1fr)) !important;
+}
+
+/* 舒适模式中的公开/私密数据另起一行，但不撑高核心统计 */
+.team-secondary-stats > .playtime-public,
+.team-secondary-stats > .playtime-private {
+  grid-row: 2;
+  height: 18px !important;
+}
+
+@media (max-width: 720px) {
+  .team-secondary-stats {
+    grid-template-columns: minmax(96px, 1.2fr) repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .team-header-flag-bg {
+    top: -30px !important;
+    left: -28px !important;
+    width: calc(100% + 56px) !important;
+    height: calc(100% + 60px) !important;
+  }
+}
 </style>
 
