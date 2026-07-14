@@ -182,8 +182,8 @@ class SteamGameDurationService {
     this.steamPlaytimeRepo = steamPlaytimeRepo || null;
     this.playerDatabase = playerDatabase || null;
     this.logger = logger || null;
-    this.proxyUrl = proxyUrl || null;
-    this.noProxy = noProxy || null;
+    this.proxyUrl = String(proxyUrl || "").trim() || null;
+    this.noProxy = String(noProxy || "").trim() || null;
 
     this.jobs = new Map();
     this.jobOrder = [];
@@ -243,6 +243,8 @@ class SteamGameDurationService {
       runningJobs,
       completedJobs,
       failedJobs,
+      proxyConfigured: Boolean(this.proxyUrl || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY),
+      noProxyConfigured: Boolean(this.noProxy || process.env.NO_PROXY || process.env.no_proxy),
     };
   }
 
@@ -870,6 +872,8 @@ class SteamGameDurationService {
       "--app-id", String(this.appId),
       "--timeout", String(timeoutSeconds),
     ];
+    if (this.proxyUrl) args.push("--proxy", this.proxyUrl);
+    if (this.noProxy) args.push("--no-proxy", this.noProxy);
 
     const candidates = collectPythonBinCandidates(this.pythonBin);
     const startFailures = [];
