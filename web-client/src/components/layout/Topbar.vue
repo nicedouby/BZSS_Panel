@@ -80,10 +80,7 @@
           <strong>{{ mergedClockLabel }}</strong>
         </button>
         <div class="mobile-status-item"><span class="mobile-status-label">TPS</span><strong>{{ matchTpsLabel }}</strong></div>
-        <div class="mobile-status-item"><span class="mobile-status-label">Uptime</span><strong>{{ sysUptimeLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Memory</span><strong>{{ sysMemLabel }}</strong></div>
-        <div class="mobile-status-item"><span class="mobile-status-label">Network In</span><strong>{{ sysNetInLabel }}</strong></div>
-        <div class="mobile-status-item"><span class="mobile-status-label">Network Out</span><strong>{{ sysNetOutLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Queue</span><strong>{{ matchQueueLabel }}</strong></div>
         <div class="mobile-status-item"><span class="mobile-status-label">Time</span><strong>{{ matchTimeLabel }}</strong></div>
       </div>
