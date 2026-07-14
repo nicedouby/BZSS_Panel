@@ -1112,4 +1112,28 @@ function toggleSidebar() {
   }
 }
 
+
+
+/* Keep dropdowns clickable and visible while the bar itself remains height-fixed. */
+.topbar {
+  overflow: visible !important;
+  isolation: isolate;
+}
+
+.topbar-grid {
+  overflow: visible !important;
+}
+
+.topbar-actions {
+  position: relative;
+  z-index: calc(var(--z-topbar) + 2);
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+.topbar-actions > * {
+  pointer-events: auto;
+}
+
 </style>
