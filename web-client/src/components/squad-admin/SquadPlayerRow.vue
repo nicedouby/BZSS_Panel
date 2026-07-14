@@ -907,4 +907,57 @@ function displayRole(role: string | null | undefined) {
   }
 }
 
+
+
+/* Semantic status colors also follow the active theme. */
+.squad-player-row .health-liquid.hp-high {
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--color-status-online) 58%, transparent),
+    color-mix(in srgb, var(--color-status-online) 18%, transparent)
+  ) !important;
+  box-shadow: 0 -2px 8px color-mix(in srgb, var(--color-status-online) 26%, transparent) inset !important;
+}
+
+.squad-player-row .health-liquid.hp-mid {
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--color-status-warning) 58%, transparent),
+    color-mix(in srgb, var(--color-status-warning) 18%, transparent)
+  ) !important;
+  box-shadow: 0 -2px 8px color-mix(in srgb, var(--color-status-warning) 26%, transparent) inset !important;
+}
+
+.squad-player-row .health-liquid.hp-low {
+  background: linear-gradient(
+    0deg,
+    color-mix(in srgb, var(--color-status-error) 64%, transparent),
+    color-mix(in srgb, var(--color-status-error) 22%, transparent)
+  ) !important;
+  box-shadow: 0 -2px 10px color-mix(in srgb, var(--color-status-error) 30%, transparent) inset !important;
+}
+
+.squad-player-row .player-avatar-ping-badge.low {
+  color: var(--color-text-primary) !important;
+  background: color-mix(in srgb, var(--color-status-online) 78%, var(--color-bg-elevated)) !important;
+  border-color: color-mix(in srgb, var(--color-status-online) 42%, var(--color-border-default)) !important;
+}
+
+.squad-player-row .player-avatar-ping-badge.medium {
+  color: var(--color-text-primary) !important;
+  background: color-mix(in srgb, var(--color-status-warning) 78%, var(--color-bg-elevated)) !important;
+  border-color: color-mix(in srgb, var(--color-status-warning) 42%, var(--color-border-default)) !important;
+}
+
+.squad-player-row .player-avatar-ping-badge.high {
+  color: var(--color-text-primary) !important;
+  background: color-mix(in srgb, var(--color-status-error) 78%, var(--color-bg-elevated)) !important;
+  border-color: color-mix(in srgb, var(--color-status-error) 42%, var(--color-border-default)) !important;
+}
+
+.squad-player-row .player-avatar::after {
+  mix-blend-mode: normal !important;
+  opacity: .16 !important;
+}
+
 </style>
