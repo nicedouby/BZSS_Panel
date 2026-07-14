@@ -649,5 +649,125 @@ const teamAveragePingText = computed(() => {
   .team-secondary-stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .team-stat-chip { height: 32px; }
 }
+
+/* ─── 紧凑队伍头部与节省空间的旗帜显示 ───────────────────────────────────── */
+.team-column {
+  gap: 7px;
+  padding: 7px;
+  border-radius: 12px;
+}
+
+.team-column-header {
+  min-height: 0;
+  padding: 8px 9px;
+  border-radius: 10px;
+}
+
+.team-column-main {
+  gap: 7px;
+}
+
+.team-header-top-row {
+  min-height: 25px;
+  gap: 7px;
+}
+
+.team-title-line {
+  gap: 6px;
+  font-size: 13px;
+}
+
+.team-id-badge {
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 9px;
+}
+
+.team-name {
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+.unit-icon {
+  width: 25px;
+  height: 25px;
+  padding: 3px;
+  border-radius: 7px;
+}
+
+/* 旗帜作为右侧装饰层，不再铺满整个头部 */
+.team-header-flag-bg {
+  top: 0;
+  right: 0;
+  left: auto;
+  width: 112px;
+  height: 100%;
+  transform: none;
+  opacity: .18;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 35%, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,.35) 35%, #000 100%);
+}
+
+.team-header-flag-bg .team-faction-bg-img {
+  object-fit: cover;
+  object-position: right center;
+  filter: saturate(.7) brightness(.8);
+}
+
+.team-secondary-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.team-stat-chip {
+  height: 27px;
+  padding: 0 5px;
+  border-radius: 7px;
+  column-gap: 3px;
+}
+
+.team-stat-chip .chip-icon {
+  width: 10px;
+  height: 10px;
+}
+
+.team-stat-chip .tsc-label {
+  font-size: 7px;
+}
+
+.team-stat-chip .tsc-value {
+  font-size: 10px;
+}
+
+.team-column .squad-list {
+  gap: 6px;
+}
+
+@media (max-width: 720px) {
+  .team-column {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .team-column-header {
+    padding: 7px 8px;
+  }
+
+  .team-secondary-stats {
+    gap: 3px;
+  }
+
+  .team-stat-chip {
+    height: 25px;
+    padding-inline: 4px;
+  }
+
+  .team-header-flag-bg {
+    width: 82px;
+    opacity: .14;
+  }
+}
 </style>
 
