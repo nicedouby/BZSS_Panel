@@ -879,8 +879,12 @@ class SteamGameDurationService {
       "--app-id", String(this.appId),
       "--timeout", String(timeoutSeconds),
     ];
+    const effectiveNoProxy = this.noProxy
+      || process.env.NO_PROXY
+      || process.env.no_proxy
+      || "";
     if (this.proxyUrl) args.push("--proxy", this.proxyUrl);
-    if (this.noProxy) args.push("--no-proxy", this.noProxy);
+    if (effectiveNoProxy) args.push("--no-proxy", effectiveNoProxy);
 
     const candidates = collectPythonBinCandidates(this.pythonBin);
     const startFailures = [];
