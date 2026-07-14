@@ -445,18 +445,15 @@ function displayRole(role: string | null | undefined) {
 /* ─── 玩家网格视觉重构：身份、状态、战绩分层 ─────────────────────────────── */
 .squad-player-row.player-row {
   position: relative;
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  display: grid !important;
+  grid-template-columns: 48px minmax(0, 1fr) !important;
   gap: 10px;
-  min-height: 76px;
-  padding: 9px 11px 9px 9px;
-  border: 1px solid rgba(148, 163, 184, 0.14);
-  border-left: 3px solid var(--player-accent, rgba(148, 163, 184, 0.32));
-  border-radius: 12px;
-  background:
-    linear-gradient(105deg, color-mix(in srgb, var(--player-accent, #94a3b8) 9%, transparent), transparent 38%),
-    linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018)),
-    rgba(8, 13, 24, .82);
+  min-height: 76px !important;
+  padding: 9px 11px 9px 9px !important;
+  border: 1px solid rgba(148, 163, 184, 0.32) !important;
+  border-left: 4px solid var(--player-accent, #37c8ff) !important;
+  border-radius: 12px !important;
+  background: linear-gradient(135deg, rgba(28, 42, 68, .94), rgba(8, 13, 24, .96)) !important;
   box-shadow: 0 5px 16px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.035);
   overflow: hidden;
   isolation: isolate;
