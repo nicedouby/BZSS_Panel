@@ -89,6 +89,9 @@
           </div>
 
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
+            <div v-if="matchLoadingScreenUrl" class="match-list-loading-screen" aria-hidden="true">
+              <img :src="matchLoadingScreenUrl" alt="" />
+            </div>
             <TeamColumn
               v-for="team in viewModels.teams"
               :key="team.teamId"
@@ -378,6 +381,12 @@ watch(
   }
 );
 
+function resolveLoadingScreenUrl(layerNameValue: unknown): string {
+  const key = String(layerNameValue ?? "").trim().split(/[_\s-]/)[0];
+  if (!key) return "";
+  return `/MapScene/LoadingScreen_${key}_DQHD.PNG`;
+}
+
 function handleViewModeChange(mode: "list" | "map") {
   if (mode === "list") {
     router.push("/match-status");
@@ -490,6 +499,20 @@ const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.upda
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
+const matchLoadingScreenUrl = computed(() => {
+  const serverStatus = matchSnapshot.value?.serverStatus ?? {};
+  const fields = serverStatus.fields ?? {};
+  return resolveLoadingScreenUrl(
+    serverStatus.layerName
+      ?? serverStatus.layer
+      ?? serverStatus.mapName
+      ?? serverStatus.map
+      ?? fields.NextLayer_s
+      ?? fields.MapName_s
+      ?? "",
+  );
+});
+
 const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
   enabled: computed(() => active.value && !pageHidden.value && auth.authenticated),
@@ -3261,4 +3284,67 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 .match-status-data-state {
   grid-row: 3;
 }
+
+
+/* Use the map loading screen as a visible, low-contrast backdrop for the team list. */
+.squad-main-content {
+  position: relative !important;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--color-bg-page);
+}
+
+.match-list-loading-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: .62;
+}
+
+.match-list-loading-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-bg-page) 24%, transparent) 0%,
+      transparent 42%,
+      color-mix(in srgb, var(--color-bg-page) 20%, transparent) 100%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-bg-page) 34%, transparent),
+      transparent 34%,
+      color-mix(in srgb, var(--color-bg-page) 28%, transparent)
+    );
+}
+
+.match-list-loading-screen img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center 44%;
+  filter: blur(1px) saturate(.92) contrast(.98);
+  transform: scale(1.035);
+}
+
+.squad-main-content > :not(.match-list-loading-screen) {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 720px) {
+  .match-list-loading-screen {
+    opacity: .48;
+  }
+
+  .match-list-loading-screen img {
+    object-position: center;
+  }
+}
+
 </style>
