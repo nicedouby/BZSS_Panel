@@ -436,6 +436,8 @@
     "usePythonScript": true,
     "pythonScript": "./support/runtime-assets/steam-playtime/FetchGameDuration.py",
     "pythonConfigPath": "./support/runtime-assets/steam-playtime/config.json",
+    "proxyUrl": "",
+    "noProxy": "",
     "scriptTimeoutMs": 12000,
     "scriptFallbackToApi": false,
     "onlineRefreshFreshnessWindowMinutes": 120
