@@ -237,6 +237,20 @@
         "restartRequired": true
       },
       {
+        "path": "steam.proxyUrl",
+        "label": "Steam Proxy URL (HTTP/HTTPS)",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.noProxy",
+        "label": "Steam Proxy Bypass Hosts",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
         "path": "steam.usePythonScript",
         "label": "Steam Use Python Script",
         "type": "boolean",
