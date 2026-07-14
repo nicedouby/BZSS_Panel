@@ -100,7 +100,7 @@ import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, Sq
 import SquadCard from "./SquadCard.vue";
 import TeamHeaderQuickStats from "./TeamHeaderQuickStats.vue";
 import { extractPlaytimeHours } from "../../utils/squad-admin-adapter";
-import { 获取战斗群旗帜, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
+import { 获取战斗群旗帜, getFlagUrl, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
 
 const props = defineProps<{
   team: TeamViewModel;
@@ -124,7 +124,8 @@ const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "t
 const isComfortable = computed(() => props.densityMode !== "compact");
 
 const factionFlagUrl = computed(() => {
-  return 获取战斗群旗帜(props.team.teamName);
+  // factionCode comes from ShowServerInfo; keep team name as a legacy fallback.
+  return getFlagUrl(props.team.factionCode) ?? 获取战斗群旗帜(props.team.teamName);
 });
 const unitIconUrl = computed(() => {
   return getUnitIconUrlByTeamName(props.team.teamName);
@@ -958,5 +959,33 @@ const teamAveragePingText = computed(() => {
     height: calc(100% + 60px) !important;
   }
 }
+
+
+/* Keep the faction flag as a compact left accent instead of a full-header backdrop. */
+.team-header-flag-bg {
+  top: -16px !important;
+  left: -22px !important;
+  right: auto !important;
+  width: 138px !important;
+  height: calc(100% + 32px) !important;
+  transform: rotate(-6deg) !important;
+  opacity: .2 !important;
+  mask-image: linear-gradient(108deg, #000 0%, rgba(0, 0, 0, .78) 48%, transparent 100%) !important;
+  -webkit-mask-image: linear-gradient(108deg, #000 0%, rgba(0, 0, 0, .78) 48%, transparent 100%) !important;
+}
+
+.team-header-flag-bg .team-faction-bg-img {
+  object-fit: cover !important;
+  object-position: left center !important;
+  filter: blur(1px) saturate(.9) brightness(.9) !important;
+}
+
+@media (max-width: 720px) {
+  .team-header-flag-bg {
+    left: -18px !important;
+    width: 112px !important;
+  }
+}
+
 </style>
 
