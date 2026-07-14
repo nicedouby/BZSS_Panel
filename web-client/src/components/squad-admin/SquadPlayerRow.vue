@@ -1302,4 +1302,50 @@ function displayRole(role: string | null | undefined) {
   }
 }
 
+
+/* Loading screen visibility: lightweight translucent row surface, no blur on the live list. */
+.squad-player-row.player-row {
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 10%, transparent),
+      transparent 40%
+    ),
+    color-mix(in srgb, var(--color-bg-card, var(--color-bg-panel)) 58%, transparent) !important;
+  box-shadow:
+    0 1px 5px color-mix(in srgb, var(--color-bg-page) 22%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--color-text-primary) 8%, transparent) !important;
+}
+
+.squad-player-row.player-row::after {
+  opacity: .18 !important;
+}
+
+.squad-player-row.player-row:hover {
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 18%, transparent),
+      transparent 46%
+    ),
+    color-mix(in srgb, var(--color-bg-elevated, var(--color-bg-card)) 68%, transparent) !important;
+}
+
+.squad-player-row.player-row.selected {
+  background:
+    linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--player-accent, var(--color-brand-primary)) 22%, transparent),
+      transparent 48%
+    ),
+    color-mix(in srgb, var(--color-bg-elevated, var(--color-bg-card)) 72%, transparent) !important;
+}
+
+.squad-player-row .scoreboard-chip,
+.squad-player-row .role-chip,
+.squad-player-row .playtime-chip,
+.squad-player-row .bzss-core-ft-badge {
+  background: color-mix(in srgb, var(--color-bg-elevated, var(--color-bg-card)) 60%, transparent) !important;
+}
+
 </style>
