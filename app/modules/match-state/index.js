@@ -1752,6 +1752,8 @@ function extractServerInfoFields(raw) {
     "ServerTPS",
     "TickRate",
     "ServerTickRate",
+    "TeamOne_s",
+    "TeamTwo_s",
   ];
 
   const text = String(raw ?? "");
