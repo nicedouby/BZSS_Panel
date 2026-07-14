@@ -286,7 +286,7 @@ import {
   filterTeamsBySearch,
   compareSquadMembers,
 } from "../utils/squad-admin-adapter";
-import { 获取战斗群旗帜, getFactionFromTeamId } from "../shared/faction-assets/faction-data";
+import { 获取战斗群旗帜, getFactionFromTeamId, getFlagUrl } from "../shared/faction-assets/faction-data";
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
@@ -1715,9 +1715,10 @@ function buildPlayerDetailViewModel(player: PlayerRowViewModel): PlayerDetailVie
     ?? (rawBase as any).TeamName,
   );
   detail.teamName = resolvedTeamName;
-  detail.factionFlagUrl = resolvedTeamName
-    ? 获取战斗群旗帜(resolvedTeamName)
-    : (player.factionFlagUrl ?? null);
+  detail.factionFlagUrl = getFlagUrl(currentTeam?.factionCode ?? "")
+    ?? (resolvedTeamName ? 获取战斗群旗帜(resolvedTeamName) : null)
+    ?? player.factionFlagUrl
+    ?? null;
   detail.bzssCorePing = player.bzssCorePing ?? tacticalStatePlayer?.network?.gamePing ?? bzssCoreInfo?.playerScoreboard?.ping ?? null;
   detail.bzssCoreFtIndex = player.bzssCoreFtIndex ?? tacticalStatePlayer?.telemetry?.fireTeamIndex ?? bzssCoreInfo?.ftIndex ?? null;
   detail.bzssCoreFtPosition = player.bzssCoreFtPosition ?? tacticalStatePlayer?.telemetry?.fireTeamPosition ?? bzssCoreInfo?.ftPosition ?? null;
