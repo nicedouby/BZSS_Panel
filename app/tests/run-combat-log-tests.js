@@ -218,8 +218,52 @@ async function testProjectileWeaponWritesBotInCombatLog() {
   });
 }
 
+
+async function testRawAndCleanRepresentationsAreWrittenOnce() {
+  await withTempCombatLog(async ({ module, emit, tempDir }) => {
+    await module.start();
+
+    const rawPayload = {
+      record: {
+        sourceEventId: "raw-clean-dup",
+        serverId: "BZSS_Main",
+        time: "2026-06-02T21:00:00+08:00",
+        type: "wound",
+        victimName: "Victim",
+        damage: 62,
+        weapon: "BP_Projectile_C_2147432581",
+        rawLog: "same-combat-log-line",
+      },
+    };
+    const cleanPayload = {
+      record: {
+        serverId: "BZSS_Main",
+        time: "2026-06-02T21:00:00+08:00",
+        type: "wound",
+        attackerName: "",
+        victimName: "Victim",
+        damage: 62,
+        weapon: "Projectile",
+        raw: {
+          sourceEventId: "raw-clean-dup",
+          rawLog: "same-combat-log-line",
+        },
+      },
+    };
+
+    await emit("module.combatState", "updated", rawPayload);
+    await emit("module.combatClean", "woundResolved", cleanPayload);
+    await module.stop();
+
+    const filePath = path.join(tempDir, "data", "combat-logs", "2026-06", "2026-06-02.log");
+    const content = await fs.readFile(filePath, "utf8");
+    const lines = content.trim().split(/\r?\n/);
+    assert.equal(lines.length, 1);
+  });
+}
 await testWritesDailyFileAndExposesBrowseApis();
 await testDuplicateEventKeyIsWrittenOnce();
+await testRawAndCleanRepresentationsAreWrittenOnce();
 await testSquidBotAttackerWritesBotInCombatLog();
 await testProjectileWeaponWritesBotInCombatLog();
 
