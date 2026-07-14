@@ -6,6 +6,7 @@ import path from "node:path";
 import { classifySquadName } from "../domain/squad/squad_name_classifier.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
+import { normalizeRuleChainPassEvent, normalizeSquadRuleViolationEvent } from "../modules/squad-rule-chain/events.js";
 import { createPlugin as createStepwisePlugin } from "../plugins/stepwise-squad-playtime-guard.js";
 import { createPlugin as createFairPlugin } from "../plugins/fair-squad-guard.js";
 
@@ -72,6 +73,34 @@ function creation(overrides = {}) {
     createdAt: new Date().toISOString(),
     ...overrides,
   };
+}
+
+function testClassificationFieldsNormalizeWithoutLoss() {
+  const classification = {
+    squadType: "vehicle",
+    squadNature: "vehicle",
+    squadTypeId: "ifv",
+    squadTypeLabel: "步战车",
+    squadRuleId: "rule:bmp",
+    effectiveMaxPlayers: 4,
+    maxPlayersSource: "type_default",
+    assetPath: "/Game/BMP",
+    classificationMetadata: { matchedKind: "canonical" },
+  };
+  for (const event of [
+    normalizeRuleChainPassEvent(classification),
+    normalizeSquadRuleViolationEvent(classification),
+  ]) {
+    assert.equal(event.squadType, "vehicle");
+    assert.equal(event.squadNature, "vehicle");
+    assert.equal(event.squadTypeId, "ifv");
+    assert.equal(event.squadTypeLabel, "步战车");
+    assert.equal(event.squadRuleId, "rule:bmp");
+    assert.equal(event.effectiveMaxPlayers, 4);
+    assert.equal(event.maxPlayersSource, "type_default");
+    assert.equal(event.assetPath, "/Game/BMP");
+    assert.deepEqual(event.classificationMetadata, { matchedKind: "canonical" });
+  }
 }
 
 async function createHarness(options = {}) {
@@ -253,7 +282,7 @@ async function createHarness(options = {}) {
 async function testNameViolationShortCircuits() {
   const harness = await createHarness();
   try {
-    harness.eventBus.emitModuleEvent("module.squadLifecycle", "squadCreated", creation({ squadName: "BMP队", squadId: 11 }));
+    harness.eventBus.emitModuleEvent("module.squadLifecycle", "squadCreated", creation({ squadName: "BMP违规队", squadId: 11 }));
     await waitFor(() => harness.disbands.length === 1);
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.removes.length, 1);
@@ -399,6 +428,39 @@ async function testTieredPassFallbackBroadcastsWhenFairSkips() {
     const fallbackBroadcast = harness.broadcasts[0].message;
     assert.equal(fallbackBroadcast.includes("\u961F\u4F0D\u6027\u8D28"), true);
     assert.equal(fallbackBroadcast.includes(fallbackNature), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testClassificationFieldsReachFinalPass() {
+  const playtimeRows = new Map([["steam-1", { game_seconds: 1000 * 3600 }]]);
+  const harness = await createHarness({ playtimeRows, logClockSeconds: 60 });
+  try {
+    harness.eventBus.emitModuleEvent("module.squadRuleChain", "squadNameRulePassed", creation({
+      squadName: "BMP",
+      squadId: 42,
+      squadType: "vehicle",
+      squadNature: "vehicle",
+      squadTypeId: "ifv",
+      squadTypeLabel: "步战车",
+      squadRuleId: "rule:bmp",
+      effectiveMaxPlayers: 4,
+      maxPlayersSource: "type_default",
+      assetPath: "/Game/BMP",
+      classificationMetadata: { matchedKind: "canonical" },
+    }));
+    await waitFor(() => harness.ruleChain.api.getState().finalPassRecords.some((item) => item.event?.squadId === 42));
+    const event = harness.ruleChain.api.getState().finalPassRecords.find((item) => item.event?.squadId === 42).event;
+    assert.equal(event.squadType, "vehicle");
+    assert.equal(event.squadNature, "vehicle");
+    assert.equal(event.squadTypeId, "ifv");
+    assert.equal(event.squadTypeLabel, "步战车");
+    assert.equal(event.squadRuleId, "rule:bmp");
+    assert.equal(event.effectiveMaxPlayers, 4);
+    assert.equal(event.maxPlayersSource, "type_default");
+    assert.equal(event.assetPath, "/Game/BMP");
+    assert.deepEqual(event.classificationMetadata, { matchedKind: "canonical" });
   } finally {
     await harness.stop();
   }
@@ -688,12 +750,14 @@ async function testWorldBringUpClearsPreviousFinalPassRecords() {
   }
 }
 
+testClassificationFieldsNormalizeWithoutLoss();
 await testNameViolationShortCircuits();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
 await testTrackingDoesNotTreatFairViolationAsAllowedCreation();
 await testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord();
 await testTieredPassFallbackBroadcastsWhenFairSkips();
+await testClassificationFieldsReachFinalPass();
 await testFinalPassWarningMatchesSquadNature();
 await testFinalPassCacheRestoresSameMatch();
 await testFinalPassCacheRestoresByMatchCacheAlias();

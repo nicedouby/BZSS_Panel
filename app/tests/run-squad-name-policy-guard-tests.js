@@ -46,6 +46,7 @@ async function createHarness(configOverride = {}) {
 
   const moduleListeners = new Map();
   const calls = [];
+  const passedEvents = [];
   const modules = {
     squadManagement: {
       async requestRemoveFromSquad(request) {
@@ -74,6 +75,9 @@ async function createHarness(configOverride = {}) {
         return subscribe(moduleListeners, `${moduleId}:${eventName}`, handler);
       },
       emitModuleEvent(moduleId, eventName, event) {
+        if (moduleId === "module.squadRuleChain" && eventName === "squadNameRulePassed") {
+          passedEvents.push(event);
+        }
         if (moduleId === "module.squadRuleChain" && eventName === "squadRuleViolation") {
           if (event.removeLeaderBeforeDisband) {
             calls.push({
@@ -132,6 +136,7 @@ async function createHarness(configOverride = {}) {
 
   return {
     calls,
+    passedEvents,
     instance,
     emit(moduleId, eventName, event) {
       emit(moduleListeners, `${moduleId}:${eventName}`, event);
@@ -142,7 +147,7 @@ async function createHarness(configOverride = {}) {
 async function testLogViolationDisbandsThenWarns() {
   const harness = await createHarness();
   await harness.instance.start();
-  harness.emit("module.squadLifecycle", "squadCreated", createEvent({ squadName: "BMP队" }));
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({ squadName: "BMP违规队" }));
   await waitForHandlers();
 
   assert.equal(harness.calls.length, 6);
@@ -168,10 +173,15 @@ async function testLogViolationDisbandsThenWarns() {
 async function testAllowedNameDoesNothing() {
   const harness = await createHarness();
   await harness.instance.start();
-  harness.emit("module.squadLifecycle", "squadCreated", createEvent({ squadName: "BMP-1" }));
+  harness.emit("module.squadLifecycle", "squadCreated", createEvent({ squadName: "BMP队" }));
   await waitForHandlers();
 
   assert.equal(harness.calls.length, 0);
+  assert.equal(harness.passedEvents.length, 1);
+  assert.equal(harness.passedEvents[0].squadType, "vehicle");
+  assert.equal(harness.passedEvents[0].squadNature, "vehicle");
+  assert.equal(harness.passedEvents[0].squadTypeId, "ifv");
+  assert.equal(harness.passedEvents[0].squadRuleId, "rule:bmp");
   assert.equal(harness.instance.api.getState().recent[0].status, "allowed");
   await harness.instance.stop();
 }
@@ -193,7 +203,7 @@ async function testNonChineseWeirdNameIsViolation() {
 async function testDuplicateHandledOnce() {
   const harness = await createHarness();
   await harness.instance.start();
-  const event = createEvent({ squadName: "BMP队", creationSignature: "create-1" });
+  const event = createEvent({ squadName: "BMP违规队", creationSignature: "create-1" });
   harness.emit("module.squadLifecycle", "squadCreated", event);
   harness.emit("module.squadLifecycle", "squadCreated", event);
   await waitForHandlers();
@@ -207,11 +217,11 @@ async function testRapidRecreateWithNewCreationSignatureIsHandledAgain() {
   const harness = await createHarness();
   await harness.instance.start();
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creationSignature: "create-1",
   }));
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creationSignature: "create-2",
   }));
   await waitForHandlers();
@@ -228,7 +238,7 @@ async function testMatchStateEventsDoNotTriggerGuardDirectly() {
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
-    squads: [createEvent({ squadName: "BMP队" })],
+    squads: [createEvent({ squadName: "BMP违规队" })],
   });
   await waitForHandlers();
   assert.equal(harness.calls.length, 0);
@@ -239,12 +249,12 @@ async function testRapidRecreateWithSameSignatureButNewGeneration() {
   const harness = await createHarness();
   await harness.instance.start();
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creationSignature: "create-1",
     generation: 1,
   }));
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creationSignature: "create-1",
     record: { generation: 2 },
   }));
@@ -260,12 +270,12 @@ async function testRapidRecreateWithoutSignatureButNewGeneration() {
   const harness = await createHarness();
   await harness.instance.start();
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creationSignature: "",
     generation: 1,
   }));
   harness.emit("module.squadLifecycle", "squadCreated", createEvent({
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creationSignature: "",
     record: { generation: 2 },
   }));
@@ -283,7 +293,7 @@ function createEvent(override = {}) {
     matchId: "match-1",
     teamId: 1,
     squadId: 3,
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creatorName: "Creator",
     creatorSteamId: "76561198000000000",
     creatorEosId: "eos-creator",

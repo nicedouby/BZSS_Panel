@@ -1294,7 +1294,9 @@ async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
     socket: {},
   }, stateRecorder.res);
   assert.equal(stateRecorder.state.status, 200);
-  assert.equal(JSON.parse(stateRecorder.state.body).stats.entries, 2);
+  const initialState = JSON.parse(stateRecorder.state.body);
+  assert.equal(initialState.version, 2);
+  assert.equal(initialState.stats.entries >= 2, true);
 
   const testRecorder = createRecorder();
   const testReq = Readable.from([JSON.stringify({ name: "BMP队" })]);
@@ -1305,8 +1307,9 @@ async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
   await viewerServer.handleRequest(testReq, testRecorder.res);
   assert.equal(testRecorder.state.status, 200);
   const testBody = JSON.parse(testRecorder.state.body);
-  assert.equal(testBody.valid, false);
-  assert.deepEqual(testBody.keywordSuggestions.map((item) => item.name), ["BMP-1", "BMP-2"]);
+  assert.equal(testBody.valid, true);
+  assert.equal(testBody.classification.typeId, "ifv");
+  assert.equal(testBody.matched.matchedKind, "suffix");
 
   const forbiddenRecorder = createRecorder();
   const forbiddenReq = Readable.from([JSON.stringify({ suggestionLimit: 3, entries: [] })]);
@@ -1333,16 +1336,23 @@ async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
 
   const saveRecorder = createRecorder();
   const saveReq = Readable.from([JSON.stringify({
+    version: 2,
+    revision: initialState.revision,
     suggestionLimit: 3,
+    types: initialState.types,
     entries: [
       {
         id: "tank",
+        typeId: "tank",
         faction: "ADF",
-        vehicleType: "MBT",
+        legacyVehicleType: "MBT",
         asset: "/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1",
         name: "M1A1",
         aliases: ["Abrams"],
         keywords: ["TANK"],
+        enabled: true,
+        priority: 100,
+        source: "manual",
       },
     ],
   })]);
@@ -1355,8 +1365,45 @@ async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
   const saveBody = JSON.parse(saveRecorder.state.body);
   assert.equal(saveBody.suggestionLimit, 3);
   assert.equal(saveBody.stats.entries, 1);
+  assert.equal(saveBody.revision, initialState.revision + 1);
   const savedRaw = JSON.parse(await fs.readFile(policyPath, "utf8"));
   assert.equal(savedRaw.entries[0].name, "M1A1");
+  assert.equal(savedRaw.version, 2);
+  assert.equal(Array.isArray(savedRaw.types), true);
+
+  const staleRecorder = createRecorder();
+  const staleReq = Readable.from([JSON.stringify({
+    revision: initialState.revision,
+    types: saveBody.types,
+    entries: saveBody.entries,
+  })]);
+  staleReq.method = "POST";
+  staleReq.url = "/api/squad-name-policy/state";
+  staleReq.headers = { host: "localhost", "content-type": "application/json" };
+  staleReq.socket = {};
+  await adminServer.handleRequest(staleReq, staleRecorder.res);
+  assert.equal(staleRecorder.state.status, 409);
+
+  const validateRecorder = createRecorder();
+  const validateReq = Readable.from([JSON.stringify({
+    version: 2,
+    revision: saveBody.revision,
+    types: saveBody.types,
+    entries: [{
+      ...saveBody.entries[0],
+      id: "invalid-infantry-asset",
+      name: "Invalid Infantry",
+      typeId: "infantry",
+      asset: "/Game/Invalid",
+    }],
+  })]);
+  validateReq.method = "POST";
+  validateReq.url = "/api/squad-name-policy/validate";
+  validateReq.headers = { host: "localhost", "content-type": "application/json" };
+  validateReq.socket = {};
+  await adminServer.handleRequest(validateReq, validateRecorder.res);
+  assert.equal(validateRecorder.state.status, 422);
+  assert.equal(JSON.parse(validateRecorder.state.body).errors.some((item) => item.code === "non_vehicle_asset"), true);
 }
 
 async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClear() {
@@ -3806,5 +3853,4 @@ await testMatchSnapshotRoutesExposeArtifacts();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");
-
 

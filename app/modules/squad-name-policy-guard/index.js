@@ -172,7 +172,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         teamId: normalized.teamId,
         squadId: normalized.squadId,
         squadName: normalized.squadName,
-        squadType: resolvePassedSquadType(normalized.squadName, evaluation),
+        ...buildClassificationEventFields(normalized.squadName, evaluation),
         leaderSteamId: normalized.creatorSteamId,
         leaderName: normalized.creatorName,
         leaderEosId: normalized.creatorEosId,
@@ -201,7 +201,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         teamId: normalized.teamId,
         squadId: normalized.squadId,
         squadName: normalized.squadName,
-        squadType: resolvePassedSquadType(normalized.squadName, evaluation),
+        ...buildClassificationEventFields(normalized.squadName, evaluation),
         leaderSteamId: normalized.creatorSteamId,
         leaderName: normalized.creatorName,
         leaderEosId: normalized.creatorEosId,
@@ -290,10 +290,30 @@ function buildWarningMessages(evaluation) {
   return buildSquadNamePolicyWarningMessages(evaluation?.suggestions ?? []);
 }
 
-function resolvePassedSquadType(squadName, evaluation) {
-  const explicit = text(evaluation?.classification?.nature);
-  if (explicit) return explicit;
-  return text(classifySquadName(squadName, { includeDebug: false })?.nature);
+function buildClassificationEventFields(squadName, evaluation) {
+  const classification = evaluation?.classification && typeof evaluation.classification === "object"
+    ? evaluation.classification
+    : null;
+  const fallbackNature = classification
+    ? ""
+    : text(classifySquadName(squadName, { includeDebug: false })?.nature);
+  const nature = text(classification?.nature) || fallbackNature || "other";
+  return {
+    squadType: nature,
+    squadNature: nature,
+    squadTypeId: text(classification?.typeId),
+    squadTypeLabel: text(classification?.typeLabel ?? classification?.label),
+    squadRuleId: text(classification?.ruleId ?? evaluation?.matched?.id),
+    effectiveMaxPlayers: nullableNumber(classification?.effectiveMaxPlayers),
+    maxPlayersSource: text(classification?.maxPlayersSource) || "none",
+    assetPath: text(classification?.assetPath ?? evaluation?.matched?.asset),
+    classificationMetadata: {
+      reason: text(classification?.reason ?? evaluation?.reason),
+      matchedKind: text(evaluation?.matched?.matchedKind),
+      matchedValue: text(evaluation?.matched?.matchedValue),
+      fallback: !classification,
+    },
+  };
 }
 
 function expandWarningMessages(messages = [], runtimeConfig = {}) {

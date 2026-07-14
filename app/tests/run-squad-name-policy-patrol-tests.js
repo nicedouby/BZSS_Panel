@@ -85,7 +85,7 @@ async function testViolationIsFlaggedButNotActedOn() {
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
-    squads: [createEvent({ squadName: "BMP队", creationSignature: "patrol-1" })],
+    squads: [createEvent({ squadName: "BMP违规队", creationSignature: "patrol-1" })],
   });
   await waitForHandlers();
 
@@ -132,7 +132,7 @@ async function testPlainLetterNameIsFlagged() {
 async function testDuplicateSnapshotIsSkipped() {
   const harness = await createHarness();
   await harness.instance.start();
-  const squad = createEvent({ squadName: "BMP队", creationSignature: "patrol-3" });
+  const squad = createEvent({ squadName: "BMP违规队", creationSignature: "patrol-3" });
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
@@ -157,7 +157,7 @@ function createEvent(override = {}) {
     matchId: "match-1",
     teamId: 1,
     squadId: 3,
-    squadName: "BMP队",
+    squadName: "BMP违规队",
     creatorName: "Creator",
     ...override,
   };
