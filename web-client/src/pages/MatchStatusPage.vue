@@ -90,13 +90,18 @@
 
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
             <div
-              v-if="matchLoadingScreenUrl && !matchLoadingScreenFailed"
+              v-if="shouldRequestMatchLoadingScreen"
               class="match-list-loading-screen"
+              :class="{ 'is-ready': matchLoadingScreenReady }"
               aria-hidden="true"
             >
               <img
                 :src="matchLoadingScreenUrl"
                 alt=""
+                loading="lazy"
+                decoding="async"
+                fetchpriority="low"
+                @load="matchLoadingScreenReady = true"
                 @error="matchLoadingScreenFailed = true"
               />
             </div>
@@ -503,6 +508,9 @@ const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refr
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
 
 const matchLoadingScreenFailed = ref(false);
+const matchLoadingScreenRequested = ref(false);
+const matchLoadingScreenReady = ref(false);
+let matchLoadingScreenIdleHandle: number | null = null;
 const matchLoadingScreenUrl = computed(() => {
   const serverSnapshot = server.snapshot ?? {};
   const source = [
@@ -520,8 +528,28 @@ const matchLoadingScreenUrl = computed(() => {
   return resolveMatchLoadingScreenUrl(String(source ?? ""));
 });
 
-watch(matchLoadingScreenUrl, () => {
+const shouldRequestMatchLoadingScreen = computed(() => (
+  Boolean(matchLoadingScreenUrl.value)
+  && matchLoadingScreenRequested.value
+  && !matchLoadingScreenFailed.value
+));
+
+watch(matchLoadingScreenUrl, (url) => {
+  cancelIdleTask(matchLoadingScreenIdleHandle);
+  matchLoadingScreenIdleHandle = null;
   matchLoadingScreenFailed.value = false;
+  matchLoadingScreenReady.value = false;
+  matchLoadingScreenRequested.value = false;
+
+  if (!url) return;
+
+  // The actual loading screen can be a large DQHD image.  Request it only
+  // after the shared match snapshot has painted, and keep its decode off the
+  // critical navigation path.
+  matchLoadingScreenIdleHandle = scheduleIdleTask(() => {
+    matchLoadingScreenIdleHandle = null;
+    matchLoadingScreenRequested.value = true;
+  }, 1_200);
 }, { immediate: true });
 
 function resolveMatchLoadingScreenUrl(mapOrLayer: string) {
@@ -996,6 +1024,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelIdleTask(matchLoadingScreenIdleHandle);
+  matchLoadingScreenIdleHandle = null;
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
   tacticalStateStore.stopStream();
@@ -3039,8 +3069,13 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   height: 100%;
   object-fit: cover;
   object-position: center;
-  opacity: .52;
+  opacity: 0;
   filter: saturate(.82) contrast(1.04) brightness(.78);
+  transition: opacity 180ms ease;
+}
+
+.match-list-loading-screen.is-ready img {
+  opacity: .52;
 }
 
 .squad-main-content > :not(.match-list-loading-screen) {
