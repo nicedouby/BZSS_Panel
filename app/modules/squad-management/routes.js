@@ -9,6 +9,27 @@ export async function handleSquadManagementRoutes({
   readJsonBody,
   json,
 }) {
+  // Authenticated system-module endpoint. This handler is invoked after the
+  // WebServer session gate, so it is a safe lightweight route without adding
+  // another dispatch layer to the large core web server.
+  if (url.pathname === "/api/modules/logpost-diagnostics/state") {
+    if (req.method !== "GET") {
+      json(405, { error: "MethodNotAllowed", message: "Only GET is supported." });
+      return true;
+    }
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, { error: "Forbidden", message: "SuperAdmin access is required." });
+      return true;
+    }
+    const diagnostics = modules.logpostDiagnostics;
+    if (!diagnostics?.getState) {
+      json(404, { error: "LogPostDiagnosticsUnavailable", message: "LogPost diagnostics module is not loaded." });
+      return true;
+    }
+    json(200, { ok: true, data: diagnostics.getState() });
+    return true;
+  }
+
   if (!url.pathname.startsWith("/api/squad-management")) {
     return false;
   }
