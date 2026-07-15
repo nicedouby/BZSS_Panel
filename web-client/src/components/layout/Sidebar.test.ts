@@ -11,7 +11,7 @@ vi.mock("./useRegisteredWebPagesQuery", async () => {
   };
 });
 
-import Sidebar from "./Sidebar.vue";
+import Sidebar from "./StableSidebar.vue";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 
