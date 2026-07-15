@@ -38,6 +38,39 @@ function blackEdgeSwitchCountFromPlayer(player) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
+function normalizedText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function steamProfileMatches(existing, steamID, steamAvatar, profile = {}) {
+  if (!existing) return false;
+
+  const checks = [
+    [normalizedText(steamAvatar), normalizedText(existing.avatar_medium ?? existing.avatarMedium)],
+    [normalizedText(profile.personaName ?? profile.personaname), normalizedText(existing.persona_name ?? existing.personaName)],
+    [
+      normalizedText(profile.profileUrl ?? profile.profileurl),
+      normalizedText(existing.profile_url ?? existing.profileUrl) ?? `https://steamcommunity.com/profiles/${steamID}/`,
+    ],
+    [normalizedText(profile.avatar ?? profile.avatarsmall), normalizedText(existing.avatar_small ?? existing.avatarSmall)],
+    [normalizedText(profile.avatarMedium ?? profile.avatarmedium), normalizedText(existing.avatar_medium ?? existing.avatarMedium)],
+    [normalizedText(profile.avatarFull ?? profile.avatarfull), normalizedText(existing.avatar_full ?? existing.avatarFull)],
+  ];
+
+  for (const [expected, current] of checks) {
+    if (expected != null && expected !== current) return false;
+  }
+
+  const visibility = Number(profile.communityvisibilitystate);
+  if (Number.isFinite(visibility)) {
+    const currentVisibility = Number(existing.community_visibility_state ?? existing.communityVisibilityState);
+    if (!Number.isFinite(currentVisibility) || visibility !== currentVisibility) return false;
+  }
+
+  return true;
+}
+
 /**
  * Module: PlayerDatabase
  *
@@ -192,8 +225,19 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.setGameDurationOverride(playerId, gameSeconds);
     },
 
-    async updateSteamAvatarBySteamID(steamID, steamAvatar) {
-      return repo.updateSteamAvatarBySteamID(steamID, steamAvatar);
+    async updateSteamAvatarBySteamID(steamID, steamAvatar, profile = {}) {
+      const normalizedSteamID = String(steamID ?? "").trim();
+      if (!normalizedSteamID) return null;
+
+      const cachedPlayer = repo.bySteamID?.get?.(normalizedSteamID) ?? null;
+      if (cachedPlayer?.id && normalizedText(cachedPlayer.steam_avatar) === normalizedText(steamAvatar)) {
+        const existingProfile = await repo.getSteamProfile(cachedPlayer.id, cachedPlayer);
+        if (steamProfileMatches(existingProfile, normalizedSteamID, steamAvatar, profile)) {
+          return cachedPlayer;
+        }
+      }
+
+      return repo.updateSteamAvatarBySteamID(normalizedSteamID, steamAvatar, profile);
     },
 
     async listPlayersWithSteamID(options = {}) {
