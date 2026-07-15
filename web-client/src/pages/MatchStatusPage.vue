@@ -286,6 +286,7 @@ import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
+import { fetchTacticalStatePlayerHealth } from "../app/tacticalStateApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -408,6 +409,18 @@ const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false
 const active = ref(true);
 const { canAutoRefresh } = useAutoRefreshGate(computed(() => active.value && !pageHidden.value));
 
+const playerHealthQuery = useQuery({
+  queryKey: computed(() => ["tactical-player-health", auth.authenticated]),
+  enabled: computed(() => active.value && !pageHidden.value && auth.authenticated),
+  queryFn: fetchTacticalStatePlayerHealth,
+  staleTime: 1_000,
+  refetchInterval: computed(() => (
+    active.value && !pageHidden.value && auth.authenticated ? 2_000 : false
+  )),
+  refetchIntervalInBackground: false,
+  refetchOnWindowFocus: false,
+});
+
 // The full tactical-state stream carries high-frequency position data.  It is
 // owned by TacticalMapPage; the list page only opens it temporarily for the
 // currently inspected player's BZSS-Core detail.
@@ -488,14 +501,20 @@ const remoteTelemetryQuery = useQuery({
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
 
 const healthLookup = computed<Record<string, number | null>>(() => {
-  const players = tacticalPlayers.value;
-  if (!Array.isArray(players) || players.length === 0) return {};
+  const healthPlayers = playerHealthQuery.data.value?.players;
+  if (!Array.isArray(healthPlayers) || healthPlayers.length === 0) return {};
   const map: Record<string, number | null> = {};
-  for (const p of players) {
-    const name = String(p?.identity?.name ?? "").trim() || String(p?.name ?? "").trim();
+  for (const player of healthPlayers) {
+    const name = String(player?.name ?? "").trim();
     if (!name) continue;
-    const hp = p?.telemetry?.health ?? p?.raw?.bzss?.soldierInfo?.health ?? null;
-    map[name] = hp != null && Number.isFinite(hp) ? hp : null;
+    const rawHealth = Number(player?.health);
+    if (!Number.isFinite(rawHealth)) {
+      map[name] = null;
+      continue;
+    }
+    // BZSS-Core samples can report health either as 0..1 or 0..100.
+    const percent = rawHealth >= 0 && rawHealth <= 1 ? rawHealth * 100 : rawHealth;
+    map[name] = Math.max(0, Math.min(100, percent));
   }
   return map;
 });
