@@ -12,8 +12,7 @@
       </div>
 
       <template #actions>
-        <router-link to="/debug/squad-name-policy/rules" class="btn ghost">队名规则</router-link>
-        <router-link to="/debug/squad-name-classifier" class="btn ghost">分类调试</router-link>
+        <router-link to="/debug/squad-name-policy/rules" class="btn ghost">队名规范维护</router-link>
         <button type="button" class="btn ghost" :disabled="loading" @click="refreshNow">
           {{ loading ? "刷新中..." : "刷新" }}
         </button>
