@@ -25,6 +25,12 @@ async function main() {
   let unsubscribed = false;
   let latestRevision = 10;
   const tacticalState = {
+    async getPlayers() {
+      return [{
+        identity: { name: "Health Test", playerID: 7, steamID: "76561190000000000" },
+        telemetry: { health: 0.75, stale: false, observedAt: "2026-07-15T00:00:00.000Z" },
+      }];
+    },
     async getStreamSnapshot() {
       const envelope = {
         ok: true,
@@ -38,6 +44,19 @@ async function main() {
       return () => { unsubscribed = true; };
     },
   };
+
+  let healthResponse = null;
+  const healthHandled = await handleTacticalStateRoutes({
+    modules: { tacticalState },
+    url: new URL("http://localhost/api/tactical-state/player-health"),
+    req,
+    res,
+    user: null,
+    json(_status, payload) { healthResponse = payload; },
+  });
+  assert.equal(healthHandled, true);
+  assert.equal(healthResponse?.players?.[0]?.name, "Health Test");
+  assert.equal(healthResponse?.players?.[0]?.health, 0.75);
 
   const handled = await handleTacticalStateRoutes({
     modules: { tacticalState },
