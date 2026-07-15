@@ -17,6 +17,15 @@
           :class="{ active: selectedId === player.id }"
           @click="$emit('select', player.id)"
         >
+          <img
+            v-if="player.steam_avatar || player.steamAvatar"
+            class="player-avatar"
+            :src="player.steam_avatar || player.steamAvatar"
+            alt=""
+          >
+          <div v-else class="player-avatar player-avatar-fallback">
+            {{ String(player.current_name || player.name || "?").slice(0, 1).toUpperCase() }}
+          </div>
           <div class="item-main">
             <span class="player-name">{{ player.current_name || player.name || t("common.unknown") }}</span>
             <span class="player-group">{{ player.permission_group || "default" }}</span>
@@ -97,7 +106,9 @@ function formatTime(value: unknown) {
   cursor: pointer;
   transition: all 0.2s ease;
   display: grid;
-  gap: 4px;
+  grid-template-columns: 42px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 4px;
 }
 
 .player-item:hover {
@@ -114,6 +125,23 @@ function formatTime(value: unknown) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.player-avatar {
+  grid-row: span 3;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.player-avatar-fallback {
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-muted);
 }
 
 .item-qq {
