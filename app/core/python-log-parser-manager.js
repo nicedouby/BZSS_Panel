@@ -3,6 +3,8 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
 
+const DIAGNOSTIC_PREFIX = "[BZSS_DIAG] ";
+
 /**
  * Core: PythonLogParserManager
  *
@@ -15,6 +17,8 @@ export class PythonLogParserManager {
     this.webStatus = webStatus;
     this.child = null;
     this.stopping = false;
+    this.stdoutBuffer = "";
+    this.diagnostics = null;
   }
 
   async start() {
@@ -32,6 +36,8 @@ export class PythonLogParserManager {
     this.webStatus.set("pythonLogParser", "starting");
     this.logger.info(`Starting Python LogParser: ${pythonExecutable} ${scriptPath} ${configPath}`);
     this.logger.info(`Python cwd: ${workingDirectory}`);
+    this.stdoutBuffer = "";
+    this.diagnostics = null;
 
     this.child = spawn(pythonExecutable, [scriptPath, configPath], {
       cwd: workingDirectory,
@@ -48,8 +54,7 @@ export class PythonLogParserManager {
 
     if (this.config.pipeOutput ?? true) {
       this.child.stdout.on("data", (data) => {
-        const text = data.toString("utf8").trimEnd();
-        if (text) this.logger.info(`[PY] ${text}`);
+        this.consumeStdout(data);
       });
 
       this.child.stderr.on("data", (data) => {
@@ -59,8 +64,16 @@ export class PythonLogParserManager {
     }
 
     this.child.on("exit", (code, signal) => {
+      this.flushStdoutBuffer();
       this.logger.warn(`Python LogParser exited. code=${code} signal=${signal}`);
       this.webStatus.set("pythonLogParser", "stopped");
+      this.webStatus.set("logPostPythonDiagnostics", {
+        ...(this.diagnostics ?? {}),
+        processStatus: "stopped",
+        exitedAt: new Date().toISOString(),
+        exitCode: code,
+        exitSignal: signal,
+      });
       this.child = null;
 
       if (!this.stopping && this.config.restartOnExit) {
@@ -76,6 +89,50 @@ export class PythonLogParserManager {
       this.webStatus.set("pythonLogParser", "error");
       this.logger.error(`Python LogParser spawn failed: ${error.stack ?? error}`);
     });
+  }
+
+  consumeStdout(data) {
+    this.stdoutBuffer += data.toString("utf8");
+    const lines = this.stdoutBuffer.split(/\r?\n/u);
+    this.stdoutBuffer = lines.pop() ?? "";
+    for (const line of lines) {
+      this.consumeStdoutLine(line);
+    }
+    // Bound an unterminated third-party line so a broken producer cannot grow memory forever.
+    if (this.stdoutBuffer.length > 1024 * 1024) {
+      this.logger.warn("Python stdout contained an oversized unterminated line; truncating buffer.");
+      this.stdoutBuffer = this.stdoutBuffer.slice(-64 * 1024);
+    }
+  }
+
+  consumeStdoutLine(line) {
+    const text = String(line ?? "").trimEnd();
+    if (!text) return;
+    if (text.startsWith(DIAGNOSTIC_PREFIX)) {
+      try {
+        const payload = JSON.parse(text.slice(DIAGNOSTIC_PREFIX.length));
+        this.diagnostics = {
+          ...payload,
+          receivedAt: new Date().toISOString(),
+          processStatus: "running",
+        };
+        this.webStatus.set("logPostPythonDiagnostics", this.diagnostics);
+      } catch (error) {
+        this.logger.warn(`Invalid Python LogPost diagnostic payload: ${error.message}`);
+      }
+      return;
+    }
+    this.logger.info(`[PY] ${text}`);
+  }
+
+  flushStdoutBuffer() {
+    const text = this.stdoutBuffer;
+    this.stdoutBuffer = "";
+    if (text) this.consumeStdoutLine(text);
+  }
+
+  getDiagnostics() {
+    return this.diagnostics ? { ...this.diagnostics } : null;
   }
 
   async stop() {
