@@ -28,23 +28,19 @@
       <span>{{ pageError || error || state?.lastError }}</span>
     </div>
 
-    <div class="layout">
-      <div class="main-column">
+    <div class="layout-dashboard">
+      <div class="top-row-grid">
         <PageCard title="新增 / 编辑封禁" description="必须填写到期时间。也可以输入时长，由页面自动换算到期时间。">
           <form class="ban-form" @submit.prevent="submitDraft">
             <div class="form-grid">
-              <label class="field">
-                <span>Steam64</span>
-                <input v-model.trim="draft.steamID" type="text" inputmode="numeric" placeholder="7656119..." />
-              </label>
-              <label class="field">
-                <span>EOS</span>
-                <input v-model.trim="draft.eosID" type="text" placeholder="EOS-..." />
-              </label>
-              <label class="field field--wide">
-                <span>名称</span>
-                <input v-model.trim="draft.name" type="text" placeholder="可选，仅用于显示或名称回退匹配" />
-              </label>
+              <div class="field field--wide">
+                <span>玩家 (自动匹配 Steam64 / EOS / 名字)</span>
+                <PlayerSelect
+                  v-model="targetPlayerInput"
+                  @select="handlePlayerSelect"
+                  placeholder="输入 玩家名 / Steam64 / EOS ID 自动检索"
+                />
+              </div>
               <label class="field field--wide">
                 <span>原因</span>
                 <textarea v-model.trim="draft.reason" rows="3" placeholder="填写踢出时展示的原因" />
@@ -100,7 +96,82 @@
           </form>
         </PageCard>
 
-        <PageCard title="封禁列表" description="支持搜索、按状态过滤，以及逐条编辑、禁用、启用和删除。">
+        <PageCard title="安全审计日志" description="展示最近的封禁踢出命中记录与系统事件。">
+          <template #actions>
+            <div class="event-tabs">
+              <button
+                type="button"
+                class="event-tab-btn"
+                :class="{ 'event-tab-btn--active': activeEventTab === 'hits' }"
+                @click="activeEventTab = 'hits'"
+              >
+                命中历史 ({{ recentHitEvents.length }})
+              </button>
+              <button
+                type="button"
+                class="event-tab-btn"
+                :class="{ 'event-tab-btn--active': activeEventTab === 'events' }"
+                @click="activeEventTab = 'events'"
+              >
+                系统事件 ({{ recentEvents.length }})
+              </button>
+            </div>
+          </template>
+
+          <div v-if="activeEventTab === 'hits'" class="event-list">
+            <article
+              v-for="event in recentHitEvents"
+              :key="event.id"
+              class="event-item"
+              :data-kind="event.kind"
+            >
+              <div class="event-head">
+                <StatusBadge :tone="event.kind === 'kick_success' ? 'success' : event.kind === 'kick_failed' ? 'danger' : 'info'" size="sm">
+                  {{ event.kind }}
+                </StatusBadge>
+                <span>{{ formatTime(event.at) }}</span>
+              </div>
+              <strong>{{ event.playerName || event.entryName || "未知玩家" }}</strong>
+              <span>{{ event.serverId || "global" }}</span>
+              <span>{{ event.matchType ? `${event.matchType}: ${event.matchValue}` : event.reason || "" }}</span>
+            </article>
+            <EmptyState
+              v-if="!recentHitEvents.length && !loading"
+              compact
+              title="暂无命中历史"
+              description="还没有发生过封禁命中。"
+            />
+          </div>
+
+          <div v-else class="event-list">
+            <article
+              v-for="event in recentEvents"
+              :key="event.id"
+              class="event-item"
+              :data-kind="event.kind"
+            >
+              <div class="event-head">
+                <StatusBadge :tone="eventTone(event.kind)" size="sm">
+                  {{ event.kind }}
+                </StatusBadge>
+                <span>{{ formatTime(event.at) }}</span>
+              </div>
+              <strong>{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong>
+              <span>{{ event.serverId || event.entryId || "" }}</span>
+              <span v-if="event.reason">{{ event.reason }}</span>
+            </article>
+            <EmptyState
+              v-if="!recentEvents.length && !loading"
+              compact
+              title="暂无事件"
+              description="系统尚未记录事件。"
+            />
+          </div>
+        </PageCard>
+      </div>
+
+      <div class="bottom-row-full">
+        <PageCard title="封禁列表" description="支持搜索、按状态过滤，以及逐条编辑、禁用、启用 and 删除。">
           <template #actions>
             <label class="search-box">
               <span>搜索</span>
@@ -142,26 +213,62 @@
                   </td>
                   <td>
                     <div class="identity-cell">
-                      <strong>{{ entry.name || entry.identityText || entry.id }}</strong>
-                      <span>{{ entry.steamID || "无 Steam64" }}</span>
-                      <span>{{ entry.eosID || "无 EOS" }}</span>
+                      <div class="identity-header">
+                        <span class="user-avatar-icon">👤</span>
+                        <strong class="identity-name">{{ entry.name || entry.id }}</strong>
+                      </div>
+                      <div class="identity-badges">
+                        <span 
+                          v-if="entry.steamID" 
+                          class="id-badge id-badge--steam" 
+                          title="点击复制 Steam64" 
+                          @click="copyTextWithToast(entry.steamID, ui)"
+                        >
+                          <span class="badge-label">STEAM</span>
+                          <span class="badge-value">{{ entry.steamID }}</span>
+                        </span>
+                        <span 
+                          v-if="entry.eosID" 
+                          class="id-badge id-badge--eos" 
+                          title="点击复制 EOS ID" 
+                          @click="copyTextWithToast(entry.eosID, ui)"
+                        >
+                          <span class="badge-label">EOS</span>
+                          <span class="badge-value">{{ entry.eosID }}</span>
+                        </span>
+                      </div>
                     </div>
                   </td>
-                  <td class="reason-cell">{{ entry.reason || "未填写" }}</td>
+                  <td class="reason-cell">
+                    <span class="reason-text" :title="entry.reason || '未填写原因'">
+                      {{ entry.reason || "未填写原因" }}
+                    </span>
+                  </td>
                   <td>
                     <div class="time-cell">
-                      <strong>{{ formatTime(entry.expiresAt) }}</strong>
-                      <span>{{ entry.expiresInLabel }}</span>
+                      <strong :class="{'text-danger': entry.status === 'active' && entry.expiresInMs < 86400000}">
+                        {{ formatTime(entry.expiresAt) }}
+                      </strong>
+                      <span class="expires-in" :class="expiryLabelClass(entry)">
+                        {{ entry.expiresInLabel }}
+                      </span>
                     </div>
                   </td>
                   <td>
-                    <strong>{{ entry.hitCount }}</strong>
+                    <span 
+                      class="hit-badge" 
+                      :class="{ 'hit-badge--has-hits': entry.hitCount > 0 }"
+                      :title="`封禁踢出次数: ${entry.hitCount}`"
+                    >
+                      {{ entry.hitCount }}
+                    </span>
                   </td>
                   <td>
-                    <div class="time-cell">
+                    <div class="time-cell" v-if="entry.lastHitAt">
                       <strong>{{ formatTime(entry.lastHitAt) }}</strong>
-                      <span>{{ entry.lastHitPlayerName || "暂无" }}</span>
+                      <span class="last-hit-player">{{ entry.lastHitPlayerName || "未知" }}</span>
                     </div>
+                    <span v-else class="text-muted font-11">暂无命中</span>
                   </td>
                   <td>
                     <div class="row-actions">
@@ -204,68 +311,12 @@
           />
         </PageCard>
       </div>
-
-      <div class="side-column">
-        <PageCard title="命中历史" description="展示最近的踢出命中记录。">
-          <div class="event-list">
-            <article
-              v-for="event in recentHitEvents"
-              :key="event.id"
-              class="event-item"
-              :data-kind="event.kind"
-            >
-              <div class="event-head">
-                <StatusBadge :tone="event.kind === 'kick_success' ? 'success' : event.kind === 'kick_failed' ? 'danger' : 'info'" size="sm">
-                  {{ event.kind }}
-                </StatusBadge>
-                <span>{{ formatTime(event.at) }}</span>
-              </div>
-              <strong>{{ event.playerName || event.entryName || "未知玩家" }}</strong>
-              <span>{{ event.serverId || "global" }}</span>
-              <span>{{ event.matchType ? `${event.matchType}: ${event.matchValue}` : event.reason || "" }}</span>
-            </article>
-            <EmptyState
-              v-if="!recentHitEvents.length && !loading"
-              compact
-              title="暂无命中历史"
-              description="还没有发生过封禁命中。"
-            />
-          </div>
-        </PageCard>
-
-        <PageCard title="最近事件" description="包含加载、过期、创建、更新和踢出失败等事件。">
-          <div class="event-list">
-            <article
-              v-for="event in recentEvents"
-              :key="event.id"
-              class="event-item"
-              :data-kind="event.kind"
-            >
-              <div class="event-head">
-                <StatusBadge :tone="eventTone(event.kind)" size="sm">
-                  {{ event.kind }}
-                </StatusBadge>
-                <span>{{ formatTime(event.at) }}</span>
-              </div>
-              <strong>{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong>
-              <span>{{ event.serverId || event.entryId || "" }}</span>
-              <span v-if="event.reason">{{ event.reason }}</span>
-            </article>
-            <EmptyState
-              v-if="!recentEvents.length && !loading"
-              compact
-              title="暂无事件"
-              description="系统尚未记录事件。"
-            />
-          </div>
-        </PageCard>
-      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 
 import { apiDelete, apiGet, apiPatch, apiPost } from "../app/apiClient";
 import AppButton from "../components/ui/AppButton.vue";
@@ -275,8 +326,11 @@ import PageHeader from "../components/common/PageHeader.vue";
 import StatGrid from "../components/ui/StatGrid.vue";
 import type { StatItem } from "../components/ui/StatGrid.vue";
 import StatusBadge from "../components/ui/StatusBadge.vue";
+import PlayerSelect from "../components/common/PlayerSelect.vue";
 import { formatTime } from "../composables/useDateTimeFormat";
 import { usePollingResource } from "../composables/usePollingResource";
+import { copyTextWithToast } from "../utils/clipboard";
+import { useUiStore } from "../stores/ui.store";
 
 type EntryStatus = "active" | "disabled" | "expired";
 type StatusView = "all" | EntryStatus;
@@ -364,6 +418,7 @@ type ApiResponse<T> = {
   data: T;
 };
 
+const ui = useUiStore();
 const pageError = ref("");
 const saving = ref(false);
 const reloading = ref(false);
@@ -372,6 +427,9 @@ const busyId = ref("");
 const viewStatus = ref<StatusView>("all");
 const searchText = ref("");
 const editingId = ref("");
+const targetPlayerInput = ref("");
+const activeEventTab = ref<"hits" | "events">("hits");
+
 const draft = reactive({
   steamID: "",
   eosID: "",
@@ -382,6 +440,54 @@ const draft = reactive({
   durationUnit: "days" as DurationUnit,
   status: "active" as EntryStatus,
 });
+
+watch(targetPlayerInput, (val) => {
+  const cleanVal = val.trim();
+  if (!cleanVal) {
+    draft.steamID = "";
+    draft.eosID = "";
+    draft.name = "";
+    return;
+  }
+
+  if (cleanVal === draft.name || cleanVal === draft.steamID || cleanVal === draft.eosID) {
+    return;
+  }
+
+  // 17-digit numeric string starting with 7 (Steam64)
+  if (/^7\d{16}$/.test(cleanVal)) {
+    if (draft.steamID !== cleanVal) {
+      draft.steamID = cleanVal;
+      draft.eosID = "";
+      draft.name = "";
+    }
+    return;
+  }
+
+  // EOS ID checks: 32 hex chars or starts with "eos"
+  if (/^[0-9a-fA-F]{32}$/.test(cleanVal) || cleanVal.toLowerCase().startsWith("eos")) {
+    if (draft.eosID !== cleanVal) {
+      draft.eosID = cleanVal;
+      draft.steamID = "";
+      draft.name = "";
+    }
+    return;
+  }
+
+  // Fallback: Name
+  if (draft.name !== cleanVal) {
+    draft.name = cleanVal;
+    draft.steamID = "";
+    draft.eosID = "";
+  }
+});
+
+function handlePlayerSelect(player: any) {
+  draft.steamID = player.steam_id || player.steamID || player.steamId || "";
+  draft.eosID = player.eos_id || player.eosID || player.eosId || "";
+  draft.name = player.current_name || player.name || "";
+  targetPlayerInput.value = draft.name || draft.steamID || draft.eosID || "";
+}
 
 const {
   data: state,
@@ -597,6 +703,7 @@ function resetDraft() {
   draft.durationValue = 7;
   draft.durationUnit = "days";
   draft.status = "active";
+  targetPlayerInput.value = "";
 }
 
 function editEntry(entry: BanEntry) {
@@ -609,6 +716,11 @@ function editEntry(entry: BanEntry) {
   draft.durationValue = 7;
   draft.durationUnit = "days";
   draft.status = entry.status;
+  targetPlayerInput.value = entry.name || entry.steamID || entry.eosID || "";
+  
+  if (typeof window !== "undefined") {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 }
 
 async function submitDraft() {
@@ -705,6 +817,14 @@ function eventTone(kind: string) {
   }
   return "info";
 }
+
+function expiryLabelClass(entry: BanEntry) {
+  if (entry.status !== "active") return "text-muted";
+  if (entry.expiresInMs && entry.expiresInMs < 86_400_000) {
+    return "text-danger-pulse";
+  }
+  return "text-success-soft";
+}
 </script>
 
 <style scoped>
@@ -713,18 +833,53 @@ function eventTone(kind: string) {
   gap: 16px;
 }
 
-.layout {
+.layout-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.top-row-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+  grid-template-columns: 1.2fr 1fr;
   gap: 16px;
   align-items: start;
 }
 
-.main-column,
-.side-column {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
+.bottom-row-full {
+  width: 100%;
+}
+
+/* Event tab buttons styling */
+.event-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-soft, rgba(255, 255, 255, 0.04));
+}
+
+.event-tab-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.event-tab-btn:hover {
+  color: var(--color-text-primary);
+}
+
+.event-tab-btn--active {
+  color: var(--color-brand-primary, #37c8ff) !important;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .ban-form {
@@ -748,6 +903,8 @@ function eventTone(kind: string) {
 .field--wide {
   grid-column: 1 / -1;
 }
+
+
 
 .field input,
 .field textarea,
@@ -847,8 +1004,11 @@ function eventTone(kind: string) {
 }
 
 .table-wrap {
+  max-height: 560px;
   overflow: auto;
   margin-top: 12px;
+  overscroll-behavior: contain;
+  padding-right: 4px;
 }
 
 .ban-table {
@@ -910,15 +1070,48 @@ function eventTone(kind: string) {
 .event-list {
   display: grid;
   gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 6px;
 }
 
+/* Timeline event item design */
 .event-item {
   display: grid;
   gap: 6px;
   padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid var(--color-border-default);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  border-radius: 12px;
+  border: 1px solid var(--color-border-soft, rgba(255, 255, 255, 0.06));
+  background: rgba(255, 255, 255, 0.015);
+  border-left: 3px solid var(--color-border-default, rgba(255, 255, 255, 0.15));
+  transition: all 0.2s ease;
+}
+
+.event-item:hover {
+  transform: translateX(2px);
+  background: rgba(255, 255, 255, 0.025);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.event-item[data-kind="kick_success"] {
+  border-left-color: var(--color-status-success);
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.04) 0%, rgba(255, 255, 255, 0.005) 100%);
+}
+
+.event-item[data-kind="kick_failed"] {
+  border-left-color: var(--color-status-danger);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.04) 0%, rgba(255, 255, 255, 0.005) 100%);
+}
+
+.event-item[data-kind="created"],
+.event-item[data-kind="updated"],
+.event-item[data-kind="loaded"] {
+  border-left-color: var(--color-status-info);
+}
+
+.event-item[data-kind="expired"] {
+  border-left-color: var(--color-status-warning);
 }
 
 .event-head {
@@ -958,8 +1151,166 @@ function eventTone(kind: string) {
   background: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 10%, transparent);
 }
 
+/* Identity Cell Visual Design */
+.identity-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.user-avatar-icon {
+  font-size: 14px;
+  opacity: 0.6;
+}
+
+.identity-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.identity-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Dual-tone Identity badges */
+.id-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  max-width: fit-content;
+  transition: all 0.2s ease;
+}
+
+.id-badge:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.badge-label {
+  padding: 2px 6px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.id-badge--steam .badge-label {
+  background: rgba(59, 130, 246, 0.6);
+}
+
+.id-badge--eos .badge-label {
+  background: rgba(168, 85, 247, 0.6);
+}
+
+.badge-value {
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--color-text-secondary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.id-badge:hover .badge-value {
+  color: var(--color-text-primary);
+}
+
+/* Reason Text */
+.reason-text {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+/* Countdown Label and Pulses */
+.expires-in {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.text-danger-pulse {
+  color: var(--color-status-danger) !important;
+  animation: pulse-opacity 1.5s infinite;
+}
+
+.text-success-soft {
+  color: var(--color-status-success) !important;
+  opacity: 0.85;
+}
+
+@keyframes pulse-opacity {
+  0% { opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { opacity: 0.7; }
+}
+
+/* Hit Badges */
+.hit-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  color: var(--color-text-muted);
+}
+
+.hit-badge--has-hits {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.15);
+  animation: pulse-border 2.5s infinite;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.last-hit-player {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.font-11 {
+  font-size: 11px;
+}
+
+/* Enhanced Preview Boxes */
+.preview {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0%, rgba(255, 255, 255, 0.005) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.04) !important;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.02);
+}
+
+.ban-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.ban-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.01) !important;
+}
+
 @media (max-width: 1160px) {
-  .layout {
+  .top-row-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -973,5 +1324,30 @@ function eventTone(kind: string) {
   .reason-cell {
     max-width: none;
   }
+}
+
+/* Custom Styled Scrollbars for Panel Ban Page Elements */
+.table-wrap::-webkit-scrollbar,
+.event-list::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.table-wrap::-webkit-scrollbar-track,
+.event-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb,
+.event-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  transition: background 0.15s ease;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover,
+.event-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 </style>

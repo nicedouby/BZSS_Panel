@@ -43,35 +43,43 @@
     <section class="status-cards-grid">
       <div class="status-card" :class="payload?.status || 'idle'">
         <div class="status-card-inner">
-          <div class="status-header">
-            <span class="status-dot-indicator" :class="payload?.status || 'idle'"></span>
-            <span class="lbl">核心状态</span>
+          <div class="status-card-top-row">
+            <div class="status-header">
+              <span class="status-dot-indicator" :class="payload?.status || 'idle'"></span>
+              <span class="lbl">核心状态</span>
+            </div>
+            <strong class="val" :class="statusColorClass">{{ statusLabel }}</strong>
           </div>
-          <strong class="val" :class="statusColorClass">{{ statusLabel }}</strong>
           <span class="sub text-muted">{{ statusDetail }}</span>
         </div>
       </div>
 
       <div class="status-card">
         <div class="status-card-inner">
-          <span class="lbl">运行时玩家</span>
-          <strong class="val">{{ runtimePlayers.length }} <span class="val-unit">人</span></strong>
+          <div class="status-card-top-row">
+            <span class="lbl">运行时玩家</span>
+            <strong class="val">{{ runtimePlayers.length }} <span class="val-unit">人</span></strong>
+          </div>
           <span class="sub text-muted">API同步: {{ payload?.state?.runtimePlayerCount ?? 0 }} 人</span>
         </div>
       </div>
 
       <div class="status-card">
         <div class="status-card-inner">
-          <span class="lbl">计分板玩家</span>
-          <strong class="val">{{ scoreboardPlayers.length }} <span class="val-unit">人</span></strong>
+          <div class="status-card-top-row">
+            <span class="lbl">计分板玩家</span>
+            <strong class="val">{{ scoreboardPlayers.length }} <span class="val-unit">人</span></strong>
+          </div>
           <span class="sub text-muted">API同步: {{ payload?.state?.scoreboardPlayerCount ?? 0 }} 人</span>
         </div>
       </div>
 
       <div class="status-card">
         <div class="status-card-inner">
-          <span class="lbl">场景对象</span>
-          <strong class="val">{{ totalSceneCount }} <span class="val-unit">项</span></strong>
+          <div class="status-card-top-row">
+            <span class="lbl">场景对象</span>
+            <strong class="val">{{ totalSceneCount }} <span class="val-unit">项</span></strong>
+          </div>
           <span class="sub text-muted">{{ payload?.captureZones?.length ?? 0 }} 点位 / {{ payload?.fobs?.length ?? 0 }} FOB</span>
         </div>
       </div>
@@ -82,7 +90,48 @@
         <header class="panel-header-wrapper">
           <div class="panel-header-top">
             <div class="panel-title-group">
-              <h2>玩家快照 ({{ sortedFilteredPairs.length }} / {{ playerPairs.length }})</h2>
+              <div class="main-tabs">
+                <button 
+                  type="button" 
+                  class="tab-link" 
+                  :class="{ 'tab-link--active': activeMainTab === 'players' }" 
+                  @click="activeMainTab = 'players'"
+                >
+                  玩家 ({{ playerPairs.length }})
+                </button>
+                <button 
+                  type="button" 
+                  class="tab-link" 
+                  :class="{ 'tab-link--active': activeMainTab === 'zones' }" 
+                  @click="activeMainTab = 'zones'"
+                >
+                  占领点 ({{ captureZones.length }})
+                </button>
+                <button 
+                  type="button" 
+                  class="tab-link" 
+                  :class="{ 'tab-link--active': activeMainTab === 'fobs' }" 
+                  @click="activeMainTab = 'fobs'"
+                >
+                  FOB ({{ fobs.length }})
+                </button>
+                <button 
+                  type="button" 
+                  class="tab-link" 
+                  :class="{ 'tab-link--active': activeMainTab === 'mainZones' }" 
+                  @click="activeMainTab = 'mainZones'"
+                >
+                  基地区域 ({{ mainZones.length }})
+                </button>
+                <button 
+                  type="button" 
+                  class="tab-link" 
+                  :class="{ 'tab-link--active': activeMainTab === 'explosions' }" 
+                  @click="activeMainTab = 'explosions'"
+                >
+                  爆炸记录 ({{ explosions.length }})
+                </button>
+              </div>
               <span v-if="isFilterActive" class="filter-indicator-badge">已筛选</span>
             </div>
 
@@ -106,21 +155,26 @@
           <!-- New Premium Multi-Parameter Filter Bar -->
           <div class="filter-bar">
             <!-- 1. Search Box -->
-            <div class="filter-item search-filter">
+            <div v-if="activeMainTab !== 'mainZones'" class="filter-item search-filter">
               <div class="search-input-wrapper">
                 <span class="search-icon">🔍</span>
                 <input
                   v-model.trim="query"
                   class="search-input"
                   type="text"
-                  placeholder="搜索名字、ID、GUID..."
+                  :placeholder="
+                    activeMainTab === 'players' ? '搜索名字、ID、GUID...' :
+                    activeMainTab === 'zones' ? '搜索占领点名称...' :
+                    activeMainTab === 'fobs' ? '搜索 FOB ID/名称...' :
+                    activeMainTab === 'explosions' ? '搜索伤害源/玩家...' : '搜索...'
+                  "
                 />
                 <button v-if="query" type="button" class="clear-search-btn" @click="query = ''">×</button>
               </div>
             </div>
 
             <!-- 2. Team Faction Filter -->
-            <div class="filter-item team-filter">
+            <div v-if="activeMainTab !== 'explosions'" class="filter-item team-filter">
               <span class="filter-label">阵营：</span>
               <div class="btn-group">
                 <button 
@@ -151,7 +205,7 @@
             </div>
 
             <!-- 3. Squad Filter -->
-            <div class="filter-item squad-filter">
+            <div v-if="activeMainTab === 'players'" class="filter-item squad-filter">
               <span class="filter-label">小队：</span>
               <select v-model="selectedSquad" class="filter-select">
                 <option value="all">全部小队</option>
@@ -163,7 +217,7 @@
             </div>
 
             <!-- 4. Role / Status Filter -->
-            <div class="filter-item role-filter">
+            <div v-if="activeMainTab === 'players'" class="filter-item role-filter">
               <span class="filter-label">状态：</span>
               <select v-model="selectedRole" class="filter-select">
                 <option value="all">全部状态</option>
@@ -187,216 +241,458 @@
         </header>
 
         <div class="player-list-scroll">
-          <div v-if="sortedFilteredPairs.length > 0" class="table-view-container fade-in">
-            <div class="table-responsive">
-              <table class="player-table">
-                <thead>
-                  <tr>
-                    <th class="sortable" @click="handleSort('playerIndex')">
-                      Index <span v-if="sortKey === 'playerIndex'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable" @click="handleSort('playerId')">
-                      Player ID <span v-if="sortKey === 'playerId'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable" @click="handleSort('teamId')">
-                      Team <span v-if="sortKey === 'teamId'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable" @click="handleSort('squadId')">
-                      Squad <span v-if="sortKey === 'squadId'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th>Status</th>
-                    <th class="sortable text-center" @click="handleSort('kills')">
-                      K <span v-if="sortKey === 'kills'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable text-center" @click="handleSort('deaths')">
-                      D <span v-if="sortKey === 'deaths'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable text-center" @click="handleSort('woundeds')">
-                      W <span v-if="sortKey === 'woundeds'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable text-center" @click="handleSort('lives')">
-                      Lives <span v-if="sortKey === 'lives'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable text-center" @click="handleSort('teamworkScore')">
-                      Teamwork <span v-if="sortKey === 'teamworkScore'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable text-center" @click="handleSort('objectiveScore')">
-                      Objective <span v-if="sortKey === 'objectiveScore'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="sortable text-center" @click="handleSort('combatScore')">
-                      Combat <span v-if="sortKey === 'combatScore'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
-                    </th>
-                    <th class="text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <template v-for="pair in sortedFilteredPairs" :key="pair.playerIndex">
-                    <tr
-                      class="player-row"
-                      :class="[
-                        pair.scoreboard?.teamId === 1 ? 'player-row--blue' : pair.scoreboard?.teamId === 2 ? 'player-row--red' : '',
-                        { 'player-row--expanded': expandedPlayers[pair.playerIndex] },
-                      ]"
-                      @click="togglePlayerExpand(pair.playerIndex)"
-                    >
-                      <td class="mono font-bold player-name-cell">
-                        {{ getPlayerName(pair) || `Player ${pair.playerIndex}` }}
-                        <span class="text-muted text-xs font-normal">({{ pair.playerIndex }})</span>
-                      </td>
-                      <td class="mono text-muted">{{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</td>
-                      <td>
-                        <span
-                          v-if="pair.scoreboard?.teamId != null"
-                          class="badge"
-                          :class="pair.scoreboard.teamId === 1 ? 'badge--blue' : 'badge--red'"
-                        >
-                          {{ getTeamChineseName(pair.scoreboard.teamId) || `Team ${pair.scoreboard.teamId}` }}
-                        </span>
-                        <span v-else class="text-muted">-</span>
-                      </td>
-                      <td>
-                        <span class="badge badge--team">Squad {{ pair.scoreboard?.squadId ?? "--" }}</span>
-                      </td>
-                      <td>
-                        <div class="flex-inline gap-4">
+          <!-- Tab 1: Players -->
+          <template v-if="activeMainTab === 'players'">
+            <div v-if="sortedFilteredPairs.length > 0" class="table-view-container fade-in">
+              <div class="table-responsive">
+                <table class="player-table">
+                  <thead>
+                    <tr>
+                      <th class="sortable" @click="handleSort('playerIndex')">
+                        Index <span v-if="sortKey === 'playerIndex'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable" @click="handleSort('playerId')">
+                        Player ID <span v-if="sortKey === 'playerId'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable" @click="handleSort('teamId')">
+                        Team <span v-if="sortKey === 'teamId'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable" @click="handleSort('squadId')">
+                        Squad <span v-if="sortKey === 'squadId'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th>Status</th>
+                      <th class="sortable text-center" @click="handleSort('kills')">
+                        K <span v-if="sortKey === 'kills'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable text-center" @click="handleSort('deaths')">
+                        D <span v-if="sortKey === 'deaths'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable text-center" @click="handleSort('woundeds')">
+                        W <span v-if="sortKey === 'woundeds'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable text-center" @click="handleSort('lives')">
+                        Lives <span v-if="sortKey === 'lives'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable text-center" @click="handleSort('teamworkScore')">
+                        Teamwork <span v-if="sortKey === 'teamworkScore'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable text-center" @click="handleSort('objectiveScore')">
+                        Objective <span v-if="sortKey === 'objectiveScore'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="sortable text-center" @click="handleSort('combatScore')">
+                        Combat <span v-if="sortKey === 'combatScore'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span>
+                      </th>
+                      <th class="text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="pair in sortedFilteredPairs" :key="pair.playerIndex">
+                      <tr
+                        class="player-row"
+                        :class="[
+                          pair.scoreboard?.teamId === 1 ? 'player-row--blue' : pair.scoreboard?.teamId === 2 ? 'player-row--red' : '',
+                          { 'player-row--expanded': expandedPlayers[pair.playerIndex] },
+                        ]"
+                        @click="togglePlayerExpand(pair.playerIndex)"
+                      >
+                        <td class="mono font-bold player-name-cell">
+                          {{ getPlayerName(pair) || `Player ${pair.playerIndex}` }}
+                          <span class="text-muted text-xs font-normal">({{ pair.playerIndex }})</span>
+                        </td>
+                        <td class="mono text-muted">{{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</td>
+                        <td>
                           <span
-                            class="player-status-dot"
-                            :class="pair.runtime?.stale ? 'player-status-dot--stale' : 'player-status-dot--live'"
-                            :title="pair.runtime?.stale ? '数据已过期' : '数据在线'"
-                          ></span>
-                          <span v-if="pair.scoreboard?.isCommander" class="badge badge--gold">指挥</span>
-                          <span v-if="pair.scoreboard?.isAdmin" class="badge badge--admin">Admin</span>
-                        </div>
-                      </td>
-                      <td class="mono text-center font-bold text-green-glow">{{ pair.scoreboard?.kills ?? 0 }}</td>
-                      <td class="mono text-center text-red-soft">{{ pair.scoreboard?.deaths ?? 0 }}</td>
-                      <td class="mono text-center">{{ pair.scoreboard?.woundeds ?? 0 }}</td>
-                      <td class="mono text-center text-muted">{{ pair.scoreboard?.lives ?? 0 }}</td>
-                      <td class="mono text-center">{{ pair.scoreboard?.teamworkScore ?? 0 }}</td>
-                      <td class="mono text-center">{{ pair.scoreboard?.objectiveScore ?? 0 }}</td>
-                      <td class="mono text-center">{{ pair.scoreboard?.combatScore ?? 0 }}</td>
-                      <td class="text-right" @click.stop>
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm table-expand-btn"
-                          @click="togglePlayerExpand(pair.playerIndex)"
-                        >
-                          {{ expandedPlayers[pair.playerIndex] ? "收起" : "展开" }}
-                        </button>
-                      </td>
-                    </tr>
-
-                    <tr v-if="expandedPlayers[pair.playerIndex]" class="detail-row" @click.stop>
-                      <td colspan="13">
-                        <div class="table-expanded-content">
-                          <div class="expanded-grid">
-                            <div class="grid-card">
-                              <h5>基础信息</h5>
-                              <ul>
-                                <li>
-                                  <span>Player Index:</span> 
-                                  <div class="val-copy-row">
-                                    <strong class="mono">{{ pair.playerIndex }}</strong>
-                                  </div>
-                                </li>
-                                <li>
-                                  <span>Player ID:</span> 
-                                  <div class="val-copy-row">
-                                    <strong class="mono">{{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</strong>
-                                    <button 
-                                      v-if="pair.runtime?.playerId ?? pair.scoreboard?.playerId" 
-                                      type="button" 
-                                      class="btn-copy-mini" 
-                                      title="复制 ID"
-                                      @click="copyToClipboard(String(pair.runtime?.playerId ?? pair.scoreboard?.playerId), 'copied-val')"
-                                    >
-                                      📋
-                                    </button>
-                                  </div>
-                                </li>
-                                <li><span>Player Name:</span> <strong class="mono">{{ getPlayerName(pair) || "--" }}</strong></li>
-                                <li>
-                                  <span>Player GUID:</span> 
-                                  <div class="val-copy-row">
-                                    <strong class="mono text-truncate" style="max-width: 140px;">{{ rawPlayerGuid(pair) }}</strong>
-                                    <button 
-                                      v-if="rawPlayerGuid(pair) !== '--'" 
-                                      type="button" 
-                                      class="btn-copy-mini" 
-                                      title="复制 GUID"
-                                      @click="copyToClipboard(rawPlayerGuid(pair), 'copied-val')"
-                                    >
-                                      📋
-                                    </button>
-                                  </div>
-                                </li>
-                                <li><span>Team:</span> <strong class="mono">{{ pair.scoreboard?.teamId ?? "--" }}</strong></li>
-                                <li><span>Squad:</span> <strong class="mono">{{ pair.scoreboard?.squadId ?? "--" }}</strong></li>
-                                <li><span>Commander:</span> <strong class="mono">{{ boolText(pair.scoreboard?.isCommander) }}</strong></li>
-                                <li><span>Admin:</span> <strong class="mono">{{ boolText(pair.scoreboard?.isAdmin) }}</strong></li>
-                                <li><span>FireTeam:</span> <strong class="mono">{{ pair.scoreboard?.fireTeamIndex ?? "--" }}/{{ pair.scoreboard?.fireTeamPosition ?? "--" }}</strong></li>
-                              </ul>
-                            </div>
-
-                            <div class="grid-card">
-                              <h5>运行时信息</h5>
-                              <ul>
-                                <li>
-                                  <span>Position:</span> 
-                                  <div class="val-copy-row">
-                                    <strong class="mono">{{ formatVector(pair.runtime?.position) }}</strong>
-                                    <button 
-                                      v-if="pair.runtime?.position" 
-                                      type="button" 
-                                      class="btn-copy-mini" 
-                                      title="复制位置"
-                                      @click="copyToClipboard(formatVector(pair.runtime?.position), 'copied-val')"
-                                    >
-                                      📋
-                                    </button>
-                                  </div>
-                                </li>
-                                <li><span>Yaw:</span> <strong class="mono">{{ pair.runtime?.yaw ?? "--" }}</strong></li>
-                                <li><span>Observed At:</span> <strong class="mono">{{ formatDateTime(pair.runtime?.observedAt) }}</strong></li>
-                                <li><span>Stale:</span> <strong class="mono">{{ boolText(pair.runtime?.stale) }}</strong></li>
-                                <li><span>Combat Info:</span> <strong class="mono">{{ pair.runtime?.combatInfo || "--" }}</strong></li>
-                              </ul>
-                            </div>
-
-                            <div class="grid-card">
-                              <h5>计分板信息</h5>
-                              <ul>
-                                <li><span>Ping:</span> <strong class="mono">{{ pair.scoreboard?.ping != null ? `${pair.scoreboard.ping} ms` : "--" }}</strong></li>
-                                <li><span>Kills:</span> <strong class="mono">{{ pair.scoreboard?.kills ?? 0 }}</strong></li>
-                                <li><span>Deaths:</span> <strong class="mono">{{ pair.scoreboard?.deaths ?? 0 }}</strong></li>
-                                <li><span>Woundeds:</span> <strong class="mono">{{ pair.scoreboard?.woundeds ?? 0 }}</strong></li>
-                                <li><span>Wounds:</span> <strong class="mono">{{ pair.scoreboard?.wounds ?? 0 }}</strong></li>
-                                <li><span>TeamKills:</span> <strong class="mono">{{ pair.scoreboard?.teamKills ?? 0 }}</strong></li>
-                                <li><span>Heal Points:</span> <strong class="mono">{{ pair.scoreboard?.healPoints ?? 0 }}</strong></li>
-                                <li><span>Revived Points:</span> <strong class="mono">{{ pair.scoreboard?.revivedPoints ?? 0 }}</strong></li>
-                                <li><span>Teamwork:</span> <strong class="mono">{{ pair.scoreboard?.teamworkScore ?? 0 }}</strong></li>
-                                <li><span>Objective:</span> <strong class="mono">{{ pair.scoreboard?.objectiveScore ?? 0 }}</strong></li>
-                                <li><span>Combat:</span> <strong class="mono">{{ pair.scoreboard?.combatScore ?? 0 }}</strong></li>
-                              </ul>
-                            </div>
+                            v-if="pair.scoreboard?.teamId != null"
+                            class="badge"
+                            :class="pair.scoreboard.teamId === 1 ? 'badge--blue' : 'badge--red'"
+                          >
+                            {{ getTeamChineseName(pair.scoreboard.teamId) || `Team ${pair.scoreboard.teamId}` }}
+                          </span>
+                          <span v-else class="text-muted">-</span>
+                        </td>
+                        <td>
+                          <span class="badge badge--team">Squad {{ pair.scoreboard?.squadId ?? "--" }}</span>
+                        </td>
+                        <td>
+                          <div class="flex-inline gap-4">
+                            <span
+                              class="player-status-dot"
+                              :class="pair.runtime?.stale ? 'player-status-dot--stale' : 'player-status-dot--live'"
+                              :title="pair.runtime?.stale ? '数据已过期' : '数据在线'"
+                            ></span>
+                            <span v-if="pair.scoreboard?.isCommander" class="badge badge--gold">指挥</span>
+                            <span v-if="pair.scoreboard?.isAdmin" class="badge badge--admin">Admin</span>
                           </div>
+                        </td>
+                        <td class="mono text-center font-bold text-green-glow">{{ pair.scoreboard?.kills ?? 0 }}</td>
+                        <td class="mono text-center text-red-soft">{{ pair.scoreboard?.deaths ?? 0 }}</td>
+                        <td class="mono text-center">{{ pair.scoreboard?.woundeds ?? 0 }}</td>
+                        <td class="mono text-center text-muted">{{ pair.scoreboard?.lives ?? 0 }}</td>
+                        <td class="mono text-center">{{ pair.scoreboard?.teamworkScore ?? 0 }}</td>
+                        <td class="mono text-center">{{ pair.scoreboard?.objectiveScore ?? 0 }}</td>
+                        <td class="mono text-center">{{ pair.scoreboard?.combatScore ?? 0 }}</td>
+                        <td class="text-right" @click.stop>
+                          <button
+                            type="button"
+                            class="btn btn-secondary btn-sm table-expand-btn"
+                            @click="togglePlayerExpand(pair.playerIndex)"
+                          >
+                            {{ expandedPlayers[pair.playerIndex] ? "收起" : "展开" }}
+                          </button>
+                        </td>
+                      </tr>
 
-                          <details v-if="showRaw" class="player-json-details">
-                            <summary>行原始 JSON</summary>
-                            <pre class="json-block">{{ formatPlayerPairJson(pair) }}</pre>
-                          </details>
-                        </div>
-                      </td>
-                    </tr>
-                  </template>
-                </tbody>
-              </table>
+                      <tr v-if="expandedPlayers[pair.playerIndex]" class="detail-row" @click.stop>
+                        <td colspan="13">
+                          <div class="table-expanded-content">
+                            <div class="expanded-grid">
+                              <div class="grid-card">
+                                <h5>基础信息</h5>
+                                <ul>
+                                  <li>
+                                    <span>Player Index:</span> 
+                                    <div class="val-copy-row">
+                                      <strong class="mono">{{ pair.playerIndex }}</strong>
+                                    </div>
+                                  </li>
+                                  <li>
+                                    <span>Player ID:</span> 
+                                    <div class="val-copy-row">
+                                      <strong class="mono">{{ pair.runtime?.playerId ?? pair.scoreboard?.playerId ?? "--" }}</strong>
+                                      <button 
+                                        v-if="pair.runtime?.playerId ?? pair.scoreboard?.playerId" 
+                                        type="button" 
+                                        class="btn-copy-mini" 
+                                        title="复制 ID"
+                                        @click="copyToClipboard(String(pair.runtime?.playerId ?? pair.scoreboard?.playerId), 'copied-val')"
+                                      >
+                                        📋
+                                      </button>
+                                    </div>
+                                  </li>
+                                  <li><span>Player Name:</span> <strong class="mono">{{ getPlayerName(pair) || "--" }}</strong></li>
+                                  <li>
+                                    <span>Player GUID:</span> 
+                                    <div class="val-copy-row">
+                                      <strong class="mono text-truncate" style="max-width: 140px;">{{ rawPlayerGuid(pair) }}</strong>
+                                      <button 
+                                        v-if="rawPlayerGuid(pair) !== '--'" 
+                                        type="button" 
+                                        class="btn-copy-mini" 
+                                        title="复制 GUID"
+                                        @click="copyToClipboard(rawPlayerGuid(pair), 'copied-val')"
+                                      >
+                                        📋
+                                      </button>
+                                    </div>
+                                  </li>
+                                  <li><span>Team:</span> <strong class="mono">{{ pair.scoreboard?.teamId ?? "--" }}</strong></li>
+                                  <li><span>Squad:</span> <strong class="mono">{{ pair.scoreboard?.squadId ?? "--" }}</strong></li>
+                                  <li><span>Commander:</span> <strong class="mono">{{ boolText(pair.scoreboard?.isCommander) }}</strong></li>
+                                  <li><span>Admin:</span> <strong class="mono">{{ boolText(pair.scoreboard?.isAdmin) }}</strong></li>
+                                  <li><span>FireTeam:</span> <strong class="mono">{{ pair.scoreboard?.fireTeamIndex ?? "--" }}/{{ pair.scoreboard?.fireTeamPosition ?? "--" }}</strong></li>
+                                </ul>
+                              </div>
+
+                              <div class="grid-card">
+                                <h5>运行时信息</h5>
+                                <ul>
+                                  <li>
+                                    <span>Position:</span> 
+                                    <div class="val-copy-row">
+                                      <strong class="mono">{{ formatVector(pair.runtime?.position) }}</strong>
+                                      <button 
+                                        v-if="pair.runtime?.position" 
+                                        type="button" 
+                                        class="btn-copy-mini" 
+                                        title="复制位置"
+                                        @click="copyToClipboard(formatVector(pair.runtime?.position), 'copied-val')"
+                                      >
+                                        📋
+                                      </button>
+                                    </div>
+                                  </li>
+                                  <li><span>Yaw:</span> <strong class="mono">{{ pair.runtime?.yaw ?? "--" }}</strong></li>
+                                  <li><span>Observed At:</span> <strong class="mono">{{ formatDateTime(pair.runtime?.observedAt) }}</strong></li>
+                                  <li><span>Stale:</span> <strong class="mono">{{ boolText(pair.runtime?.stale) }}</strong></li>
+                                  <li><span>Combat Info:</span> <strong class="mono">{{ pair.runtime?.combatInfo || "--" }}</strong></li>
+                                </ul>
+                              </div>
+
+                              <div class="grid-card">
+                                <h5>计分板信息</h5>
+                                <ul>
+                                  <li><span>Ping:</span> <strong class="mono">{{ pair.scoreboard?.ping != null ? `${pair.scoreboard.ping} ms` : "--" }}</strong></li>
+                                  <li><span>Kills:</span> <strong class="mono">{{ pair.scoreboard?.kills ?? 0 }}</strong></li>
+                                  <li><span>Deaths:</span> <strong class="mono">{{ pair.scoreboard?.deaths ?? 0 }}</strong></li>
+                                  <li><span>Woundeds:</span> <strong class="mono">{{ pair.scoreboard?.woundeds ?? 0 }}</strong></li>
+                                  <li><span>Wounds:</span> <strong class="mono">{{ pair.scoreboard?.wounds ?? 0 }}</strong></li>
+                                  <li><span>TeamKills:</span> <strong class="mono">{{ pair.scoreboard?.teamKills ?? 0 }}</strong></li>
+                                  <li><span>Heal Points:</span> <strong class="mono">{{ pair.scoreboard?.healPoints ?? 0 }}</strong></li>
+                                  <li><span>Revived Points:</span> <strong class="mono">{{ pair.scoreboard?.revivedPoints ?? 0 }}</strong></li>
+                                  <li><span>Teamwork:</span> <strong class="mono">{{ pair.scoreboard?.teamworkScore ?? 0 }}</strong></li>
+                                  <li><span>Objective:</span> <strong class="mono">{{ pair.scoreboard?.objectiveScore ?? 0 }}</strong></li>
+                                  <li><span>Combat:</span> <strong class="mono">{{ pair.scoreboard?.combatScore ?? 0 }}</strong></li>
+                                </ul>
+                              </div>
+                            </div>
+
+                            <!-- Extra telemetry cards if available -->
+                            <div v-if="pair.rawPlayer?.vehicleInfo?.vehicleType || pair.rawPlayer?.soldierInfo?.soldierClass" class="expanded-extra-grid">
+                              <div v-if="pair.rawPlayer?.vehicleInfo?.vehicleType" class="grid-card grid-card--vehicle">
+                                <h5>载具状态</h5>
+                                <ul>
+                                  <li><span>载具类型:</span> <strong class="mono">{{ pair.rawPlayer.vehicleInfo.vehicleType }}</strong></li>
+                                  <li v-if="pair.rawPlayer.vehicleInfo.health != null">
+                                    <span>生命值:</span>
+                                    <div class="fob-health-wrapper" style="width: 100px; margin-left: 10px; display: inline-block; vertical-align: middle;">
+                                      <div class="fob-health-track" style="height: 6px;">
+                                        <div 
+                                          class="fob-health-bar"
+                                          :style="{ 
+                                            width: `${(pair.rawPlayer.vehicleInfo.health / (pair.rawPlayer.vehicleInfo.maxHealth || 100)) * 100}%`,
+                                            background: (pair.rawPlayer.vehicleInfo.health / (pair.rawPlayer.vehicleInfo.maxHealth || 100)) > 0.5 
+                                              ? 'linear-gradient(90deg, #10b981, #34d399)' 
+                                              : 'linear-gradient(90deg, #ef4444, #f87171)'
+                                          }"
+                                        ></div>
+                                      </div>
+                                    </div>
+                                    <strong class="mono" style="margin-left: 6px;">{{ pair.rawPlayer.vehicleInfo.health }}/{{ pair.rawPlayer.vehicleInfo.maxHealth || '100' }}</strong>
+                                  </li>
+                                  <li><span>世界坐标:</span> <strong class="mono text-xs">{{ formatVector(pair.rawPlayer.vehicleInfo.position) }}</strong></li>
+                                </ul>
+                              </div>
+
+                              <div v-if="pair.rawPlayer?.soldierInfo?.soldierClass" class="grid-card grid-card--soldier">
+                                <h5>士兵装备</h5>
+                                <ul>
+                                  <li><span>兵种职业:</span> <strong class="mono">{{ pair.rawPlayer.soldierInfo.soldierClass }}</strong></li>
+                                  <li v-if="pair.rawPlayer.soldierInfo.health != null"><span>健康值:</span> <strong class="mono">{{ pair.rawPlayer.soldierInfo.health }}%</strong></li>
+                                  <li><span>当前武器:</span> <strong class="mono text-xs">{{ pair.rawPlayer.soldierInfo.weaponClass || '--' }}</strong></li>
+                                  <li v-if="pair.rawPlayer.soldierInfo.ammoValues?.length">
+                                    <span>弹药数量:</span> 
+                                    <strong class="mono">{{ pair.rawPlayer.soldierInfo.ammoValues.join(' / ') }}</strong>
+                                  </li>
+                                  <li><span>世界坐标:</span> <strong class="mono text-xs">{{ formatVector(pair.rawPlayer.soldierInfo.position) }}</strong></li>
+                                </ul>
+                              </div>
+                            </div>
+
+                            <details v-if="showRaw" class="player-json-details">
+                              <summary>行原始 JSON</summary>
+                              <pre class="json-block">{{ formatPlayerPairJson(pair) }}</pre>
+                            </details>
+                          </div>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+            <div v-else class="empty-list-state">
+              <p>当前没有满足筛选条件的玩家数据。</p>
+            </div>
+          </template>
 
-          <div v-else class="empty-list-state">
-            <p>当前没有满足筛选条件的玩家数据。</p>
-          </div>
+          <!-- Tab 2: Capture Zones -->
+          <template v-else-if="activeMainTab === 'zones'">
+            <div v-if="filteredCaptureZones.length > 0" class="zones-grid fade-in">
+              <div 
+                v-for="(zone, index) in filteredCaptureZones" 
+                :key="`${zone.name}-${index}`" 
+                class="zone-card-main"
+                :class="[
+                  zone.captureDirection === 1 || zone.ownerTeamId === 1 ? 'zone-card--blue' : '',
+                  zone.captureDirection === 2 || zone.ownerTeamId === 2 ? 'zone-card--red' : '',
+                ]"
+              >
+                <div class="zone-card-header">
+                  <h3>{{ zone.name || `Capture Zone ${index + 1}` }}</h3>
+                  <span class="zone-status-badge" :class="{ 'zone-status-badge--locked': zone.isLocked }">
+                    {{ zone.isLocked ? "已锁定" : "活跃点" }}
+                  </span>
+                </div>
+                <div v-if="!zone.isLocked && zone.capturePercent != null && zone.capturePercent > 0" class="capture-progress-wrapper">
+                  <div class="capture-progress-track">
+                    <div 
+                      class="capture-progress-bar"
+                      :style="{ 
+                        width: formatCapturePercent(zone.capturePercent),
+                        background: zone.captureDirection === 1 
+                          ? 'linear-gradient(90deg, #3b82f6, #60a5fa)' 
+                          : zone.captureDirection === 2 
+                            ? 'linear-gradient(90deg, #ef4444, #f87171)' 
+                            : 'linear-gradient(90deg, #64748b, #94a3b8)'
+                      }"
+                    ></div>
+                  </div>
+                </div>
+                <div class="zone-info-grid">
+                  <div class="info-item">
+                    <span class="label">归属阵营:</span>
+                    <strong class="value">
+                      <span 
+                        v-if="zone.ownerTeamId || zone.teamId" 
+                        class="badge" 
+                        :class="(zone.ownerTeamId || zone.teamId) === 1 ? 'badge--blue' : 'badge--red'"
+                      >
+                        {{ getTeamChineseName(zone.ownerTeamId || zone.teamId) || `Team ${zone.ownerTeamId || zone.teamId}` }}
+                      </span>
+                      <span v-else class="text-muted">中立</span>
+                    </strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">占领进度:</span>
+                    <strong class="value">{{ formatCapturePercent(zone.capturePercent) }}</strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">占领方向:</span>
+                    <strong class="value">{{ formatCaptureDirection(zone.captureDirection) }}</strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">位置坐标:</span>
+                    <strong class="value mono text-xs">{{ formatSceneVector(zone.position) }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-list-state">
+              <p>当前没有满足筛选条件的占领点数据。</p>
+            </div>
+          </template>
+
+          <!-- Tab 3: FOBs -->
+          <template v-else-if="activeMainTab === 'fobs'">
+            <div v-if="filteredFobs.length > 0" class="fobs-grid fade-in">
+              <div 
+                v-for="(fob, index) in filteredFobs" 
+                :key="`${fob.name || 'fob'}-${index}`" 
+                class="fob-card-main"
+                :class="fob.teamId === 1 ? 'fob-card--blue' : fob.teamId === 2 ? 'fob-card--red' : ''"
+              >
+                <div class="fob-card-header">
+                  <h3>{{ fob.name || `FOB` }}</h3>
+                  <div class="fob-status-badges">
+                    <span v-if="fob.isBleeding" class="fob-badge fob-badge--bleeding animate-pulse">流血中</span>
+                    <span v-if="fob.health != null" class="fob-badge fob-badge--health">血量: {{ fob.health }}%</span>
+                  </div>
+                </div>
+                
+                <!-- FOB Health Bar -->
+                <div v-if="fob.health != null" class="fob-health-wrapper">
+                  <div class="fob-health-track">
+                    <div 
+                      class="fob-health-bar"
+                      :style="{ 
+                        width: `${fob.health}%`,
+                        background: fob.health > 50 
+                          ? 'linear-gradient(90deg, #10b981, #34d399)' 
+                          : fob.health > 20 
+                            ? 'linear-gradient(90deg, #f59e0b, #fbbf24)' 
+                            : 'linear-gradient(90deg, #ef4444, #f87171)'
+                      }"
+                    ></div>
+                  </div>
+                </div>
+
+                <div class="fob-info-grid">
+                  <div class="info-item">
+                    <span class="label">归属阵营:</span>
+                    <strong class="value">
+                      <span 
+                        v-if="fob.teamId" 
+                        class="badge" 
+                        :class="fob.teamId === 1 ? 'badge--blue' : 'badge--red'"
+                      >
+                        {{ getTeamChineseName(fob.teamId) || `Team ${fob.teamId}` }}
+                      </span>
+                      <span v-else class="text-muted">-</span>
+                    </strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">建材点数:</span>
+                    <strong class="value">{{ fob.construction ?? fob.constructionPoints ?? 0 }}</strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">弹药点数:</span>
+                    <strong class="value">{{ fob.ammo ?? 0 }}</strong>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">尺寸/发起者:</span>
+                    <strong class="value text-xs">{{ fob.size || fob.instigator || '--' }}</strong>
+                  </div>
+                  <div class="info-item full-width">
+                    <span class="label">世界坐标:</span>
+                    <strong class="value mono text-xs">{{ formatSceneVector(fob.position) }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-list-state">
+              <p>当前没有满足筛选条件的 FOB 数据。</p>
+            </div>
+          </template>
+
+          <!-- Tab 4: Main Zones -->
+          <template v-else-if="activeMainTab === 'mainZones'">
+            <div v-if="filteredMainZones.length > 0" class="main-zones-grid fade-in">
+              <div 
+                v-for="(mz, index) in filteredMainZones" 
+                :key="index" 
+                class="mz-card-main"
+                :class="mz.teamId === 1 ? 'mz-card--blue' : mz.teamId === 2 ? 'mz-card--red' : ''"
+              >
+                <div class="mz-card-header">
+                  <h3>基地 (Main Zone)</h3>
+                  <span class="badge" :class="mz.teamId === 1 ? 'badge--blue' : 'badge--red'">
+                    {{ getTeamChineseName(mz.teamId) || `Team ${mz.teamId}` }}
+                  </span>
+                </div>
+                <div class="mz-info">
+                  <div class="info-item">
+                    <span class="label">位置坐标:</span>
+                    <strong class="value mono text-xs">{{ formatSceneVector(mz.position) }}</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="empty-list-state">
+              <p>当前没有满足筛选条件的基地区域数据。</p>
+            </div>
+          </template>
+
+          <!-- Tab 5: Explosions -->
+          <template v-else-if="activeMainTab === 'explosions'">
+            <div v-if="filteredExplosions.length > 0" class="table-view-container fade-in">
+              <div class="table-responsive">
+                <table class="player-table">
+                  <thead>
+                    <tr>
+                      <th>时间</th>
+                      <th>ID</th>
+                      <th>伤害源 (Damage Causer)</th>
+                      <th>发起者 (Instigator)</th>
+                      <th>世界坐标</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="exp in filteredExplosions" :key="exp.id" class="explosion-row">
+                      <td class="mono">{{ formatDateTime(exp.at) }}</td>
+                      <td class="mono text-muted text-xs">{{ exp.id }}</td>
+                      <td class="mono text-green-glow">{{ exp.damageCauser }}</td>
+                      <td class="mono font-bold">{{ exp.damageInstigator || '--' }}</td>
+                      <td class="mono text-xs">X: {{ exp.x.toFixed(1) }}, Y: {{ exp.y.toFixed(1) }}, Z: {{ exp.z.toFixed(1) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div v-else class="empty-list-state">
+              <p>当前没有满足筛选条件的爆炸记录数据。</p>
+            </div>
+          </template>
         </div>
       </section>
 
@@ -538,6 +834,9 @@ import {
   type BzssCoreCaptureZoneInfo,
   type BzssCoreRuntimePlayerInfo,
   type BzssCoreScoreboardPlayerInfo,
+  type BzssCoreFobInfo,
+  type BzssCoreMainZoneInfo,
+  type BzssCoreExplosionInfo,
 } from "../app/bzssCoreApi";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { useSquadStore } from "../stores/squad.store";
@@ -550,6 +849,7 @@ type PlayerPair = {
   playerIndex: number | string;
   runtime: BzssCoreRuntimePlayerInfo | null;
   scoreboard: BzssCoreScoreboardPlayerInfo | null;
+  rawPlayer?: BzssCoreMergedPlayer | null;
 };
 
 type BzssCoreMergedPlayer = {
@@ -575,13 +875,26 @@ type BzssCoreMergedPlayer = {
     combatInfo?: string;
     vehicleInfo?: any;
   };
-  soldierInfo?: {
+  vehicleInfo?: {
+    raw?: string;
+    vehicleType?: string;
+    healthText?: string;
+    health?: number | null;
+    maxHealth?: number | null;
     position?: BzssCoreRuntimePlayerInfo["position"] | null;
-    rotation?: {
-      z?: number | null;
-    } | null;
+    rotation?: BzssCoreRuntimePlayerInfo["position"] | null;
+  } | null;
+  soldierInfo?: {
+    raw?: string;
+    fields?: string[];
+    values?: Record<string, string>;
+    soldierClass?: string;
+    health?: number | null;
     weaponClass?: string;
-  };
+    ammoValues?: number[];
+    position?: BzssCoreRuntimePlayerInfo["position"] | null;
+    rotation?: BzssCoreRuntimePlayerInfo["position"] | null;
+  } | null;
   presence?: {
     state?: string;
     runtimeObservedAt?: string;
@@ -624,6 +937,7 @@ const rawLoaded = ref(false);
 const selectedTeam = ref<number | null>(null);
 const selectedSquad = ref<string | number>("all");
 const selectedRole = ref<string>("all");
+const activeMainTab = ref<"players" | "zones" | "fobs" | "mainZones" | "explosions">("players");
 
 const availableSquads = computed(() => {
   const squadsSet = new Set<number>();
@@ -728,14 +1042,15 @@ const teamNames = computed(() => {
   };
 });
 
-function getTeamChineseName(teamId: number) {
+function getTeamChineseName(teamId: number | null | undefined) {
   if (teamId === 1) return getChineseNameFromTeamName(teamNames.value.t1Raw);
   if (teamId === 2) return getChineseNameFromTeamName(teamNames.value.t2Raw);
   return "";
 }
 
 // Check if a team translation was found, return raw name or clean short name if translation is empty
-function getTeamShortLabel(teamId: number) {
+function getTeamShortLabel(teamId: number | null | undefined) {
+  if (teamId == null) return "";
   const cnName = getTeamChineseName(teamId);
   if (cnName) return cnName;
   return teamId === 1 ? teamNames.value.t1Raw : teamNames.value.t2Raw;
@@ -845,6 +1160,7 @@ function buildPlayerPairFromMergedPlayer(player: BzssCoreMergedPlayer): PlayerPa
     playerIndex: player.playerIndex ?? player.playerId ?? "",
     runtime,
     scoreboard,
+    rawPlayer: player,
   };
 }
 
@@ -935,6 +1251,81 @@ const sortedFilteredPairs = computed(() => {
 const captureZones = computed<BzssCoreCaptureZoneInfo[]>(() => (
   payload.value?.captureZones ?? rawData.value?.captureZones ?? []
 ));
+
+const fobs = computed<BzssCoreFobInfo[]>(() => (
+  payload.value?.fobs ?? rawData.value?.fobs ?? []
+));
+
+const mainZones = computed<BzssCoreMainZoneInfo[]>(() => (
+  payload.value?.mainZones ?? rawData.value?.mainZones ?? []
+));
+
+const explosions = computed<BzssCoreExplosionInfo[]>(() => (
+  payload.value?.explosions ?? rawData.value?.explosions ?? []
+));
+
+const filteredCaptureZones = computed(() => {
+  const needle = query.value.trim().toLowerCase();
+  let list = captureZones.value;
+
+  if (needle) {
+    list = list.filter((zone) => 
+      (zone.name ?? "").toLowerCase().includes(needle) ||
+      (zone.raw ?? "").toLowerCase().includes(needle)
+    );
+  }
+
+  if (selectedTeam.value !== null) {
+    list = list.filter((zone) => 
+      zone.teamId === selectedTeam.value || 
+      zone.ownerTeamId === selectedTeam.value || 
+      zone.captureDirection === selectedTeam.value
+    );
+  }
+
+  return list;
+});
+
+const filteredFobs = computed(() => {
+  const needle = query.value.trim().toLowerCase();
+  let list = fobs.value;
+
+  if (needle) {
+    list = list.filter((fob) => 
+      (fob.name ?? "").toLowerCase().includes(needle) ||
+      (fob.fobId ?? "").toLowerCase().includes(needle) ||
+      (fob.raw ?? "").toLowerCase().includes(needle)
+    );
+  }
+
+  if (selectedTeam.value !== null) {
+    list = list.filter((fob) => fob.teamId === selectedTeam.value);
+  }
+
+  return list;
+});
+
+const filteredMainZones = computed(() => {
+  let list = mainZones.value;
+  if (selectedTeam.value !== null) {
+    list = list.filter((mz) => mz.teamId === selectedTeam.value);
+  }
+  return list;
+});
+
+const filteredExplosions = computed(() => {
+  const needle = query.value.trim().toLowerCase();
+  let list = explosions.value;
+
+  if (needle) {
+    list = list.filter((exp) => 
+      (exp.damageCauser ?? "").toLowerCase().includes(needle) ||
+      (exp.damageInstigator ?? "").toLowerCase().includes(needle) ||
+      (exp.id ?? "").toLowerCase().includes(needle)
+    );
+  }
+  return list;
+});
 
 
 const rawDataStatusLabel = computed(() => {
@@ -1256,7 +1647,7 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.015);
   border: 1px solid var(--color-border-soft);
   border-radius: 12px;
-  padding: 14px 18px;
+  padding: 10px 16px;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1270,7 +1661,14 @@ onBeforeUnmount(() => {
 .status-card-inner {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.status-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .status-header {
@@ -2351,5 +2749,208 @@ onBeforeUnmount(() => {
   .expanded-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Tab Buttons */
+.main-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none; /* Firefox */
+}
+
+.main-tabs::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+}
+
+.tab-link {
+  height: 36px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-link:hover {
+  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-border-default);
+}
+
+.tab-link--active {
+  color: var(--color-brand-primary) !important;
+  background: rgba(55, 200, 255, 0.08) !important;
+  border-color: rgba(55, 200, 255, 0.35) !important;
+  box-shadow: 0 0 12px rgba(55, 200, 255, 0.08);
+}
+
+/* Grids for other categories */
+.zones-grid, .fobs-grid, .main-zones-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 4px;
+}
+
+/* Zone Card */
+.zone-card-main, .fob-card-main, .mz-card-main {
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 12px;
+  padding: 16px;
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.zone-card-main:hover, .fob-card-main:hover, .mz-card-main:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--color-border-default);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+.zone-card--blue, .fob-card--blue, .mz-card--blue {
+  border-left: 3px solid #3b82f6;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.04), transparent 80%);
+}
+
+.zone-card--red, .fob-card--red, .mz-card--red {
+  border-left: 3px solid #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.04), transparent 80%);
+}
+
+.zone-card-header, .fob-card-header, .mz-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.zone-card-header h3, .fob-card-header h3, .mz-card-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zone-status-badge, .fob-badge {
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 99px;
+  border: 1px solid transparent;
+}
+
+.zone-status-badge {
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.2);
+  color: var(--color-status-success);
+}
+
+.zone-status-badge--locked {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: var(--color-status-warning);
+}
+
+.fob-badge--bleeding {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.fob-badge--health {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--color-border-soft);
+  color: var(--color-text-secondary);
+}
+
+/* FOB Health bar */
+.fob-health-wrapper {
+  width: 100%;
+}
+
+.fob-health-track {
+  height: 6px;
+  width: 100%;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.fob-health-bar {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.35s ease;
+}
+
+.zone-info-grid, .fob-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 10px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-item.full-width {
+  grid-column: 1 / -1;
+}
+
+.info-item .label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.info-item .value {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.mz-info {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  padding-top: 10px;
+}
+
+.explosion-row:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Expanded extra grid */
+.expanded-extra-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.grid-card--vehicle {
+  border-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+.grid-card--soldier {
+  border-color: rgba(168, 85, 247, 0.2) !important;
 }
 </style>

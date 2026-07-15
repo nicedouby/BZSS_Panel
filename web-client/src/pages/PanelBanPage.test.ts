@@ -1,5 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
 
 vi.mock("vue-router", () => ({
   useRoute: () => ({
@@ -21,6 +22,7 @@ import PanelBanPage from "./PanelBanPage.vue";
 
 describe("PanelBanPage", () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     vi.useFakeTimers();
     vi.mocked(apiGet).mockResolvedValue({
       ok: true,
@@ -100,7 +102,15 @@ describe("PanelBanPage", () => {
   });
 
   it("renders panel ban state from the plugin API", async () => {
-    const wrapper = mount(PanelBanPage);
+    const pinia = createPinia();
+    const wrapper = mount(PanelBanPage, {
+      global: {
+        plugins: [pinia],
+        stubs: {
+          PlayerSelect: true,
+        },
+      },
+    });
     await vi.runOnlyPendingTimersAsync();
     await flushPromises();
 

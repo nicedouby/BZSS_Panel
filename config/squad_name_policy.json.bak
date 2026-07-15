@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 4,
+  "revision": 3,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-07-15T07:50:37.540Z",
+  "updatedAt": "2026-07-15T07:49:25.942Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -6141,7 +6141,7 @@
       "keywords": [
         "GUIKE"
       ],
-      "typeId": "logistics",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6245,7 +6245,7 @@
       "name": "创伤小组",
       "aliases": [],
       "keywords": [],
-      "typeId": "logistics",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6262,7 +6262,7 @@
       "name": "萨尼铁塔",
       "aliases": [],
       "keywords": [],
-      "typeId": "logistics",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6281,7 +6281,7 @@
       "keywords": [
         "ZSJ"
       ],
-      "typeId": "helicopter",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
