@@ -81,8 +81,8 @@ async function testWarnByPlayerIdPreferred() {
     targetName: "don",
     targetPlayerId: "123",
     message: "test message",
-    sourceModule: "module.infantryCombatEnhancer",
-    reason: "infantry_damage_victim",
+    sourceModule: "module.test",
+    reason: "test_warning",
   });
 
   assert.equal(result.success, true);
@@ -134,8 +134,8 @@ async function testRequirePlayerIdSkipsNameFallback() {
   const result = await module.api.warnPlayer({
     targetName: "don",
     message: "should not send by name",
-    sourceModule: "module.infantryCombatEnhancer",
-    reason: "infantry_damage_victim",
+    sourceModule: "module.test",
+    reason: "test_warning",
     requireTargetPlayerId: true,
   });
 

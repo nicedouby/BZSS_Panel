@@ -22,7 +22,6 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/squad-rule-chain/stepwise", requiredPermission: "squad_management.view" },
   { route: "/squad-rule-chain/fair", requiredPermission: "squad_management.view" },
   { route: "/plugin-subscriptions", requiredPermission: "settings.manage" },
-  { route: "/plugins/infantry-combat-enhancer", requiredPermission: "infantry_combat_enhancer.view" },
   { route: "/plugins/group-report", requiredPermission: "group_report.view" },
   { route: "/plugins/tactical-report", requiredPermission: "plugin:tactical-report:view" },
   { route: "/plugins/tactical-report/config", requiredPermission: "plugin:tactical-report:update" },

@@ -213,16 +213,6 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
-    name: "infantry-combat-enhancer",
-    path: "/plugins/infantry-combat-enhancer",
-    component: () => import("../pages/InfantryCombatEnhancerPage.vue"),
-    titleKey: "routeTitle.infantryCombatEnhancer",
-    category: "plugin",
-    refreshPolicy: "polling",
-    nav: { section: "combat", label: "步兵战斗增强", icon: "💂", order: 40 },
-    ...workspacePage,
-  },
-  {
     name: "group-report",
     path: "/plugins/group-report",
     component: () => import("../pages/GroupReportPage.vue"),

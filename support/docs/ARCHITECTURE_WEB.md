@@ -150,7 +150,6 @@ core/web-status.js
 | `/kill-manage` | `core` | `polling` | 战斗管理 |
 | `/admin-warns` | `core` | `polling` | 警告记录 |
 | `/squad-management` | `core` | `polling` | 小队管理 |
-| `/plugins/infantry-combat-enhancer` | `plugin` | `polling` | 插件页 |
 | `/plugins/group-report` | `plugin` | `polling` | 插件页 |
 | `/plugins/server-info-statistics` | `plugin` | `polling` | 插件页 |
 | `/plugin-subscriptions` | `system` | `polling` | 系统页 |

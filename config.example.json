@@ -616,20 +616,6 @@
         "windowMs": 300000
       }
     },
-    "infantryCombatEnhancer": {
-      "enabled": true,
-      "minAttackerDamage": 15,
-      "damageDebounceMs": 0,
-      "damageAggregation": {
-        "enabled": false,
-        "debounceMs": 0
-      },
-      "showVictimDamage": true,
-      "showVictimWound": true,
-      "showVictimKill": true,
-      "showAttackerDamage": true,
-      "storeRecentEventLimit": 300
-    },
     "adminWarn": {
       "enabled": true,
       "maxRecords": 3000,

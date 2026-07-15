@@ -384,7 +384,6 @@ const pagePermissionLabels = new Map([
   ["scheduled_broadcast.view", "定时广播"],
   ["squad_management.view", "小队管理"],
   ["plugin:panel-ban:view", "面板封禁"],
-  ["infantry_combat_enhancer.view", "步战增强"],
   ["group_report.view", "抱团报备"],
   ["plugin:tactical-report:view", "战术报点页面"],
   ["plugin:tactical-report:update", "战术报点配置"],
@@ -1252,4 +1251,3 @@ td small {
   }
 }
 </style>
-

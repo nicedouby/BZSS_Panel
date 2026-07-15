@@ -29,7 +29,6 @@ import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createSquadNamePolicyPatrolModule } from "../modules/squad-name-policy-patrol/index.js";
-import { createInfantryCombatEnhancerModule } from "../modules/infantry-combat-enhancer/index.js";
 import { createPlaytimeModule } from "../modules/playtime/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
@@ -94,7 +93,6 @@ export class ModuleManager {
       createSquadRuleChainModule,
       createSquadNamePolicyGuardModule,
       createSquadNamePolicyPatrolModule,
-      createInfantryCombatEnhancerModule,
       createPlaytimeModule,
       createServerStatsModule,
       createRemoteTelemetryModule,
@@ -216,4 +214,3 @@ function inferModuleId(factoryName) {
   const normalized = name.charAt(0).toLowerCase() + name.slice(1);
   return `module.${normalized}`;
 }
-

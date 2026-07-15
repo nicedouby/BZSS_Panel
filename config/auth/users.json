@@ -289,7 +289,6 @@
         "admin_warn.view",
         "scheduled_broadcast.view",
         "squad_management.view",
-        "infantry_combat_enhancer.view",
         "group_report.view",
         "plugin:tactical-report:view",
         "plugin:tactical-report:update",
