@@ -709,19 +709,17 @@ async function submitForbRessCommand() {
 
   busy.value = true;
   try {
-    for (const teamId of teams) {
-      const result = await executeBzssCoreCommand({
-        directive: "SetFobResourceRegeneration",
-        parameter: [teamId, ...suffix].join(","),
-      });
+    const commands = teams.map((teamId) =>
+      `SetFobResourceRegeneration:${[teamId, ...suffix].join(",")}`,
+    );
+    const result = await executeBzssCoreCommand({ batch: commands });
 
-      if (!result.ok) {
-        const details = [result.message, result.stdout, result.stderr]
-          .map((item) => String(item ?? "").trim())
-          .filter(Boolean)
-          .join(" / ");
-        throw new Error(details || "SetFobResourceRegeneration failed.");
-      }
+    if (!result.ok) {
+      const details = [result.message, result.stdout, result.stderr]
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+        .join(" / ");
+      throw new Error(details || "SetFobResourceRegeneration failed.");
     }
 
     ui.pushToast({
