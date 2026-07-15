@@ -50,8 +50,8 @@
       <button class="overview-card" type="button" @click="activeTab = 'types'">
         <span>队伍类型</span><strong>{{ types.length }}</strong><small>{{ enabledTypeCount }} 个可继续使用</small>
       </button>
-      <button class="overview-card" :class="{ attention: legacyTypeCount > 0 }" type="button" @click="showLegacyTypes">
-        <span>待确认类型</span><strong>{{ legacyTypeCount }}</strong><small>{{ legacyTypeCount ? "由旧配置迁移，建议逐步整理" : "迁移数据已整理" }}</small>
+      <button class="overview-card" type="button" @click="showVehicleTypes">
+        <span>载具类别</span><strong>{{ vehicleTypeCount }}</strong><small>轻型、装甲、炮兵与航空载具</small>
       </button>
     </section>
 
@@ -258,7 +258,7 @@ const typeMap = computed(() => new Map(types.value.map((type) => [type.id, type]
 const enabledRuleCount = computed(() => entries.value.filter((entry) => entry.enabled).length);
 const disabledRuleCount = computed(() => entries.value.length - enabledRuleCount.value);
 const enabledTypeCount = computed(() => types.value.filter((type) => type.enabled).length);
-const legacyTypeCount = computed(() => types.value.filter((type) => type.id.startsWith("legacy_")).length);
+const vehicleTypeCount = computed(() => types.value.filter((type) => type.nature === "vehicle").length);
 const activeFilterCount = computed(() => [filters.nature, filters.typeId, filters.status, filters.source].filter(Boolean).length);
 const filtersActive = computed(() => Boolean(filters.search || activeFilterCount.value));
 const filteredEntries = computed(() => entries.value.filter((entry) => {
@@ -328,7 +328,7 @@ function setDefaultPatterns(event: Event) { defaultNamePatterns.value = parseLis
 function clearFilters() { Object.assign(filters, { search: "", nature: "", typeId: "", status: "", source: "" }); renderLimit.value = 100; }
 function showAllRules() { activeTab.value = "rules"; clearFilters(); }
 function showDisabledRules() { activeTab.value = "rules"; clearFilters(); filters.status = "disabled"; showFilters.value = true; }
-function showLegacyTypes() { activeTab.value = "types"; typeFilters.search = "legacy_"; typeFilters.nature = ""; }
+function showVehicleTypes() { activeTab.value = "types"; typeFilters.search = ""; typeFilters.nature = "vehicle"; }
 function openValidationItem(item: ValidationItem) { if (item.section === "types") { activeTab.value = "types"; if (item.typeId) openTypeEditor(item.typeId); return; } activeTab.value = "rules"; if (item.ruleId) openEditor(item.ruleId); }
 function toggleVisibleSelection() { const visible = visibleEntries.value.map((entry) => entry.id); selectedIds.value = allVisibleSelected.value ? selectedIds.value.filter((id) => !visible.includes(id)) : [...new Set([...selectedIds.value, ...visible])]; }
 function applyBulk() { const selected = new Set(selectedIds.value); for (const entry of entries.value) { if (!selected.has(entry.id)) continue; if (bulk.typeId) { entry.typeId = bulk.typeId; if (typeFor(entry.typeId)?.nature !== "vehicle") entry.asset = ""; } if (bulk.faction !== "") entry.faction = bulk.faction; if (bulk.clearOverride) entry.maxPlayersOverride = null; else if (bulk.maxPlayersOverride != null) entry.maxPlayersOverride = Number(bulk.maxPlayersOverride) || null; if (bulk.enabled) entry.enabled = bulk.enabled === "true"; if (bulk.clearAsset) entry.asset = ""; } showBulk.value = false; markDirty(); ui.pushToast({ title: "批量修改已应用", message: `已更新 ${selected.size} 条规则，保存后生效。`, tone: "ok" }); }

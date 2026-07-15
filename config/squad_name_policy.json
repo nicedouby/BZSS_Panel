@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 1,
+  "revision": 2,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -602,204 +602,114 @@
   ],
   "types": [
     {
-      "id": "infantry",
-      "label": "普通步兵",
-      "nature": "infantry",
-      "description": "普通步兵小队",
+      "id": "matv",
+      "label": "MATV / 吉普车",
+      "nature": "vehicle",
       "defaultMaxPlayers": null,
-      "assetMode": "none",
+      "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 10
-    },
-    {
-      "id": "special_infantry",
-      "label": "特种步兵",
-      "nature": "infantry",
-      "description": "具有特殊用途的步兵小队",
-      "defaultMaxPlayers": null,
-      "assetMode": "none",
-      "enabled": true,
-      "sortOrder": 20
+      "sortOrder": 10,
+      "description": "轻型防护车、吉普车及武装轻型车辆小队"
     },
     {
       "id": "ifv",
-      "label": "步战车",
+      "label": "IFV / 步战车",
       "nature": "vehicle",
-      "description": "步兵战车小队",
       "defaultMaxPlayers": null,
       "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 30
+      "sortOrder": 20,
+      "description": "步兵战车小队"
     },
     {
-      "id": "matv",
-      "label": "MATV",
+      "id": "apc",
+      "label": "APC / 装甲运兵车",
       "nature": "vehicle",
-      "description": "轻型防护与战术车辆小队",
-      "defaultMaxPlayers": 4,
+      "defaultMaxPlayers": null,
       "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 40
+      "sortOrder": 30,
+      "description": "装甲运兵车小队"
     },
     {
       "id": "tank",
-      "label": "坦克",
+      "label": "Tank / 坦克",
       "nature": "vehicle",
-      "description": "主战坦克小队",
-      "defaultMaxPlayers": 4,
+      "defaultMaxPlayers": null,
       "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 50
+      "sortOrder": 40,
+      "description": "主战坦克及机动火炮系统小队"
     },
     {
-      "id": "mortar",
-      "label": "迫击炮",
-      "nature": "support",
-      "description": "迫击炮及间接火力小队",
-      "defaultMaxPlayers": 4,
-      "assetMode": "none",
-      "enabled": true,
-      "sortOrder": 60
-    },
-    {
-      "id": "logistics",
-      "label": "后勤",
-      "nature": "logistics",
-      "description": "后勤运输与建设小队",
+      "id": "atgm_matv",
+      "label": "ATGM MATV",
+      "nature": "vehicle",
       "defaultMaxPlayers": null,
-      "assetMode": "none",
+      "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 70
+      "sortOrder": 50,
+      "description": "搭载反坦克导弹或无后坐力炮的轻型车辆小队"
     },
     {
-      "id": "command",
-      "label": "指挥",
-      "nature": "support",
-      "description": "指挥与协调小队",
+      "id": "artillery_vehicle",
+      "label": "Artillery Vehicle / 炮兵载具",
+      "nature": "vehicle",
       "defaultMaxPlayers": null,
-      "assetMode": "none",
+      "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 80
+      "sortOrder": 60,
+      "description": "自行火炮、火箭炮、迫击炮车及防空炮车小队"
     },
     {
       "id": "helicopter",
-      "label": "直升机",
+      "label": "Helicopter / 直升机",
       "nature": "vehicle",
-      "description": "直升机小队",
       "defaultMaxPlayers": null,
       "assetMode": "optional",
       "enabled": true,
-      "sortOrder": 90
+      "sortOrder": 70,
+      "description": "运输及通用直升机小队"
     },
     {
-      "id": "recon",
-      "label": "侦察",
-      "nature": "support",
-      "description": "侦察与情报支援小队",
+      "id": "attack_helicopter",
+      "label": "Attacker Helicopter / 攻击直升机",
+      "nature": "vehicle",
+      "defaultMaxPlayers": null,
+      "assetMode": "optional",
+      "enabled": true,
+      "sortOrder": 80,
+      "description": "攻击及近距空中支援直升机小队"
+    },
+    {
+      "id": "infantry",
+      "label": "战斗步兵",
+      "nature": "infantry",
       "defaultMaxPlayers": null,
       "assetMode": "none",
       "enabled": true,
-      "sortOrder": 100
+      "sortOrder": 90,
+      "description": "承担正面战斗任务的步兵小队"
     },
     {
-      "id": "legacy_mrap",
-      "label": "MRAP（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 MRAP 自动迁移，请在类型管理器中确认。",
+      "id": "logistics",
+      "label": "后勤小队",
+      "nature": "logistics",
       "defaultMaxPlayers": null,
-      "assetMode": "optional",
+      "assetMode": "none",
       "enabled": true,
-      "sortOrder": 1100
+      "sortOrder": 100,
+      "description": "后勤运输与建设小队"
     },
     {
-      "id": "legacy_ltv",
-      "label": "LTV（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 LTV 自动迁移，请在类型管理器中确认。",
+      "id": "mortar",
+      "label": "迫击炮小队",
+      "nature": "support",
       "defaultMaxPlayers": null,
-      "assetMode": "optional",
+      "assetMode": "none",
       "enabled": true,
-      "sortOrder": 1110
-    },
-    {
-      "id": "legacy_td",
-      "label": "TD（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 TD 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1120
-    },
-    {
-      "id": "legacy_apc",
-      "label": "APC（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 APC 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1130
-    },
-    {
-      "id": "legacy_spa",
-      "label": "SPA（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 SPA 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1140
-    },
-    {
-      "id": "legacy_ah",
-      "label": "AH（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 AH 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1150
-    },
-    {
-      "id": "legacy_rsv",
-      "label": "RSV（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 RSV 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1160
-    },
-    {
-      "id": "legacy_spaa",
-      "label": "SPAA（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 SPAA 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1170
-    },
-    {
-      "id": "legacy_mgs",
-      "label": "MGS（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 MGS 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1180
-    },
-    {
-      "id": "legacy_uh",
-      "label": "UH（待确认）",
-      "nature": "vehicle",
-      "description": "由旧载具类型 UH 自动迁移，请在类型管理器中确认。",
-      "defaultMaxPlayers": null,
-      "assetMode": "optional",
-      "enabled": true,
-      "sortOrder": 1190
+      "sortOrder": 110,
+      "description": "迫击炮及间接火力步兵小队"
     }
   ],
   "entries": [
@@ -814,7 +724,7 @@
         "PMVMAG",
         "PMVMAG58"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "ADF",
       "asset": "/Game/Vehicles/PMV/BP_PMV_Mag58.BP_PMV_Mag58",
       "maxPlayersOverride": null,
@@ -845,7 +755,7 @@
         "PMVRWS",
         "PMVM"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "ADF",
       "asset": "/Game/Vehicles/PMV/BP_PMV_RWS.BP_PMV_RWS",
       "maxPlayersOverride": null,
@@ -969,7 +879,7 @@
         "KOZAKAGS",
         "KOZAKAGS17"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "AFU",
       "asset": "/Game/Vehicles/Kozak_2M1_AFU/BP_Kozak_2M1_AGS.BP_Kozak_2M1_AGS",
       "maxPlayersOverride": null,
@@ -999,7 +909,7 @@
       "keywords": [
         "BRDM"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "AFU",
       "asset": "/Game/Vehicles/BRDM2-L1_AFU/BP_BRDM-2L1_AFU.BP_BRDM-2L1_AFU",
       "maxPlayersOverride": null,
@@ -1030,7 +940,7 @@
         "Kozak",
         "KOZAKNSV"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "AFU",
       "asset": "/Game/Vehicles/Kozak_2M1_AFU/BP_Kozak_2M1_Kord.BP_Kozak_2M1_Kord",
       "maxPlayersOverride": null,
@@ -1059,7 +969,7 @@
         "TECHNICALKORNET",
         "TOW"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "AFU",
       "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_AFU_Kornet.BP_Technical2Seater_AFU_Kornet",
       "maxPlayersOverride": null,
@@ -1093,7 +1003,7 @@
         "MTLB",
         "MTLBPKT"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "AFU",
       "asset": "/Game/Vehicles/MTLB_AFU/BP_MTLB_AFU.BP_MTLB_AFU",
       "maxPlayersOverride": null,
@@ -1124,7 +1034,7 @@
         "MTLBZU",
         "MTLBZU23"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "AFU",
       "asset": "/Game/Vehicles/MTLB_AFU/BP_MTLB_ZU23_AFU.BP_MTLB_ZU23_AFU",
       "maxPlayersOverride": null,
@@ -1186,7 +1096,7 @@
         "BM",
         "BM21"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "AFU",
       "asset": "/Game/Vehicles/Kraz-6322_BM21Grad/BP_Kraz_6322_BM21Grad.BP_Kraz_6322_BM21Grad",
       "maxPlayersOverride": null,
@@ -1330,7 +1240,7 @@
       "keywords": [
         "LPPV"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "BAF",
       "asset": "/Game/Vehicles/LPPV/BP_LPPV.BP_LPPV",
       "maxPlayersOverride": null,
@@ -1354,7 +1264,7 @@
       "keywords": [
         "LPPVRWS"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "BAF",
       "asset": "/Game/Vehicles/LPPV/BP_LPPV_M2RWS.BP_LPPV_M2RWS",
       "maxPlayersOverride": null,
@@ -1381,7 +1291,7 @@
         "FV",
         "FV107"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "BAF",
       "asset": "/Game/Vehicles/FV107/BP_FV107.BP_FV107",
       "maxPlayersOverride": null,
@@ -1406,7 +1316,7 @@
         "FV432",
         "FV"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "BAF",
       "asset": "/Game/Vehicles/FV432/BP_FV432.BP_FV432",
       "maxPlayersOverride": null,
@@ -1432,7 +1342,7 @@
         "FV",
         "FV432"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "BAF",
       "asset": "/Game/Vehicles/FV432/BP_FV432_M2_RWS.BP_FV432_M2_RWS",
       "maxPlayersOverride": null,
@@ -1460,7 +1370,7 @@
         "FV",
         "FV432"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "BAF",
       "asset": "/Game/Vehicles/FV432/BP_FV432_L37A2_RWS.BP_FV432_L37A2_RWS",
       "maxPlayersOverride": null,
@@ -1593,7 +1503,7 @@
       "keywords": [
         "LUVWC"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "CAF",
       "asset": "/Game/Vehicles/LUVW/BP_LUVW_C6.BP_LUVW_C6",
       "maxPlayersOverride": null,
@@ -1618,7 +1528,7 @@
       "keywords": [
         "LUVWM"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "CAF",
       "asset": "/Game/Vehicles/LUVW/BP_LUVW_M2.BP_LUVW_M2",
       "maxPlayersOverride": null,
@@ -1646,7 +1556,7 @@
       "typeId": "matv",
       "faction": "CAF",
       "asset": "/Game/Vehicles/TAPV/BP_TAPV.BP_TAPV",
-      "maxPlayersOverride": 4,
+      "maxPlayersOverride": null,
       "allowSquadSuffix": false,
       "enabled": true,
       "priority": 100,
@@ -1672,7 +1582,7 @@
         "LAVIIIC",
         "LAVC"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "CAF",
       "asset": "/Game/Vehicles/LAV_RWS/BP_LAV_RWS_C6.BP_LAV_RWS_C6",
       "maxPlayersOverride": null,
@@ -1704,7 +1614,7 @@
         "LAVIIIM",
         "LAVM"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "CAF",
       "asset": "/Game/Vehicles/LAV_RWS/BP_LAV_RWS_M2.BP_LAV_RWS_M2",
       "maxPlayersOverride": null,
@@ -1731,7 +1641,7 @@
       "keywords": [
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "CAF",
       "asset": "/Game/Vehicles/TLAV/BP_M113A3_CAF_C6.BP_M113A3_CAF_C6",
       "maxPlayersOverride": null,
@@ -1758,7 +1668,7 @@
       "keywords": [
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "CAF",
       "asset": "/Game/Vehicles/TLAV/BP_M113A3_CAF_M2.BP_M113A3_CAF_M2",
       "maxPlayersOverride": null,
@@ -1786,7 +1696,7 @@
       "keywords": [
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "CAF",
       "asset": "/Game/Vehicles/TLAV/BP_M113A3_CAF_TLAV.BP_M113A3_CAF_TLAV",
       "maxPlayersOverride": null,
@@ -1853,7 +1763,7 @@
         "CH146",
         "CAS"
       ],
-      "typeId": "legacy_ah",
+      "typeId": "attack_helicopter",
       "faction": "CAF",
       "asset": "/Game/Vehicles/CH146/BP_CH146_CAS.BP_CH146_CAS",
       "maxPlayersOverride": null,
@@ -1936,7 +1846,7 @@
       "keywords": [
         "LIGHTTRANSPORT"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "CRF",
       "asset": "/Game/Vehicles/LUVW_CRF/BP_LUVW_CRF.BP_LUVW_CRF",
       "maxPlayersOverride": null,
@@ -1963,7 +1873,7 @@
       "keywords": [
         "LIGHTFSV"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "CRF",
       "asset": "/Game/Vehicles/M1151_CRF/BP_M1151_Light_Woodland_CRF.BP_M1151_Light_Woodland_CRF",
       "maxPlayersOverride": null,
@@ -1991,7 +1901,7 @@
       "keywords": [
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "CRF",
       "asset": "/Game/Vehicles/M113A3/BP_M113A3_M2_CRF.BP_M113A3_M2_CRF",
       "maxPlayersOverride": null,
@@ -2048,7 +1958,7 @@
         "SAFIRAGS",
         "SAFIRAGS17"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/Safir/BP_Safir_AGS-17.BP_Safir_AGS-17",
       "maxPlayersOverride": null,
@@ -2075,7 +1985,7 @@
         "Safir",
         "SAFIRKORD"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/Safir/BP_Safir_Kord.BP_Safir_Kord",
       "maxPlayersOverride": null,
@@ -2101,7 +2011,7 @@
         "Safir",
         "SAFIRMG"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/Safir/BP_Safir_MG3.BP_Safir_MG3",
       "maxPlayersOverride": null,
@@ -2126,7 +2036,7 @@
       "keywords": [
         "BRDM"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_GFI_Spandrel.BP_BRDM-2_GFI_Spandrel",
       "maxPlayersOverride": null,
@@ -2154,7 +2064,7 @@
         "Tow",
         "SAFIRKORNET"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/Safir/BP_Safir_Kornet.BP_Safir_Kornet",
       "maxPlayersOverride": null,
@@ -2181,7 +2091,7 @@
       "keywords": [
         "MTLB"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "GFI",
       "asset": "/Game/Vehicles/MTLB/BP_MTLBM_6MA_GFI.BP_MTLBM_6MA_GFI",
       "maxPlayersOverride": null,
@@ -2214,7 +2124,7 @@
         "VMK",
         "MTLB"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "GFI",
       "asset": "/Game/Vehicles/MTLB/BP_MTLB_VMK_GFI.BP_MTLB_VMK_GFI",
       "maxPlayersOverride": null,
@@ -2308,7 +2218,7 @@
         "BRDMUB",
         "BRDMUB32"
       ],
-      "typeId": "legacy_rsv",
+      "typeId": "artillery_vehicle",
       "faction": "GFI",
       "asset": "/Game/Vehicles/BRDM-2/Weapons/BP_BRDM2_GFI_UB32.BP_BRDM2_GFI_UB32",
       "maxPlayersOverride": null,
@@ -2343,7 +2253,7 @@
         "TIGRMKORD",
         "TIGRKORD"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Tigr/BP_Tigr_AGS17.BP_Tigr_AGS17",
       "maxPlayersOverride": null,
@@ -2371,7 +2281,7 @@
       "keywords": [
         "BRDM"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "IMF",
       "asset": "/Game/Vehicles/BRDM-2/BP_BRDM-2_MIL.BP_BRDM-2_MIL",
       "maxPlayersOverride": null,
@@ -2404,7 +2314,7 @@
         "SUVAGS",
         "SUVAGS17"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Technical_Armoured/BP_Armored_Technical2Seater_Camo_AGS17.BP_Armored_Technical2Seater_Camo_AGS17",
       "maxPlayersOverride": null,
@@ -2439,7 +2349,7 @@
         "TECHNICALHMG",
         "SUVHMG"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Technical2Seater/BP_Armored_Technical2Seater_Camo_DSHK.BP_Armored_Technical2Seater_Camo_DSHK",
       "maxPlayersOverride": null,
@@ -2475,7 +2385,7 @@
         "TECHNICALSPG",
         "SUVSPG"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Technical2Seater/BP_Armored_Technical2Seater_Camo_SPG9.BP_Armored_Technical2Seater_Camo_SPG9",
       "maxPlayersOverride": null,
@@ -2510,7 +2420,7 @@
         "BTR",
         "BTR80"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "IMF",
       "asset": "/Game/Vehicles/BTR80/BP_BTR80_Militia.BP_BTR80_Militia",
       "maxPlayersOverride": null,
@@ -2571,7 +2481,7 @@
         "SUVUB",
         "SUVUB32"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Technical/BP_Technical_UB32_MIL.BP_Technical_UB32_MIL",
       "maxPlayersOverride": null,
@@ -2604,7 +2514,7 @@
         "BM",
         "BM21"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Ural375_BM21Grad/BP_BM21Grad_IMF.BP_BM21Grad_IMF",
       "maxPlayersOverride": null,
@@ -2673,7 +2583,7 @@
       "keywords": [
         "BMP"
       ],
-      "typeId": "legacy_spaa",
+      "typeId": "artillery_vehicle",
       "faction": "IMF",
       "asset": "/Game/Vehicles/BMP-1/BP_BMP1_MIL_ZU23.BP_BMP1_MIL_ZU23",
       "maxPlayersOverride": null,
@@ -2704,7 +2614,7 @@
         "MTLBZU",
         "MTLBZU232"
       ],
-      "typeId": "legacy_spaa",
+      "typeId": "artillery_vehicle",
       "faction": "IMF",
       "asset": "/Game/Vehicles/MTLB/BP_MTLB_ZU23_MIL.BP_MTLB_ZU23_MIL",
       "maxPlayersOverride": null,
@@ -2736,7 +2646,7 @@
         "URAL",
         "URAL375"
       ],
-      "typeId": "legacy_spaa",
+      "typeId": "artillery_vehicle",
       "faction": "IMF",
       "asset": "/Game/Vehicles/Ural375/BP_Ural_375_ZU23_MIL.BP_Ural_375_ZU23_MIL",
       "maxPlayersOverride": null,
@@ -2803,7 +2713,7 @@
         "SUVAGS",
         "SUVAGS17"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "MEI",
       "asset": "/Game/Vehicles/Technical_Armoured/BP_Armored_Technical2Seater_White_AGS17.BP_Armored_Technical2Seater_White_AGS17",
       "maxPlayersOverride": null,
@@ -2836,7 +2746,7 @@
         "TECHNICALBMP",
         "BMP"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "MEI",
       "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_BMP1.BP_Technical2Seater_White_BMP1",
       "maxPlayersOverride": null,
@@ -2869,7 +2779,7 @@
         "SUVMORTAR",
         "SUVPJP"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "MEI",
       "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_Mortar.BP_Technical2Seater_White_Mortar",
       "maxPlayersOverride": null,
@@ -2901,7 +2811,7 @@
         "TECHNICALUB",
         "TECHNICALUB32"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "MEI",
       "asset": "/Game/Vehicles/Technical/BP_Technical_UB32_INS.BP_Technical_UB32_INS",
       "maxPlayersOverride": null,
@@ -2930,7 +2840,7 @@
         "TECHNICALZU",
         "TECHNICALZU232"
       ],
-      "typeId": "legacy_spaa",
+      "typeId": "artillery_vehicle",
       "faction": "MEI",
       "asset": "/Game/Vehicles/Technical2Seater/BP_Technical2Seater_White_ZU23.BP_Technical2Seater_White_ZU23",
       "maxPlayersOverride": null,
@@ -2960,7 +2870,7 @@
         "CSK",
         "CSK131"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/CSK131/BP_CSK131_RWS.BP_CSK131_RWS",
       "maxPlayersOverride": null,
@@ -2987,7 +2897,7 @@
         "CSK",
         "CSK131"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJY88.BP_CSK131_QJY88",
       "maxPlayersOverride": null,
@@ -3013,7 +2923,7 @@
         "CSK",
         "CSK131"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/CSK131/BP_CSK131_QJZ89.BP_CSK131_QJZ89",
       "maxPlayersOverride": null,
@@ -3039,7 +2949,7 @@
         "CSK",
         "CSK131"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/CSK131/BP_CSK131_QLZ87.BP_CSK131_QLZ87",
       "maxPlayersOverride": null,
@@ -3064,7 +2974,7 @@
       "keywords": [
         "LYNX"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
       "maxPlayersOverride": null,
@@ -3094,7 +3004,7 @@
       "keywords": [
         "LYNX"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
       "maxPlayersOverride": null,
@@ -3124,7 +3034,7 @@
         "CSK",
         "CSK131"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "PLA",
       "asset": "/Game/Vehicles/CSK131/BP_CSK131_HJ-8ATGM.BP_CSK131_HJ-8ATGM",
       "maxPlayersOverride": null,
@@ -3155,7 +3065,7 @@
         "ZSD",
         "ZSD89"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZSD89/BP_ZSD89.BP_ZSD89",
       "maxPlayersOverride": null,
@@ -3184,7 +3094,7 @@
         "ZSD",
         "ZSD89"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZSD89/BP_ZSD89_QLZ-87.BP_ZSD89_QLZ-87",
       "maxPlayersOverride": null,
@@ -3215,7 +3125,7 @@
         "ZSL",
         "ZSL10"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89.BP_ZSL10_QJZ-89",
       "maxPlayersOverride": null,
@@ -3247,7 +3157,7 @@
         "ZSL",
         "ZSL10"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QLZ-87.BP_ZSL10_QLZ-87",
       "maxPlayersOverride": null,
@@ -3280,7 +3190,7 @@
         "ZSL",
         "ZSL92"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLA",
       "asset": "/Game/Vehicles/WZ551/BP_WZ551A.BP_WZ551A",
       "maxPlayersOverride": null,
@@ -3313,7 +3223,7 @@
         "ZSL",
         "ZSL92"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLA",
       "asset": "/Game/Vehicles/WZ551/BP_WZ551B_QLZ-87.BP_WZ551B_QLZ-87",
       "maxPlayersOverride": null,
@@ -3497,7 +3407,7 @@
         "ZTD",
         "ZTD05"
       ],
-      "typeId": "legacy_mgs",
+      "typeId": "tank",
       "faction": "PLA",
       "asset": "/Game/Vehicles/ZTD05/BP_ZTD05.BP_ZTD05",
       "maxPlayersOverride": null,
@@ -3525,7 +3435,7 @@
         "ZSD",
         "ZSD05"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLAAGF",
       "asset": "/Game/Vehicles/ZBD05/BP_ZSD05_QJZ-89.BP_ZSD05_QJZ-89",
       "maxPlayersOverride": null,
@@ -3586,7 +3496,7 @@
         "ZSD",
         "ZSD05"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLANMC",
       "asset": "/Game/Vehicles/ZBD05/BP_ZSD05_QJZ-89.BP_ZSD05_QJZ-89",
       "maxPlayersOverride": null,
@@ -3617,7 +3527,7 @@
         "ZSL",
         "ZSL10"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "PLANMC",
       "asset": "/Game/Vehicles/ZBL08/BP_ZSL10_QJZ-89_Naval.BP_ZSL10_QJZ-89_Naval",
       "maxPlayersOverride": null,
@@ -3652,7 +3562,7 @@
         "TIGRAGS",
         "TIGRAGS17"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "RGF",
       "asset": "/Game/Vehicles/Tigr/BP_Tigr_AGS17.BP_Tigr_AGS17",
       "maxPlayersOverride": null,
@@ -3683,7 +3593,7 @@
         "TIGRMRWSKORD",
         "TIGRRWSKORD"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "RGF",
       "asset": "/Game/Vehicles/Tigr/BP_Tigr_RWS.BP_Tigr_RWS",
       "maxPlayersOverride": null,
@@ -3710,7 +3620,7 @@
         "BTR",
         "BTR82"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "RGF",
       "asset": "/Game/Vehicles/BTR80/82A/BP_BTR82A_RUS.BP_BTR82A_RUS",
       "maxPlayersOverride": null,
@@ -3740,7 +3650,7 @@
         "6MA",
         "MTLBM"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "RGF",
       "asset": "/Game/Vehicles/MTLB/BP_MTLBM_6MA_RUS.BP_MTLBM_6MA_RUS",
       "maxPlayersOverride": null,
@@ -3916,7 +3826,7 @@
         "COBRAIIM",
         "COBRAM"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "TLF",
       "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_M2.BP_Cobra2_M2",
       "maxPlayersOverride": null,
@@ -3947,7 +3857,7 @@
         "COBRAIIM",
         "COBRAM"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "TLF",
       "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_RWS_M2.BP_Cobra2_RWS_M2",
       "maxPlayersOverride": null,
@@ -3979,7 +3889,7 @@
         "COBRAIIMG",
         "COBRAMG"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "TLF",
       "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_MG3.BP_Cobra2_MG3",
       "maxPlayersOverride": null,
@@ -4010,7 +3920,7 @@
         "COBRAIIMG",
         "COBRAMG"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "TLF",
       "asset": "/Game/Vehicles/Cobra_II/BP_Cobra2_RWS_MG3.BP_Cobra2_RWS_MG3",
       "maxPlayersOverride": null,
@@ -4039,7 +3949,7 @@
         "ACV",
         "ACV15"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/ACV-15/BP_ACV-15_M2.BP_ACV-15_M2",
       "maxPlayersOverride": null,
@@ -4066,7 +3976,7 @@
         "ACV",
         "ACV15"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/ACV-15/BP_ACV-15_MG3.BP_ACV-15_MG3",
       "maxPlayersOverride": null,
@@ -4093,7 +4003,7 @@
         "M113A2T",
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/M113A2T_TLF/BP_M113A2T_M2_TLF.BP_M113A2T_M2_TLF",
       "maxPlayersOverride": null,
@@ -4119,7 +4029,7 @@
       "keywords": [
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/M113A2T_TLF/BP_M113A2T_MK19_TLF.BP_M113A2T_MK19_TLF",
       "maxPlayersOverride": null,
@@ -4148,7 +4058,7 @@
         "PARSIIIM",
         "PARSM"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/PARS_III/BP_PARS3_M2.BP_PARS3_M2",
       "maxPlayersOverride": null,
@@ -4179,7 +4089,7 @@
         "PARSIIIMG",
         "PARSMG"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/PARS_III/BP_PARS3_MG3.BP_PARS3_MG3",
       "maxPlayersOverride": null,
@@ -4212,7 +4122,7 @@
         "PARSMK",
         "PARSMK19"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "TLF",
       "asset": "/Game/Vehicles/PARS_III/BP_PARS3_MK19.BP_PARS3_MK19",
       "maxPlayersOverride": null,
@@ -4268,7 +4178,7 @@
         "PJP che",
         "M113"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "TLF",
       "asset": "/Game/Vehicles/M1064A2_TLF/BP_M1064_M121_TLF.BP_M1064_M121_TLF",
       "maxPlayersOverride": null,
@@ -4355,7 +4265,7 @@
       "keywords": [
         "MATVCROWSM"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "USA",
       "asset": "/Game/Vehicles/MATV/BP_MATV_CROWS.BP_MATV_CROWS",
       "maxPlayersOverride": null,
@@ -4384,7 +4294,7 @@
         "MATVCROWSM",
         "MATVCROWSM240"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "USA",
       "asset": "/Game/Vehicles/MATV/BP_MATV_CROWS_M240.BP_MATV_CROWS_M240",
       "maxPlayersOverride": null,
@@ -4411,7 +4321,7 @@
       "keywords": [
         "MATVM"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "USA",
       "asset": "/Game/Vehicles/MATV/BP_MATV.BP_MATV",
       "maxPlayersOverride": null,
@@ -4439,7 +4349,7 @@
         "MATVM",
         "MATVM240"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "USA",
       "asset": "/Game/Vehicles/MATV/BP_MATV_M240.BP_MATV_M240",
       "maxPlayersOverride": null,
@@ -4466,7 +4376,7 @@
         "MATVMK",
         "MATVMK19"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "USA",
       "asset": "/Game/Vehicles/MATV/BP_MATV_Mk19.BP_MATV_Mk19",
       "maxPlayersOverride": null,
@@ -4577,7 +4487,7 @@
         "MATVTOW",
         "Tow"
       ],
-      "typeId": "legacy_td",
+      "typeId": "atgm_matv",
       "faction": "USA",
       "asset": "/Game/Vehicles/MATV/BP_MATV_TOW.BP_MATV_TOW",
       "maxPlayersOverride": null,
@@ -4604,7 +4514,7 @@
       "keywords": [
         "M1126"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "USA",
       "asset": "/Game/Vehicles/M1126/BP_M1126.BP_M1126",
       "maxPlayersOverride": null,
@@ -4630,7 +4540,7 @@
       "keywords": [
         "M1126"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "USA",
       "asset": "/Game/Vehicles/M1126/BP_M1126_M240.BP_M1126_M240",
       "maxPlayersOverride": null,
@@ -4656,7 +4566,7 @@
       "keywords": [
         "M113"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "USA",
       "asset": "/Game/Vehicles/M113A3/BP_M113A3_MK19.BP_M113A3_MK19",
       "maxPlayersOverride": null,
@@ -4703,7 +4613,7 @@
       "keywords": [
         "M1064"
       ],
-      "typeId": "legacy_spa",
+      "typeId": "artillery_vehicle",
       "faction": "USA",
       "asset": "/Game/Vehicles/M1064A3/BP_M1064A3_M121.BP_M1064A3_M121",
       "maxPlayersOverride": null,
@@ -4781,7 +4691,7 @@
       "keywords": [
         "M1128"
       ],
-      "typeId": "legacy_mgs",
+      "typeId": "tank",
       "faction": "USA",
       "asset": "/Game/Vehicles/M1128_MGS/BP_M1128.BP_M1128",
       "maxPlayersOverride": null,
@@ -4809,7 +4719,7 @@
         "AVP",
         "AAVP"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "USMC",
       "asset": "/Game/Vehicles/AAVP7A1/BP_AAVP7A1.BP_AAVP7A1",
       "maxPlayersOverride": null,
@@ -4836,7 +4746,7 @@
         "LAV",
         "LAV25"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "USMC",
       "asset": "/Game/Vehicles/LAV25/BP_LAV25.BP_LAV25",
       "maxPlayersOverride": null,
@@ -4864,7 +4774,7 @@
       "keywords": [
         "BTRD"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "VDV",
       "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_Transport.BP_BTR-D_Transport",
       "maxPlayersOverride": null,
@@ -4893,7 +4803,7 @@
         "BTRDAGS",
         "BTRDAGS17"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "VDV",
       "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_AGS17.BP_BTR-D_AGS17",
       "maxPlayersOverride": null,
@@ -4923,7 +4833,7 @@
       "keywords": [
         "BTRDKORD"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "VDV",
       "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_Kord.BP_BTR-D_Kord",
       "maxPlayersOverride": null,
@@ -4951,7 +4861,7 @@
       "keywords": [
         "BTRDPKM"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "VDV",
       "asset": "/Game/Vehicles/BTR-D/BP_BTR-D_PKM.BP_BTR-D_PKM",
       "maxPlayersOverride": null,
@@ -4980,7 +4890,7 @@
         "BTRMDM",
         "BTRDMDM"
       ],
-      "typeId": "legacy_apc",
+      "typeId": "apc",
       "faction": "VDV",
       "asset": "/Game/Vehicles/BTR-MDM/BP_BTRMDM_Transport.BP_BTRMDM_Transport",
       "maxPlayersOverride": null,
@@ -5067,7 +4977,7 @@
       "keywords": [
         "BTRZD"
       ],
-      "typeId": "legacy_spaa",
+      "typeId": "artillery_vehicle",
       "faction": "VDV",
       "asset": "/Game/Vehicles/BTR-D/BP_BTR-ZD.BP_BTR-ZD",
       "maxPlayersOverride": null,
@@ -5093,7 +5003,7 @@
       "keywords": [
         "SPRUTSDM"
       ],
-      "typeId": "legacy_mgs",
+      "typeId": "tank",
       "faction": "VDV",
       "asset": "/Game/Vehicles/Sprut-SDM1/BP_Sprut.BP_Sprut",
       "maxPlayersOverride": null,
@@ -5121,7 +5031,7 @@
         "CPVM",
         "CPVM134"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/CPV/BP_CPV_M134.BP_CPV_M134",
       "maxPlayersOverride": null,
@@ -5147,7 +5057,7 @@
       "keywords": [
         "CPVTRANSPORT"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/CPV/BP_CPV_Transport.BP_CPV_Transport",
       "maxPlayersOverride": null,
@@ -5172,7 +5082,7 @@
       "keywords": [
         "M1117"
       ],
-      "typeId": "legacy_mrap",
+      "typeId": "matv",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/M1117/BP_M1117.BP_M1117",
       "maxPlayersOverride": null,
@@ -5201,7 +5111,7 @@
         "SUVM",
         "SUVM134"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Technical2Seater_WPMC/BP_Technical2Seater_M134_Black.BP_Technical2Seater_M134_Black",
       "maxPlayersOverride": null,
@@ -5234,7 +5144,7 @@
         "TECHNICALM",
         "SUVM"
       ],
-      "typeId": "legacy_ltv",
+      "typeId": "matv",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Technical2Seater_WPMC/BP_Technical2Seater_M2_Black.BP_Technical2Seater_M2_Black",
       "maxPlayersOverride": null,
@@ -5264,7 +5174,7 @@
         "LOACHCAS",
         "CAS"
       ],
-      "typeId": "legacy_ah",
+      "typeId": "attack_helicopter",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS.BP_Loach_CAS",
       "maxPlayersOverride": null,
@@ -5291,7 +5201,7 @@
         "LOACHCASLARGE",
         "CAS"
       ],
-      "typeId": "legacy_ah",
+      "typeId": "attack_helicopter",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS_Large.BP_Loach_CAS_Large",
       "maxPlayersOverride": null,
@@ -5319,7 +5229,7 @@
         "LOACHCASSINGLELARGE",
         "CAS"
       ],
-      "typeId": "legacy_ah",
+      "typeId": "attack_helicopter",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS_SingleLarge.BP_Loach_CAS_SingleLarge",
       "maxPlayersOverride": null,
@@ -5349,7 +5259,7 @@
         "LOACHCASSMALL",
         "CAS"
       ],
-      "typeId": "legacy_ah",
+      "typeId": "attack_helicopter",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Loach_CAS_WPMC/BP_Loach_CAS_Small.BP_Loach_CAS_Small",
       "maxPlayersOverride": null,
@@ -5377,7 +5287,7 @@
         "LOACHSCOUT",
         "ZSJ"
       ],
-      "typeId": "legacy_ah",
+      "typeId": "attack_helicopter",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/Loach_WPMC/BP_Loach.BP_Loach",
       "maxPlayersOverride": null,
@@ -5408,7 +5318,7 @@
         "MI8",
         "MI"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "AFU",
       "asset": "/Game/Vehicles/MI8/BP_MI8_VDV.BP_MI8_VDV",
       "maxPlayersOverride": null,
@@ -5438,7 +5348,7 @@
         "MRH90",
         "MRH"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "ADF",
       "asset": "/Game/Vehicles/MRH90/BP_MRH90_Mag58.BP_MRH90_Mag58",
       "maxPlayersOverride": null,
@@ -5471,7 +5381,7 @@
         "UH-60M",
         "BLACKHAWK"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "ADF",
       "asset": "/Game/Vehicles/UH60/BP_UH60.BP_UH60",
       "maxPlayersOverride": null,
@@ -5504,7 +5414,7 @@
         "PUMA",
         "SA"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "BAF",
       "asset": "/Game/Vehicles/SA330/BP_SA330.BP_SA330",
       "maxPlayersOverride": null,
@@ -5535,7 +5445,7 @@
         "CH",
         "GRIFFON"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "CAF",
       "asset": "/Game/Vehicles/CH146/BP_CH146.BP_CH146",
       "maxPlayersOverride": null,
@@ -5566,7 +5476,7 @@
         "CH178",
         "CH"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "CAF",
       "asset": "/Game/Vehicles/CH178/BP_CH178.BP_CH178",
       "maxPlayersOverride": null,
@@ -5597,7 +5507,7 @@
         "UH1H",
         "HUEY"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "GFI",
       "asset": "/Game/Vehicles/UH1H_GFI/BP_UH1H_GFI.BP_UH1H_GFI",
       "maxPlayersOverride": null,
@@ -5629,7 +5539,7 @@
         "UH",
         "Z8G"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "PLA",
       "asset": "/Game/Vehicles/Z8G/BP_Z8G.BP_Z8G",
       "maxPlayersOverride": null,
@@ -5657,7 +5567,7 @@
         "UH",
         "Z8J"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "PLANMC",
       "asset": "/Game/Vehicles/Z8J/BP_Z8J.BP_Z8J",
       "maxPlayersOverride": null,
@@ -5687,7 +5597,7 @@
         "MI-8MTV-5",
         "MI"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "RGF",
       "asset": "/Game/Vehicles/MI8/BP_MI8.BP_MI8",
       "maxPlayersOverride": null,
@@ -5719,7 +5629,7 @@
         "UH60",
         "PKM"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "TLF",
       "asset": "/Game/Vehicles/UH60_TLF_PKM/BP_UH60_TLF_PKM.BP_UH60_TLF_PKM",
       "maxPlayersOverride": null,
@@ -5751,7 +5661,7 @@
         "UH1Y",
         "HUEY"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "USMC",
       "asset": "/Game/Vehicles/UH1Y/BP_UH1Y.BP_UH1Y",
       "maxPlayersOverride": null,
@@ -5785,7 +5695,7 @@
         "CH",
         "CH146"
       ],
-      "typeId": "legacy_uh",
+      "typeId": "helicopter",
       "faction": "WPMC",
       "asset": "/Game/Vehicles/CH146_Raven/BP_CH146_Raven.BP_CH146_Raven",
       "maxPlayersOverride": null,
@@ -6212,7 +6122,7 @@
       "name": "龟壳",
       "aliases": [],
       "keywords": [],
-      "typeId": "special_infantry",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6231,7 +6141,7 @@
       "keywords": [
         "GUIKE"
       ],
-      "typeId": "special_infantry",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6250,7 +6160,7 @@
       "name": "指挥小队",
       "aliases": [],
       "keywords": [],
-      "typeId": "command",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6335,7 +6245,7 @@
       "name": "创伤小组",
       "aliases": [],
       "keywords": [],
-      "typeId": "special_infantry",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6352,7 +6262,7 @@
       "name": "萨尼铁塔",
       "aliases": [],
       "keywords": [],
-      "typeId": "special_infantry",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6371,7 +6281,7 @@
       "keywords": [
         "ZSJ"
       ],
-      "typeId": "special_infantry",
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
