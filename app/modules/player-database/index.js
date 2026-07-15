@@ -118,6 +118,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayerSessionHistory(playerId, options);
     },
 
+    async listPlayerContainer(playerId, container, options = {}) {
+      return repo.listPlayerContainer(playerId, container, options);
+    },
+
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
