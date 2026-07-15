@@ -28,11 +28,15 @@
 
     <!-- Fallback: original full image stays visible under tiles -->
     <img
-      v-if="showFallbackImage"
+      v-if="fallbackImage"
       :src="fallbackImage"
       alt="Tactical Map"
       class="map-image-fallback"
+      :class="{ 'map-image-fallback--visible': showFallbackImage }"
       draggable="false"
+      loading="eager"
+      decoding="async"
+      fetchpriority="high"
       @load="onFallbackLoad"
     />
   </div>
@@ -56,6 +60,8 @@ const props = defineProps<{
   viewportHeight: number;
   /** Fallback image URL (original full PNG) */
   fallbackImage?: string;
+  /** True while pointer dragging; tile discovery is deferred until release. */
+  interactionActive?: boolean;
 }>();
 
 const { zoom, panX, panY } = useTacticalMapViewport();
@@ -69,6 +75,7 @@ const { visibleTiles, fallbackTiles, currentTileZoom } = useTileLoader({
   viewportWidth: toRef(props, "viewportWidth"),
   viewportHeight: toRef(props, "viewportHeight"),
   enabled: toRef(props, "tilesEnabled"),
+  interactionActive: toRef(props, "interactionActive"),
 });
 
 const emit = defineEmits<{
@@ -90,7 +97,7 @@ const primaryTilesReady = computed(() => (
  */
 const showFallbackImage = computed(() => Boolean(
   props.fallbackImage
-  && (!props.tilesEnabled || !primaryTilesReady.value),
+  && (props.interactionActive || !props.tilesEnabled || !primaryTilesReady.value),
 ));
 const MAX_LOADED_TILE_KEYS = 256;
 
@@ -183,6 +190,7 @@ defineExpose({ currentTileZoom });
   position: absolute;
   inset: 0;
   overflow: hidden;
+  contain: layout paint style;
 }
 
 .map-image-fallback {
@@ -193,7 +201,12 @@ defineExpose({ currentTileZoom });
   height: 100%;
   object-fit: fill;
   pointer-events: none;
+  opacity: 0;
   z-index: 0;
+}
+
+.map-image-fallback--visible {
+  opacity: 1;
 }
 
 .map-tile {
@@ -213,8 +226,7 @@ defineExpose({ currentTileZoom });
 }
 
 .map-tile--fallback {
-  opacity: 0.6;
-  filter: blur(1px);
+  opacity: 0.72;
   z-index: 1;
 }
 </style>
