@@ -13,16 +13,17 @@ export const SQUAD_NATURES = Object.freeze([
 export const ASSET_MODES = Object.freeze(["none", "optional", "required"]);
 
 export const DEFAULT_SQUAD_TYPES = Object.freeze([
-  { id: "infantry", label: "普通步兵", nature: "infantry", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 10, description: "普通步兵小队" },
-  { id: "special_infantry", label: "特种步兵", nature: "infantry", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 20, description: "具有特殊用途的步兵小队" },
-  { id: "ifv", label: "步战车", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 30, description: "步兵战车小队" },
-  { id: "matv", label: "MATV", nature: "vehicle", defaultMaxPlayers: 4, assetMode: "optional", enabled: true, sortOrder: 40, description: "轻型防护与战术车辆小队" },
-  { id: "tank", label: "坦克", nature: "vehicle", defaultMaxPlayers: 4, assetMode: "optional", enabled: true, sortOrder: 50, description: "主战坦克小队" },
-  { id: "mortar", label: "迫击炮", nature: "support", defaultMaxPlayers: 4, assetMode: "none", enabled: true, sortOrder: 60, description: "迫击炮及间接火力小队" },
-  { id: "logistics", label: "后勤", nature: "logistics", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 70, description: "后勤运输与建设小队" },
-  { id: "command", label: "指挥", nature: "support", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 80, description: "指挥与协调小队" },
-  { id: "helicopter", label: "直升机", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 90, description: "直升机小队" },
-  { id: "recon", label: "侦察", nature: "support", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 100, description: "侦察与情报支援小队" },
+  { id: "matv", label: "MATV / 吉普车", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 10, description: "轻型防护车、吉普车及武装轻型车辆小队" },
+  { id: "ifv", label: "IFV / 步战车", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 20, description: "步兵战车小队" },
+  { id: "apc", label: "APC / 装甲运兵车", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 30, description: "装甲运兵车小队" },
+  { id: "tank", label: "Tank / 坦克", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 40, description: "主战坦克及机动火炮系统小队" },
+  { id: "atgm_matv", label: "ATGM MATV", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 50, description: "搭载反坦克导弹或无后坐力炮的轻型车辆小队" },
+  { id: "artillery_vehicle", label: "Artillery Vehicle / 炮兵载具", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 60, description: "自行火炮、火箭炮、迫击炮车及防空炮车小队" },
+  { id: "helicopter", label: "Helicopter / 直升机", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 70, description: "运输及通用直升机小队" },
+  { id: "attack_helicopter", label: "Attacker Helicopter / 攻击直升机", nature: "vehicle", defaultMaxPlayers: null, assetMode: "optional", enabled: true, sortOrder: 80, description: "攻击及近距空中支援直升机小队" },
+  { id: "infantry", label: "战斗步兵", nature: "infantry", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 90, description: "承担正面战斗任务的步兵小队" },
+  { id: "logistics", label: "后勤小队", nature: "logistics", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 100, description: "后勤运输与建设小队" },
+  { id: "mortar", label: "迫击炮小队", nature: "support", defaultMaxPlayers: null, assetMode: "none", enabled: true, sortOrder: 110, description: "迫击炮及间接火力步兵小队" },
 ]);
 
 export function normalizeTypeId(value, fallback = "other") {

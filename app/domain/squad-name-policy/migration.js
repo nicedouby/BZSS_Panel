@@ -12,10 +12,20 @@ const LEGACY_VEHICLE_TYPE_MAP = Object.freeze({
   IFV: "ifv",
   MBT: "tank",
   TANK: "tank",
+  MGS: "tank",
+  APC: "apc",
   M1151: "matv",
   MATV: "matv",
   TAPV: "matv",
   HMMWV: "matv",
+  MRAP: "matv",
+  LTV: "matv",
+  TD: "atgm_matv",
+  SPA: "artillery_vehicle",
+  RSV: "artillery_vehicle",
+  SPAA: "artillery_vehicle",
+  UH: "helicopter",
+  AH: "attack_helicopter",
 });
 
 const SPECIAL_NAME_TYPE_MAP = new Map([
@@ -25,7 +35,7 @@ const SPECIAL_NAME_TYPE_MAP = new Map([
   ["后勤队", "logistics"],
   ["后勤", "logistics"],
   ["货拉拉", "logistics"],
-  ["指挥小队", "command"],
+  ["指挥小队", "infantry"],
 ]);
 
 export function migratePolicyV1ToV2(rawPolicy = {}, options = {}) {
@@ -67,7 +77,7 @@ export function migratePolicyV1ToV2(rawPolicy = {}, options = {}) {
   }
 
   for (const name of Array.isArray(source.specialInfantryNames) ? source.specialInfantryNames : []) {
-    const typeId = SPECIAL_NAME_TYPE_MAP.get(String(name ?? "").trim()) || "special_infantry";
+    const typeId = SPECIAL_NAME_TYPE_MAP.get(String(name ?? "").trim()) || "infantry";
     addEntry(entries, occupiedNames, normalizePolicyEntryV2({
       id: buildMigratedRuleId(name, normalizeName),
       name,
@@ -79,10 +89,10 @@ export function migratePolicyV1ToV2(rawPolicy = {}, options = {}) {
   addEntry(entries, occupiedNames, normalizePolicyEntryV2({
     id: "rule:zsj",
     name: "zsj",
-    typeId: "special_infantry",
+    typeId: "infantry",
     allowSquadSuffix: false,
     source: "migration",
-  }, { normalizeName, defaultTypeId: "special_infantry", defaultSource: "migration" }), normalizeName);
+  }, { normalizeName, defaultTypeId: "infantry", defaultSource: "migration" }), normalizeName);
 
   addRecommendedRules(entries, occupiedNames, normalizeName);
   const migrationWarnings = [];
@@ -184,7 +194,7 @@ function addRecommendedRules(entries, occupiedNames, normalizeName) {
   const rules = [
     { id: "rule:bmp", name: "BMP", aliases: ["步战", "步战车"], keywords: ["BMP"], typeId: "ifv", allowSquadSuffix: true },
     { id: "rule:hmmwv", name: "悍马", aliases: ["悍马车", "HMMWV", "M1151"], keywords: ["HMMWV", "M1151"], typeId: "matv", allowSquadSuffix: true },
-    { id: "rule:tapv", name: "TAPV", aliases: [], keywords: ["TAPV"], typeId: "matv", maxPlayersOverride: 4, allowSquadSuffix: true },
+    { id: "rule:tapv", name: "TAPV", aliases: [], keywords: ["TAPV"], typeId: "matv", allowSquadSuffix: true },
     { id: "rule:mortar", name: "迫击炮队", aliases: ["迫击炮", "Mortar", "Mortar Team"], keywords: ["MORTAR"], typeId: "mortar", allowSquadSuffix: false },
     { id: "rule:infantry", name: "步兵队", aliases: ["步兵", "INF", "Infantry"], keywords: ["INF"], typeId: "infantry", allowSquadSuffix: false },
   ];

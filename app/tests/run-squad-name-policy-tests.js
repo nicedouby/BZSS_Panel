@@ -77,6 +77,21 @@ const samplePolicy = normalizePolicyDocument({
   ],
 });
 
+assert.deepEqual(samplePolicy.types.map((type) => type.id), [
+  "matv",
+  "ifv",
+  "apc",
+  "tank",
+  "atgm_matv",
+  "artillery_vehicle",
+  "helicopter",
+  "attack_helicopter",
+  "infantry",
+  "logistics",
+  "mortar",
+]);
+assert.equal(samplePolicy.types.every((type) => type.defaultMaxPlayers == null), true);
+
 assert.equal(evaluateSquadName("op", samplePolicy).valid, true);
 assert.equal(evaluateSquadName("op", samplePolicy).matched.matchedKind, "admin");
 
@@ -86,7 +101,7 @@ assert.equal(evaluateSquadName("BMP 1", samplePolicy).matched.name, "BMP-1");
 assert.equal(evaluateSquadName("bmp 2", samplePolicy).matched.name, "BMP-2");
 assert.equal(evaluateSquadName("Squad 1", samplePolicy).valid, true);
 assert.equal(evaluateSquadName("机械化步兵队", samplePolicy).matched.matchedKind, "infantry");
-assert.equal(evaluateSquadName("龟壳", samplePolicy).matched.matchedKind, "special_infantry");
+assert.equal(evaluateSquadName("龟壳", samplePolicy).matched.matchedKind, "infantry");
 assert.equal(evaluateSquadName("后勤队", samplePolicy).valid, true);
 
 const bmpTeam = evaluateSquadName("BMP队", samplePolicy);
@@ -114,7 +129,7 @@ assert.deepEqual(buildSquadNamePolicyWarningMessages([
 
 assert.equal(evaluateSquadName("TANK", samplePolicy).suggestions[0].name, "M1A1");
 assert.equal(evaluateSquadName("LAV RWS", samplePolicy).suggestions[0].name, "LAV III C6 RWS");
-assert.equal(evaluateSquadName("zsj", samplePolicy).matched.matchedKind, "special_infantry");
+assert.equal(evaluateSquadName("zsj", samplePolicy).matched.matchedKind, "infantry");
 
 const typo = evaluateSquadName("BPM2", samplePolicy);
 assert.equal(typo.valid, false);
@@ -190,10 +205,10 @@ assert.equal(saved.version, 2);
 assert.equal(saved.infantryNames, undefined);
 
 const matrix = [
-  ["悍马车", "vehicle", "matv", 4],
-  ["TAPV", "vehicle", "matv", 4],
-  ["M1A1", "vehicle", "tank", 4],
-  ["迫击炮队", "support", "mortar", 4],
+  ["悍马车", "vehicle", "matv", null],
+  ["TAPV", "vehicle", "matv", null],
+  ["M1A1", "vehicle", "tank", null],
+  ["迫击炮队", "support", "mortar", null],
   ["步兵队", "infantry", "infantry", null],
   ["后勤队", "logistics", "logistics", null],
 ];
@@ -205,6 +220,21 @@ for (const [name, nature, typeId, maxPlayers] of matrix) {
   assert.equal(result.classification?.effectiveMaxPlayers, maxPlayers, String(name));
 }
 assert.equal(evaluateSquadName("M1A1", samplePolicy).classification.assetPath.includes("AUS_M1A1"), true);
+assert.equal(evaluateSquadName("LAV C6", samplePolicy).classification.typeId, "apc");
+
+const legacyCategoryPolicy = normalizePolicyDocument({
+  version: 1,
+  entries: [
+    { name: "ATGM Test", vehicleType: "TD" },
+    { name: "Artillery Test", vehicleType: "SPA" },
+    { name: "Transport Heli Test", vehicleType: "UH" },
+    { name: "Attack Heli Test", vehicleType: "AH" },
+  ],
+});
+assert.deepEqual(
+  legacyCategoryPolicy.entries.filter((entry) => entry.name.endsWith("Test")).map((entry) => entry.typeId),
+  ["atgm_matv", "artillery_vehicle", "helicopter", "attack_helicopter"],
+);
 
 const overridePolicy = normalizePolicyDocument({
   ...samplePolicy,
