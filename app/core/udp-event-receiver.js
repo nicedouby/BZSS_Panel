@@ -3,6 +3,7 @@
 import dgram from "node:dgram";
 
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
+const DIAGNOSTICS_PUBLISH_INTERVAL_MS = 250;
 
 /**
  * Core: UdpEventReceiver
@@ -22,6 +23,7 @@ export class UdpEventReceiver {
     this.logPostMonitor = logPostMonitor;
     this.socket = dgram.createSocket("udp4");
     this.isStarting = false;
+    this.lastDiagnosticsPublishAt = 0;
     this.metrics = {
       startedAt: "",
       packetsReceived: 0,
@@ -40,7 +42,7 @@ export class UdpEventReceiver {
     this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
     this.socket.on("error", (error) => {
       this.metrics.socketErrors += 1;
-      this.publishDiagnostics();
+      this.publishDiagnostics(true);
       if (this.isStarting) return;
 
       this.webStatus.set("udpReceiver", "error");
@@ -73,7 +75,7 @@ export class UdpEventReceiver {
     });
 
     this.metrics.startedAt = new Date().toISOString();
-    this.publishDiagnostics();
+    this.publishDiagnostics(true);
     this.webStatus.set("udpReceiver", "listening");
     this.logger.info(`UDP Receiver listening on ${this.host}:${this.port}`, {
       operation: "start",
@@ -86,7 +88,7 @@ export class UdpEventReceiver {
     await new Promise((resolve) => {
       try { this.socket.close(resolve); } catch { resolve(); }
     });
-    this.publishDiagnostics();
+    this.publishDiagnostics(true);
   }
 
   handleMessage(buffer, remoteInfo) {
@@ -177,7 +179,10 @@ export class UdpEventReceiver {
     };
   }
 
-  publishDiagnostics() {
+  publishDiagnostics(force = false) {
+    const now = Date.now();
+    if (!force && now - this.lastDiagnosticsPublishAt < DIAGNOSTICS_PUBLISH_INTERVAL_MS) return;
+    this.lastDiagnosticsPublishAt = now;
     this.webStatus?.set?.("logPostUdpTransport", this.getDiagnostics());
   }
 }
