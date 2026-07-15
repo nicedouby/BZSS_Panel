@@ -33,12 +33,31 @@ export interface TacticalStatePlayerResponse {
   player: any | null;
 }
 
+export interface TacticalStatePlayerHealth {
+  name: string;
+  playerID: string | number | null;
+  steamID: string;
+  eosID: string;
+  health: number | null;
+  stale: boolean;
+  observedAt: string | null;
+}
+
+export interface TacticalStatePlayerHealthResponse {
+  ok: boolean;
+  players: TacticalStatePlayerHealth[];
+}
+
 export async function fetchTacticalStateSnapshot() {
   return apiGet<TacticalStateSnapshotResponse>("/api/tactical-state/snapshot?compact=1");
 }
 
 export async function fetchTacticalStatePlayers() {
   return apiGet<TacticalStatePlayersResponse>("/api/tactical-state/players");
+}
+
+export async function fetchTacticalStatePlayerHealth() {
+  return apiGet<TacticalStatePlayerHealthResponse>("/api/tactical-state/player-health");
 }
 
 export async function fetchTacticalStatePlayer(params: {
