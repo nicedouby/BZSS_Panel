@@ -452,16 +452,7 @@ export const pageRegistry: PageDefinition[] = [
     nav: { section: "broadcast", label: "进服警告", icon: "⚠️", order: 40 },
     ...documentPage,
   },
-  {
-    name: "squad-name-classifier",
-    path: "/debug/squad-name-classifier",
-    component: () => import("../pages/SquadNameClassifierDebugPage.vue"),
-    title: "小队名称分类器",
-    category: "debug",
-    refreshPolicy: "manual",
-    nav: { section: "players", label: "小队名称分类器", icon: "🏷️", order: 100 },
-    ...documentPage,
-  },
+
   {
     name: "squad-name-rules",
     path: "/debug/squad-name-policy/rules",
