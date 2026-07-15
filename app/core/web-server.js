@@ -2701,6 +2701,54 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
+      const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
+      if (!infantryCombatEnhancer) {
+        return this.json(res, 404, {
+          error: "InfantryCombatEnhancerUnavailable",
+          message: "Infantry combat enhancer module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          config: infantryCombatEnhancer.getConfig?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          config: await infantryCombatEnhancer.updateConfig?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/events" && req.method === "GET") {
+        const filter = {
+          serverId: url.searchParams.get("serverId") ?? "",
+          type: url.searchParams.get("type") ?? "all",
+          warning: url.searchParams.get("warning") ?? "all",
+          relation: url.searchParams.get("relation") ?? "all",
+          weapon: url.searchParams.get("weapon") ?? "all",
+          search: url.searchParams.get("search") ?? "",
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+        };
+        return this.json(res, 200, {
+          events: infantryCombatEnhancer.getEvents?.(filter) ?? [],
+          overview: infantryCombatEnhancer.getOverview?.(filter) ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, infantryCombatEnhancer.clear?.() ?? { ok: true, cleared: 0 });
+      }
+    }
+
     if (url.pathname === "/api/player-database/list") {
       const result = await this.modules.playerDatabase.listPlayers({
         query: url.searchParams.get("q") ?? "",
@@ -2787,6 +2835,26 @@ export class WebServer {
         }
 
         return this.json(res, 200, { items: friends });
+      });
+    }
+
+    if (url.pathname.startsWith("/api/player-database/detail/container/")) {
+      const playerId = url.searchParams.get("id");
+      const container = decodeURIComponent(url.pathname.slice("/api/player-database/detail/container/".length));
+      return this.runTimedPlayerDatabaseQuery(`/api/player-database/detail/container/${container}`, playerId, async () => {
+        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
+        if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+        if (container === "steam-friends" && url.searchParams.get("refresh") === "true" && detail.player?.steam_id) {
+          const playtimeApi = this.modules.playtime?.api ?? this.modules.playtime;
+          if (playtimeApi?.fetchSteamFriends) {
+            const friends = await playtimeApi.fetchSteamFriends(detail.player.steam_id);
+            await this.modules.playerDatabase.upsertSteamFriends(Number(playerId), friends);
+          }
+        }
+        return this.json(res, 200, await this.modules.playerDatabase.listPlayerContainer(playerId, container, {
+          limit: url.searchParams.get("limit") ?? "30",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
       });
     }
 
