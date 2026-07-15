@@ -566,7 +566,7 @@
     "password": "9290dd2aa02b",
     "passwordFromEnv": "9290dd2aa02b",
     "rateLimit": {
-      "minIntervalMs": 500,
+      "minIntervalMs": 200,
       "maxQueueSize": 100
     }
   },
@@ -980,7 +980,7 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
