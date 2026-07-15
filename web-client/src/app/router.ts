@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory, type RouteLocationNormalized } from "vue-router";
 
 import ComingSoonPage from "../pages/ComingSoonPage.vue";
 import { useAuthStore } from "../stores/auth.store";
@@ -44,19 +44,56 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
+let authAccessSubscriptionAttached = false;
+
+router.beforeEach((to) => {
   const auth = useAuthStore();
-  if (!auth.checked) await auth.restoreSession();
+  attachAuthAccessSubscription(auth);
+
+  if (!auth.checked) {
+    // Do not serialize initial route chunk loading behind the session request.
+    // App.vue keeps the protected surface hidden until the check completes.
+    void auth.restoreSession().then(() => enforceCurrentRouteAccess(auth));
+    return true;
+  }
+
+  return resolveAccessRedirect(to, auth) ?? true;
+});
+
+function attachAuthAccessSubscription(auth: ReturnType<typeof useAuthStore>) {
+  if (authAccessSubscriptionAttached) return;
+  authAccessSubscriptionAttached = true;
+  auth.$subscribe(() => {
+    if (!auth.checked) return;
+    enforceCurrentRouteAccess(auth);
+  }, { detached: true });
+}
+
+function enforceCurrentRouteAccess(auth: ReturnType<typeof useAuthStore>) {
+  const current = router.currentRoute.value;
+  const redirect = resolveAccessRedirect(current, auth);
+  if (!redirect || current.path === redirect.path) return;
+  void router.replace(redirect);
+}
+
+function resolveAccessRedirect(
+  to: RouteLocationNormalized,
+  auth: ReturnType<typeof useAuthStore>,
+): { path: string } | null {
+  if (to.path === "/access-denied" || !auth.authenticated) return null;
 
   if (to.meta?.superAdminOnly) {
-    if (!auth.authenticated) return true;
-    return auth.user?.isSuperAdmin ? true : { path: "/access-denied" };
+    return auth.user?.isSuperAdmin ? null : { path: "/access-denied" };
   }
 
   const requiredPermission = String(to.meta?.requiredPermission ?? "").trim();
-  if (!requiredPermission) return true;
+  if (!requiredPermission) return null;
 
-  const authUser = auth.user as { permissions?: unknown; permission?: unknown; isSuperAdmin?: boolean } | null | undefined;
+  const authUser = auth.user as {
+    permissions?: unknown;
+    permission?: unknown;
+    isSuperAdmin?: boolean;
+  } | null | undefined;
   const permissions = normalizePermissionList(authUser?.permissions ?? authUser?.permission);
   const legacyPermissions = normalizePermissionList(to.meta?.legacyRequiredPermissions);
   const allowed = canAccessPage(authUser, requiredPermission, legacyPermissions, {
@@ -67,8 +104,8 @@ router.beforeEach(async (to) => {
     if (!permissions.includes(requiredPermission) && legacyPermissions.some((permission) => permissions.includes(permission))) {
       console.warn(`[router] Deprecated permission fallback used for ${String(to.fullPath ?? to.path)}: ${legacyPermissions.join(", ")}`);
     }
-    return true;
+    return null;
   }
 
   return { path: "/access-denied" };
-});
+}
