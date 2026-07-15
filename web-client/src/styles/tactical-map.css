@@ -53,8 +53,15 @@
   width: 1000px;
   height: 1000px;
   transform-origin: 0 0;
+  will-change: transform;
+  backface-visibility: hidden;
+  contain: layout paint style;
   box-shadow: 0 0 100px rgba(0, 0, 0, 0.9);
   background-color: #020205;
+}
+
+.map-transform-container.is-dragging {
+  box-shadow: none;
 }
 
 .map-image {
