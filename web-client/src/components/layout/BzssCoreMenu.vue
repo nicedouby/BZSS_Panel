@@ -43,8 +43,8 @@
               <label class="bzss-core-field">
                 <span>Weather keyword</span>
                 <select v-model="selectedWeather" class="bzss-core-select">
-                  <option v-for="option in weatherOptions" :key="option" :value="option">
-                    {{ option }}
+                  <option v-for="option in weatherOptions" :key="option.index" :value="option.index">
+                    {{ option.index }} · {{ option.name }}
                   </option>
                 </select>
               </label>
@@ -348,19 +348,19 @@ interface VehiclePreset {
 }
 
 const weatherOptions = [
-  "ClearSkies",
-  "Cloudy",
-  "Foggy",
-  "Overcast",
-  "PartlyCloudy",
-  "Rain",
-  "RainLight",
-  "RainHeavy",
-  "SandDust",
-  "SandDustHeavy",
-  "Snow",
-  "SnowHeavy",
-  "SnowLight",
+  { index: 0, name: "Clear_Skies" },
+  { index: 1, name: "Cloudy" },
+  { index: 2, name: "Foggy" },
+  { index: 3, name: "Overcast" },
+  { index: 4, name: "Partly_Cloudy" },
+  { index: 5, name: "Rain" },
+  { index: 6, name: "Rain_Light" },
+  { index: 7, name: "Rain_Thunders" },
+  { index: 8, name: "Sand_Dust_Calm" },
+  { index: 9, name: "Sand_Dust_Storm" },
+  { index: 10, name: "Snow" },
+  { index: 11, name: "Snow_Blizzard" },
+  { index: 12, name: "Snow_Light" },
 ] as const;
 
 const vehicleCategories = {
@@ -419,7 +419,7 @@ const menuOpen = ref(false);
 const dialogOpen = ref(false);
 const dialogMode = ref<DialogMode>("weather");
 const busy = ref(false);
-const selectedWeather = ref<(typeof weatherOptions)[number]>("SnowHeavy");
+const selectedWeather = ref(10);
 const weatherParameter = ref("10");
 const forbRessTeamId = ref<"1" | "2">("1");
 const forbRessEnabled = ref<"true" | "false">("true");
@@ -605,7 +605,7 @@ function openDialog(mode: DialogMode) {
   addWindowListeners();
 
   if (mode === "weather") {
-    selectedWeather.value = "SnowHeavy";
+    selectedWeather.value = 10;
     weatherParameter.value = "10";
   } else if (mode === "forb-ress") {
     forbRessTeamId.value = "1";
@@ -1179,6 +1179,158 @@ onBeforeUnmount(() => {
 @media (max-width: 780px) {
   .bzss-core-trigger {
     min-height: 34px;
+  }
+}
+
+
+
+/* BZSS-Core control surface refresh */
+.bzss-core {
+  position: relative;
+  z-index: 20;
+}
+
+.bzss-core-trigger {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(72, 198, 255, 0.28);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(16, 31, 43, 0.96), rgba(10, 17, 25, 0.96));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2), inset 0 1px rgba(255, 255, 255, 0.08);
+  color: #e8f7ff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bzss-core-menu {
+  min-width: 250px;
+  padding: 8px;
+  border: 1px solid rgba(92, 188, 235, 0.26);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(18, 29, 39, 0.98), rgba(8, 14, 20, 0.98));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(18px);
+}
+
+.bzss-core-item {
+  min-height: 42px;
+  padding: 0 13px;
+  border-radius: 10px;
+  color: #c8d8e3;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.bzss-core-item:hover {
+  background: rgba(44, 170, 221, 0.14);
+  color: #f2fbff;
+  transform: translateX(2px);
+}
+
+.bzss-core-dialog {
+  width: min(620px, calc(100vw - 28px));
+  max-height: min(860px, calc(100vh - 28px));
+  overflow: auto;
+  border: 1px solid rgba(89, 192, 239, 0.3);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(22, 160, 214, 0.13), transparent 36%),
+    linear-gradient(145deg, rgba(20, 31, 41, 0.98), rgba(8, 14, 20, 0.99));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58), inset 0 1px rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(22px);
+}
+
+.bzss-core-dialog-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid rgba(157, 207, 229, 0.12);
+  background: rgba(12, 21, 29, 0.86);
+  backdrop-filter: blur(18px);
+}
+
+.bzss-core-kicker {
+  margin-bottom: 7px;
+  color: #54d4ff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.bzss-core-dialog-head h2 {
+  margin: 0;
+  color: #f3fbff;
+  font-size: clamp(20px, 3vw, 28px);
+  letter-spacing: -0.025em;
+}
+
+.bzss-core-subtitle {
+  max-width: 520px;
+  margin-top: 8px;
+  color: #94a9b7;
+  line-height: 1.5;
+}
+
+.bzss-core-form {
+  gap: 16px;
+  padding: 22px 24px 24px;
+}
+
+.bzss-core-field input,
+.bzss-core-select,
+.bzss-core-textarea {
+  min-height: 44px;
+  border-color: rgba(137, 190, 213, 0.18);
+  border-radius: 11px;
+  background: rgba(4, 10, 15, 0.72);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bzss-core-field input:focus,
+.bzss-core-select:focus,
+.bzss-core-textarea:focus {
+  border-color: rgba(74, 204, 255, 0.72);
+  box-shadow: 0 0 0 3px rgba(42, 176, 226, 0.14);
+  outline: none;
+}
+
+.bzss-core-preview {
+  gap: 9px;
+  border-color: rgba(74, 204, 255, 0.2);
+  background: linear-gradient(135deg, rgba(42, 159, 207, 0.1), rgba(4, 11, 16, 0.5));
+}
+
+.bzss-core-preview code {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #7fe2ff;
+}
+
+.bzss-core-actions {
+  padding-top: 4px;
+}
+
+.bzss-core-primary,
+.bzss-core-secondary {
+  min-height: 40px;
+  border-radius: 10px;
+  padding: 0 18px;
+  font-weight: 700;
+}
+
+@media (max-width: 620px) {
+  .bzss-core-dialog-head,
+  .bzss-core-form {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .bzss-core-dialog {
+    border-radius: 16px;
   }
 }
 </style>
