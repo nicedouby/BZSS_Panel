@@ -42,6 +42,8 @@ export interface UseTileLoaderOptions {
   viewportHeight: Ref<number>;
   /** Whether tiling is enabled (false = fallback to original image) */
   enabled: Ref<boolean>;
+  /** Pause tile-set churn while the map is being dragged. */
+  interactionActive?: Ref<boolean>;
   /** Map size in the CSS coordinate space (default 1000) */
   mapSize?: number;
 }
@@ -64,6 +66,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
     viewportWidth,
     viewportHeight,
     enabled,
+    interactionActive,
     mapSize = 1000,
   } = options;
 
@@ -219,13 +222,16 @@ export function useTileLoader(options: UseTileLoaderOptions) {
 
   function markDirty() {
     dirty = true;
+    // The already-rendered map and fallback image move as one compositor layer.
+    // Replacing tile <img> nodes during a drag forces decode/paint work into the
+    // interaction frame, so defer the tile-set refresh until pointer release.
+    if (interactionActive?.value) return;
     if (rafId == null) {
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        if (dirty) {
-          dirty = false;
-          refreshTiles();
-        }
+        if (interactionActive?.value || !dirty) return;
+        dirty = false;
+        refreshTiles();
       });
     }
   }
@@ -274,7 +280,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
   const currentTileZoom = computed(() => pickZoomLevel(zoom.value));
 
   // Watch all viewport parameters
-  watch([zoom, panX, panY, viewportWidth, viewportHeight, tileBasePath, maxZoom, enabled], markDirty, {
+  watch([zoom, panX, panY, viewportWidth, viewportHeight, tileBasePath, maxZoom, enabled, ...(interactionActive ? [interactionActive] : [])], markDirty, {
     immediate: true,
   });
 
