@@ -301,6 +301,18 @@
 
                     <button
                       type="button"
+                      class="hud-action-btn-styled cheer-btn"
+                      @click="handleCheer"
+                      :disabled="actionBusy || !canUseBzssCore"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon">☠️</span>
+                        <span class="btn-text">Cheer / 击杀</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
                       class="hud-action-btn-styled kick-btn"
                       @click="handleKick"
                       :disabled="actionBusy || !canKickPlayer"
@@ -1170,6 +1182,43 @@ async function handleWarn() {
     ui.pushToast({ title: "已发送警告", message: `玩家: ${player.name}`, tone: "ok" });
   } catch (e) {
     ui.pushToast({ title: "警告失败", message: String(e), tone: "error" });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleCheer() {
+  const player = props.player;
+  if (!player || actionBusy.value || !canUseBzssCore.value) return;
+
+  const targetName = stripPlayerNamePrefix(player.name);
+  if (!targetName) return;
+
+  const confirmed = await ui.openConfirm({
+    title: "确认执行 Cheer？",
+    message: "将通过 BZSS-Core 击杀玩家 " + targetName + "。此操作不可撤销。",
+    tone: "error",
+  });
+  if (!confirmed || actionBusy.value) return;
+
+  actionBusy.value = true;
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "Cheer",
+      parameter: targetName,
+    });
+    if (!result.ok) throw new Error(result.message || "Cheer 执行失败");
+    ui.pushToast({
+      title: "Cheer 已执行",
+      message: "目标玩家：" + targetName,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "Cheer 执行失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
   } finally {
     actionBusy.value = false;
   }
