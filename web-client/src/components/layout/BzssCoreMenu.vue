@@ -85,8 +85,8 @@
               <label class="bzss-core-field">
                 <span>Enable regeneration</span>
                 <select v-model="forbRessEnabled" class="bzss-core-select">
-                  <option value="true">Open</option>
-                  <option value="false">Close</option>
+                  <option value="1">Open (1)</option>
+                  <option value="0">Close (0)</option>
                 </select>
               </label>
               <label class="bzss-core-field">
@@ -340,7 +340,7 @@
                 <code>AdminTrack:AdminName,TrackObject</code>
                 <code>RemoveAdminTrack:AdminName</code>
                 <code>SetWeather:SnowHeavy,10</code>
-                  <code>SetFobResourceRegeneration:1,true,100,500,10</code>
+                  <code>SetFobResourceRegeneration:1,1,100,500,10</code>
                   <code>SetAutomaticHeal:true</code>
                   <code>SetAutomaticHealValue:100</code>
               </div>
@@ -453,7 +453,7 @@ const busy = ref(false);
 const selectedWeather = ref(10);
 const weatherParameter = ref("10");
 const forbRessTeamId = ref<"1" | "2" | "both">("1");
-const forbRessEnabled = ref<"true" | "false">("true");
+const forbRessEnabled = ref<"0" | "1">("1");
 const forbRessAmmo = ref("0");
 const forbRessConstruction = ref("0");
 const forbRessRate = ref("0");
@@ -648,7 +648,7 @@ function openDialog(mode: DialogMode) {
     weatherParameter.value = "10";
   } else if (mode === "forb-ress") {
     forbRessTeamId.value = "1";
-    forbRessEnabled.value = "true";
+    forbRessEnabled.value = "1";
     forbRessAmmo.value = "0";
     forbRessConstruction.value = "0";
     forbRessRate.value = "0";
