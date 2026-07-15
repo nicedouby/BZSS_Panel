@@ -16,14 +16,36 @@ export class LogPostMonitor {
     this.recentEventGaps = [];
     this.recentSourceJumps = [];
     this.maxRecentGaps = 200;
+
+    this.metrics = {
+      inspectedEvents: 0,
+      ignoredReplayEvents: 0,
+      eventGapCount: 0,
+      sourceJumpCount: 0,
+      skippedRawLines: 0,
+      lastEventAt: "",
+      lastEventLatencyMs: null,
+      maxEventLatencyMs: 0,
+      latencySamples: [],
+    };
   }
 
   inspectEvent(event = {}) {
     const sourceMode = String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim().toLowerCase();
     const canTriggerActions = event?.canTriggerActions ?? event?.rawEvent?.CanTriggerActions;
 
-    if (sourceMode && sourceMode !== "live") return null;
-    if (canTriggerActions === false || String(canTriggerActions).toLowerCase() === "false") return null;
+    if (sourceMode && sourceMode !== "live") {
+      this.metrics.ignoredReplayEvents += 1;
+      return null;
+    }
+    if (canTriggerActions === false || String(canTriggerActions).toLowerCase() === "false") {
+      this.metrics.ignoredReplayEvents += 1;
+      return null;
+    }
+
+    this.metrics.inspectedEvents += 1;
+    this.metrics.lastEventAt = new Date().toISOString();
+    this.recordLatency(event);
 
     const sessionId = String(event?.sessionId ?? event?.rawEvent?.SessionID ?? "");
 
@@ -76,6 +98,7 @@ export class LogPostMonitor {
         },
       };
 
+      this.metrics.eventGapCount += 1;
       this.recentEventGaps.unshift(gapEvent);
       if (this.recentEventGaps.length > this.maxRecentGaps) {
         this.recentEventGaps.length = this.maxRecentGaps;
@@ -94,6 +117,8 @@ export class LogPostMonitor {
       && currentSourceSeq > this.lastSourceSeq + 1
     ) {
       const skippedRawLines = currentSourceSeq - this.lastSourceSeq - 1;
+      this.metrics.sourceJumpCount += 1;
+      this.metrics.skippedRawLines += skippedRawLines;
 
       this.recentSourceJumps.unshift({
         time: new Date().toISOString(),
@@ -128,7 +153,23 @@ export class LogPostMonitor {
     return gapEvent;
   }
 
+  recordLatency(event) {
+    const rawTime = event?.time ?? event?.rawEvent?.Time ?? event?.rawEvent?.time;
+    const timestamp = Date.parse(String(rawTime ?? ""));
+    if (!Number.isFinite(timestamp)) return;
+    const latency = Math.max(0, Date.now() - timestamp);
+    // Ignore obviously different clocks/timezones instead of poisoning diagnostics.
+    if (latency > 24 * 60 * 60 * 1000) return;
+    this.metrics.lastEventLatencyMs = latency;
+    this.metrics.maxEventLatencyMs = Math.max(this.metrics.maxEventLatencyMs, latency);
+    this.metrics.latencySamples.push(latency);
+    if (this.metrics.latencySamples.length > 120) {
+      this.metrics.latencySamples.splice(0, this.metrics.latencySamples.length - 120);
+    }
+  }
+
   getState() {
+    const latencySamples = this.metrics.latencySamples;
     return {
       lastSourceSeq: this.lastSourceSeq,
       lastEventSeq: this.lastEventSeq,
@@ -137,6 +178,12 @@ export class LogPostMonitor {
       recentGaps: [...this.recentEventGaps],
       recentEventGaps: [...this.recentEventGaps],
       recentSourceJumps: [...this.recentSourceJumps],
+      metrics: {
+        ...this.metrics,
+        latencySamples: undefined,
+        averageEventLatencyMs: average(latencySamples),
+        p95EventLatencyMs: percentile(latencySamples, 0.95),
+      },
     };
   }
 }
@@ -144,4 +191,16 @@ export class LogPostMonitor {
 function toPositiveNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function average(values) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  return values.reduce((sum, value) => sum + Number(value || 0), 0) / values.length;
+}
+
+function percentile(values, ratio) {
+  if (!Array.isArray(values) || values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
+  return sorted[index];
 }
