@@ -330,6 +330,24 @@ CREATE TABLE IF NOT EXISTS steam_friends (
 );
 CREATE INDEX IF NOT EXISTS idx_steam_friends_player ON steam_friends(player_id);
 
+CREATE TABLE IF NOT EXISTS steam_profiles (
+    player_id INTEGER PRIMARY KEY,
+    persona_name TEXT,
+    profile_url TEXT,
+    avatar_small TEXT,
+    avatar_medium TEXT,
+    avatar_full TEXT,
+    community_visibility_state INTEGER,
+    profile_state TEXT NOT NULL DEFAULT 'unknown',
+    last_success_at INTEGER,
+    last_attempt_at INTEGER,
+    last_error TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_steam_profiles_updated ON steam_profiles(updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
@@ -506,6 +524,50 @@ DROP TABLE IF EXISTS kill_stats;
 
     await db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_players_qq_number ON players(qq_number)");
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 9, Date.now());
+  }
+
+  if (!appliedSet.has(10)) {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS steam_profiles (
+          player_id INTEGER PRIMARY KEY,
+          persona_name TEXT,
+          profile_url TEXT,
+          avatar_small TEXT,
+          avatar_medium TEXT,
+          avatar_full TEXT,
+          community_visibility_state INTEGER,
+          profile_state TEXT NOT NULL DEFAULT 'unknown',
+          last_success_at INTEGER,
+          last_attempt_at INTEGER,
+          last_error TEXT,
+          raw_json TEXT NOT NULL DEFAULT '{}',
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_steam_profiles_updated ON steam_profiles(updated_at DESC);
+    `);
+
+    // Preserve the existing avatar cache as the initial Steam profile snapshot.
+    await db.run(`
+      INSERT INTO steam_profiles (
+        player_id, persona_name, profile_url, avatar_medium, profile_state,
+        last_success_at, last_attempt_at, raw_json, updated_at
+      )
+      SELECT id,
+             current_name,
+             CASE WHEN steam_id IS NULL OR TRIM(steam_id) = '' THEN NULL
+                  ELSE 'https://steamcommunity.com/profiles/' || steam_id || '/' END,
+             steam_avatar,
+             CASE WHEN steam_avatar IS NULL OR TRIM(steam_avatar) = '' THEN 'unknown' ELSE 'cached' END,
+             CASE WHEN steam_avatar IS NULL OR TRIM(steam_avatar) = '' THEN NULL ELSE updated_at END,
+             updated_at,
+             '{}',
+             updated_at
+      FROM players
+      WHERE steam_id IS NOT NULL AND TRIM(steam_id) <> ''
+      ON CONFLICT(player_id) DO NOTHING
+    `);
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 10, Date.now());
   }
 }
 
