@@ -25,6 +25,26 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
     return true;
   }
 
+  if (url.pathname === "/api/tactical-state/player-health" && req.method === "GET") {
+    const players = await tacticalState.getPlayers?.({ user });
+    const healthPlayers = (Array.isArray(players) ? players : []).map((player) => {
+      const identity = player?.identity ?? {};
+      const rawHealth = player?.telemetry?.health ?? player?.raw?.bzss?.soldierInfo?.health ?? null;
+      const numericHealth = Number(rawHealth);
+      return {
+        name: String(identity.name ?? player?.name ?? "").trim(),
+        playerID: identity.playerID ?? identity.playerId ?? null,
+        steamID: String(identity.steamID ?? "").trim(),
+        eosID: String(identity.eosID ?? "").trim(),
+        health: Number.isFinite(numericHealth) ? numericHealth : null,
+        stale: player?.telemetry?.stale === true,
+        observedAt: player?.telemetry?.observedAt ?? null,
+      };
+    });
+    json(200, { ok: true, players: healthPlayers });
+    return true;
+  }
+
   if (url.pathname === "/api/tactical-state/player" && req.method === "GET") {
     const identity = {
       steamID: url.searchParams.get("steamID") ?? url.searchParams.get("steamId") ?? url.searchParams.get("steam64") ?? "",
