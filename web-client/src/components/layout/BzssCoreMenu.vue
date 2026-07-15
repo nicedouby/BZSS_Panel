@@ -497,7 +497,7 @@ const dialogSubtitle = computed(() => {
 });
 const weatherPreview = computed(() => `SetWeather:${selectedWeather.value},${weatherParameter.value || "10"}`);
 const forbRessPreview = computed(() => `SetForbRessSourceRegeneration:${forbRessTeamId.value},${forbRessEnabled.value},${forbRessAmmo.value || "0"},${forbRessConstruction.value || "0"},${forbRessRate.value || "0"}`);
-const automaticHealPreview = computed(() => `SetAutomaticHeal:${automaticHealEnabled.value}\\nSetAutomaticHealValue:${automaticHealValue.value || "0"}`);
+const automaticHealPreview = computed(() => `SetAutomaticHeal:${automaticHealEnabled.value}\nSetAutomaticHealValue:${automaticHealValue.value || "0"}`);
 const timePreview = computed(() => `SetTime:${timeParameter.value || "XXXX"}`);
 const rawPreview = computed(() => rawCommand.value || "Enter a full raw command");
 const vehiclePreview = computed(() => {
