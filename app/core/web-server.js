@@ -4634,7 +4634,23 @@ export class WebServer {
     const config = this.core.config?.get?.("bzssCore", {}) ?? {};
     const scriptPath = String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim();
     const saveGamePath = String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim();
-    const command = this.normalizeBzssCoreCommand(body);
+    const batchCommands = Array.isArray(body?.batch)
+      ? body.batch
+        .map((item) => typeof item === "string" ? item : item?.command)
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+        .map((item) => this.normalizeBzssCoreCommand({ command: item }))
+      : null;
+    if (batchCommands?.some((item) => !item.ok)) {
+      return batchCommands.find((item) => !item.ok);
+    }
+    const command = batchCommands?.length
+      ? {
+          ok: true,
+          directive: "Batch",
+          command: batchCommands.map((item) => item.command),
+        }
+      : this.normalizeBzssCoreCommand(body);
 
     if (!scriptPath) {
       return {
@@ -4665,7 +4681,7 @@ export class WebServer {
       const output = await this.execFileAsync("python", [
         resolvedScriptPath,
         saveGamePath,
-        command.command,
+        ...(Array.isArray(command.command) ? command.command : [command.command]),
       ], {
         cwd: path.dirname(resolvedScriptPath),
         timeout: Math.max(1000, Number(this.core.config?.get?.("bzssCore.timeoutMs", 15000)) || 15000),
@@ -4675,7 +4691,7 @@ export class WebServer {
 
       return {
         ok: true,
-        command: command.command,
+        command: Array.isArray(command.command) ? command.command.join("\n") : command.command,
         directive: command.directive,
         scriptPath: resolvedScriptPath,
         remoteSaveGamePath: saveGamePath,
@@ -4688,7 +4704,7 @@ export class WebServer {
         ok: false,
         error: "BzssCoreExecuteFailed",
         message: error?.message ?? "Failed to execute BZSS-Core command.",
-        command: command.command,
+        command: Array.isArray(command.command) ? command.command.join("\n") : command.command,
         directive: command.directive,
         scriptPath: resolvedScriptPath,
         remoteSaveGamePath: saveGamePath,
