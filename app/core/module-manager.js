@@ -16,7 +16,7 @@ import { createSquadRemoveModule } from "../modules/squad-remove/index.js";
 import { createConsoleModule } from "../modules/console/index.js";
 import { createLogClockModule } from "../modules/log-clock/index.js";
 import { createCombatStateModule } from "../modules/combat-state/index.js";
-import { createLogpostDiagnosticsModule } from "../modules/logpost-diagnostics/index.js";
+import { createLogpostDiagnosticsModule } from "../modules/logpost-diagnostics/enhanced.js";
 
 import { createPlayerDatabaseModule } from "../modules/player-database/index.js";
 import { createPlayerDbSyncModule } from "../modules/player-db-sync/index.js";
