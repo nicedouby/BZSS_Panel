@@ -554,9 +554,39 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 function buildFinalPassBroadcastMessageV2(record) {
   const event = record?.event ?? {};
   const creator = event.leaderName || "未知玩家";
-  const squadName = event.squadName || `Squad ${event.squadId ?? "?"}`;
+  const squadName = formatBroadcastSquadName(event.squadName || `Squad ${event.squadId ?? "?"}`);
   const squadNatureLabel = resolveSquadNatureLabel(event);
-  return `${creator} 建立了${squadName}，队伍性质：${squadNatureLabel}，建队顺序码 ${record.creationOrderCode}`;
+  const squadTypeLabel = resolveSquadTypeLabel(event);
+  const playtimeText = resolvePlaytimeText(event.playtime);
+  return [
+    `${creator} 建立了${squadName}`,
+    `队伍性质：${squadNatureLabel}`,
+    `队伍类型：${squadTypeLabel}`,
+    `游戏时长：${playtimeText}`,
+    `建队码：${record.creationOrderCode ?? "?"}`,
+  ].join("，");
+}
+
+function formatBroadcastSquadName(value) {
+  const squadName = normalizeText(value) || "未知小队";
+  return /(?:小队|队)$/u.test(squadName) ? squadName : `${squadName}小队`;
+}
+
+function resolveSquadTypeLabel(event = {}) {
+  const explicitLabel = normalizeText(event.squadTypeLabel);
+  if (explicitLabel) return explicitLabel;
+  const typeId = normalizeText(event.squadTypeId);
+  if (typeId) return typeId.replace(/_/g, " ").toUpperCase();
+  return "未分类";
+}
+
+function resolvePlaytimeText(playtime) {
+  const explicitText = normalizeText(playtime?.hoursText);
+  if (explicitText) return explicitText;
+  const seconds = nullableNumber(playtime?.gameSeconds ?? playtime?.game_seconds);
+  if (seconds == null) return "未知";
+  const hours = Math.max(0, seconds) / 3600;
+  return `${Number(hours.toFixed(1))}h`;
 }
 
 function buildFinalPassWarningMessages(event = {}) {
@@ -571,7 +601,7 @@ function buildFinalPassWarningMessages(event = {}) {
 }
 
 function resolveSquadNature(event = {}) {
-  const explicitNature = normalizeText(event.squadType);
+  const explicitNature = normalizeText(event.squadNature ?? event.squadType);
   if (explicitNature && Object.values(SQUAD_NATURE).includes(explicitNature)) {
     return explicitNature;
   }
@@ -771,6 +801,12 @@ function recordSortTime(record = {}) {
 
 function normalizeText(value) {
   return String(value ?? "").trim();
+}
+
+function nullableNumber(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function cloneJsonSafe(value) {

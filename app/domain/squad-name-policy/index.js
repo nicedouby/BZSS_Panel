@@ -177,6 +177,7 @@ export function evaluateSquadName(rawName, policy) {
 
   const defaultMatch = matchDefaultNamePattern(normalizedInput, policy.defaultNamePatterns);
   if (defaultMatch) {
+    const reason = `Matched default squad name pattern: ${defaultMatch.pattern}`;
     return buildAllowedNameResult({
       input,
       normalizedInput,
@@ -185,8 +186,9 @@ export function evaluateSquadName(rawName, policy) {
       name: input.trim(),
       kind: "default",
       label: "Default squad name",
-      reason: `Matched default squad name pattern: ${defaultMatch.pattern}`,
+      reason,
       matchedValue: defaultMatch.pattern,
+      classification: buildClassification("infantry", "战斗步兵", reason),
     });
   }
 
