@@ -17,6 +17,7 @@ if sys.platform == "win32":
 
 from bzss_parser.app import BzssLogParserApp
 from bzss_parser.config import load_config
+from bzss_parser.runtime_probe import install_runtime_probe
 
 
 def main() -> None:
@@ -27,6 +28,9 @@ def main() -> None:
 
     config = load_config(config_path)
     app = BzssLogParserApp(config)
+    # The probe only wraps existing methods and emits one compact metrics line
+    # per second. It does not duplicate or retain raw log content.
+    install_runtime_probe(app, config)
     app.run()
 
 
