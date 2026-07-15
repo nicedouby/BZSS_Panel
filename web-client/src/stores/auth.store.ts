@@ -1,7 +1,13 @@
 import { defineStore } from "pinia";
 import { apiGet, apiPost, ApiError } from "../app/apiClient";
 
+const SESSION_RESTORE_TIMEOUT_MS = 3_000;
+const PROFILE_REFRESH_TIMEOUT_MS = 2_500;
+const PROFILE_REFRESH_DELAY_MS = 1_500;
+const LOGIN_TIMEOUT_MS = 6_000;
+
 let restoreSessionPromise: Promise<void> | null = null;
+let profileRefreshTimer: number | null = null;
 
 export interface AuthUser {
   id: string;
@@ -36,10 +42,14 @@ export const useAuthStore = defineStore("auth", {
     async performRestoreSession() {
       this.error = null;
       try {
-        const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/session", {}, { timeoutMs: 8_000 });
+        const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>(
+          "/api/auth/session",
+          {},
+          { timeoutMs: SESSION_RESTORE_TIMEOUT_MS },
+        );
         this.authenticated = Boolean(data.authenticated);
         this.user = data.user ?? null;
-        if (this.authenticated) void this.refreshProfile();
+        if (this.authenticated) this.scheduleProfileRefresh();
       } catch (error: any) {
         this.authenticated = false;
         this.user = null;
@@ -49,10 +59,29 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
+    scheduleProfileRefresh() {
+      this.cancelScheduledProfileRefresh();
+      if (!this.authenticated || typeof window === "undefined") return;
+      profileRefreshTimer = window.setTimeout(() => {
+        profileRefreshTimer = null;
+        if (this.authenticated) void this.refreshProfile();
+      }, PROFILE_REFRESH_DELAY_MS);
+    },
+
+    cancelScheduledProfileRefresh() {
+      if (profileRefreshTimer == null || typeof window === "undefined") return;
+      window.clearTimeout(profileRefreshTimer);
+      profileRefreshTimer = null;
+    },
+
     async refreshProfile() {
       if (!this.authenticated) return;
       try {
-        const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/me/profile", {}, { timeoutMs: 4_000 });
+        const data = await apiGet<{ authenticated: boolean; user: AuthUser | null }>(
+          "/api/auth/me/profile",
+          {},
+          { timeoutMs: PROFILE_REFRESH_TIMEOUT_MS },
+        );
         if (!data.authenticated || !data.user || !this.authenticated) return;
         this.user = this.user ? { ...this.user, ...data.user } : data.user;
       } catch {}
@@ -60,7 +89,13 @@ export const useAuthStore = defineStore("auth", {
 
     async login(username: string, password: string) {
       this.error = null;
-      const data = await apiPost<{ authenticated: boolean; user: AuthUser | null }>("/api/auth/login", { username, password });
+      this.cancelScheduledProfileRefresh();
+      const data = await apiPost<{ authenticated: boolean; user: AuthUser | null }>(
+        "/api/auth/login",
+        { username, password },
+        {},
+        { timeoutMs: LOGIN_TIMEOUT_MS },
+      );
       this.authenticated = Boolean(data.authenticated);
       this.user = data.user ?? null;
       this.checked = true;
@@ -68,6 +103,7 @@ export const useAuthStore = defineStore("auth", {
     },
 
     async logout() {
+      this.cancelScheduledProfileRefresh();
       try {
         await apiPost("/api/auth/logout", {});
       } catch {}
@@ -75,6 +111,7 @@ export const useAuthStore = defineStore("auth", {
     },
 
     logoutLocal(message = null as string | null) {
+      this.cancelScheduledProfileRefresh();
       this.checked = true;
       this.authenticated = false;
       this.user = null;
