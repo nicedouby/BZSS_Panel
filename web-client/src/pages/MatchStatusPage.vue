@@ -89,22 +89,6 @@
           </div>
 
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
-            <div
-              v-if="shouldRequestMatchLoadingScreen"
-              class="match-list-loading-screen"
-              :class="{ 'is-ready': matchLoadingScreenReady }"
-              aria-hidden="true"
-            >
-              <img
-                :src="matchLoadingScreenUrl"
-                alt=""
-                loading="lazy"
-                decoding="async"
-                fetchpriority="low"
-                @load="matchLoadingScreenReady = true"
-                @error="matchLoadingScreenFailed = true"
-              />
-            </div>
             <TeamColumn
               v-for="team in viewModels.teams"
               :key="team.teamId"
@@ -129,23 +113,6 @@
         </div>
 
         <MatchChatPanel v-if="!isMobile" class="match-chat-column" />
-      </div>
-      <div v-else-if="viewMode === 'map' || (isMobile && mobileTab === 'map')" class="match-state-map-wrapper">
-      <TacticalMapPage
-          :snapshot="tacticalMapSnapshot"
-          :players="tacticalMapPlayers"
-          :capture-zones="tacticalMapCaptureZones"
-          :fobs="tacticalMapFobs"
-          :main-zones="tacticalMapMainZones"
-          :loading="tacticalMapLoading"
-          :errorText="tacticalMapError"
-          :playtimes="playtimes"
-          :combat-stats-lookup="combatStatsLookup"
-          @select-player="handleMapSelectPlayer"
-          @warn-player="handleMapWarnPlayer"
-          @kick-player="handleMapKickPlayer"
-          @force-team-player="handleMapForceTeamChange"
-        />
       </div>
     </DataState>
 
@@ -313,7 +280,6 @@ import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import MobileSegmentTabs from "../components/mobile/MobileSegmentTabs.vue";
 import StickyActionBar from "../components/mobile/StickyActionBar.vue";
 import { useIsMobile } from "../composables/useMediaQuery";
-import TacticalMapPage from "./TacticalMapPage.vue";
 import { t } from "../i18n";
 import { normalizeRefreshPolicy, resolveRefreshDelay } from "../app/refreshPolicy";
 import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
@@ -394,6 +360,10 @@ watch(
   }
 );
 
+watch(mobileTab, (tab) => {
+  if (tab === "map") void router.push("/tactical-map");
+});
+
 function handleViewModeChange(mode: "list" | "map") {
   if (mode === "list") {
     router.push("/match-status");
@@ -406,24 +376,6 @@ const tacticalStateStore = useTacticalStateStore();
 const tacticalStateSnapshot = computed(() => tacticalStateStore.snapshot);
 const tacticalPlayers = computed(() => tacticalStateStore.players);
 const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
-const tacticalMapSnapshot = computed(() => {
-  const snapshot = tacticalStateStore.snapshot;
-  if (!snapshot) return null;
-  return {
-    ...snapshot,
-    captureZones: snapshot.assets?.captureZones ?? [],
-    fobs: snapshot.assets?.fobs ?? [],
-    mainZones: snapshot.assets?.mainZones ?? [],
-    explosions: snapshot.assets?.explosions ?? [],
-  };
-});
-const tacticalMapPlayers = computed(() => adaptTacticalStatePlayersForMap(tacticalPlayers.value, combatStatsLookup.value));
-const tacticalMapCaptureZones = computed(() => tacticalStateStore.assets?.captureZones ?? []);
-const tacticalMapMainZones = computed(() => tacticalStateStore.assets?.mainZones ?? []);
-const tacticalMapFobs = computed(() => tacticalStateStore.assets?.fobs ?? []);
-const tacticalMapLoading = computed(() => tacticalStateStore.loading);
-const tacticalMapError = computed(() => tacticalStateStore.error);
-
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
 const refreshingSquads = ref(false);
@@ -455,6 +407,22 @@ const selectedSquadDetail = ref<SquadViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
 const active = ref(true);
 const { canAutoRefresh } = useAutoRefreshGate(computed(() => active.value && !pageHidden.value));
+
+// The full tactical-state stream carries high-frequency position data.  It is
+// owned by TacticalMapPage; the list page only opens it temporarily for the
+// currently inspected player's BZSS-Core detail.
+watch(
+  () => Boolean(activePlayerWindow.value) && active.value && !pageHidden.value,
+  (shouldStream) => {
+    if (!shouldStream) {
+      tacticalStateStore.stopStream();
+      return;
+    }
+    void tacticalStateStore.fetchSnapshot();
+    tacticalStateStore.startStream();
+  },
+  { immediate: true },
+);
 let battlePlayerRefreshToken = 0;
 let battleStatsRefreshIdleHandle: number | null = null;
 
@@ -506,60 +474,6 @@ const snapshotUpdatedAt = computed(() => Math.max(server.updatedAt, players.upda
 const hasSnapshotData = computed(() => snapshotUpdatedAt.value > 0);
 const routeRefreshPolicy = computed(() => normalizeRefreshPolicy(route.meta.refreshPolicy));
 const matchSnapshot = computed(() => snapshot.value?.snapshot?.matchState ?? snapshot.value?.matchState ?? null);
-
-const matchLoadingScreenFailed = ref(false);
-const matchLoadingScreenRequested = ref(false);
-const matchLoadingScreenReady = ref(false);
-let matchLoadingScreenIdleHandle: number | null = null;
-const matchLoadingScreenUrl = computed(() => {
-  const serverSnapshot = server.snapshot ?? {};
-  const source = [
-    serverSnapshot.mapName,
-    serverSnapshot.map,
-    serverSnapshot.webStatus?.mapName,
-    serverSnapshot.webStatus?.map,
-    serverSnapshot.currentLayer,
-    serverSnapshot.layer,
-    serverSnapshot.webStatus?.currentLayer,
-    matchSnapshot.value?.mapName,
-    matchSnapshot.value?.map,
-    matchSnapshot.value?.currentLayer,
-  ].find((value) => typeof value === "string" && value.trim());
-  return resolveMatchLoadingScreenUrl(String(source ?? ""));
-});
-
-const shouldRequestMatchLoadingScreen = computed(() => (
-  Boolean(matchLoadingScreenUrl.value)
-  && matchLoadingScreenRequested.value
-  && !matchLoadingScreenFailed.value
-));
-
-watch(matchLoadingScreenUrl, (url) => {
-  cancelIdleTask(matchLoadingScreenIdleHandle);
-  matchLoadingScreenIdleHandle = null;
-  matchLoadingScreenFailed.value = false;
-  matchLoadingScreenReady.value = false;
-  matchLoadingScreenRequested.value = false;
-
-  if (!url) return;
-
-  // The actual loading screen can be a large DQHD image.  Request it only
-  // after the shared match snapshot has painted, and keep its decode off the
-  // critical navigation path.
-  matchLoadingScreenIdleHandle = scheduleIdleTask(() => {
-    matchLoadingScreenIdleHandle = null;
-    matchLoadingScreenRequested.value = true;
-  }, 1_200);
-}, { immediate: true });
-
-function resolveMatchLoadingScreenUrl(mapOrLayer: string) {
-  const mapKey = String(mapOrLayer ?? "")
-    .trim()
-    .split(/[\\s_/-]+/)[0]
-    .replace(/[^a-zA-Z0-9]/g, "");
-  return mapKey ? `/MapScene/LoadingScreen_${mapKey}_DQHD.PNG` : "";
-}
-
 
 const remoteTelemetryQuery = useQuery({
   queryKey: computed(() => ["remote-telemetry-state", auth.authenticated]),
@@ -837,104 +751,6 @@ function buildTacticalPlayerLookup(players: any[] = []) {
   return map;
 }
 
-function adaptTacticalStatePlayersForMap(playersList: any[] = [], combatLookup: Record<string, any> = {}) {
-  return (Array.isArray(playersList) ? playersList : []).map((player) => {
-    const steamId = player?.identity?.steamID ?? null;
-    const eosId = player?.identity?.eosID ?? null;
-    const rawRcon = player?.raw?.rcon ?? null;
-    const presenceState = String(player?.presence?.state ?? "");
-    const presenceHint = String(player?.telemetry?.presenceHint ?? "");
-    const isNoPawn = presenceHint === "noPawn" || presenceState === "noPawn";
-    const rconDetail = rawRcon
-      ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
-      : null;
-    const position = player?.telemetry?.position ?? player?.position ?? null;
-    const yaw = player?.telemetry?.yaw ?? player?.yaw ?? null;
-    const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
-
-    return {
-      key: player?.identity?.key ?? "",
-      playerId: player?.identity?.playerID ?? null,
-      playerIndex: player?.identity?.playerID ?? null,
-      playerName: player?.identity?.name ?? "Unknown",
-      playerGuid: steamId || eosId || "",
-      steamId: steamId || null,
-      eosId: eosId || null,
-      teamId: player?.match?.teamId ?? null,
-      squadId: player?.match?.squadId ?? null,
-      isLeader: Boolean(player?.match?.isLeader),
-      role: player?.match?.role ?? "",
-      health: player?.telemetry?.health ?? null,
-      ping: player?.network?.gamePing ?? null,
-      ftIndex: player?.telemetry?.fireTeamIndex ?? null,
-      ftPosition: player?.telemetry?.fireTeamPosition ?? null,
-      position,
-      yaw,
-      presenceHint: isNoPawn ? "noPawn" : presenceHint,
-      presence: {
-        ...(player?.presence ?? {}),
-        state: isNoPawn ? "noPawn" : presenceState,
-      },
-      hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
-      hasPosition: Boolean(player?.telemetry?.hasPosition || position),
-      playerBaseInfo: {
-        raw: "",
-        fields: [],
-        values: {},
-      },
-      soldierInfo: {
-        raw: "",
-        fields: [],
-        values: {},
-        soldierClass: player?.telemetry?.soldierClass ?? "",
-        health: player?.telemetry?.health ?? null,
-        weaponClass: player?.telemetry?.weaponClass ?? "",
-        ammoValues: [],
-        position,
-        rotation,
-      },
-      vehicleInfo: {
-        raw: player?.vehicle?.raw ?? "",
-        vehicleType: player?.vehicle?.vehicleType ?? "",
-        healthText: "",
-        health: player?.vehicle?.health ?? null,
-        maxHealth: player?.vehicle?.maxHealth ?? null,
-        position,
-        rotation,
-      },
-      playerScoreboard: {
-        raw: "",
-        values: [],
-        numericValues: [],
-        ping: player?.network?.gamePing ?? null,
-        stats: {
-          dataLives: null,
-          numKills: player?.combat?.kills ?? null,
-          numDeaths: player?.combat?.deaths ?? null,
-          numWoundeds: player?.combat?.woundeds ?? null,
-          numWounds: player?.combat?.wounds ?? null,
-          numTeamKills: player?.combat?.teamKills ?? null,
-          healPoints: player?.combat?.healPoints ?? null,
-          revivedPoints: player?.combat?.revives ?? null,
-          teamworkScore: player?.combat?.teamworkScore ?? null,
-          objectiveScore: player?.combat?.objectiveScore ?? null,
-          combatScore: player?.combat?.combatScore ?? null,
-        },
-      },
-      observedAt: player?.freshness?.bzssCoreUpdatedAt ?? player?.freshness?.generatedAt ?? "",
-      stale: !player?.freshness?.bzssCoreUpdatedAt,
-      rawText: "",
-      runtime: rawRcon,
-      raw: player?.raw ?? {},
-      profile: player?.profile ?? {},
-      rconDetail,
-      linkConfidence: player?.link?.confidence ?? "none",
-      linkReason: player?.link?.method ?? "unlinked",
-      bzss: player,
-    };
-  });
-}
-
 function resolveTacticalStatePlayerInfo(player: PlayerRowViewModel, lookup: Map<string, any>) {
   const normalizedName = String(player.name ?? "").trim().toLowerCase();
   const normalizedSuffix = normalizedName.split(/\s+/).filter(Boolean).pop() ?? "";
@@ -1020,12 +836,9 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
-  tacticalStateStore.startStream();
 });
 
 onBeforeUnmount(() => {
-  cancelIdleTask(matchLoadingScreenIdleHandle);
-  matchLoadingScreenIdleHandle = null;
   document.removeEventListener("visibilitychange", handleVisibilityChange);
   cancelIdleTask(battleStatsRefreshIdleHandle);
   tacticalStateStore.stopStream();
@@ -1033,7 +846,6 @@ onBeforeUnmount(() => {
 
 onActivated(() => {
   active.value = true;
-  tacticalStateStore.startStream();
 });
 
 onDeactivated(() => {
@@ -1320,115 +1132,6 @@ function selectPlayer(payload: { player: PlayerRowViewModel; event: MouseEvent }
 
   if (player.steamId) {
     playtimeRequested.value = true;
-  }
-}
-
-function handleMapSelectPlayer(payload: { detail: any; event: MouseEvent }) {
-  activePlayerWindow.value = {
-    detail: payload.detail,
-    anchorX: payload.event.clientX,
-    anchorY: payload.event.clientY,
-    notice: "",
-  };
-  void hydrateActivePlayerWindowIp(payload.detail);
-
-  if (payload.detail.steamId) {
-    playtimeRequested.value = true;
-  }
-}
-
-async function handleMapWarnPlayer(detail: PlayerDetailViewModel) {
-  const message = await ui.openWarnPrompt({
-    title: "警告玩家",
-    targetName: detail.name,
-    defaultMessage: "请遵守服务器规则",
-  });
-  if (message === null) return;
-
-  try {
-    const res = await warnPlayer({
-      targetName: detail.name,
-      targetSteamId: detail.steamId || undefined,
-      targetEosId: detail.eosId || undefined,
-      message: message.trim() || "Admin Warning",
-      reason: "manual_warn",
-      sourceModule: "web.squadAdmin",
-    });
-    if (res.success) {
-      ui.pushToast({ title: "警告发送成功", message: `已成功向玩家 ${detail.name} 发送警告。`, tone: "ok" });
-    } else {
-      ui.pushToast({ title: "警告发送失败", message: res.error || "未知错误", tone: "error" });
-    }
-  } catch (err) {
-    ui.pushToast({ title: "警告发送失败", message: String(err), tone: "error" });
-  }
-}
-
-async function handleMapKickPlayer(detail: PlayerDetailViewModel) {
-  const reason = window.prompt(`请输入踢出原因(玩家: ${detail.name}):`, "")?.trim();
-  if (reason === undefined) return;
-  if (!reason) {
-    ui.pushToast({ title: "踢出失败", message: "踢出原因不能为空", tone: "warn" });
-    return;
-  }
-
-  const confirmed = await ui.openConfirm({
-    title: "确认踢出玩家",
-    message: `确定要踢出玩家 ${detail.name} 吗？\n原因: ${reason}`,
-    tone: "error",
-  });
-  if (!confirmed) return;
-
-  try {
-    const res = await kickPlayer({
-      playerId: detail.playerId ?? undefined,
-      anyId: detail.steamId || detail.eosId || detail.name || String(detail.playerId ?? ""),
-      steamId: detail.steamId || undefined,
-      eosId: detail.eosId || undefined,
-      name: detail.name,
-      reason,
-      source: "web.squadAdmin",
-    });
-    if (res.ok) {
-      ui.pushToast({ title: "踢出成功", message: `已成功踢出玩家 ${detail.name}。`, tone: "ok" });
-    } else {
-      ui.pushToast({ title: "踢出失败", message: res.error || "未知错误", tone: "error" });
-    }
-  } catch (err) {
-    ui.pushToast({ title: "踢出失败", message: String(err), tone: "error" });
-  }
-}
-
-async function handleMapForceTeamChange(detail: PlayerDetailViewModel) {
-  const confirmed = await ui.openConfirm({
-    title: "确认强制换队",
-    message: `确定要强制玩家 ${detail.name} 换队吗？`,
-    tone: "warn",
-  });
-  if (!confirmed) return;
-
-  try {
-    const res = await forceTeamChange({
-      steamId: detail.steamId || undefined,
-      playerName: detail.name,
-      source: "manual_team_balance",
-      reason: "manual_team_balance",
-      operator: {
-        id: auth.user?.id ?? auth.user?.username ?? "",
-        name: auth.user?.username ?? "",
-        username: auth.user?.username ?? "",
-        role: auth.user?.role ?? "",
-        isSuperAdmin: Boolean(auth.user?.isSuperAdmin),
-        permissions: Array.isArray(auth.user?.permissions) ? auth.user.permissions : [],
-      },
-    });
-    if (res.ok) {
-      ui.pushToast({ title: "强制换队成功", message: `已成功将玩家 ${detail.name} 强制换队。`, tone: "ok" });
-    } else {
-      ui.pushToast({ title: "强制换队失败", message: res.error || "未知错误", tone: "error" });
-    }
-  } catch (err) {
-    ui.pushToast({ title: "强制换队失败", message: String(err), tone: "error" });
   }
 }
 
@@ -3039,48 +2742,9 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   font-size: 11px;
 }
 
-/* Actual Squad loading screen, resolved as /MapScene/LoadingScreen_<Map>_DQHD.PNG. */
 .squad-main-content {
   position: relative;
   isolation: isolate;
-}
-
-.match-list-loading-screen {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background: var(--color-bg-page);
-}
-
-.match-list-loading-screen::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--color-bg-page) 62%, transparent), transparent 48%, color-mix(in srgb, var(--color-bg-page) 44%, transparent)),
-    linear-gradient(180deg, color-mix(in srgb, var(--color-bg-page) 18%, transparent), color-mix(in srgb, var(--color-bg-page) 48%, transparent));
-}
-
-.match-list-loading-screen img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  opacity: 0;
-  filter: saturate(.82) contrast(1.04) brightness(.78);
-  transition: opacity 180ms ease;
-}
-
-.match-list-loading-screen.is-ready img {
-  opacity: .52;
-}
-
-.squad-main-content > :not(.match-list-loading-screen) {
-  position: relative;
-  z-index: 1;
 }
 
 .squad-main-content {
