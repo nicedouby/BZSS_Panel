@@ -26,6 +26,8 @@
             class="player-avatar-image"
             :src="roleIcon.icon"
             :alt="roleIcon.label"
+            loading="lazy"
+            decoding="async"
           />
           <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
           <span
@@ -93,7 +95,16 @@
       :title="`查看 ${displayName} 的 Steam 个人资料`"
       @click.stop
     >
-      <img class="player-steam-bg-img" :src="avatarUrl" alt="" />
+      <img
+        class="player-steam-bg-img"
+        :src="avatarUrl"
+        alt=""
+        width="34"
+        height="34"
+        loading="lazy"
+        decoding="async"
+        fetchpriority="low"
+      />
     </a>
   </div>
 </template>
@@ -1340,6 +1351,40 @@ function displayRole(role: string | null | undefined) {
     width: 58px !important;
     height: 58px !important;
   }
+}
+
+
+/* Full-server performance guard: keep the rich layout without forcing every
+   off-screen player tile through paint and GPU compositing. */
+.squad-player-row.player-row {
+  contain: layout paint style !important;
+  content-visibility: auto;
+  contain-intrinsic-size: 84px;
+  box-shadow: none !important;
+  transition: border-color .15s ease, background-color .15s ease !important;
+}
+
+.squad-player-row .health-liquid {
+  animation: none !important;
+  transition: height .2s linear, background-color .2s ease !important;
+}
+
+.squad-player-row .player-avatar,
+.squad-player-row .player-steam-bg {
+  box-shadow: none !important;
+}
+
+.squad-player-row .player-avatar-image,
+.squad-player-row .player-steam-bg-img {
+  filter: none !important;
+}
+
+.squad-player-row .player-avatar-text {
+  text-shadow: none !important;
+}
+
+.squad-player-row .scoreboard-chip {
+  transition: none !important;
 }
 
 </style>
