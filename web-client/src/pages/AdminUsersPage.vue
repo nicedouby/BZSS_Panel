@@ -399,7 +399,6 @@ const pagePermissionLabels = new Map([
   ["debug.draw_vote_guard.view", "平局投票提示"],
   ["debug.welcome_join_warning.view", "入服欢迎警告"],
   ["debug.squad_name_policy.view", "队名规范"],
-  ["debug.squad_name_classifier.view", "小队名称分类器"],
   ["audit.view", "操作记录"],
 ]);
 
