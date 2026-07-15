@@ -22,6 +22,11 @@
             class="player-avatar"
             :src="player.steam_avatar || player.steamAvatar"
             alt=""
+            width="42"
+            height="42"
+            loading="lazy"
+            decoding="async"
+            fetchpriority="low"
           >
           <div v-else class="player-avatar player-avatar-fallback">
             {{ String(player.current_name || player.name || "?").slice(0, 1).toUpperCase() }}
@@ -99,16 +104,17 @@ function formatTime(value: unknown) {
 }
 
 .player-item {
-  padding: 12px;
-  background: var(--color-bg-panel);
-  border: 1px solid var(--color-border-default);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
   column-gap: 10px;
   row-gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  background: var(--color-bg-panel);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  contain: layout paint style;
 }
 
 .player-item:hover {
@@ -125,6 +131,7 @@ function formatTime(value: unknown) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  min-width: 0;
 }
 
 .player-avatar {
@@ -151,12 +158,17 @@ function formatTime(value: unknown) {
 }
 
 .player-name {
+  min-width: 0;
+  overflow: hidden;
   font-weight: 700;
   color: var(--color-text-primary);
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-group {
+  flex: 0 0 auto;
   font-size: 11px;
   background: rgba(255, 255, 255, 0.05);
   padding: 2px 6px;
@@ -167,11 +179,20 @@ function formatTime(value: unknown) {
 .item-meta {
   display: flex;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
   font-size: 11px;
   color: var(--color-text-muted);
 }
 
 .player-ip {
+  overflow: hidden;
   opacity: 0.8;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player-item { transition: none; }
 }
 </style>
