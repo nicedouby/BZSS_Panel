@@ -240,6 +240,7 @@ export async function executeBzssCoreCommand(input: {
   directive?: string;
   parameter?: string;
   command?: string;
+  batch?: string[];
   raw?: boolean;
 }) {
   return apiPost<BzssCoreExecuteResult>("/api/bzss-core/execute", input, {}, { timeoutMs: 20_000 });
