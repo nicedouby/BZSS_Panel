@@ -1191,12 +1191,20 @@ async function handleCheer() {
   const player = props.player;
   if (!player || actionBusy.value || !canUseBzssCore.value) return;
 
-  const targetName = stripPlayerNamePrefix(player.name);
-  if (!targetName) return;
+  const playerId = Number(player.playerId);
+  if (!Number.isInteger(playerId) || playerId < 0) {
+    ui.pushToast({
+      title: "Cheer 无法执行",
+      message: "当前玩家缺少有效的 RCON 玩家 ID。",
+      tone: "error",
+    });
+    return;
+  }
 
+  const target = "#" + playerId;
   const confirmed = await ui.openConfirm({
     title: "确认执行 Cheer？",
-    message: "将通过 BZSS-Core 击杀玩家 " + targetName + "。此操作不可撤销。",
+    message: "将通过 BZSS-Core 击杀玩家 " + target + "。此操作不可撤销。",
     tone: "error",
   });
   if (!confirmed || actionBusy.value) return;
@@ -1205,12 +1213,12 @@ async function handleCheer() {
   try {
     const result = await executeBzssCoreCommand({
       directive: "Cheer",
-      parameter: targetName,
+      parameter: target,
     });
     if (!result.ok) throw new Error(result.message || "Cheer 执行失败");
     ui.pushToast({
       title: "Cheer 已执行",
-      message: "目标玩家：" + targetName,
+      message: "目标玩家：" + target,
       tone: "ok",
     });
   } catch (error) {
