@@ -4755,7 +4755,9 @@ export class WebServer {
     const text = String(parameter ?? "").trim();
     const allowed = new Set([
       "SetTime",
-      "TransitionWeather",
+      "SetWeather",
+      "Cheer",
+      "SetForbRessSourceRegeneration",
       "CreateVehicle",
       "AdminTrack",
       "RemoveAdminTrack",
@@ -4765,7 +4767,7 @@ export class WebServer {
       return {
         ok: false,
         error: "UnsupportedBzssCoreDirective",
-        message: "Supported directives: SetTime, TransitionWeather, CreateVehicle, AdminTrack, RemoveAdminTrack.",
+        message: "Supported directives: SetTime, SetWeather, Cheer, SetForbRessSourceRegeneration, CreateVehicle, AdminTrack, RemoveAdminTrack.",
       };
     }
 
