@@ -1200,7 +1200,14 @@ class SteamGameDurationService {
         const avatar = summary.avatarmedium || summary.avatar || summary.avatarfull;
         if (steamID && avatar) {
           console.log(`[SteamAvatar] Saving: ID=${steamID} -> URL=${avatar}`);
-          await this.playerDatabase?.updateSteamAvatarBySteamID?.(steamID, avatar);
+          await this.playerDatabase?.updateSteamAvatarBySteamID?.(steamID, avatar, {
+            personaName: summary.personaname || summary.realname || null,
+            profileUrl: summary.profileurl || null,
+            avatar: summary.avatar || null,
+            avatarMedium: summary.avatarmedium || null,
+            avatarFull: summary.avatarfull || null,
+            communityvisibilitystate: summary.communityvisibilitystate,
+          });
         } else {
           console.log(`[SteamAvatar] Warning: Missing steamid or avatar in summary:`, JSON.stringify(summary));
         }
