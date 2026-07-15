@@ -12,6 +12,18 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: "/", redirect: "/match-status" },
+    {
+      path: "/system/logpost-diagnostics",
+      name: "logpost-diagnostics",
+      component: () => import("../pages/LogPostDiagnosticsPage.vue"),
+      meta: {
+        title: "LogPost 摄取诊断",
+        refreshPolicy: "manual",
+        layoutMode: "workspace",
+        contentPadding: "none",
+        superAdminOnly: true,
+      },
+    },
     ...buildPageRoutes(),
     {
       path: "/combat-clean",
