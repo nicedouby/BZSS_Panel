@@ -19,6 +19,7 @@ export class PythonLogParserManager {
     this.stopping = false;
     this.stdoutBuffer = "";
     this.diagnostics = null;
+    this.pipeOutput = this.config.pipeOutput ?? true;
   }
 
   async start() {
@@ -38,6 +39,7 @@ export class PythonLogParserManager {
     this.logger.info(`Python cwd: ${workingDirectory}`);
     this.stdoutBuffer = "";
     this.diagnostics = null;
+    this.pipeOutput = this.config.pipeOutput ?? true;
 
     this.child = spawn(pythonExecutable, [scriptPath, configPath], {
       cwd: workingDirectory,
@@ -52,16 +54,16 @@ export class PythonLogParserManager {
 
     this.webStatus.set("pythonLogParser", "running");
 
-    if (this.config.pipeOutput ?? true) {
-      this.child.stdout.on("data", (data) => {
-        this.consumeStdout(data);
-      });
+    // Always drain both pipes. Leaving a piped child stdout/stderr unread will
+    // eventually fill the OS pipe buffer and suspend the Python parser.
+    this.child.stdout.on("data", (data) => {
+      this.consumeStdout(data);
+    });
 
-      this.child.stderr.on("data", (data) => {
-        const text = data.toString("utf8").trimEnd();
-        if (text) this.logger.warn(`[PY] ${text}`);
-      });
-    }
+    this.child.stderr.on("data", (data) => {
+      const text = data.toString("utf8").trimEnd();
+      if (text && this.pipeOutput) this.logger.warn(`[PY] ${text}`);
+    });
 
     this.child.on("exit", (code, signal) => {
       this.flushStdoutBuffer();
@@ -122,7 +124,7 @@ export class PythonLogParserManager {
       }
       return;
     }
-    this.logger.info(`[PY] ${text}`);
+    if (this.pipeOutput) this.logger.info(`[PY] ${text}`);
   }
 
   flushStdoutBuffer() {
