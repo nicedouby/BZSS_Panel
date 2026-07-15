@@ -22,9 +22,25 @@ export class UdpEventReceiver {
     this.logPostMonitor = logPostMonitor;
     this.socket = dgram.createSocket("udp4");
     this.isStarting = false;
+    this.metrics = {
+      startedAt: "",
+      packetsReceived: 0,
+      bytesReceived: 0,
+      acceptedEvents: 0,
+      bzssCoreChunks: 0,
+      invalidJson: 0,
+      oversizedMessages: 0,
+      missingEventField: 0,
+      socketErrors: 0,
+      lastPacketAt: "",
+      lastPacketBytes: 0,
+      lastRemote: "",
+    };
 
     this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
     this.socket.on("error", (error) => {
+      this.metrics.socketErrors += 1;
+      this.publishDiagnostics();
       if (this.isStarting) return;
 
       this.webStatus.set("udpReceiver", "error");
@@ -56,6 +72,8 @@ export class UdpEventReceiver {
       this.socket.bind(this.port, this.host);
     });
 
+    this.metrics.startedAt = new Date().toISOString();
+    this.publishDiagnostics();
     this.webStatus.set("udpReceiver", "listening");
     this.logger.info(`UDP Receiver listening on ${this.host}:${this.port}`, {
       operation: "start",
@@ -68,10 +86,19 @@ export class UdpEventReceiver {
     await new Promise((resolve) => {
       try { this.socket.close(resolve); } catch { resolve(); }
     });
+    this.publishDiagnostics();
   }
 
   handleMessage(buffer, remoteInfo) {
+    this.metrics.packetsReceived += 1;
+    this.metrics.bytesReceived += buffer.length;
+    this.metrics.lastPacketAt = new Date().toISOString();
+    this.metrics.lastPacketBytes = buffer.length;
+    this.metrics.lastRemote = `${remoteInfo.address}:${remoteInfo.port}`;
+
     if (buffer.length > this.maxMessageBytes) {
+      this.metrics.oversizedMessages += 1;
+      this.publishDiagnostics();
       this.logger.warn(`UDP message too large. Bytes=${buffer.length}`, {
         operation: "handleMessage",
         data: {
@@ -86,16 +113,14 @@ export class UdpEventReceiver {
     try {
       rawEvent = JSON.parse(buffer.toString("utf8"));
     } catch {
-      /*this.logger.warn(`Invalid UDP JSON from ${remoteInfo.address}:${remoteInfo.port}`, {
-        operation: "handleMessage",
-        data: {
-          bytes: buffer.length,
-        },
-      });*/
+      this.metrics.invalidJson += 1;
+      this.publishDiagnostics();
       return;
     }
-    
+
     if (!rawEvent.Event) {
+      this.metrics.missingEventField += 1;
+      this.publishDiagnostics();
       this.logger.warn("UDP event missing Event field.", {
         operation: "handleMessage",
         data: {
@@ -105,7 +130,10 @@ export class UdpEventReceiver {
       return;
     }
 
+    this.metrics.acceptedEvents += 1;
+
     if (rawEvent.Event === BZSS_CORE_PLAYER_CHUNK_EVENT_NAME) {
+      this.metrics.bzssCoreChunks += 1;
       const event = buildBzssCorePlayerChunkEvent(rawEvent, remoteInfo);
       this.logger.debug(() => `UDP event accepted ${event.eventName}`, {
         operation: "handleMessage",
@@ -115,6 +143,7 @@ export class UdpEventReceiver {
         },
       });
       this.eventBus.emitCoreEvent(event.eventName, event);
+      this.publishDiagnostics();
       return;
     }
 
@@ -135,6 +164,21 @@ export class UdpEventReceiver {
       this.eventBus.emitCoreEvent(gapEvent.eventName, gapEvent);
     }
     this.eventBus.emitCoreEvent(event.eventName, event);
+    this.publishDiagnostics();
+  }
+
+  getDiagnostics() {
+    return {
+      ...this.metrics,
+      host: this.host,
+      port: this.port,
+      maxMessageBytes: this.maxMessageBytes,
+      status: this.webStatus?.state?.udpReceiver ?? "unknown",
+    };
+  }
+
+  publishDiagnostics() {
+    this.webStatus?.set?.("logPostUdpTransport", this.getDiagnostics());
   }
 }
 
@@ -154,7 +198,6 @@ function wrapUdpStartupError(error, host, port) {
 
   return error;
 }
-
 
 function buildBzssCorePlayerChunkEvent(rawEvent, remoteInfo) {
   const eventId = String(rawEvent?.EventId ?? `${String(rawEvent?.ServerID ?? "")}:${String(rawEvent?.SessionID ?? "")}:${String(rawEvent?.Seq ?? "")}:${BZSS_CORE_PLAYER_CHUNK_EVENT_NAME}`);
