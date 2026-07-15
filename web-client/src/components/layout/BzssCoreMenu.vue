@@ -79,6 +79,7 @@
                 <select v-model="forbRessTeamId" class="bzss-core-select">
                   <option value="1">Team 1</option>
                   <option value="2">Team 2</option>
+                  <option value="both">Both Teams</option>
                 </select>
               </label>
               <label class="bzss-core-field">
@@ -451,7 +452,7 @@ const dialogMode = ref<DialogMode>("weather");
 const busy = ref(false);
 const selectedWeather = ref(10);
 const weatherParameter = ref("10");
-const forbRessTeamId = ref<"1" | "2">("1");
+const forbRessTeamId = ref<"1" | "2" | "both">("1");
 const forbRessEnabled = ref<"true" | "false">("true");
 const forbRessAmmo = ref("0");
 const forbRessConstruction = ref("0");
@@ -690,16 +691,52 @@ async function submitWeatherCommand() {
 }
 
 async function submitForbRessCommand() {
-  await executeCommand({
-    directive: "SetForbRessSourceRegeneration",
-    parameter: [
-      forbRessTeamId.value,
-      forbRessEnabled.value,
-      forbRessAmmo.value.trim() || "0",
-      forbRessConstruction.value.trim() || "0",
-      forbRessRate.value.trim() || "0",
-    ].join(","),
-  });
+  if (busy.value) return;
+
+  const teams = forbRessTeamId.value === "both"
+    ? ["1", "2"]
+    : [forbRessTeamId.value];
+
+  const suffix = [
+    forbRessEnabled.value,
+    forbRessAmmo.value.trim() || "0",
+    forbRessConstruction.value.trim() || "0",
+    forbRessRate.value.trim() || "0",
+  ];
+
+  busy.value = true;
+  try {
+    for (const teamId of teams) {
+      const result = await executeBzssCoreCommand({
+        directive: "SetForbRessSourceRegeneration",
+        parameter: [teamId, ...suffix].join(","),
+      });
+
+      if (!result.ok) {
+        const details = [result.message, result.stdout, result.stderr]
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+          .join(" / ");
+        throw new Error(details || "SetForbRessSourceRegeneration failed.");
+      }
+    }
+
+    ui.pushToast({
+      title: "FOB resource regeneration updated",
+      message: teams.length === 2 ? "Applied to Team 1 and Team 2." : "Applied to Team " + teams[0] + ".",
+      tone: "ok",
+    });
+    closeDialog();
+  } catch (error: any) {
+    ui.pushToast({
+      title: t("common.error"),
+      message: error?.message || "FOB resource regeneration failed.",
+      tone: "error",
+      durationMs: 7000,
+    });
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function submitAutomaticHealCommands() {
