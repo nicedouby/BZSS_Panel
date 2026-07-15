@@ -159,7 +159,7 @@
                         <span>性质划分</span>
                         <strong v-if="testResult.classification">
                           <span class="nature-pill" :data-nature="testResult.classification.nature">
-                            {{ testResult.classification.label }}
+                            {{ natureLabel(testResult.classification.nature) }}
                           </span>
                         </strong>
                         <strong v-else-if="testResult.valid && testResult.matched">
@@ -174,6 +174,22 @@
                         <span class="reason-text">
                           {{ testResult.classification?.reason || testResult.reason || "未命中步兵或默认规则，进入相似度匹配流程。" }}
                         </span>
+                      </div>
+                      <div v-if="testResult.classification">
+                        <span>细分类型</span>
+                        <strong>{{ testResult.classification.typeLabel || testResult.classification.label || "-" }}（{{ testResult.classification.typeId || "-" }}）</strong>
+                      </div>
+                      <div v-if="testResult.classification">
+                        <span>命中规则</span>
+                        <strong>{{ testResult.classification.ruleId || "启发式回退" }}</strong>
+                      </div>
+                      <div v-if="testResult.classification">
+                        <span>人数上限</span>
+                        <strong>{{ testResult.classification.effectiveMaxPlayers ?? "不限" }} · {{ maxPlayersSourceLabel(testResult.classification.maxPlayersSource) }}</strong>
+                      </div>
+                      <div v-if="testResult.classification" class="wide-col">
+                        <span>资产路径</span>
+                        <strong class="reason-text">{{ testResult.classification.assetPath || "无" }}</strong>
                       </div>
                     </div>
                   </div>
@@ -213,7 +229,7 @@
                         <div class="vehicle-canonical-name">{{ testResult.matched.name }}</div>
                         <div class="vehicle-specs">
                           <span class="spec-tag">{{ testResult.matched.faction || "通用" }}</span>
-                          <span class="spec-tag type-tag">{{ testResult.matched.vehicleType || "未定义类型" }}</span>
+                          <span class="spec-tag type-tag">{{ testResult.classification?.typeLabel || testResult.matched.typeLabel || testResult.matched.vehicleType || "未定义类型" }}</span>
                           <span v-if="testResult.matched.asset" class="spec-tag asset-tag mono">{{ testResult.matched.asset }}</span>
                         </div>
                       </div>
@@ -624,6 +640,9 @@ type PolicyEntry = {
   id: string;
   faction: string;
   vehicleType: string;
+  typeId?: string;
+  typeLabel?: string;
+  nature?: string;
   asset: string;
   name: string;
   aliases: string[];
@@ -681,6 +700,12 @@ type PolicyTestResult = {
   classification?: {
     nature: string;
     label: string;
+    typeId: string;
+    typeLabel: string;
+    ruleId: string;
+    effectiveMaxPlayers: number | null;
+    maxPlayersSource: string;
+    assetPath: string;
     reason: string;
   } | null;
 };
@@ -809,6 +834,16 @@ async function clearGuardRecent() {
 function triggerPresetTest(name: string) {
   testName.value = name;
   void runTest();
+}
+
+function natureLabel(value: string) {
+  return ({ infantry: "步兵", vehicle: "载具", support: "支援", logistics: "后勤", other: "其他" } as Record<string, string>)[value] || value || "未知";
+}
+
+function maxPlayersSourceLabel(value: string) {
+  if (value === "rule_override") return "规则覆盖";
+  if (value === "type_default") return "类型默认";
+  return "无上限来源";
 }
 
 const displayedWarningMessages = computed(() => {

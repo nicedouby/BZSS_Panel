@@ -403,7 +403,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         teamId: record.teamId,
         squadId: record.squadId,
         squadName: record.squadName,
-        squadType: record.squadNature,
+        ...buildClassificationFields(record),
         leaderSteamId: record.creatorSteamId || record.inferredLeader?.steamId,
         leaderName: record.creatorName || record.inferredLeader?.name,
         leaderEosId: record.creatorEosId || record.inferredLeader?.eosId,
@@ -429,7 +429,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         teamId: record.teamId,
         squadId: record.squadId,
         squadName: record.squadName,
-        squadType: record.squadNature,
+        ...buildClassificationFields(record),
         leaderSteamId: record.creatorSteamId || record.inferredLeader?.steamId,
         leaderName: record.creatorName || record.inferredLeader?.name,
         leaderEosId: record.creatorEosId || record.inferredLeader?.eosId,
@@ -763,11 +763,10 @@ function findRule(nature, seconds, runtimeConfig) {
 function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
   const creationSource = normalizeText(event.creationSource ?? fallbackSource) || fallbackSource;
   const classification = classifySquadName(normalizeText(event.squadName));
-  const passedSquadType = normalizeText(event.squadType);
+  const passedSquadType = normalizeText(event.squadNature ?? event.squadType);
   const squadNature = passedSquadType || classification.nature;
-  const squadNatureLabel = squadNature === classification.nature
-    ? classification.label
-    : passedSquadType;
+  const squadNatureLabel = normalizeText(event.squadTypeLabel)
+    || (squadNature === classification.nature ? classification.label : passedSquadType);
   return {
     id: normalizeText(event.id) || `sspg:${Date.now()}:${Math.random().toString(16).slice(2)}`,
     serverId: normalizeText(event.serverId),
@@ -792,6 +791,13 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
     isLogConfirmed: creationSource === "LOG" || creationSource === "RCON_PROMOTED_TO_LOG",
     squadNature,
     squadNatureLabel,
+    squadTypeId: normalizeText(event.squadTypeId),
+    squadTypeLabel: normalizeText(event.squadTypeLabel) || squadNatureLabel,
+    squadRuleId: normalizeText(event.squadRuleId),
+    effectiveMaxPlayers: nullableNumber(event.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(event.maxPlayersSource) || "none",
+    assetPath: normalizeText(event.assetPath),
+    classificationMetadata: cloneValue(event.classificationMetadata) ?? {},
     squadVehicleClass: classification.vehicleClass,
     squadVehicleClassLabel: classification.vehicleClassLabel,
     clockSeconds: positiveInt(event.clockSeconds, 0),
@@ -800,6 +806,20 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
     actions: Array.isArray(event.actions) ? event.actions.map((action) => ({ ...action })) : [],
     active: event.active !== false,
     resolvedAt: normalizeText(event.resolvedAt),
+  };
+}
+
+function buildClassificationFields(record = {}) {
+  return {
+    squadType: normalizeText(record.squadNature) || "other",
+    squadNature: normalizeText(record.squadNature) || "other",
+    squadTypeId: normalizeText(record.squadTypeId),
+    squadTypeLabel: normalizeText(record.squadTypeLabel ?? record.squadNatureLabel),
+    squadRuleId: normalizeText(record.squadRuleId),
+    effectiveMaxPlayers: nullableNumber(record.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(record.maxPlayersSource) || "none",
+    assetPath: normalizeText(record.assetPath),
+    classificationMetadata: cloneValue(record.classificationMetadata) ?? {},
   };
 }
 

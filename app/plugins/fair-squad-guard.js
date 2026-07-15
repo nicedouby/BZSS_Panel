@@ -418,7 +418,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         teamId: record.teamId,
         squadId: record.squadId,
         squadName: record.squadName,
-        squadType: "fair_squad_creation",
+        ...buildClassificationFields(record),
         leaderSteamId: record.creatorSteamId,
         leaderName: record.creatorName,
         leaderEosId: record.creatorEosId,
@@ -474,7 +474,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       teamId: record.teamId,
       squadId: record.squadId,
       squadName: record.squadName,
-      squadType: "fair_squad_creation",
+      ...buildClassificationFields(record),
       leaderSteamId: record.creatorSteamId,
       leaderName: record.creatorName,
       leaderEosId: record.creatorEosId,
@@ -1024,6 +1024,14 @@ function normalizeCreationEvent(event = {}) {
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
     squadName: normalizeText(event.squadName),
+    squadNature: normalizeText(event.squadNature ?? event.squadType),
+    squadTypeId: normalizeText(event.squadTypeId),
+    squadTypeLabel: normalizeText(event.squadTypeLabel),
+    squadRuleId: normalizeText(event.squadRuleId),
+    effectiveMaxPlayers: nullableNumber(event.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(event.maxPlayersSource) || "none",
+    assetPath: normalizeText(event.assetPath),
+    classificationMetadata: cloneValue(event.classificationMetadata) ?? {},
     factionName: normalizeText(event.factionName ?? event.teamName),
     creatorName: normalizeText(event.creatorName ?? event.playerName),
     creatorSteamId: normalizeText(event.creatorSteamId ?? event.creatorSteamID ?? event.steamId ?? event.steamID),
@@ -1036,6 +1044,20 @@ function normalizeCreationEvent(event = {}) {
     sourceMode: normalizeSourceMode(event.sourceMode ?? (creationSource === "LOG" ? "live" : "backfill")),
     creationConfidence: "HIGH",
     isLogConfirmed: true,
+  };
+}
+
+function buildClassificationFields(record = {}) {
+  return {
+    squadType: normalizeText(record.squadNature) || "other",
+    squadNature: normalizeText(record.squadNature) || "other",
+    squadTypeId: normalizeText(record.squadTypeId),
+    squadTypeLabel: normalizeText(record.squadTypeLabel),
+    squadRuleId: normalizeText(record.squadRuleId),
+    effectiveMaxPlayers: nullableNumber(record.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(record.maxPlayersSource) || "none",
+    assetPath: normalizeText(record.assetPath),
+    classificationMetadata: cloneValue(record.classificationMetadata) ?? {},
   };
 }
 
@@ -1173,6 +1195,11 @@ function summarizeActionResult(result) {
 
 function cloneRecord(record) {
   return JSON.parse(JSON.stringify(record));
+}
+
+function cloneValue(value) {
+  if (value == null || typeof value !== "object") return value;
+  return JSON.parse(JSON.stringify(value));
 }
 
 function sleep(ms) {

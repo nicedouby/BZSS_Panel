@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { normalizePolicyDocument } from "../domain/squad-name-policy/index.js";
+import { validatePolicyDocument } from "../domain/squad-name-policy/index.js";
 
 const DEFAULT_INPUT = path.resolve(process.cwd(), "support", "reference-data", "载具队队名规范.xlsx");
 const DEFAULT_OUTPUT = path.resolve(process.cwd(), "config", "squad_name_policy.json");
@@ -57,7 +57,7 @@ const raw = execFileSync(python, ["-c", extractor, inputPath], {
 });
 const parsed = JSON.parse(raw);
 const now = new Date().toISOString();
-const policy = normalizePolicyDocument({
+const validation = validatePolicyDocument({
   version: 1,
   source: {
     type: "xlsx",
@@ -70,19 +70,14 @@ const policy = normalizePolicyDocument({
   suggestionLimit: 5,
   entries: parsed.entries,
 });
+if (!validation.valid) {
+  throw new Error(`Imported policy failed validation: ${JSON.stringify(validation.errors)}`);
+}
+const policy = validation.normalized;
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-fs.writeFileSync(outputPath, `${JSON.stringify({
-  version: policy.version,
-  source: policy.source,
-  importedAt: policy.importedAt,
-  updatedAt: policy.updatedAt,
-  suggestionLimit: policy.suggestionLimit,
-  defaultNamePatterns: policy.defaultNamePatterns,
-  infantryNames: policy.infantryNames,
-  specialInfantryNames: policy.specialInfantryNames,
-  entries: policy.entries,
-}, null, 2)}\n`, "utf8");
+if (fs.existsSync(outputPath)) fs.copyFileSync(outputPath, `${outputPath}.bak`);
+fs.writeFileSync(outputPath, `${JSON.stringify(policy, null, 2)}\n`, "utf8");
 
 console.log(JSON.stringify({
   ok: true,

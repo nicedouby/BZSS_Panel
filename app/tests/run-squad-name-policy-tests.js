@@ -9,6 +9,7 @@ import {
   normalizePolicyDocument,
   readSquadNamePolicyState,
   saveSquadNamePolicyState,
+  validatePolicyDocument,
 } from "../domain/squad-name-policy/index.js";
 
 const samplePolicy = normalizePolicyDocument({
@@ -89,12 +90,15 @@ assert.equal(evaluateSquadName("龟壳", samplePolicy).matched.matchedKind, "spe
 assert.equal(evaluateSquadName("后勤队", samplePolicy).valid, true);
 
 const bmpTeam = evaluateSquadName("BMP队", samplePolicy);
-assert.equal(bmpTeam.valid, false);
+assert.equal(bmpTeam.valid, true);
 assert.equal(bmpTeam.suffixStripped, true);
-assert.deepEqual(bmpTeam.keywordSuggestions.map((item) => item.name).slice(0, 3), ["BMP-1", "BMP-2", "BMP-2M"]);
-assert.equal(bmpTeam.warningMessage.includes("BMP-1"), true);
-assert.equal(bmpTeam.warningMessages[0], "警告违规队名！\n本服对队名要求十分严格。");
-assert.equal(bmpTeam.warningMessages[1], "警告你可能想建立\nBMP-1，BMP-2\nBMP-2M 队。");
+assert.equal(bmpTeam.classification.typeId, "ifv");
+assert.equal(bmpTeam.classification.nature, "vehicle");
+assert.equal(bmpTeam.matched.matchedKind, "suffix");
+
+const invalidBmp = evaluateSquadName("BMP违规队", samplePolicy);
+assert.equal(invalidBmp.valid, false);
+assert.equal(invalidBmp.suggestions.some((item) => item.name.startsWith("BMP")), true);
 
 assert.deepEqual(buildSquadNamePolicyWarningMessages([
   { name: "BMP-1" },
@@ -151,7 +155,7 @@ assert.equal(bizarreChinese.classification ?? null, null);
 const modelChinese = evaluateSquadName("08式", samplePolicy);
 assert.equal(modelChinese.valid, true);
 assert.equal(modelChinese.matched?.name, "ZBL08");
-assert.equal(modelChinese.classification ?? null, null);
+assert.equal(modelChinese.classification?.typeId, "ifv");
 
 const modelChineseTeam = evaluateSquadName("08式队", samplePolicy);
 assert.equal(modelChineseTeam.valid, false);
@@ -171,7 +175,9 @@ const config = {
   },
 };
 await saveSquadNamePolicyState(config, {
+  revision: 1,
   suggestionLimit: 3,
+  types: samplePolicy.types,
   entries: samplePolicy.entries,
 });
 const state = await readSquadNamePolicyState(config);
@@ -179,5 +185,78 @@ assert.equal(state.stats.entries, samplePolicy.entries.length);
 assert.equal(state.suggestionLimit, 3);
 const saved = JSON.parse(await fs.readFile(policyPath, "utf8"));
 assert.equal(Array.isArray(saved.entries), true);
+assert.equal(Array.isArray(saved.types), true);
+assert.equal(saved.version, 2);
+assert.equal(saved.infantryNames, undefined);
+
+const matrix = [
+  ["悍马车", "vehicle", "matv", 4],
+  ["TAPV", "vehicle", "matv", 4],
+  ["M1A1", "vehicle", "tank", 4],
+  ["迫击炮队", "support", "mortar", 4],
+  ["步兵队", "infantry", "infantry", null],
+  ["后勤队", "logistics", "logistics", null],
+];
+for (const [name, nature, typeId, maxPlayers] of matrix) {
+  const result = evaluateSquadName(name, samplePolicy);
+  assert.equal(result.valid, true, String(name));
+  assert.equal(result.classification?.nature, nature, String(name));
+  assert.equal(result.classification?.typeId, typeId, String(name));
+  assert.equal(result.classification?.effectiveMaxPlayers, maxPlayers, String(name));
+}
+assert.equal(evaluateSquadName("M1A1", samplePolicy).classification.assetPath.includes("AUS_M1A1"), true);
+
+const overridePolicy = normalizePolicyDocument({
+  ...samplePolicy,
+  entries: samplePolicy.entries.map((entry) => entry.id === "rule:tapv"
+    ? { ...entry, maxPlayersOverride: 3 }
+    : entry),
+});
+assert.equal(evaluateSquadName("TAPV", overridePolicy).classification.effectiveMaxPlayers, 3);
+assert.equal(evaluateSquadName("TAPV", overridePolicy).classification.maxPlayersSource, "rule_override");
+
+const duplicatePolicy = {
+  ...samplePolicy,
+  entries: [...samplePolicy.entries, {
+    id: "rule:duplicate_bmp",
+    name: "Duplicate",
+    aliases: ["BMP"],
+    keywords: [],
+    typeId: "ifv",
+    faction: "",
+    asset: "",
+    enabled: true,
+  }],
+};
+assert.equal(validatePolicyDocument(duplicatePolicy).errors.some((item) => item.code === "duplicate_name"), true);
+assert.equal(validatePolicyDocument({
+  ...samplePolicy,
+  entries: [{ ...samplePolicy.entries[0], typeId: "missing_type" }],
+}).errors.some((item) => item.code === "unknown_type"), true);
+assert.equal(validatePolicyDocument({
+  ...samplePolicy,
+  entries: [{ ...samplePolicy.entries.find((entry) => entry.typeId === "infantry"), asset: "/Game/Invalid" }],
+}).errors.some((item) => item.code === "non_vehicle_asset"), true);
+assert.equal(validatePolicyDocument({
+  ...samplePolicy,
+  types: [...samplePolicy.types, { ...samplePolicy.types[0] }],
+}).errors.some((item) => item.code === "duplicate_type_id"), true);
+assert.equal(validatePolicyDocument({
+  ...samplePolicy,
+  types: samplePolicy.types.map((type, index) => index === 0 ? { ...type, nature: "invalid" } : type),
+}).errors.some((item) => item.code === "invalid_nature"), true);
+
+await assert.rejects(
+  saveSquadNamePolicyState(config, { revision: 1, types: state.types, entries: state.entries }),
+  (error) => error?.code === "PolicyRevisionConflict",
+);
+const state2 = await saveSquadNamePolicyState(config, {
+  revision: state.revision,
+  suggestionLimit: 4,
+  types: state.types,
+  entries: state.entries,
+});
+assert.equal(state2.revision, state.revision + 1);
+assert.equal(await fs.stat(`${policyPath}.bak`).then(() => true), true);
 
 console.log("run-squad-name-policy-tests.js passed");

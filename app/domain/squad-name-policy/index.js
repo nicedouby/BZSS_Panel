@@ -8,14 +8,31 @@ import {
   SQUAD_NATURE,
   SQUAD_NATURE_LABEL,
 } from "../squad/squad_name_classifier.js";
+import {
+  DEFAULT_SQUAD_TYPES,
+  POLICY_VERSION,
+  buildRuleClassification,
+  buildTypeIndex,
+  normalizePolicyEntryV2,
+  normalizeSquadType,
+  resolveEffectiveMaxPlayers,
+} from "./schema.js";
+import { migratePolicyV1ToV2 } from "./migration.js";
+import { validatePolicyDocument as validatePolicyDocumentV2 } from "./validation.js";
+
+export {
+  POLICY_VERSION,
+  buildTypeIndex,
+  migratePolicyV1ToV2,
+  normalizePolicyEntryV2,
+  normalizeSquadType,
+  resolveEffectiveMaxPlayers,
+};
 
 const DEFAULT_POLICY_PATH = path.resolve(process.cwd(), "config", "squad_name_policy.json");
 const DEFAULT_SUGGESTION_LIMIT = 5;
 const MAX_SUGGESTION_LIMIT = 50;
 const ALGORITHM_THRESHOLD = 0.42;
-const BUILTIN_SPECIAL_INFANTRY_NAMES = Object.freeze([
-  "zsj",
-]);
 const ADMIN_SQUAD_NAMES = Object.freeze([
   "op",
   "admin",
@@ -56,18 +73,73 @@ export async function readSquadNamePolicyState(configManager = null) {
 export async function saveSquadNamePolicyState(configManager = null, nextPolicy = {}) {
   const policyPath = resolveSquadNamePolicyPath(configManager);
   const previous = loadSquadNamePolicy(configManager);
-  const normalized = normalizePolicyDocument({
+  const requestedRevision = Number(nextPolicy?.revision);
+  if (!Number.isInteger(requestedRevision) || requestedRevision !== previous.revision) {
+    throw createPolicyError(
+      "PolicyRevisionConflict",
+      `队名规范已被其他会话修改。当前版本为 ${previous.revision}，请刷新后重试。`,
+      409,
+      { expectedRevision: previous.revision, receivedRevision: nextPolicy?.revision ?? null },
+    );
+  }
+  const candidate = {
     ...previous,
     ...nextPolicy,
+    version: POLICY_VERSION,
+    revision: previous.revision + 1,
     source: nextPolicy.source ?? previous.source,
-    entries: nextPolicy.entries,
+    types: nextPolicy.types ?? previous.types,
+    entries: nextPolicy.entries ?? previous.entries,
     suggestionLimit: nextPolicy.suggestionLimit ?? nextPolicy.config?.suggestionLimit ?? previous.suggestionLimit,
     updatedAt: new Date().toISOString(),
-  }, { policyPath });
+  };
+
+  const validation = validatePolicyDocument(candidate, { policyPath });
+  if (!validation.valid) {
+    throw createPolicyError(
+      "PolicyValidationFailed",
+      `队名规范包含 ${validation.errors.length} 个错误，未保存。`,
+      422,
+      { validation },
+    );
+  }
+  const normalized = normalizePolicyDocument(candidate, { policyPath });
 
   await fsp.mkdir(path.dirname(policyPath), { recursive: true });
-  await fsp.writeFile(policyPath, `${JSON.stringify(serializePolicy(normalized), null, 2)}\n`, "utf8");
+  try {
+    await fsp.copyFile(policyPath, `${policyPath}.bak`);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const tempPath = `${policyPath}.${process.pid}.${Date.now()}.tmp`;
+  await fsp.writeFile(tempPath, `${JSON.stringify(serializePolicy(normalized), null, 2)}\n`, "utf8");
+  await fsp.rename(tempPath, policyPath);
+  await appendPolicyAudit(policyPath, {
+    action: "save",
+    revision: normalized.revision,
+    previousRevision: previous.revision,
+    actor: optionalString(nextPolicy?.auditActor) || "unknown",
+    updatedAt: normalized.updatedAt,
+    ruleCount: normalized.entries.length,
+    typeCount: normalized.types.length,
+  });
   return buildPolicyState(normalized);
+}
+
+export function validatePolicyDocument(rawPolicy = {}, options = {}) {
+  const original = rawPolicy && typeof rawPolicy === "object" && !Array.isArray(rawPolicy)
+    ? rawPolicy
+    : {};
+  const normalized = normalizePolicyDocument(rawPolicy, options);
+  const validationTarget = Number(original.version) >= POLICY_VERSION
+    && Array.isArray(original.types)
+    && Array.isArray(original.entries)
+    ? original
+    : normalized;
+  return {
+    ...validatePolicyDocumentV2(validationTarget, { normalizeName: normalizePolicyName }),
+    normalized: serializePolicy(normalized),
+  };
 }
 
 export function testSquadNamePolicy(rawName, policyOrConfig = null) {
@@ -134,32 +206,25 @@ export function evaluateSquadName(rawName, policy) {
     });
   }
 
-  const infantryMatch = indexes.infantryNameIndex.get(normalizedInput);
-  if (infantryMatch) {
-    return buildAllowedNameResult({
-      input,
-      normalizedInput,
-      normalizedStrippedInput,
-      suffixStripped,
-      name: infantryMatch.name,
-      kind: infantryMatch.kind,
-      label: infantryMatch.kind === "special_infantry" ? "Special infantry squad name" : "Infantry squad name",
-      reason: infantryMatch.kind === "special_infantry"
-        ? "Matched special infantry whitelist."
-        : "Matched infantry whitelist.",
-      matchedValue: infantryMatch.name,
-      classification: buildClassification(
-        infantryMatch.kind,
-        infantryMatch.kind === "special_infantry" ? "特种步兵队" : "步兵队",
-        infantryMatch.kind === "special_infantry"
-          ? "Matched special infantry whitelist."
-          : "Matched infantry whitelist.",
-      ),
-    });
+  let exactMatch = indexes.nameIndex.get(normalizedInput);
+  let matchedBySuffix = false;
+  if (!exactMatch && suffixStripped) {
+    const suffixCandidate = indexes.nameIndex.get(normalizedStrippedInput);
+    if (suffixCandidate?.entry?.allowSquadSuffix) {
+      exactMatch = suffixCandidate;
+      matchedBySuffix = true;
+    }
   }
-
-  const exactMatch = indexes.nameIndex.get(normalizedInput);
-  if (exactMatch && !suffixStripped) {
+  if (exactMatch) {
+    const squadType = indexes.typeIndex.get(exactMatch.entry.typeId);
+    const matchedKind = matchedBySuffix
+      ? "suffix"
+      : (["infantry", "special_infantry"].includes(exactMatch.entry.typeId) && exactMatch.kind === "canonical"
+        ? exactMatch.entry.typeId
+        : exactMatch.kind);
+    const reason = matchedBySuffix
+      ? "Matched allowed squad suffix."
+      : (exactMatch.kind === "canonical" ? "Matched canonical squad name." : "Matched squad name alias.");
     return {
       ok: true,
       input,
@@ -167,12 +232,13 @@ export function evaluateSquadName(rawName, policy) {
       normalizedStrippedInput,
       suffixStripped,
       valid: true,
-      reason: exactMatch.kind === "canonical" ? "Matched canonical vehicle name." : "Matched vehicle alias.",
-      matched: buildVehicleMatch(exactMatch.entry, exactMatch.kind, exactMatch.value),
+      reason,
+      matched: buildPolicyMatch(exactMatch.entry, squadType, matchedKind, exactMatch.value),
       suggestions: [],
       keywordSuggestions: [],
       algorithmSuggestions: [],
       warningMessage: "",
+      classification: buildRuleClassification(exactMatch.entry, squadType, reason),
     };
   }
 
@@ -215,8 +281,8 @@ export function evaluateSquadName(rawName, policy) {
     suffixStripped,
     valid: false,
     reason: suffixStripped
-      ? "Squad suffix is not accepted as a valid vehicle squad name."
-      : "No canonical vehicle name or alias matched.",
+      ? "Squad suffix is not accepted by the matched rule."
+      : "No canonical squad name or alias matched.",
     matched: null,
     suggestions,
     keywordSuggestions,
@@ -308,7 +374,20 @@ function inferNonVehicleClassification(input, normalizedInput, normalizedStrippe
 }
 
 function buildClassification(nature, label, reason) {
-  return { nature, label, reason };
+  const broadNature = ["infantry", "vehicle", "support", "logistics", "other"].includes(nature)
+    ? nature
+    : "other";
+  return {
+    nature: broadNature,
+    typeId: nature || "other",
+    typeLabel: label,
+    label,
+    ruleId: "",
+    effectiveMaxPlayers: null,
+    maxPlayersSource: "none",
+    assetPath: "",
+    reason,
+  };
 }
 
 function isNumericOnlyName(value) {
@@ -374,8 +453,12 @@ export function stripSquadSuffix(value) {
 }
 
 export function normalizePolicyDocument(rawPolicy = {}, options = {}) {
-  const source = rawPolicy && typeof rawPolicy === "object" && !Array.isArray(rawPolicy) ? rawPolicy : {};
-  const entries = Array.isArray(source.entries) ? source.entries.map(normalizeEntry).filter(Boolean) : [];
+  const original = rawPolicy && typeof rawPolicy === "object" && !Array.isArray(rawPolicy) ? rawPolicy : {};
+  const source = migratePolicyV1ToV2(original, { normalizeName: normalizePolicyName });
+  const types = normalizeTypes(source.types);
+  const entries = Array.isArray(source.entries)
+    ? source.entries.map((entry) => normalizeEntry(entry)).filter(Boolean)
+    : [];
   const withAutoKeywords = entries.map((entry) => ({
     ...entry,
     keywords: dedupeStrings([
@@ -385,9 +468,11 @@ export function normalizePolicyDocument(rawPolicy = {}, options = {}) {
   }));
 
   return {
-    version: Number(source.version ?? 1),
+    version: POLICY_VERSION,
+    revision: normalizeRevision(source.revision),
     policyPath: options.policyPath ?? source.policyPath ?? "",
     source: normalizeSource(source.source),
+    migrationWarnings: Array.isArray(source.migrationWarnings) ? source.migrationWarnings : [],
     importedAt: optionalString(source.importedAt),
     updatedAt: optionalString(source.updatedAt),
     suggestionLimit: normalizeSuggestionLimit(source.suggestionLimit ?? source.config?.suggestionLimit),
@@ -395,30 +480,45 @@ export function normalizePolicyDocument(rawPolicy = {}, options = {}) {
       ...DEFAULT_NAME_PATTERNS,
       ...asStringArray(source.defaultNamePatterns),
     ]),
-    infantryNames: dedupeStrings(asStringArray(source.infantryNames)),
-    specialInfantryNames: dedupeStrings([
-      ...asStringArray(source.specialInfantryNames),
-      ...BUILTIN_SPECIAL_INFANTRY_NAMES,
-    ]),
+    types,
+    infantryNames: buildCompatibilityNames(withAutoKeywords, "infantry"),
+    specialInfantryNames: buildCompatibilityNames(withAutoKeywords, "special_infantry"),
     entries: withAutoKeywords,
   };
 }
 
 export function buildPolicyState(policy) {
   const normalized = normalizePolicyDocument(policy, { policyPath: policy.policyPath });
+  const typeIndex = buildTypeIndex(normalized.types);
   return {
     ok: true,
     policyPath: normalized.policyPath,
     version: normalized.version,
+    revision: normalized.revision,
     source: normalized.source,
+    migrationWarnings: normalized.migrationWarnings,
     importedAt: normalized.importedAt,
     updatedAt: normalized.updatedAt,
     suggestionLimit: normalized.suggestionLimit,
     defaultNamePatterns: normalized.defaultNamePatterns,
     infantryNames: normalized.infantryNames,
     specialInfantryNames: normalized.specialInfantryNames,
+    types: normalized.types.map((type) => ({
+      ...type,
+      ruleCount: normalized.entries.filter((entry) => entry.typeId === type.id).length,
+    })),
+    validation: validatePolicyDocumentV2(normalized, { normalizeName: normalizePolicyName }),
     stats: buildPolicyStats(normalized),
-    entries: normalized.entries,
+    entries: normalized.entries.map((entry) => {
+      const squadType = typeIndex.get(entry.typeId);
+      return {
+        ...entry,
+        vehicleType: entry.legacyVehicleType || (squadType?.nature === "vehicle" ? squadType.label : ""),
+        typeLabel: squadType?.label || entry.typeId,
+        nature: squadType?.nature || "other",
+        ...resolveEffectiveMaxPlayers(entry, squadType),
+      };
+    }),
   };
 }
 
@@ -441,27 +541,22 @@ export function buildPolicyStats(policy) {
     keywordCells: keywordCount,
     uniqueKeywords: uniqueKeywords.size,
     factions: new Set(policy.entries.map((entry) => entry.faction).filter(Boolean)).size,
-    vehicleTypes: new Set(policy.entries.map((entry) => entry.vehicleType).filter(Boolean)).size,
+    vehicleTypes: new Set(policy.entries.filter((entry) => policy.types.find((type) => type.id === entry.typeId)?.nature === "vehicle").map((entry) => entry.typeId)).size,
+    types: policy.types.length,
+    enabledEntries: policy.entries.filter((entry) => entry.enabled).length,
   };
 }
 
 function buildPolicyIndexes(policy) {
   const nameIndex = new Map();
-  const infantryNameIndex = new Map();
   const keywordIndex = new Map();
   const searchable = [];
+  const typeIndex = buildTypeIndex(policy.types);
+  const sortedEntries = [...policy.entries]
+    .filter((entry) => entry.enabled && typeIndex.get(entry.typeId)?.enabled)
+    .sort((left, right) => right.priority - left.priority || left.name.localeCompare(right.name, "zh-CN"));
 
-  for (const name of policy.infantryNames) {
-    const key = normalizePolicyName(name);
-    if (key && !infantryNameIndex.has(key)) infantryNameIndex.set(key, { name, kind: "infantry" });
-  }
-
-  for (const name of policy.specialInfantryNames) {
-    const key = normalizePolicyName(name);
-    if (key) infantryNameIndex.set(key, { name, kind: "special_infantry" });
-  }
-
-  for (const entry of policy.entries) {
+  for (const entry of sortedEntries) {
     const canonicalKey = normalizePolicyName(entry.name);
     if (canonicalKey && !nameIndex.has(canonicalKey)) {
       nameIndex.set(canonicalKey, { entry, kind: "canonical", value: entry.name });
@@ -487,7 +582,7 @@ function buildPolicyIndexes(policy) {
     }
   }
 
-  return { nameIndex, infantryNameIndex, keywordIndex, searchable };
+  return { nameIndex, keywordIndex, searchable, typeIndex };
 }
 
 function matchDefaultNamePattern(normalizedInput, patterns = []) {
@@ -634,9 +729,14 @@ function sortChars(value) {
   return String(value ?? "").split("").sort().join("");
 }
 
-function buildVehicleMatch(entry, matchedKind, matchedValue) {
+function buildPolicyMatch(entry, squadType, matchedKind, matchedValue) {
+  const maxPlayers = resolveEffectiveMaxPlayers(entry, squadType);
   return {
     ...entry,
+    vehicleType: entry.legacyVehicleType || (squadType?.nature === "vehicle" ? squadType?.label : ""),
+    typeLabel: squadType?.label || entry.typeId,
+    nature: squadType?.nature || "other",
+    ...maxPlayers,
     matchedKind,
     matchedValue,
   };
@@ -647,7 +747,8 @@ function buildSuggestion(entry, extra = {}) {
     id: entry.id,
     name: entry.name,
     faction: entry.faction,
-    vehicleType: entry.vehicleType,
+    vehicleType: entry.legacyVehicleType,
+    typeId: entry.typeId,
     asset: entry.asset,
     aliases: entry.aliases,
     keywords: entry.keywords,
@@ -660,30 +761,9 @@ function buildSuggestion(entry, extra = {}) {
 }
 
 function normalizeEntry(rawEntry) {
-  const source = rawEntry && typeof rawEntry === "object" && !Array.isArray(rawEntry) ? rawEntry : {};
-  const name = optionalString(source.name ?? source.vehicleName);
-  if (!name) return null;
-  const asset = optionalString(source.asset ?? source.vehicleAsset);
-  const faction = optionalString(source.faction ?? source.factionName);
-  const vehicleType = optionalString(source.vehicleType ?? source.type);
-  const aliases = dedupeStrings(asStringArray(source.aliases));
-  const keywords = dedupeStrings(asStringArray(source.keywords));
-  const id = optionalString(source.id) || buildEntryId({ faction, vehicleType, asset, name });
-  return {
-    id,
-    faction,
-    vehicleType,
-    asset,
-    name,
-    aliases,
-    keywords,
-    searchTokens: dedupeStrings([
-      ...asStringArray(source.searchTokens),
-      ...extractSearchTokens(name),
-      ...aliases.flatMap(extractSearchTokens),
-      ...extractSearchTokens(asset),
-    ]),
-  };
+  const entry = normalizePolicyEntryV2(rawEntry, { normalizeName: normalizePolicyName });
+  if (!entry) return null;
+  return entry;
 }
 
 function inferKeywordsForEntry(entry) {
@@ -765,22 +845,39 @@ function bigrams(value) {
 
 function serializePolicy(policy) {
   return {
-    version: policy.version,
+    version: POLICY_VERSION,
+    revision: policy.revision,
     source: policy.source,
+    migrationWarnings: policy.migrationWarnings,
     importedAt: policy.importedAt,
     updatedAt: policy.updatedAt,
     suggestionLimit: policy.suggestionLimit,
     defaultNamePatterns: policy.defaultNamePatterns,
-    infantryNames: policy.infantryNames,
-    specialInfantryNames: policy.specialInfantryNames,
+    types: policy.types.map((type) => ({
+      id: type.id,
+      label: type.label,
+      nature: type.nature,
+      description: type.description,
+      defaultMaxPlayers: type.defaultMaxPlayers,
+      assetMode: type.assetMode,
+      enabled: type.enabled,
+      sortOrder: type.sortOrder,
+    })),
     entries: policy.entries.map((entry) => ({
       id: entry.id,
-      faction: entry.faction,
-      vehicleType: entry.vehicleType,
-      asset: entry.asset,
       name: entry.name,
       aliases: entry.aliases,
       keywords: entry.keywords,
+      typeId: entry.typeId,
+      faction: entry.faction,
+      asset: entry.asset,
+      maxPlayersOverride: entry.maxPlayersOverride,
+      allowSquadSuffix: entry.allowSquadSuffix,
+      enabled: entry.enabled,
+      priority: entry.priority,
+      source: entry.source,
+      notes: entry.notes,
+      legacyVehicleType: entry.legacyVehicleType,
       searchTokens: entry.searchTokens,
     })),
   };
@@ -788,14 +885,14 @@ function serializePolicy(policy) {
 
 function createEmptyPolicyDocument() {
   return {
-    version: 1,
+    version: POLICY_VERSION,
+    revision: 1,
     source: { type: "manual", fileName: "" },
     importedAt: null,
     updatedAt: null,
     suggestionLimit: DEFAULT_SUGGESTION_LIMIT,
     defaultNamePatterns: [...DEFAULT_NAME_PATTERNS],
-    infantryNames: [],
-    specialInfantryNames: [],
+    types: DEFAULT_SQUAD_TYPES,
     entries: [],
   };
 }
@@ -814,14 +911,6 @@ function normalizeSuggestionLimit(value) {
   const number = Number(value ?? DEFAULT_SUGGESTION_LIMIT);
   if (!Number.isFinite(number)) return DEFAULT_SUGGESTION_LIMIT;
   return Math.max(1, Math.min(MAX_SUGGESTION_LIMIT, Math.trunc(number)));
-}
-
-function buildEntryId(entry) {
-  const base = [entry.faction, entry.vehicleType, entry.name, entry.asset]
-    .map((part) => normalizePolicyName(part))
-    .filter(Boolean)
-    .join(":");
-  return base || `entry:${Math.random().toString(36).slice(2)}`;
 }
 
 function isPolicyDocument(value) {
@@ -852,6 +941,41 @@ function dedupeStrings(values = []) {
   return result;
 }
 
+function normalizeTypes(rawTypes) {
+  const source = Array.isArray(rawTypes) && rawTypes.length > 0 ? rawTypes : DEFAULT_SQUAD_TYPES;
+  const seen = new Set();
+  return source
+    .map((type, index) => normalizeSquadType(type, index * 10))
+    .filter((type) => {
+      if (!type || seen.has(type.id)) return false;
+      seen.add(type.id);
+      return true;
+    })
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.label.localeCompare(right.label, "zh-CN"));
+}
+
+function buildCompatibilityNames(entries, typeId) {
+  return dedupeStrings(entries.filter((entry) => entry.typeId === typeId).map((entry) => entry.name));
+}
+
+function normalizeRevision(value) {
+  const revision = Number(value);
+  return Number.isInteger(revision) && revision > 0 ? revision : 1;
+}
+
+async function appendPolicyAudit(policyPath, event) {
+  const auditPath = `${policyPath}.audit.jsonl`;
+  await fsp.appendFile(auditPath, `${JSON.stringify({ ...event, timestamp: new Date().toISOString() })}\n`, "utf8");
+}
+
+function createPolicyError(code, message, statusCode, details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = statusCode;
+  Object.assign(error, details);
+  return error;
+}
+
 export default {
   buildSquadNamePolicyWarningMessages,
   evaluateSquadName,
@@ -863,4 +987,5 @@ export default {
   saveSquadNamePolicyState,
   stripSquadSuffix,
   testSquadNamePolicy,
+  validatePolicyDocument,
 };

@@ -25,8 +25,10 @@ import {
 } from "./squad-name-classifier.js";
 import {
   readSquadNamePolicyState,
+  resolveSquadNamePolicyPath,
   saveSquadNamePolicyState,
   testSquadNamePolicy,
+  validatePolicyDocument,
 } from "../domain/squad-name-policy/index.js";
 import {
   getAllPlugins,
@@ -430,13 +432,48 @@ export class WebServer {
       if (req.method === "POST") {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
-        return this.json(res, 200, await saveSquadNamePolicyState(this.core.config, body));
+        try {
+          return this.json(res, 200, await saveSquadNamePolicyState(this.core.config, {
+            ...body,
+            auditActor: user?.username ?? user?.name ?? "admin",
+          }));
+        } catch (error) {
+          if (error?.code === "PolicyValidationFailed") {
+            return this.json(res, 422, {
+              error: error.code,
+              message: error.message,
+              validation: error.validation,
+            });
+          }
+          if (error?.code === "PolicyRevisionConflict") {
+            return this.json(res, 409, {
+              error: error.code,
+              message: error.message,
+              expectedRevision: error.expectedRevision,
+              receivedRevision: error.receivedRevision,
+            });
+          }
+          throw error;
+        }
       }
 
       return this.json(res, 405, {
         error: "MethodNotAllowed",
         message: "Only GET and POST are supported.",
       });
+    }
+
+    if (url.pathname === "/api/squad-name-policy/validate") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const result = validatePolicyDocument(body, { policyPath: resolveSquadNamePolicyPath(this.core.config) });
+      return this.json(res, result.valid ? 200 : 422, result);
     }
 
     if (url.pathname === "/api/squad-name-policy/test") {
@@ -454,7 +491,7 @@ export class WebServer {
           message: "Squad name is required.",
         });
       }
-      return this.json(res, 200, testSquadNamePolicy(name, this.core.config));
+      return this.json(res, 200, testSquadNamePolicy(name, body?.policy ?? this.core.config));
     }
 
     if (url.pathname === "/api/modules/squad-name-policy-guard/state") {
@@ -6043,7 +6080,4 @@ function pickLatestRecord(records) {
   }
   return latest;
 }
-
-
-
 
