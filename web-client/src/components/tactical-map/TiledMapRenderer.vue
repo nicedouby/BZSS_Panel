@@ -1,5 +1,5 @@
 <template>
-  <div class="tiled-map-renderer">
+  <div class="tiled-map-renderer" :class="{ 'is-interacting': interactionActive }">
     <!-- Fallback: low-res tiles from cached lower zoom level -->
     <img
       v-for="tile in fallbackTiles"
@@ -75,7 +75,7 @@ const { visibleTiles, fallbackTiles, currentTileZoom } = useTileLoader({
   viewportWidth: toRef(props, "viewportWidth"),
   viewportHeight: toRef(props, "viewportHeight"),
   enabled: toRef(props, "tilesEnabled"),
-  interactionActive: toRef(props, "interactionActive"),
+  interactionActive: computed(() => props.interactionActive === true),
 });
 
 const emit = defineEmits<{
@@ -223,6 +223,10 @@ defineExpose({ currentTileZoom });
 
 .map-tile--loaded {
   opacity: 1;
+}
+
+.tiled-map-renderer.is-interacting .map-tile {
+  transition: none;
 }
 
 .map-tile--fallback {
