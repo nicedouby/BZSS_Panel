@@ -38,7 +38,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { useIsCompactLandscape, useIsMobile } from "../../composables/useMediaQuery";
 import Topbar from "./Topbar.vue";
-import Sidebar from "./Sidebar.vue";
+import Sidebar from "./StableSidebar.vue";
 import SectionSubnav from "./SectionSubnav.vue";
 import AppConfirmDialog from "../common/AppConfirmDialog.vue";
 import WarnPrompt from "../common/WarnPrompt.vue";
