@@ -4758,6 +4758,8 @@ export class WebServer {
       "SetWeather",
       "Cheer",
       "SetForbRessSourceRegeneration",
+      "SetAutomaticHeal",
+      "SetAutomaticHealValue",
       "CreateVehicle",
       "AdminTrack",
       "RemoveAdminTrack",
@@ -4767,7 +4769,7 @@ export class WebServer {
       return {
         ok: false,
         error: "UnsupportedBzssCoreDirective",
-        message: "Supported directives: SetTime, SetWeather, Cheer, SetForbRessSourceRegeneration, CreateVehicle, AdminTrack, RemoveAdminTrack.",
+        message: "Supported directives: SetTime, SetWeather, Cheer, SetForbRessSourceRegeneration, SetAutomaticHeal, SetAutomaticHealValue, CreateVehicle, AdminTrack, RemoveAdminTrack.",
       };
     }
 
