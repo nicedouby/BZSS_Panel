@@ -25,6 +25,13 @@ const runtimeSyncState = reactive({
 
 let timer: number | null = null;
 let visibilityListenerAttached = false;
+let activeSnapshotController: AbortController | null = null;
+let snapshotRequestVersion = 0;
+
+// The snapshot is the panel's shared data path.  A server that is still
+// starting must never be able to leave it permanently in the "in flight"
+// state, otherwise every page that depends on it remains on its loading view.
+const SNAPSHOT_REQUEST_TIMEOUT_MS = 7_000;
 
 export function setRuntimeSyncRefreshPolicy(policy: unknown) {
   runtimeSyncState.refreshPolicy = normalizeRefreshPolicy(policy);
@@ -40,6 +47,9 @@ export function startRuntimeSync() {
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;
   runtimeSyncState.inFlight = false;
+  snapshotRequestVersion += 1;
+  activeSnapshotController?.abort("runtime-sync-stopped");
+  activeSnapshotController = null;
   clearRuntimeTimer();
   detachVisibilityListener();
 }
@@ -110,6 +120,12 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
   if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
   if (options.immediate) clearRuntimeTimer();
 
+  const requestVersion = ++snapshotRequestVersion;
+  const controller = new AbortController();
+  activeSnapshotController = controller;
+  const timeoutId = window.setTimeout(() => controller.abort("timeout"), SNAPSHOT_REQUEST_TIMEOUT_MS);
+  const isCurrentRequest = () => requestVersion === snapshotRequestVersion;
+
   runtimeSyncState.inFlight = true;
   try {
     const response = await fetch("/api/snapshot/all", {
@@ -117,7 +133,10 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
       headers: {
         Accept: "application/json",
       },
+      signal: controller.signal,
     });
+
+    if (!isCurrentRequest() || !runtimeSyncState.started) return;
 
     if (response.status === 401) {
       runtimeSyncState.lastError = "Unauthorized";
@@ -138,7 +157,7 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
     }
 
     const data = await response.json();
-    if (!runtimeSyncState.started) return;
+    if (!isCurrentRequest() || !runtimeSyncState.started) return;
 
     const normalized = markRaw(normalizeRuntimeSnapshot(data));
     snapshot.value = normalized;
@@ -149,14 +168,22 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
     runtimeSyncState.errorType = null;
     runtimeSyncState.consecutiveFailures = 0;
   } catch (error) {
-    runtimeSyncState.lastError = error instanceof Error ? error.message : "Runtime snapshot failed";
-    runtimeSyncState.errorType = "network";
+    if (!isCurrentRequest() || !runtimeSyncState.started) return;
+    const timedOut = controller.signal.aborted && controller.signal.reason === "timeout";
+    runtimeSyncState.lastError = timedOut
+      ? `Snapshot request timed out after ${SNAPSHOT_REQUEST_TIMEOUT_MS}ms`
+      : error instanceof Error ? error.message : "Runtime snapshot failed";
+    runtimeSyncState.errorType = timedOut ? "timeout" : "network";
     runtimeSyncState.consecutiveFailures += 1;
     markRuntimeStoresStale();
   } finally {
-    runtimeSyncState.inFlight = false;
-    if (options.scheduleNext && runtimeSyncState.started) {
-      scheduleRuntimeSync();
+    window.clearTimeout(timeoutId);
+    if (isCurrentRequest()) {
+      activeSnapshotController = null;
+      runtimeSyncState.inFlight = false;
+      if (options.scheduleNext && runtimeSyncState.started) {
+        scheduleRuntimeSync();
+      }
     }
   }
 }
