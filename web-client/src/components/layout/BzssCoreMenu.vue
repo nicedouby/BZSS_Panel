@@ -709,13 +709,18 @@ async function submitForbRessCommand() {
 
   busy.value = true;
   try {
-    const commands = teams.map((teamId) =>
-      `SetFobResourceRegeneration:${[teamId, ...suffix].join(",")}`,
+    const results = await Promise.all(
+      teams.map((teamId) =>
+        executeBzssCoreCommand({
+          directive: "SetFobResourceRegeneration",
+          parameter: [teamId, ...suffix].join(","),
+        }),
+      ),
     );
-    const result = await executeBzssCoreCommand({ batch: commands });
 
-    if (!result.ok) {
-      const details = [result.message, result.stdout, result.stderr]
+    const failed = results.find((result) => !result.ok);
+    if (failed) {
+      const details = [failed.message, failed.stdout, failed.stderr]
         .map((item) => String(item ?? "").trim())
         .filter(Boolean)
         .join(" / ");
