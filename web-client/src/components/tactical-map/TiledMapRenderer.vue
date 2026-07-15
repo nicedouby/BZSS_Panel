@@ -1,51 +1,39 @@
 <template>
   <div class="tiled-map-renderer" :class="{ 'is-interacting': interactionActive }">
-    <!-- Fallback: low-res tiles from cached lower zoom level -->
-    <img
-      v-for="tile in fallbackTiles"
-      :key="tile.key"
-      :src="tile.src"
-      class="map-tile map-tile--fallback"
-      :style="tileStyle(tile)"
-      draggable="false"
-      decoding="async"
-      loading="eager"
-    />
-
-    <!-- Primary tiles at current zoom level -->
-    <img
-      v-for="tile in visibleTiles"
-      :key="tile.key"
-      :src="tile.src"
-      class="map-tile"
-      :class="{ 'map-tile--loaded': isTileLoaded(tile.key) }"
-      :style="tileStyle(tile)"
-      draggable="false"
-      decoding="async"
-      @load="onTileLoad(tile.key)"
-      @error="onTileError(tile.key, tile.src)"
-    />
-
-    <!-- Fallback: original full image stays visible under tiles -->
+    <!-- A stable, fully decoded image remains under the tiles at all times. -->
     <img
       v-if="fallbackImage"
       :src="fallbackImage"
       alt="Tactical Map"
       class="map-image-fallback"
-      :class="{ 'map-image-fallback--visible': showFallbackImage }"
       draggable="false"
       loading="eager"
       decoding="async"
       fetchpriority="high"
       @load="onFallbackLoad"
     />
+
+    <!-- Loaded tiles naturally paint over the stable full-map image. -->
+    <img
+      v-for="tile in visibleTiles"
+      :key="tile.key"
+      :src="tile.src"
+      class="map-tile"
+      :style="tileStyle(tile)"
+      draggable="false"
+      decoding="async"
+      loading="eager"
+      @load="onTileLoad"
+      @error="onTileError(tile.key, tile.src)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, toRef, ref, watch } from "vue";
+import { computed, onBeforeUnmount, toRef, watch } from "vue";
 import { useTileLoader, type TileInfo } from "../../composables/useTileLoader";
 import { useTacticalMapViewport } from "../../composables/tacticalMapViewport";
+import { warmTacticalMapTileCache } from "../../utils/map-tile-cache";
 
 const props = defineProps<{
   /** Base path to tiles directory, e.g. "/assets/map-tiles/Sumari_RAAS_v1" */
@@ -58,15 +46,15 @@ const props = defineProps<{
   viewportWidth: number;
   /** Viewport height in pixels */
   viewportHeight: number;
-  /** Fallback image URL (original full PNG) */
+  /** Stable full-map image shown underneath the tiles */
   fallbackImage?: string;
-  /** True while pointer dragging; tile discovery is deferred until release. */
+  /** True while pointer dragging; tile discovery is deferred until release */
   interactionActive?: boolean;
 }>();
 
 const { zoom, panX, panY } = useTacticalMapViewport();
 
-const { visibleTiles, fallbackTiles, currentTileZoom } = useTileLoader({
+const { visibleTiles, currentTileZoom } = useTileLoader({
   tileBasePath: toRef(props, "tileBasePath"),
   maxZoom: toRef(props, "maxZoom"),
   zoom,
@@ -82,105 +70,89 @@ const emit = defineEmits<{
   (e: "ready"): void;
 }>();
 
-// Track which tiles have finished loading via native <img> @load event
-const loadedSet = ref(new Set<string>());
-const fallbackLoaded = ref(false);
-const primaryTilesReady = computed(() => (
-  visibleTiles.value.length > 0
-  && visibleTiles.value.every((tile) => loadedSet.value.has(tile.key))
-));
+let readyEmitted = false;
+let warmupTimer: number | null = null;
+let warmupController: AbortController | null = null;
 
-/**
- * Keep the local full-resolution fallback visible until every primary tile
- * covering the viewport is ready. Individual loaded tiles render above it,
- * so this prevents transparent square gaps during zoom/pan transitions.
- */
-const showFallbackImage = computed(() => Boolean(
-  props.fallbackImage
-  && (props.interactionActive || !props.tilesEnabled || !primaryTilesReady.value),
-));
-const MAX_LOADED_TILE_KEYS = 256;
-
-function onTileLoad(key: string) {
-  const next = new Set(loadedSet.value);
-  next.add(key);
-  pruneLoadedKeys(next);
-  loadedSet.value = next;
-  syncReadyState();
-}
-
-function pruneLoadedKeys(target = loadedSet.value) {
-  const activeKeys = new Set([
-    ...visibleTiles.value.map((tile) => tile.key),
-    ...fallbackTiles.value.map((tile) => tile.key),
-  ]);
-  for (const key of target) {
-    if (!activeKeys.has(key)) target.delete(key);
-  }
-  if (target.size <= MAX_LOADED_TILE_KEYS) return;
-  for (const key of [...target].slice(0, target.size - MAX_LOADED_TILE_KEYS)) {
-    target.delete(key);
-  }
-}
-
-function isTileLoaded(key: string) {
-  return loadedSet.value.has(key);
+function emitReadyOnce() {
+  if (readyEmitted) return;
+  readyEmitted = true;
+  emit("ready");
 }
 
 function onFallbackLoad() {
-  fallbackLoaded.value = true;
-  syncReadyState();
+  emitReadyOnce();
+  scheduleCacheWarmup();
+}
+
+function onTileLoad() {
+  // Tiles can still make the map ready when a legacy config has no base image.
+  if (!props.fallbackImage) emitReadyOnce();
+  scheduleCacheWarmup();
 }
 
 function onTileError(key: string, src: string) {
   if (import.meta.env.DEV) {
     console.warn("[TiledMapRenderer] tile failed", { key, src });
   }
-
-  // Failed tiles should not block the base image from serving as the visible fallback.
-  syncReadyState();
 }
 
-// Clear loaded state when map changes
-watch(() => props.tileBasePath, () => {
-  loadedSet.value = new Set();
-  fallbackLoaded.value = false;
-  syncReadyState();
-});
+function scheduleCacheWarmup() {
+  if (!props.tilesEnabled || warmupTimer !== null || warmupController !== null) return;
+  warmupTimer = window.setTimeout(() => {
+    warmupTimer = null;
+    if (!props.tilesEnabled) return;
+
+    const controller = new AbortController();
+    warmupController = controller;
+    void warmTacticalMapTileCache({
+      basePath: props.tileBasePath,
+      maxZoom: props.maxZoom,
+      preferredZoom: currentTileZoom.value,
+      concurrency: 6,
+      signal: controller.signal,
+    }).finally(() => {
+      if (warmupController === controller) warmupController = null;
+    });
+  }, 350);
+}
+
+function resetMapLoadingState() {
+  readyEmitted = false;
+  if (warmupTimer !== null) {
+    window.clearTimeout(warmupTimer);
+    warmupTimer = null;
+  }
+  warmupController?.abort();
+  warmupController = null;
+}
 
 watch(
-  () => [
-    visibleTiles.value.map((tile) => tile.key).join(","),
-    fallbackTiles.value.map((tile) => tile.key).join(","),
-    props.tilesEnabled,
-  ] as const,
+  () => [props.tileBasePath, props.maxZoom] as const,
   () => {
-    pruneLoadedKeys();
-    syncReadyState();
+    resetMapLoadingState();
+    if (props.tilesEnabled && !props.fallbackImage) scheduleCacheWarmup();
   },
-  { immediate: true }
 );
 
-function syncReadyState() {
-  const tilesReady =
-    fallbackLoaded.value ||
-    !props.tilesEnabled ||
-    primaryTilesReady.value;
-
-  if (tilesReady) {
-    emit("ready");
-  }
-}
+watch(
+  () => props.tilesEnabled,
+  (enabled) => {
+    if (enabled) scheduleCacheWarmup();
+    else resetMapLoadingState();
+  },
+);
 
 function tileStyle(tile: TileInfo) {
   return {
-    position: "absolute" as const,
     left: `${tile.left}%`,
     top: `${tile.top}%`,
     width: `${tile.width}%`,
     height: `${tile.height}%`,
   };
 }
+
+onBeforeUnmount(resetMapLoadingState);
 
 defineExpose({ currentTileZoom });
 </script>
@@ -191,46 +163,31 @@ defineExpose({ currentTileZoom });
   inset: 0;
   overflow: hidden;
   contain: layout paint style;
+  background: #020205;
 }
 
-.map-image-fallback {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-  pointer-events: none;
-  opacity: 0;
-  z-index: 0;
-}
-
-.map-image-fallback--visible {
-  opacity: 1;
-}
-
+.map-image-fallback,
 .map-tile {
   position: absolute;
   display: block;
-  image-rendering: auto;
-  opacity: 0;
-  transition: opacity 0.2s ease;
   pointer-events: none;
-  /* Prevents sub-pixel gaps between tiles */
   backface-visibility: hidden;
-  z-index: 1;
 }
 
-.map-tile--loaded {
-  opacity: 1;
+.map-image-fallback {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  z-index: 0;
+}
+
+.map-tile {
+  image-rendering: auto;
+  z-index: 1;
 }
 
 .tiled-map-renderer.is-interacting .map-tile {
   transition: none;
-}
-
-.map-tile--fallback {
-  opacity: 0.72;
-  z-index: 1;
 }
 </style>
