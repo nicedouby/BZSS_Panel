@@ -36,63 +36,42 @@
       </section>
 
       <section class="pipeline-grid">
-        <article class="stage-card panel">
-          <div class="stage-title"><span>01</span><strong>Squad.log 输入</strong></div>
-          <MetricRow label="文件大小" :value="formatBytes(latest.pipeline?.sourceFile?.sizeBytes)" />
-          <MetricRow label="生成速率" :value="formatRate(latest.pipeline?.sourceFile?.producedBytesPerSec)" />
-          <MetricRow label="最后修改" :value="formatTime(latest.pipeline?.sourceFile?.modifiedAt)" />
-          <p class="path" :title="latest.pipeline?.sourceFile?.path">{{ latest.pipeline?.sourceFile?.path || "未找到" }}</p>
+        <article
+          v-for="stage in stageCards"
+          :key="stage.id"
+          class="stage-card panel"
+          :class="stage.cssClass"
+        >
+          <div class="stage-title">
+            <span>{{ stage.number }}</span>
+            <strong>{{ stage.title }}</strong>
+          </div>
+          <div v-for="row in stage.rows" :key="row.label" class="metric-row">
+            <span>{{ row.label }}</span>
+            <strong>{{ row.value }}</strong>
+          </div>
+          <p v-if="stage.path" class="path" :title="stage.path">{{ stage.path }}</p>
         </article>
+      </section>
 
-        <article class="stage-card panel" :class="stageClass('python')">
-          <div class="stage-title"><span>02</span><strong>Python TailReader / Parser</strong></div>
-          <MetricRow label="进程状态" :value="latest.pipeline?.parser?.status || 'unknown'" />
-          <MetricRow label="消费速率" :value="formatRate(latest.pipeline?.parser?.consumedBytesPerSec)" />
-          <MetricRow label="源文件积压" :value="formatBytes(latest.pipeline?.parser?.backlogBytes)" />
-          <MetricRow label="预计追平" :value="formatSeconds(latest.pipeline?.parser?.backlogSeconds)" />
-          <MetricRow label="CPU" :value="formatPercent(latest.pipeline?.parser?.process?.cpuPercent)" />
-          <MetricRow label="内存" :value="formatBytes(latest.pipeline?.parser?.process?.workingSetBytes)" />
-          <MetricRow label="磁盘写入" :value="formatRate(latest.pipeline?.parser?.process?.writeBytesPerSec)" />
-        </article>
-
-        <article class="stage-card panel">
-          <div class="stage-title"><span>03</span><strong>LogPost 文件输出</strong></div>
-          <MetricRow label="all.jsonl 大小" :value="formatBytes(latest.pipeline?.output?.sizeBytes)" />
-          <MetricRow label="输出速率" :value="formatRate(latest.pipeline?.output?.producedBytesPerSec)" />
-          <MetricRow label="原始日志副本" :value="String(latest.pipeline?.output?.writeAmplification?.rawCopiesPerLine ?? '--')" />
-          <MetricRow label="单事件预计写入" :value="String(latest.pipeline?.output?.writeAmplification?.matchedEventWrites ?? '--')" />
-          <p class="path" :title="latest.pipeline?.output?.path">{{ latest.pipeline?.output?.path || "未找到" }}</p>
-        </article>
-
-        <article class="stage-card panel" :class="stageClass('fileBridge')">
-          <div class="stage-title"><span>04</span><strong>Node FileBridge</strong></div>
-          <MetricRow label="消费速率" :value="formatRate(latest.pipeline?.fileBridge?.consumedBytesPerSec)" />
-          <MetricRow label="积压" :value="formatBytes(latest.pipeline?.fileBridge?.backlogBytes)" />
-          <MetricRow label="预计追平" :value="formatSeconds(latest.pipeline?.fileBridge?.backlogSeconds)" />
-          <MetricRow label="最近单轮耗时" :value="formatMs(latest.pipeline?.fileBridge?.lastTickDurationMs)" />
-          <MetricRow label="重叠轮询跳过" :value="String(latest.pipeline?.fileBridge?.overlappingTickSkips ?? 0)" />
-          <MetricRow label="理论读取上限" :value="formatRate(latest.pipeline?.fileBridge?.theoreticalMaxBytesPerSec)" />
-        </article>
-
-        <article class="stage-card panel" :class="stageClass('udp')">
-          <div class="stage-title"><span>05</span><strong>UDP 投递</strong></div>
-          <MetricRow label="数据包速率" :value="formatPerSecond(latest.pipeline?.udp?.packetsPerSec)" />
-          <MetricRow label="带宽" :value="formatRate(latest.pipeline?.udp?.bytesPerSec)" />
-          <MetricRow label="累计接收" :value="String(latest.pipeline?.udp?.packetsReceived ?? 0)" />
-          <MetricRow label="无效 JSON" :value="String(latest.pipeline?.udp?.invalidJson ?? 0)" />
-          <MetricRow label="超大数据包" :value="String(latest.pipeline?.udp?.oversizedMessages ?? 0)" />
-          <MetricRow label="BZSS 玩家分块" :value="String(latest.pipeline?.udp?.bzssCoreChunks ?? 0)" />
-        </article>
-
-        <article class="stage-card panel" :class="stageClass('node')">
-          <div class="stage-title"><span>06</span><strong>EventBus / Node 主线程</strong></div>
-          <MetricRow label="事件消费速率" :value="formatPerSecond(latest.pipeline?.delivery?.eventsPerSec)" />
-          <MetricRow label="事件序号缺口" :value="String(latest.pipeline?.delivery?.metrics?.eventGapCount ?? 0)" />
-          <MetricRow label="事件延迟 P95" :value="formatMs(latest.pipeline?.delivery?.metrics?.p95EventLatencyMs)" />
-          <MetricRow label="事件循环 P95" :value="formatMs(latest.pipeline?.node?.eventLoopP95Ms)" />
-          <MetricRow label="事件循环最大" :value="formatMs(latest.pipeline?.node?.eventLoopMaxMs)" />
-          <MetricRow label="Node RSS" :value="formatBytes(latest.pipeline?.node?.rssBytes)" />
-        </article>
+      <section v-if="pythonTimingRows.length" class="panel timing-panel">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PYTHON STAGE TIMING</p>
+            <h2>Python 阶段耗时</h2>
+          </div>
+          <span>最大单行 {{ formatMs(latest.pipeline?.parser?.maxLineProcessMs) }}</span>
+        </div>
+        <div class="timing-grid">
+          <div v-for="item in pythonTimingRows" :key="item.key" class="timing-item">
+            <div>
+              <span>{{ item.label }}</span>
+              <strong>{{ formatPercent(item.share * 100) }}</strong>
+            </div>
+            <div class="timing-track"><span :style="{ width: `${Math.min(100, item.share * 100)}%` }" /></div>
+            <small>{{ formatMs(item.durationMs) }}</small>
+          </div>
+        </div>
       </section>
 
       <section class="diagnosis-layout">
@@ -134,8 +113,14 @@
             </div>
           </div>
           <div class="amplification-score">
-            <div><span>每条原始日志副本</span><strong>{{ latest.pipeline?.output?.writeAmplification?.rawCopiesPerLine ?? "--" }}</strong></div>
-            <div><span>每个匹配事件写入</span><strong>{{ latest.pipeline?.output?.writeAmplification?.matchedEventWrites ?? "--" }}</strong></div>
+            <div>
+              <span>每条原始日志副本</span>
+              <strong>{{ latest.pipeline?.output?.writeAmplification?.rawCopiesPerLine ?? "--" }}</strong>
+            </div>
+            <div>
+              <span>每个匹配事件写入</span>
+              <strong>{{ latest.pipeline?.output?.writeAmplification?.matchedEventWrites ?? "--" }}</strong>
+            </div>
           </div>
           <ul>
             <li v-for="note in latest.pipeline?.output?.writeAmplification?.notes ?? []" :key="note">{{ note }}</li>
@@ -146,58 +131,43 @@
       <section class="panel history-panel">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">LAST {{ history.length }} SAMPLES</p>
-            <h2>吞吐与积压趋势</h2>
+            <p class="eyebrow">LAST {{ historyRows.length }} SAMPLES</p>
+            <h2>最近吞吐与积压</h2>
           </div>
           <span>采样周期 {{ state?.sampleIntervalMs ?? 1000 }}ms</span>
         </div>
-
-        <div class="trend-grid">
-          <TrendChart
-            title="源日志：生成 vs Python 消费"
-            :history="history"
-            first-key="sourceProducedBytesPerSec"
-            second-key="parserConsumedBytesPerSec"
-            first-label="生成"
-            second-label="消费"
-            value-type="rate"
-          />
-          <TrendChart
-            title="LogPost：输出 vs FileBridge 消费"
-            :history="history"
-            first-key="outputProducedBytesPerSec"
-            second-key="bridgeConsumedBytesPerSec"
-            first-label="输出"
-            second-label="消费"
-            value-type="rate"
-          />
-          <TrendChart
-            title="积压趋势"
-            :history="history"
-            first-key="sourceBacklogBytes"
-            second-key="bridgeBacklogBytes"
-            first-label="源日志"
-            second-label="FileBridge"
-            value-type="bytes"
-          />
-          <TrendChart
-            title="运行压力"
-            :history="history"
-            first-key="eventLoopP95Ms"
-            second-key="parserCpuPercent"
-            first-label="Node P95 ms"
-            second-label="Python CPU %"
-            value-type="number"
-          />
+        <div class="history-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>源生成</th>
+                <th>Python 消费</th>
+                <th>源积压</th>
+                <th>FileBridge 积压</th>
+                <th>Node P95</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in historyRows" :key="row.sampledAt">
+                <td>{{ formatTime(row.sampledAt) }}</td>
+                <td>{{ formatRate(row.sourceProducedBytesPerSec) }}</td>
+                <td>{{ formatRate(row.parserConsumedBytesPerSec) }}</td>
+                <td>{{ formatBytes(row.sourceBacklogBytes) }}</td>
+                <td>{{ formatBytes(row.bridgeBacklogBytes) }}</td>
+                <td>{{ formatMs(row.eventLoopP95Ms) }}</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
       <details class="panel path-panel">
         <summary>诊断路径与原始状态</summary>
         <dl>
-          <template v-for="(value, key) in state?.paths ?? {}" :key="key">
-            <dt v-if="key !== 'parserConfig'">{{ key }}</dt>
-            <dd v-if="key !== 'parserConfig'">{{ value }}</dd>
+          <template v-for="entry in pathEntries" :key="entry.key">
+            <dt>{{ entry.key }}</dt>
+            <dd>{{ entry.value }}</dd>
           </template>
         </dl>
       </details>
@@ -211,6 +181,15 @@
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref } from "vue";
 
 type DiagnosticState = Record<string, any>;
+type MetricRowData = { label: string; value: string };
+type StageCard = {
+  id: string;
+  number: string;
+  title: string;
+  rows: MetricRowData[];
+  path?: string;
+  cssClass?: string;
+};
 
 const state = ref<DiagnosticState | null>(null);
 const loading = ref(false);
@@ -219,16 +198,117 @@ let timer: number | null = null;
 let controller: AbortController | null = null;
 
 const latest = computed(() => state.value?.latest ?? null);
-const history = computed(() => Array.isArray(state.value?.history) ? state.value.history : []);
+const history = computed<any[]>(() => Array.isArray(state.value?.history) ? state.value.history : []);
+const historyRows = computed(() => history.value.slice(-30).reverse());
+const pathEntries = computed(() => Object.entries(state.value?.paths ?? {})
+  .filter(([key]) => key !== "parserConfig")
+  .map(([key, value]) => ({ key, value: formatPathValue(value) })));
 
-const MetricRow = defineComponent({
-  props: { label: String, value: String },
-  setup(props) {
-    return () => h("div", { class: "metric-row" }, [
-      h("span", props.label),
-      h("strong", props.value || "--"),
-    ]);
-  },
+const stageCards = computed<StageCard[]>(() => {
+  const pipeline = latest.value?.pipeline ?? {};
+  return [
+    {
+      id: "source",
+      number: "01",
+      title: "Squad.log 输入",
+      rows: [
+        { label: "文件大小", value: formatBytes(pipeline.sourceFile?.sizeBytes) },
+        { label: "生成速率", value: formatRate(pipeline.sourceFile?.producedBytesPerSec) },
+        { label: "最后修改", value: formatTime(pipeline.sourceFile?.modifiedAt) },
+      ],
+      path: pipeline.sourceFile?.path || "未找到",
+    },
+    {
+      id: "python",
+      number: "02",
+      title: "Python TailReader / Parser",
+      rows: [
+        { label: "进程状态", value: String(pipeline.parser?.status ?? "unknown") },
+        { label: "消费速率", value: formatRate(pipeline.parser?.consumedBytesPerSec) },
+        { label: "源文件积压", value: formatBytes(pipeline.parser?.backlogBytes) },
+        { label: "预计追平", value: formatSeconds(pipeline.parser?.backlogSeconds) },
+        { label: "每秒处理行", value: formatPerSecond(pipeline.parser?.linesProcessedPerSec) },
+        { label: "CPU", value: formatPercent(pipeline.parser?.process?.cpuPercent) },
+        { label: "内存", value: formatBytes(pipeline.parser?.process?.workingSetBytes) },
+        { label: "磁盘写入", value: formatRate(pipeline.parser?.process?.writeBytesPerSec) },
+      ],
+      cssClass: stageClass("python"),
+    },
+    {
+      id: "output",
+      number: "03",
+      title: "LogPost 文件输出",
+      rows: [
+        { label: "all.jsonl 大小", value: formatBytes(pipeline.output?.sizeBytes) },
+        { label: "输出速率", value: formatRate(pipeline.output?.producedBytesPerSec) },
+        { label: "原始日志副本", value: String(pipeline.output?.writeAmplification?.rawCopiesPerLine ?? "--") },
+        { label: "单事件预计写入", value: String(pipeline.output?.writeAmplification?.matchedEventWrites ?? "--") },
+      ],
+      path: pipeline.output?.path || "未找到",
+    },
+    {
+      id: "bridge",
+      number: "04",
+      title: "Node FileBridge",
+      rows: [
+        { label: "消费速率", value: formatRate(pipeline.fileBridge?.consumedBytesPerSec) },
+        { label: "积压", value: formatBytes(pipeline.fileBridge?.backlogBytes) },
+        { label: "预计追平", value: formatSeconds(pipeline.fileBridge?.backlogSeconds) },
+        { label: "最近单轮耗时", value: formatMs(pipeline.fileBridge?.lastTickDurationMs) },
+        { label: "重叠轮询跳过", value: String(pipeline.fileBridge?.overlappingTickSkips ?? 0) },
+        { label: "理论读取上限", value: formatRate(pipeline.fileBridge?.theoreticalMaxBytesPerSec) },
+      ],
+      cssClass: stageClass("fileBridge"),
+    },
+    {
+      id: "udp",
+      number: "05",
+      title: "UDP 投递",
+      rows: [
+        { label: "数据包速率", value: formatPerSecond(pipeline.udp?.packetsPerSec) },
+        { label: "带宽", value: formatRate(pipeline.udp?.bytesPerSec) },
+        { label: "累计接收", value: String(pipeline.udp?.packetsReceived ?? 0) },
+        { label: "无效 JSON", value: String(pipeline.udp?.invalidJson ?? 0) },
+        { label: "超大数据包", value: String(pipeline.udp?.oversizedMessages ?? 0) },
+        { label: "BZSS 玩家分块", value: String(pipeline.udp?.bzssCoreChunks ?? 0) },
+      ],
+      cssClass: stageClass("udp"),
+    },
+    {
+      id: "node",
+      number: "06",
+      title: "EventBus / Node 主线程",
+      rows: [
+        { label: "事件消费速率", value: formatPerSecond(pipeline.delivery?.eventsPerSec) },
+        { label: "事件序号缺口", value: String(pipeline.delivery?.metrics?.eventGapCount ?? 0) },
+        { label: "事件延迟 P95", value: formatMs(pipeline.delivery?.metrics?.p95EventLatencyMs) },
+        { label: "事件循环 P95", value: formatMs(pipeline.node?.eventLoopP95Ms) },
+        { label: "事件循环最大", value: formatMs(pipeline.node?.eventLoopMaxMs) },
+        { label: "Node RSS", value: formatBytes(pipeline.node?.rssBytes) },
+      ],
+      cssClass: stageClass("node"),
+    },
+  ];
+});
+
+const pythonTimingRows = computed(() => {
+  const shares = latest.value?.pipeline?.parser?.stageShare ?? {};
+  const durations = latest.value?.pipeline?.parser?.stageDurationsMs ?? {};
+  const definitions = [
+    ["read", "TailReader 读取", "tail_read"],
+    ["parse", "解析", "bzss_parse"],
+    ["fileIo", "文件落盘", "raw_archive_write"],
+    ["udp", "UDP 发送", "udp_send"],
+    ["other", "其他同步工作", "process_total"],
+  ] as const;
+  return definitions
+    .map(([key, label, durationKey]) => ({
+      key,
+      label,
+      share: numberValue(shares[key]),
+      durationMs: numberValue(durations[durationKey]),
+    }))
+    .filter((item) => item.share > 0 || item.durationMs > 0);
 });
 
 const MetricValue = defineComponent({
@@ -237,46 +317,6 @@ const MetricValue = defineComponent({
     return () => h("div", { class: "metric-value" }, [
       h("span", props.label),
       h("strong", props.value || "--"),
-    ]);
-  },
-});
-
-const TrendChart = defineComponent({
-  props: {
-    title: { type: String, required: true },
-    history: { type: Array as () => any[], required: true },
-    firstKey: { type: String, required: true },
-    secondKey: { type: String, required: true },
-    firstLabel: { type: String, required: true },
-    secondLabel: { type: String, required: true },
-    valueType: { type: String, default: "number" },
-  },
-  setup(props) {
-    const values = computed(() => props.history.flatMap((item) => [numberValue(item?.[props.firstKey]), numberValue(item?.[props.secondKey])]));
-    const maxValue = computed(() => Math.max(1, ...values.value));
-    const points = (key: string) => props.history.map((item, index) => {
-      const width = 300;
-      const height = 96;
-      const x = props.history.length <= 1 ? 0 : (index / (props.history.length - 1)) * width;
-      const y = height - (numberValue(item?.[key]) / maxValue.value) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(" ");
-    const latestValue = (key: string) => {
-      const value = props.history.at(-1)?.[key];
-      if (props.valueType === "bytes") return formatBytes(value);
-      if (props.valueType === "rate") return formatRate(value);
-      return numberValue(value).toFixed(1);
-    };
-    return () => h("article", { class: "trend-card" }, [
-      h("div", { class: "trend-title" }, props.title),
-      h("svg", { viewBox: "0 0 300 96", preserveAspectRatio: "none", role: "img", "aria-label": props.title }, [
-        h("polyline", { class: "trend-line trend-line-first", points: points(props.firstKey), fill: "none" }),
-        h("polyline", { class: "trend-line trend-line-second", points: points(props.secondKey), fill: "none" }),
-      ]),
-      h("div", { class: "trend-legend" }, [
-        h("span", { class: "legend-first" }, `${props.firstLabel} ${latestValue(props.firstKey)}`),
-        h("span", { class: "legend-second" }, `${props.secondLabel} ${latestValue(props.secondKey)}`),
-      ]),
     ]);
   },
 });
@@ -298,7 +338,7 @@ async function refresh() {
     state.value = payload?.data ?? payload;
     error.value = "";
   } catch (reason) {
-    if ((reason as any)?.name !== "AbortError") {
+    if ((reason as { name?: string })?.name !== "AbortError") {
       error.value = reason instanceof Error ? reason.message : "未知错误";
     }
   } finally {
@@ -332,7 +372,18 @@ function numberValue(value: unknown) {
   return Number.isFinite(number) ? Math.max(0, number) : 0;
 }
 
+function formatPathValue(value: unknown) {
+  if (value == null) return "--";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function formatBytes(value: unknown) {
+  if (value == null || !Number.isFinite(Number(value))) return "--";
   const bytes = numberValue(value);
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(2)} MB`;
@@ -392,73 +443,67 @@ onBeforeUnmount(() => {
   display: grid;
   gap: 14px;
   color: var(--color-text-primary);
+  overflow: auto;
 }
-
 .panel {
   border: 1px solid var(--color-border-soft);
   border-radius: 14px;
   background: var(--color-bg-card);
   box-shadow: var(--shadow-sm);
 }
-
-.page-header {
-  padding: 18px 20px;
+.page-header,
+.headline,
+.section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 16px;
 }
-
-.eyebrow {
-  margin: 0 0 5px;
-  color: var(--color-brand-primary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .18em;
-}
-
+.page-header { padding: 18px 20px; }
+.headline { padding: 14px 18px; }
+.eyebrow { margin: 0 0 5px; color: var(--color-brand-primary); font-size: 10px; font-weight: 800; letter-spacing: .18em; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 6px; font-size: 24px; }
 h2 { margin-bottom: 0; font-size: 17px; }
 .subtitle { margin-bottom: 0; color: var(--color-text-muted); font-size: 13px; }
-
-.header-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.header-status, .headline-metrics { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .status-pill { padding: 6px 10px; border-radius: 999px; border: 1px solid var(--color-border-soft); font-size: 12px; font-weight: 800; }
-.status-healthy { color: var(--color-status-success); background: color-mix(in srgb, var(--color-status-success) 12%, transparent); }
-.status-warning { color: var(--color-status-warning); background: color-mix(in srgb, var(--color-status-warning) 12%, transparent); }
-.status-critical { color: var(--color-status-danger); background: color-mix(in srgb, var(--color-status-danger) 12%, transparent); }
-.sample-time { color: var(--color-text-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.status-healthy { color: var(--color-status-success); }
+.status-warning { color: var(--color-status-warning); }
+.status-critical { color: var(--color-status-danger); }
+.sample-time { color: var(--color-text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .refresh-button { min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border-default); border-radius: 9px; background: var(--color-bg-elevated); color: var(--color-text-primary); cursor: pointer; }
 .refresh-button:disabled { opacity: .55; cursor: wait; }
-
 .error-banner { padding: 12px 14px; display: flex; gap: 10px; color: var(--color-status-danger); }
-.headline { padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .headline > div:first-child { display: grid; gap: 4px; }
 .headline > div:first-child span { color: var(--color-text-muted); font-size: 11px; }
 .headline > div:first-child strong { font-size: 17px; }
 .headline-warning { border-color: color-mix(in srgb, var(--color-status-warning) 40%, var(--color-border-soft)); }
 .headline-critical { border-color: color-mix(in srgb, var(--color-status-danger) 46%, var(--color-border-soft)); }
-.headline-metrics { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .metric-value { min-width: 110px; padding: 8px 10px; border-radius: 10px; background: var(--color-bg-elevated); display: grid; gap: 2px; }
 .metric-value span { color: var(--color-text-muted); font-size: 10px; }
 .metric-value strong { font-size: 14px; font-variant-numeric: tabular-nums; }
-
 .pipeline-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.stage-card { padding: 14px; min-width: 0; }
+.stage-card { min-width: 0; padding: 14px; }
 .stage-warning { border-color: color-mix(in srgb, var(--color-status-warning) 44%, var(--color-border-soft)); }
 .stage-critical { border-color: color-mix(in srgb, var(--color-status-danger) 52%, var(--color-border-soft)); }
 .stage-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .stage-title span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: var(--color-bg-elevated); color: var(--color-brand-primary); font-size: 10px; font-weight: 900; }
 .stage-title strong { font-size: 13px; }
-:deep(.metric-row) { min-height: 28px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--color-border-soft); }
-:deep(.metric-row span) { color: var(--color-text-muted); font-size: 11px; }
-:deep(.metric-row strong) { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.metric-row { min-height: 28px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--color-border-soft); }
+.metric-row span { color: var(--color-text-muted); font-size: 11px; }
+.metric-row strong { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
 .path { margin: 10px 0 0; color: var(--color-text-disabled); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-.diagnosis-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, .8fr); gap: 12px; }
-.diagnosis-panel, .amplification-panel, .history-panel, .path-panel { padding: 16px; }
-.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.timing-panel, .diagnosis-panel, .amplification-panel, .history-panel, .path-panel { padding: 16px; }
+.section-heading { margin-bottom: 12px; }
 .section-heading > span { color: var(--color-text-muted); font-size: 11px; }
+.timing-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.timing-item { padding: 10px; border-radius: 10px; background: var(--color-bg-elevated); }
+.timing-item > div:first-child { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
+.timing-track { height: 5px; margin: 8px 0; overflow: hidden; border-radius: 999px; background: var(--color-border-soft); }
+.timing-track span { display: block; height: 100%; background: var(--color-brand-primary); }
+.timing-item small { color: var(--color-text-muted); }
+.diagnosis-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, .8fr); gap: 12px; }
 .bottleneck-list { display: grid; gap: 9px; }
 .bottleneck-item { padding: 11px 12px; border: 1px solid var(--color-border-soft); border-radius: 11px; background: var(--color-bg-elevated); }
 .bottleneck-item.severity-warning { border-left: 3px solid var(--color-status-warning); }
@@ -475,34 +520,26 @@ h2 { margin-bottom: 0; font-size: 17px; }
 .amplification-score span { color: var(--color-text-muted); font-size: 10px; }
 .amplification-score strong { font-size: 22px; }
 .amplification-panel ul { margin: 12px 0 0; padding-left: 18px; color: var(--color-text-muted); font-size: 11px; line-height: 1.6; }
-
-.trend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-:deep(.trend-card) { min-width: 0; padding: 11px; border: 1px solid var(--color-border-soft); border-radius: 11px; background: var(--color-bg-elevated); }
-:deep(.trend-title) { margin-bottom: 7px; color: var(--color-text-secondary); font-size: 11px; font-weight: 700; }
-:deep(.trend-card svg) { width: 100%; height: 96px; display: block; overflow: visible; background: linear-gradient(to bottom, transparent 49%, var(--color-border-soft) 50%, transparent 51%); }
-:deep(.trend-line) { vector-effect: non-scaling-stroke; stroke-width: 1.8; }
-:deep(.trend-line-first) { stroke: var(--color-brand-primary); }
-:deep(.trend-line-second) { stroke: var(--color-brand-secondary); }
-:deep(.trend-legend) { margin-top: 7px; display: flex; justify-content: space-between; gap: 8px; color: var(--color-text-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
-:deep(.legend-first)::before, :deep(.legend-second)::before { content: ""; display: inline-block; width: 7px; height: 2px; margin-right: 4px; vertical-align: middle; }
-:deep(.legend-first)::before { background: var(--color-brand-primary); }
-:deep(.legend-second)::before { background: var(--color-brand-secondary); }
-
+.history-table-wrap { overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--color-border-soft); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--color-text-muted); font-weight: 700; }
+td { font-variant-numeric: tabular-nums; }
 .path-panel summary { cursor: pointer; color: var(--color-text-secondary); font-size: 12px; font-weight: 700; }
 .path-panel dl { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 7px 12px; margin: 14px 0 0; }
 .path-panel dt { color: var(--color-text-muted); font-size: 10px; }
 .path-panel dd { margin: 0; color: var(--color-text-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; overflow-wrap: anywhere; }
-
 @media (max-width: 1180px) {
   .pipeline-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .diagnosis-layout { grid-template-columns: 1fr; }
+  .timing-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-
 @media (max-width: 760px) {
   .logpost-diagnostics-page { padding: 10px; }
   .page-header, .headline { align-items: flex-start; flex-direction: column; }
   .header-status, .headline-metrics { justify-content: flex-start; }
-  .pipeline-grid, .trend-grid { grid-template-columns: 1fr; }
+  .pipeline-grid, .timing-grid { grid-template-columns: 1fr; }
   .path-panel dl { grid-template-columns: 1fr; }
 }
 </style>
