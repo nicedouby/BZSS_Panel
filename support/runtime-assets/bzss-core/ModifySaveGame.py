@@ -268,43 +268,53 @@ def atomic_replace(path: Path, data: bytes) -> None:
         temp_path.unlink(missing_ok=True)
 
 
-def write_message(save_path: Path, message: str) -> int:
+def write_messages(save_path: Path, messages: list[str]) -> int:
     if not save_path.is_file():
         raise SaveGameError(f"SaveGame 文件不存在：{save_path}")
 
-    if not message:
+    normalized_messages = [str(message).strip() for message in messages if str(message).strip()]
+    if not normalized_messages:
         raise SaveGameError("消息不能为空")
 
-    event_name, separator, _event_parameter = message.partition(":")
-    if not separator:
-        raise SaveGameError("消息格式错误，应为：事件名:事件参数")
-    if not event_name:
-        raise SaveGameError("事件名不能为空")
+    for message in normalized_messages:
+        event_name, separator, _event_parameter = message.partition(":")
+        if not separator:
+            raise SaveGameError("消息格式错误，应为：事件名:事件参数")
+        if not event_name:
+            raise SaveGameError("事件名不能为空")
 
     lock_path = save_path.with_name(save_path.name + ".writer.lock")
     lock_fd = acquire_lock(lock_path)
 
     try:
         original = save_path.read_bytes()
-        patched, index, _created = patch_first_empty_or_append(original, message)
+        patched = original
+        indexes: list[int] = []
+        for message in normalized_messages:
+            patched, index, _created = patch_first_empty_or_append(patched, message)
+            indexes.append(index)
         atomic_replace(save_path, patched)
     finally:
         os.close(lock_fd)
         lock_path.unlink(missing_ok=True)
 
-    print(f"Data[{index}] = {message}")
+    for index, message in zip(indexes, normalized_messages):
+        print(f"Data[{index}] = {message}")
     return 0
 
+
+def write_message(save_path: Path, message: str) -> int:
+    return write_messages(save_path, [message])
 
 def main() -> int:
     parser = argparse.ArgumentParser(
         usage='%(prog)s <SaveGame路径> "<事件名:事件参数>"'
     )
     parser.add_argument("save_path", type=Path)
-    parser.add_argument("message")
+    parser.add_argument("messages", nargs="+")
     args = parser.parse_args()
 
-    return write_message(args.save_path, args.message)
+    return write_messages(args.save_path, args.messages)
 
 
 if __name__ == "__main__":
