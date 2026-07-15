@@ -237,14 +237,17 @@ def patch_first_empty_or_append(data: bytes, message: str) -> tuple[bytes, int, 
     return patched, target_index, False
 
 
-def acquire_lock(lock_path: Path) -> int:
-    try:
-        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError as exc:
-        raise SaveGameError("另一个外部进程正在写入该 SaveGame") from exc
-
-    os.write(fd, f"pid={os.getpid()}\ntime={time.time()}\n".encode("ascii"))
-    return fd
+def acquire_lock(lock_path: Path, timeout_seconds: float = 30.0) -> int:
+    deadline = time.monotonic() + max(0.1, timeout_seconds)
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"pid={os.getpid()}\ntime={time.time()}\n".encode("ascii"))
+            return fd
+        except FileExistsError as exc:
+            if time.monotonic() >= deadline:
+                raise SaveGameError("另一个外部进程持续占用该 SaveGame，等待超时") from exc
+            time.sleep(0.05)
 
 
 def atomic_replace(path: Path, data: bytes) -> None:
