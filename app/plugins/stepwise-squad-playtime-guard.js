@@ -437,6 +437,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         createdAt: record.createdAt,
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
+        playtime: cloneValue(record.playtime) ?? null,
       });
       record.actions.push({ type: "tiered_pass_emitted" });
     }

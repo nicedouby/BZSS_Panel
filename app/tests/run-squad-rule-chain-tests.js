@@ -86,6 +86,7 @@ function testClassificationFieldsNormalizeWithoutLoss() {
     maxPlayersSource: "type_default",
     assetPath: "/Game/BMP",
     classificationMetadata: { matchedKind: "canonical" },
+    playtime: { known: true, gameSeconds: 3600000, hoursText: "1000h", source: "module.playtime" },
   };
   for (const event of [
     normalizeRuleChainPassEvent(classification),
@@ -100,6 +101,7 @@ function testClassificationFieldsNormalizeWithoutLoss() {
     assert.equal(event.maxPlayersSource, "type_default");
     assert.equal(event.assetPath, "/Game/BMP");
     assert.deepEqual(event.classificationMetadata, { matchedKind: "canonical" });
+    assert.deepEqual(event.playtime, classification.playtime);
   }
 }
 
@@ -461,6 +463,46 @@ async function testClassificationFieldsReachFinalPass() {
     assert.equal(event.maxPlayersSource, "type_default");
     assert.equal(event.assetPath, "/Game/BMP");
     assert.deepEqual(event.classificationMetadata, { matchedKind: "canonical" });
+    assert.equal(event.playtime?.known, true);
+    assert.equal(event.playtime?.hoursText, "1000h");
+    const broadcast = harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast");
+    assert.equal(
+      broadcast?.message,
+      "Leader 建立了BMP小队，队伍性质：载具队，队伍类型：步战车，游戏时长：1000h，建队码：1",
+    );
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testMatvBroadcastIncludesRequestedDetails() {
+  const harness = await createHarness();
+  try {
+    harness.broadcasts.length = 0;
+    harness.eventBus.emitModuleEvent(
+      "module.squadRuleChain",
+      "finalSquadRulePassed",
+      creation({
+        squadName: "TAPV",
+        squadId: 43,
+        squadType: "vehicle",
+        squadNature: "vehicle",
+        squadTypeId: "matv",
+        squadTypeLabel: "MATV / 吉普车",
+        playtime: {
+          known: true,
+          gameSeconds: 473.9 * 3600,
+          hoursText: "473.9h",
+          source: "module.playtime",
+        },
+      }),
+    );
+
+    await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
+    assert.equal(
+      harness.broadcasts[0].message,
+      "Leader 建立了TAPV小队，队伍性质：载具队，队伍类型：MATV / 吉普车，游戏时长：473.9h，建队码：1",
+    );
   } finally {
     await harness.stop();
   }
@@ -758,6 +800,7 @@ await testTrackingDoesNotTreatFairViolationAsAllowedCreation();
 await testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord();
 await testTieredPassFallbackBroadcastsWhenFairSkips();
 await testClassificationFieldsReachFinalPass();
+await testMatvBroadcastIncludesRequestedDetails();
 await testFinalPassWarningMatchesSquadNature();
 await testFinalPassCacheRestoresSameMatch();
 await testFinalPassCacheRestoresByMatchCacheAlias();

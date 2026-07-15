@@ -425,6 +425,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         createdAt: record.createdAt,
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
+        playtime: cloneValue(record.playtime) ?? null,
       });
       record.actions.push({ type: "final_pass_emitted" });
     }
@@ -1032,6 +1033,7 @@ function normalizeCreationEvent(event = {}) {
     maxPlayersSource: normalizeText(event.maxPlayersSource) || "none",
     assetPath: normalizeText(event.assetPath),
     classificationMetadata: cloneValue(event.classificationMetadata) ?? {},
+    playtime: cloneValue(event.playtime) ?? null,
     factionName: normalizeText(event.factionName ?? event.teamName),
     creatorName: normalizeText(event.creatorName ?? event.playerName),
     creatorSteamId: normalizeText(event.creatorSteamId ?? event.creatorSteamID ?? event.steamId ?? event.steamID),
