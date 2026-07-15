@@ -13,6 +13,9 @@
                 <StatusBadge :tone="props.squad.isLocked ? 'warn' : 'ok'">
                   {{ props.squad.isLocked ? t("common.locked") : t("common.open") }}
                 </StatusBadge>
+                <StatusBadge :tone="props.squad.restrictionViolation ? 'error' : restrictionStatusTone">
+                  {{ restrictionStatusLabel }}
+                </StatusBadge>
                 <StatusBadge tone="idle">Team {{ props.squad.teamId }}</StatusBadge>
                 <StatusBadge tone="idle">{{ props.squad.memberCount }} / {{ props.squad.maxMembers }}</StatusBadge>
               </div>
@@ -48,7 +51,57 @@
               </div>
             </section>
 
-            <!-- 2. SQUAD ACTIONS -->
+            <!-- 2. RESTRICTION STATUS -->
+            <section
+              class="detail-section restriction-card"
+              :class="props.squad.restrictionViolation ? 'restriction-card--violation' : 'restriction-card--compliant'"
+            >
+              <div class="detail-section-title">队伍限制检查 / RESTRICTIONS</div>
+              <div class="restriction-status-row">
+                <div>
+                  <strong>{{ restrictionStatusTitle }}</strong>
+                  <p>{{ restrictionStatusDescription }}</p>
+                </div>
+                <StatusBadge :tone="props.squad.restrictionViolation ? 'error' : restrictionStatusTone">
+                  {{ restrictionStatusLabel }}
+                </StatusBadge>
+              </div>
+
+              <ul v-if="props.squad.restrictionReasons.length" class="restriction-reason-list">
+                <li v-for="reason in props.squad.restrictionReasons" :key="reason">{{ reason }}</li>
+              </ul>
+
+              <div v-if="props.squad.squadRestriction?.evaluated" class="restriction-rule-grid">
+                <div class="restriction-rule-item">
+                  <span>队伍类型</span>
+                  <strong>{{ props.squad.squadTypeLabel || props.squad.squadTypeId || "未知" }}</strong>
+                </div>
+                <div class="restriction-rule-item">
+                  <span>锁队规则</span>
+                  <strong>{{ props.squad.squadRestriction.allowLock ? "允许锁队" : "禁止锁队" }}</strong>
+                </div>
+                <div class="restriction-rule-item">
+                  <span>单人锁队</span>
+                  <strong>{{ props.squad.squadRestriction.allowSoloLock ? "允许" : "禁止" }}</strong>
+                </div>
+                <div class="restriction-rule-item">
+                  <span>锁队人数上限</span>
+                  <strong>{{ props.squad.squadRestriction.maxPlayersWhenLocked ?? "不限" }}</strong>
+                </div>
+                <div class="restriction-rule-item">
+                  <span>检测人数</span>
+                  <strong>{{ props.squad.squadRestriction.playerCount }} 人</strong>
+                </div>
+                <div class="restriction-rule-item">
+                  <span>当前队锁</span>
+                  <strong>{{ props.squad.squadRestriction.locked ? "已锁" : "未锁" }}</strong>
+                </div>
+              </div>
+
+              <p class="restriction-monitor-note">当前仅检测并展示违规状态，不会自动警告、踢人或解散小队。</p>
+            </section>
+
+            <!-- 3. SQUAD ACTIONS -->
             <section class="detail-section action-center">
               <div class="detail-section-title">{{ t("common.actions") }}</div>
               
@@ -65,7 +118,7 @@
               </div>
             </section>
 
-            <!-- 3. MEMBER LIST -->
+            <!-- 4. MEMBER LIST -->
             <section class="detail-section members-section">
               <div class="detail-section-title">成员列表 / MEMBERS ({{ props.squad.memberCount }})</div>
               <div class="member-list">
@@ -140,6 +193,33 @@ const panelStyle = computed(() => {
 const teamColorClass = computed(() => {
   if (!props.squad) return "";
   return props.squad.teamId === 1 ? "team1-theme" : "team2-theme";
+});
+
+const restrictionStatusLabel = computed(() => {
+  if (!props.squad) return "未检测";
+  if (props.squad.restrictionViolation) return "违规";
+  if (props.squad.restrictionStatus === "disabled") return "模块停用";
+  if (props.squad.restrictionStatus === "not_applicable") return "无适用规则";
+  return "合规";
+});
+
+const restrictionStatusTone = computed<"ok" | "idle">(() => {
+  return props.squad?.restrictionStatus === "compliant" ? "ok" : "idle";
+});
+
+const restrictionStatusTitle = computed(() => {
+  if (!props.squad) return "尚未检测";
+  if (props.squad.restrictionViolation) return "这支小队当前违反限制";
+  if (props.squad.restrictionStatus === "disabled") return "限制检测模块已停用";
+  if (props.squad.restrictionStatus === "not_applicable") return "这支小队没有对应的限制规则";
+  return "这支小队当前符合限制";
+});
+
+const restrictionStatusDescription = computed(() => {
+  if (!props.squad) return "";
+  if (!props.squad.isLocked) return "小队未锁定，因此不触发锁队人数或单人锁队限制。";
+  if (props.squad.restrictionViolation) return `已锁队，检测人数为 ${props.squad.squadRestriction?.playerCount ?? props.squad.memberCount} 人。`;
+  return `小队已锁定，检测人数为 ${props.squad.squadRestriction?.playerCount ?? props.squad.memberCount} 人。`;
 });
 
 function close() {
@@ -335,6 +415,81 @@ onUnmounted(() => {
   gap: 6px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.restriction-card {
+  border: 1px solid var(--color-border-soft);
+}
+
+.restriction-card--violation {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.restriction-card--compliant {
+  border-color: rgba(74, 222, 128, 0.22);
+}
+
+.restriction-status-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.restriction-status-row strong {
+  color: var(--color-text-primary);
+  font-size: 13px;
+}
+
+.restriction-status-row p,
+.restriction-monitor-note {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.restriction-reason-list {
+  margin: 10px 0 0;
+  padding: 9px 10px 9px 28px;
+  border-radius: 8px;
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.3);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.restriction-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.restriction-rule-item {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.restriction-rule-item span {
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.restriction-rule-item strong {
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .restriction-rule-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .drawer-close-button {

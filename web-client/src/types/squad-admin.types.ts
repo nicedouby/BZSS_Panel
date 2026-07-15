@@ -59,7 +59,7 @@ export interface SquadViewModel {
   publicPlaytimePlayers: number;
   privatePlaytimePlayers: number;
   knownPlaytimePlayers: number;
-  squadNature: "infantry" | "vehicle" | "support" | "other";
+  squadNature: "infantry" | "vehicle" | "support" | "logistics" | "other";
   squadNatureLabel: string;
   squadNatureReason: string | null;
   squadNatureRule: string | null;
@@ -70,6 +70,16 @@ export interface SquadViewModel {
   squadVehicleClassReason: string | null;
   squadVehicleClassRule: string | null;
   squadVehicleClassConfidence: "high" | "medium" | "low";
+  squadTypeId: string;
+  squadTypeLabel: string;
+  squadRuleId: string;
+  effectiveMaxPlayers: number | null;
+  maxPlayersSource: string;
+  assetPath: string;
+  restrictionStatus: "disabled" | "not_applicable" | "compliant" | "violation";
+  restrictionViolation: boolean;
+  restrictionReasons: string[];
+  squadRestriction: import("../stores/squad.store").SquadRestrictionEvaluation | null;
   leader: SquadLeaderRowViewModel | null;
   members: PlayerRowViewModel[];
   warnings: SquadWarning[];
@@ -167,7 +177,7 @@ export interface MatchHeaderData {
 }
 
 export interface SquadWarning {
-  type: "no_leader" | "no_members" | "stale_data";
+  type: "no_leader" | "no_members" | "stale_data" | "restriction_violation";
   message: string;
 }
 

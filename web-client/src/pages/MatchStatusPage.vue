@@ -2262,7 +2262,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
       squads: team.squads.filter((squad) => {
         if (mode === "no_leader") return squad.state === "no_leader";
         if (mode === "locked") return squad.isLocked;
-        if (mode === "alerts") return squad.warnings.length > 0 || squad.state === "no_leader";
+        if (mode === "alerts") return squad.restrictionViolation || squad.warnings.length > 0 || squad.state === "no_leader";
         return true;
       }),
     }))
