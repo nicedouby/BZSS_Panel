@@ -340,7 +340,7 @@
                 <code>AdminTrack:AdminName,TrackObject</code>
                 <code>RemoveAdminTrack:AdminName</code>
                 <code>SetWeather:SnowHeavy,10</code>
-                  <code>SetForbRessSourceRegeneration:1,true,100,500,10</code>
+                  <code>SetFobResourceRegeneration:1,true,100,500,10</code>
                   <code>SetAutomaticHeal:true</code>
                   <code>SetAutomaticHealValue:100</code>
               </div>
@@ -498,7 +498,7 @@ const dialogSubtitle = computed(() => {
 });
 const weatherPreview = computed(() => `SetWeather:${selectedWeather.value},${weatherParameter.value || "10"}`);
 const forbRessPreview = computed(() => {
-  const build = (teamId: string) => `SetForbRessSourceRegeneration:${teamId},${forbRessEnabled.value},${forbRessAmmo.value || "0"},${forbRessConstruction.value || "0"},${forbRessRate.value || "0"}`;
+  const build = (teamId: string) => `SetFobResourceRegeneration:${teamId},${forbRessEnabled.value},${forbRessAmmo.value || "0"},${forbRessConstruction.value || "0"},${forbRessRate.value || "0"}`;
   return forbRessTeamId.value === "both" ? `${build("1")}\\n${build("2")}` : build(forbRessTeamId.value);
 });
 const automaticHealPreview = computed(() => `SetAutomaticHeal:${automaticHealEnabled.value}\nSetAutomaticHealValue:${automaticHealValue.value || "0"}`);
@@ -711,7 +711,7 @@ async function submitForbRessCommand() {
   try {
     for (const teamId of teams) {
       const result = await executeBzssCoreCommand({
-        directive: "SetForbRessSourceRegeneration",
+        directive: "SetFobResourceRegeneration",
         parameter: [teamId, ...suffix].join(","),
       });
 
@@ -720,7 +720,7 @@ async function submitForbRessCommand() {
           .map((item) => String(item ?? "").trim())
           .filter(Boolean)
           .join(" / ");
-        throw new Error(details || "SetForbRessSourceRegeneration failed.");
+        throw new Error(details || "SetFobResourceRegeneration failed.");
       }
     }
 
