@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from "vue";
+import { computed, onBeforeUnmount, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
@@ -19,17 +19,61 @@ import { t } from "./i18n";
 import { useAuthStore } from "./stores/auth.store";
 import { useUiStore } from "./stores/ui.store";
 
+const RUNTIME_START_DELAY_MS = 180;
+
 const auth = useAuthStore();
 const ui = useUiStore();
 const route = useRoute();
-const isPublicSnapshotRoute = route.path === "/astrbot/server-info-card";
+const isPublicSnapshotRoute = computed(() => route.path === "/astrbot/server-info-card");
+
+let runtimeStartFrame: number | null = null;
+let runtimeStartTimer: number | null = null;
+
+function cancelDeferredRuntimeStart() {
+  if (runtimeStartFrame != null && typeof window !== "undefined") {
+    window.cancelAnimationFrame(runtimeStartFrame);
+    runtimeStartFrame = null;
+  }
+  if (runtimeStartTimer != null && typeof window !== "undefined") {
+    window.clearTimeout(runtimeStartTimer);
+    runtimeStartTimer = null;
+  }
+}
+
+function deferRuntimeStart() {
+  cancelDeferredRuntimeStart();
+  if (!auth.authenticated || typeof window === "undefined") return;
+
+  const schedule = () => {
+    runtimeStartFrame = null;
+    runtimeStartTimer = window.setTimeout(() => {
+      runtimeStartTimer = null;
+      if (auth.authenticated) startRuntimeSync();
+    }, RUNTIME_START_DELAY_MS);
+  };
+
+  if (typeof window.requestAnimationFrame === "function") {
+    runtimeStartFrame = window.requestAnimationFrame(schedule);
+  } else {
+    schedule();
+  }
+}
 
 watch(
-  () => [auth.authenticated, route.meta.refreshPolicy] as const,
-  ([authenticated, refreshPolicy]) => {
-    setRuntimeSyncRefreshPolicy(refreshPolicy);
-    if (authenticated) startRuntimeSync();
-    else stopRuntimeSync();
+  () => route.meta.refreshPolicy,
+  (refreshPolicy) => setRuntimeSyncRefreshPolicy(refreshPolicy),
+  { immediate: true },
+);
+
+watch(
+  () => auth.authenticated,
+  (authenticated) => {
+    if (authenticated) {
+      deferRuntimeStart();
+      return;
+    }
+    cancelDeferredRuntimeStart();
+    stopRuntimeSync();
   },
   { immediate: true },
 );
@@ -42,4 +86,8 @@ watch(
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => {
+  cancelDeferredRuntimeStart();
+});
 </script>
