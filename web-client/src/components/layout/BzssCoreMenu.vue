@@ -91,15 +91,15 @@
               </label>
               <label class="bzss-core-field">
                 <span>Ammo quantity</span>
-                <input v-model.trim="forbRessAmmo" type="number" min="0" placeholder="0" />
+                <input v-model="forbRessAmmo" type="number" min="0" placeholder="0" />
               </label>
               <label class="bzss-core-field">
                 <span>Construction quantity</span>
-                <input v-model.trim="forbRessConstruction" type="number" min="0" placeholder="0" />
+                <input v-model="forbRessConstruction" type="number" min="0" placeholder="0" />
               </label>
               <label class="bzss-core-field">
                 <span>Total rate</span>
-                <input v-model.trim="forbRessRate" type="number" min="0" placeholder="0" />
+                <input v-model="forbRessRate" type="number" min="0" placeholder="0" />
               </label>
               <div class="bzss-core-preview">
                 <span>Command</span>
@@ -122,7 +122,7 @@
 
               <label class="bzss-core-field">
                 <span>Automatic heal value</span>
-                <input v-model.trim="automaticHealValue" type="number" min="0" placeholder="0" />
+                <input v-model="automaticHealValue" type="number" min="0" placeholder="0" />
               </label>
 
               <div class="bzss-core-preview">
@@ -702,9 +702,9 @@ async function submitForbRessCommand() {
 
   const suffix = [
     forbRessEnabled.value,
-    forbRessAmmo.value.trim() || "0",
-    forbRessConstruction.value.trim() || "0",
-    forbRessRate.value.trim() || "0",
+    String(forbRessAmmo.value ?? "").trim() || "0",
+    String(forbRessConstruction.value ?? "").trim() || "0",
+    String(forbRessRate.value ?? "").trim() || "0",
   ];
 
   busy.value = true;
@@ -754,7 +754,7 @@ async function submitAutomaticHealCommands() {
 
     const valueResult = await executeBzssCoreCommand({
       directive: "SetAutomaticHealValue",
-      parameter: automaticHealValue.value.trim() || "0",
+      parameter: String(automaticHealValue.value ?? "").trim() || "0",
     });
     if (!valueResult.ok) throw new Error(valueResult.message || "SetAutomaticHealValue failed.");
 
