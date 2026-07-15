@@ -19,7 +19,7 @@ export interface RuntimeSquad {
   creationSource?: string;
   creationConfidence?: string;
   sourceLabel?: string;
-  squadNature?: "infantry" | "vehicle" | "support" | "other";
+  squadNature?: "infantry" | "vehicle" | "support" | "logistics" | "other";
   squadNatureLabel?: string;
   squadNatureReason?: string | null;
   squadNatureRule?: string | null;
@@ -30,6 +30,41 @@ export interface RuntimeSquad {
   squadVehicleClassReason?: string | null;
   squadVehicleClassRule?: string | null;
   squadVehicleClassConfidence?: "high" | "medium" | "low";
+  squadTypeId?: string;
+  squadTypeLabel?: string;
+  squadRuleId?: string;
+  effectiveMaxPlayers?: number | null;
+  maxPlayersSource?: string;
+  assetPath?: string;
+  restrictionStatus?: "disabled" | "not_applicable" | "compliant" | "violation";
+  restrictionViolation?: boolean;
+  restrictionReasons?: string[];
+  squadRestriction?: SquadRestrictionEvaluation;
+}
+
+export interface SquadRestrictionViolation {
+  code: "lock_forbidden" | "solo_lock_forbidden" | "locked_player_limit_exceeded" | string;
+  message: string;
+  actual?: number | boolean | null;
+  expected?: number | boolean | null;
+  limit?: number | null;
+}
+
+export interface SquadRestrictionEvaluation {
+  moduleId: string;
+  enforcementEnabled: false;
+  evaluated: boolean;
+  status: "disabled" | "not_applicable" | "compliant" | "violation";
+  isViolation: boolean;
+  typeId: string;
+  typeLabel: string;
+  locked: boolean;
+  playerCount: number;
+  allowLock: boolean | null;
+  allowSoloLock: boolean | null;
+  maxPlayersWhenLocked: number | null;
+  violations: SquadRestrictionViolation[];
+  reasons: string[];
 }
 
 export const useSquadStore = defineStore("squads", () => {

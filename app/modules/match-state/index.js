@@ -559,7 +559,9 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const serverId = String(event.serverId ?? state.serverId ?? core.webStatus.serverId ?? "").trim();
     if (serverId) state.serverId = serverId;
 
-    const classifiedSquads = squads.map(classifySquad);
+    const classifiedSquads = typeof modules?.squadRestrictionMonitor?.evaluateSquads === "function"
+      ? modules.squadRestrictionMonitor.evaluateSquads(squads)
+      : squads.map(classifySquad);
     rememberTeamFactionMappings(serverId, [...teams, ...classifiedSquads]);
     state.squads = {
       list: classifiedSquads,

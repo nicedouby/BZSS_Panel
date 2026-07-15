@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 
 import { createMatchStateModule } from "../modules/match-state/index.js";
 
-function createHarness({ sessionStateFile = "", logs = [], subscribed = true } = {}) {
+function createHarness({ sessionStateFile = "", logs = [], subscribed = true, squadRestrictionMonitor = null } = {}) {
   const subscriptionState = { subscribed };
   const coreEvents = [];
   const moduleEvents = [];
@@ -134,6 +134,7 @@ function createHarness({ sessionStateFile = "", logs = [], subscribed = true } =
         return subscriptionState.subscribed;
       },
     },
+    ...(squadRestrictionMonitor ? { squadRestrictionMonitor } : {}),
   };
 
   return {
@@ -226,6 +227,31 @@ async function testAggregatesRconSnapshots() {
   assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_MATCH_STATE_UPDATED"));
   assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_LIST_PLAYERS_UPDATED"));
   assert.ok(harness.coreEvents.some((item) => item.eventName === "RCON_LIST_SQUADS_UPDATED"));
+}
+
+async function testRestrictionMonitorEnrichesSquadSnapshot() {
+  let evaluated = 0;
+  const harness = createHarness({
+    squadRestrictionMonitor: {
+      evaluateSquads(squads) {
+        evaluated += 1;
+        return squads.map((squad) => ({
+          ...squad,
+          squadTypeId: "ifv",
+          squadTypeLabel: "IFV / 步战车",
+          restrictionViolation: true,
+          restrictionReasons: ["测试违规原因"],
+        }));
+      },
+    },
+  });
+
+  await harness.module.api.refresh("squads");
+  const state = harness.module.api.getState();
+  assert.equal(evaluated, 1);
+  assert.equal(state.squads.list[0].squadTypeId, "ifv");
+  assert.equal(state.squads.list[0].restrictionViolation, true);
+  assert.deepEqual(state.squads.list[0].restrictionReasons, ["测试违规原因"]);
 }
 
 async function testMissingServerInfoFieldsDoNotClobberLastGoodValues() {
@@ -562,6 +588,7 @@ async function testMatchStateSessionDifferentMapDoesNotMatchPreviousMatch() {
 }
 
 await testAggregatesRconSnapshots();
+await testRestrictionMonitorEnrichesSquadSnapshot();
 await testMissingServerInfoFieldsDoNotClobberLastGoodValues();
 await testJsonShowServerInfoUpdatesPlaytime();
 await testLayerSuffixDerivesModeWhenGameModeMissing();

@@ -427,10 +427,12 @@ export class WebServer {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         try {
-          return this.json(res, 200, await saveSquadNamePolicyState(this.core.config, {
+          const saved = await saveSquadNamePolicyState(this.core.config, {
             ...body,
             auditActor: user?.username ?? user?.name ?? "admin",
-          }));
+          });
+          this.modules.squadRestrictionMonitor?.reload?.();
+          return this.json(res, 200, saved);
         } catch (error) {
           if (error?.code === "PolicyValidationFailed") {
             return this.json(res, 422, {
@@ -486,6 +488,47 @@ export class WebServer {
         });
       }
       return this.json(res, 200, testSquadNamePolicy(name, body?.policy ?? this.core.config));
+    }
+
+    if (url.pathname === "/api/modules/squad-restriction-monitor/state") {
+      if (req.method !== "GET") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only GET is supported.",
+        });
+      }
+      const api = this.modules.squadRestrictionMonitor;
+      if (!api?.getState) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadRestrictionMonitor module is not available.",
+        });
+      }
+      return this.json(res, 200, {
+        ok: true,
+        data: api.getState(),
+      });
+    }
+
+    if (url.pathname === "/api/modules/squad-restriction-monitor/test") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+      const api = this.modules.squadRestrictionMonitor;
+      if (!api?.evaluateSquad) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadRestrictionMonitor module is not available.",
+        });
+      }
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, {
+        ok: true,
+        data: api.evaluateSquad(body ?? {}),
+      });
     }
 
     if (url.pathname === "/api/modules/squad-name-policy-guard/state") {

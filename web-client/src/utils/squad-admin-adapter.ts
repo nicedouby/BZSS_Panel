@@ -181,6 +181,20 @@ export function adaptSquad(
     squadVehicleClassReason: squad.squadVehicleClassReason ?? null,
     squadVehicleClassRule: squad.squadVehicleClassRule ?? null,
     squadVehicleClassConfidence: squad.squadVehicleClassConfidence ?? "low",
+    squadTypeId: squad.squadTypeId ?? "",
+    squadTypeLabel: squad.squadTypeLabel ?? squad.squadVehicleClassLabel ?? "其他",
+    squadRuleId: squad.squadRuleId ?? "",
+    effectiveMaxPlayers: squad.effectiveMaxPlayers ?? null,
+    maxPlayersSource: squad.maxPlayersSource ?? "none",
+    assetPath: squad.assetPath ?? "",
+    restrictionStatus: squad.restrictionStatus ?? squad.squadRestriction?.status ?? "not_applicable",
+    restrictionViolation: Boolean(squad.restrictionViolation ?? squad.squadRestriction?.isViolation),
+    restrictionReasons: Array.isArray(squad.restrictionReasons)
+      ? [...squad.restrictionReasons]
+      : Array.isArray(squad.squadRestriction?.reasons)
+        ? [...squad.squadRestriction.reasons]
+        : [],
+    squadRestriction: squad.squadRestriction ?? null,
     leader,
     members: otherMembers.sort(compareSquadMembers),
     warnings,

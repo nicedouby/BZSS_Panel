@@ -1,7 +1,7 @@
 <template>
   <article
     class="squad-card"
-    :class="[teamColorClass, { selected: hasSelectedPlayer }]"
+    :class="[teamColorClass, { selected: hasSelectedPlayer, 'restriction-violation': squad.restrictionViolation }]"
   >
     <header class="squad-header" @click.stop="$emit('select-squad', squad)">
       <div class="squad-header-main">
@@ -14,10 +14,13 @@
               {{ squad.squadNatureLabel }}
             </StatusBadge>
             <StatusBadge class="squad-type-badge" :tone="vehicleTone(squad.squadVehicleClass)">
-              {{ squad.squadVehicleClassLabel || "其他" }}
+              {{ squad.squadTypeLabel || squad.squadVehicleClassLabel || "其他" }}
             </StatusBadge>
           </span>
           <span class="squad-member-count">{{ squad.memberCount }}/{{ squad.maxMembers }}</span>
+          <StatusBadge v-if="squad.restrictionViolation" class="squad-status-badge" tone="error">
+            违规
+          </StatusBadge>
           <StatusBadge class="squad-status-badge" :tone="squad.isLocked ? 'warn' : 'idle'">
             {{ squad.isLocked ? t("common.locked") : t("common.open") }}
           </StatusBadge>
@@ -188,6 +191,10 @@ const squadAveragePingText = computed(() => {
 
 const squadWarnings = computed(() => {
   const items: string[] = [];
+  if (props.squad.restrictionViolation) {
+    const reason = props.squad.restrictionReasons[0] || "队伍限制违规";
+    items.push(`违规：${reason}`);
+  }
   if (props.squad.state === "empty") items.push("Empty");
   if (props.squad.state === "no_leader") items.push("No leader");
   if (props.squad.isLocked) items.push("Locked");
@@ -195,7 +202,7 @@ const squadWarnings = computed(() => {
   const summary = squadPlaytimeSummary.value;
   if (summary.knownPlaytimePlayers <= 0) items.push("No time data");
   if (summary.averagePlaytimeHours != null && summary.averagePlaytimeHours < 10) items.push("Low avg");
-  return items.slice(0, 3);
+  return items.slice(0, 4);
 });
 
 function getPlayerPlaytime(steamId: string | null | undefined): number | null {
@@ -220,7 +227,8 @@ function getPlayerHealth(player: PlayerRowViewModel): number | null {
   return hp != null && Number.isFinite(hp) ? hp : null;
 }
 
-function warningTone(label: string): "warn" | "idle" {
+function warningTone(label: string): "error" | "warn" | "idle" {
+  if (label.startsWith("违规：")) return "error";
   if (label === "Locked" || label === "No leader" || label === "Low avg" || label === "No time data") {
     return "warn";
   }
@@ -283,6 +291,17 @@ function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: M
     inset 0 0 0 1px var(--color-status-info),
     0 0 12px rgba(96, 165, 250, 0.12),
     var(--shadow-md);
+}
+
+.squad-card.restriction-violation {
+  border-color: rgba(248, 113, 113, 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgba(248, 113, 113, 0.32),
+    0 0 18px rgba(239, 68, 68, 0.13);
+}
+
+.squad-card.restriction-violation .squad-header {
+  background: rgba(127, 29, 29, 0.14) !important;
 }
 
 /* 左侧团队色彩条 */
@@ -464,6 +483,12 @@ function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: M
   color: #fde68a;
   border-color: rgba(245, 158, 11, 0.3);
   background: rgba(245, 158, 11, 0.09);
+}
+
+.squad-warning-chip.tone-error {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(127, 29, 29, 0.28);
 }
 
 /* ─── 空小队 ─────────────────────────────────────────────────────────────── */
