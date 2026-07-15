@@ -18,12 +18,6 @@ import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
 import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
 import {
-  classifySquadName,
-  getSquadNameClassifierRules,
-  getSquadNameExactRuleConfig,
-  updateSquadNameExactRuleConfig,
-} from "./squad-name-classifier.js";
-import {
   readSquadNamePolicyState,
   resolveSquadNamePolicyPath,
   saveSquadNamePolicyState,
@@ -627,60 +621,6 @@ export class WebServer {
       return this.json(res, 200, {
         ok: true,
         data: await api.clearRecent(),
-      });
-    }
-
-    if (url.pathname === "/api/squad-name/rules") {
-      if (req.method === "GET") {
-        const result = await getSquadNameExactRuleConfig(this.core.config);
-        return this.json(res, 200, {
-          ok: true,
-          ...result,
-        });
-      }
-
-      if (req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        const result = await updateSquadNameExactRuleConfig(this.core.config, body?.exactRules ?? body ?? {});
-        return this.json(res, 200, {
-          ok: true,
-          ...result,
-        });
-      }
-
-      return this.json(res, 405, {
-        error: "MethodNotAllowed",
-        message: "Only GET and POST are supported.",
-      });
-    }
-
-    if (url.pathname === "/api/squad-name/classify") {
-      if (req.method !== "GET" && req.method !== "POST") {
-        return this.json(res, 405, {
-          error: "MethodNotAllowed",
-          message: "Only GET and POST are supported.",
-        });
-      }
-
-      const body = req.method === "POST" ? await this.readJsonBody(req) : {};
-      const name = req.method === "POST"
-        ? body?.name ?? body?.squadName ?? body?.teamName ?? ""
-        : url.searchParams.get("name") ?? url.searchParams.get("squadName") ?? url.searchParams.get("teamName") ?? "";
-
-      if (!String(name ?? "").trim()) {
-        return this.json(res, 400, {
-          error: "MissingName",
-          message: "Squad name is required.",
-        });
-      }
-
-      const result = classifySquadName(name, {
-        rules: getSquadNameClassifierRules(this.core.config),
-      });
-      return this.json(res, 200, {
-        ok: true,
-        ...result,
       });
     }
 
