@@ -64,7 +64,7 @@ function attachAuthAccessSubscription(auth: ReturnType<typeof useAuthStore>) {
   if (authAccessSubscriptionAttached) return;
   authAccessSubscriptionAttached = true;
   auth.$subscribe(() => {
-    if (!auth.checked) return;
+    if (!auth.checked || (auth.authenticated && !auth.user)) return;
     enforceCurrentRouteAccess(auth);
   }, { detached: true });
 }
@@ -80,10 +80,10 @@ function resolveAccessRedirect(
   to: RouteLocationNormalized,
   auth: ReturnType<typeof useAuthStore>,
 ): { path: string } | null {
-  if (to.path === "/access-denied" || !auth.authenticated) return null;
+  if (to.path === "/access-denied" || !auth.authenticated || !auth.user) return null;
 
   if (to.meta?.superAdminOnly) {
-    return auth.user?.isSuperAdmin ? null : { path: "/access-denied" };
+    return auth.user.isSuperAdmin ? null : { path: "/access-denied" };
   }
 
   const requiredPermission = String(to.meta?.requiredPermission ?? "").trim();
@@ -93,8 +93,8 @@ function resolveAccessRedirect(
     permissions?: unknown;
     permission?: unknown;
     isSuperAdmin?: boolean;
-  } | null | undefined;
-  const permissions = normalizePermissionList(authUser?.permissions ?? authUser?.permission);
+  };
+  const permissions = normalizePermissionList(authUser.permissions ?? authUser.permission);
   const legacyPermissions = normalizePermissionList(to.meta?.legacyRequiredPermissions);
   const allowed = canAccessPage(authUser, requiredPermission, legacyPermissions, {
     superAdminOnly: Boolean(to.meta?.superAdminOnly),
