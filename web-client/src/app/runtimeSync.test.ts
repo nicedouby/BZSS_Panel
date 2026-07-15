@@ -130,6 +130,7 @@ describe("runtimeSync", () => {
       headers: {
         Accept: "application/json",
       },
+      signal: expect.any(AbortSignal),
     });
     expect(server.snapshot.map).toBe("AlBasrah");
     expect(server.snapshot.webStatus.rcon).toBe("connected");
@@ -257,5 +258,24 @@ describe("runtimeSync", () => {
     expect(realtimePrimary).toBeLessThan(pollingPrimary);
     expect(hiddenRealtimePrimary).toBeGreaterThan(realtimePrimary);
     expect(realtimeAuxiliary).toBeGreaterThan(realtimePrimary);
+  });
+
+  it("releases the shared loading state after a snapshot timeout", async () => {
+    vi.stubGlobal("window", {
+      setTimeout: (callback: () => void) => {
+        queueMicrotask(callback);
+        return 1;
+      },
+      clearTimeout() {},
+    });
+    fetchMock.mockImplementation((_path: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+
+    await syncOnce();
+
+    expect(getRuntimeSyncState().inFlight).toBe(false);
+    expect(getRuntimeSyncState().errorType).toBe("timeout");
+    expect(getRuntimeSyncState().lastError).toContain("7000ms");
   });
 });
