@@ -988,22 +988,4 @@ const teamAveragePingText = computed(() => {
 }
 
 
-/* The loading screen belongs behind the whole team column, not only between rows. */
-.team-column,
-.team-column.team1,
-.team-column.team2 {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.team-column-header {
-  background: color-mix(in srgb, var(--color-bg-panel) 14%, transparent) !important;
-  box-shadow: none !important;
-}
-
-.team-column.team1 .team-column-header,
-.team-column.team2 .team-column-header {
-  background: color-mix(in srgb, var(--color-bg-panel) 18%, transparent) !important;
-}
-
 </style>
