@@ -631,20 +631,61 @@ export class PlayerRepository {
     return updated;
   }
 
-  async updateSteamAvatarBySteamID(steamID, steamAvatar) {
+  async updateSteamAvatarBySteamID(steamID, steamAvatar, profile = {}) {
     const ts = now();
+    const normalizedSteamID = cleanId(steamID);
+    if (!normalizedSteamID) return null;
     await this.db.run(
       "UPDATE players SET steam_avatar = ?, updated_at = ? WHERE steam_id = ?",
       steamAvatar,
       ts,
-      steamID
+      normalizedSteamID,
     );
-    const steam = cleanId(steamID);
-    if (steam && this.bySteamID.has(steam)) {
-      const player = this.bySteamID.get(steam);
-      player.steam_avatar = steamAvatar;
-      player.updated_at = ts;
+    const player = await this.db.get("SELECT id, current_name FROM players WHERE steam_id = ?", normalizedSteamID);
+    if (player?.id) {
+      const personaName = cleanText(profile.personaName ?? profile.personaname) ?? player.current_name ?? null;
+      const profileUrl = cleanText(profile.profileUrl ?? profile.profileurl)
+        ?? `https://steamcommunity.com/profiles/${normalizedSteamID}/`;
+      const rawJson = profile && typeof profile === "object" ? JSON.stringify(profile) : "{}";
+      await this.db.run(
+        `INSERT INTO steam_profiles (
+           player_id, persona_name, profile_url, avatar_small, avatar_medium, avatar_full,
+           community_visibility_state, profile_state, last_success_at, last_attempt_at,
+           last_error, raw_json, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, 'ready', ?, ?, NULL, ?, ?)
+         ON CONFLICT(player_id) DO UPDATE SET
+           persona_name = COALESCE(excluded.persona_name, steam_profiles.persona_name),
+           profile_url = COALESCE(excluded.profile_url, steam_profiles.profile_url),
+           avatar_small = COALESCE(excluded.avatar_small, steam_profiles.avatar_small),
+           avatar_medium = COALESCE(excluded.avatar_medium, steam_profiles.avatar_medium),
+           avatar_full = COALESCE(excluded.avatar_full, steam_profiles.avatar_full),
+           community_visibility_state = COALESCE(excluded.community_visibility_state, steam_profiles.community_visibility_state),
+           profile_state = 'ready',
+           last_success_at = excluded.last_success_at,
+           last_attempt_at = excluded.last_attempt_at,
+           last_error = NULL,
+           raw_json = excluded.raw_json,
+           updated_at = excluded.updated_at`,
+        Number(player.id),
+        personaName,
+        profileUrl,
+        cleanText(profile.avatar ?? profile.avatarsmall),
+        cleanText(profile.avatarMedium ?? profile.avatarmedium) ?? steamAvatar,
+        cleanText(profile.avatarFull ?? profile.avatarfull),
+        Number.isFinite(Number(profile.communityvisibilitystate)) ? Number(profile.communityvisibilitystate) : null,
+        ts,
+        ts,
+        rawJson,
+        ts,
+      );
     }
+    const steam = normalizedSteamID;
+    if (steam && this.bySteamID.has(steam)) {
+      const cached = this.bySteamID.get(steam);
+      cached.steam_avatar = steamAvatar;
+      cached.updated_at = ts;
+    }
+    return player ?? null;
   }
 
   normalizePaging({ limit = 12, offset = 0 } = {}) {
@@ -761,10 +802,12 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, sessions] = await Promise.all([
+    const [aliases, ips, sessions, steamProfile, containers] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSessionHistory(id, { limit: 20 }),
+      this.getSteamProfile(id, player),
+      this.getPlayerContainerSummary(id, player),
     ]);
 
     return {
@@ -772,13 +815,112 @@ export class PlayerRepository {
       aliases,
       ips,
       sessionHistory: sessions,
+      steamProfile,
+      containers,
       summary: {
         gameSeconds: resolveEffectiveGameSeconds(player),
         steamGameSeconds: normalizeSeconds(player.steam_game_seconds ?? player.game_seconds ?? 0),
         gameSecondsOverride: optionalSeconds(player.game_seconds_override),
         serverSeconds: Number(player.server_seconds ?? 0),
+        warmupSeconds: Number(player.warmup_seconds ?? 0),
+        commanderSeconds: Number(player.commander_seconds ?? 0),
+        squadLeaderSeconds: Number(player.squad_leader_seconds ?? 0),
+        inSquadSeconds: Number(player.in_squad_seconds ?? 0),
+        assets: parseAssets(player.assets_json),
+        notes: parseAssets(player.notes_json),
+        totalMatches: Number(player.total_matches ?? 0),
+        totalMatchWins: Number(player.total_match_wins ?? 0),
+        totalReportsReceived: Number(player.total_reports_received ?? 0),
+        totalReportsSubmitted: Number(player.total_reports_submitted ?? 0),
       },
     };
+  }
+
+  async getSteamProfile(playerId, player = null) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+    const profile = await this.db.get("SELECT * FROM steam_profiles WHERE player_id = ?", id);
+    if (profile) return profile;
+    const steamID = cleanId(player?.steam_id);
+    if (!steamID) return null;
+    return {
+      player_id: id,
+      persona_name: player?.current_name ?? null,
+      profile_url: `https://steamcommunity.com/profiles/${steamID}/`,
+      avatar_medium: player?.steam_avatar ?? null,
+      profile_state: player?.steam_avatar ? "cached" : "unknown",
+      last_success_at: player?.steam_avatar ? Number(player.updated_at ?? 0) : null,
+      updated_at: Number(player?.updated_at ?? 0),
+    };
+  }
+
+  async getPlayerContainerSummary(playerId, player = null) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const steamID = cleanId(player?.steam_id) ?? "";
+    const eosID = cleanId(player?.eos_id) ?? "";
+    const rows = await Promise.all([
+      this.db.get("SELECT COUNT(*) AS count, MAX(seen_at) AS last_at FROM player_aliases WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(seen_at) AS last_at FROM player_ips WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(joined_at) AS last_at FROM player_session_history WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(updated_at) AS last_at FROM steam_friends WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(updated_at) AS last_at FROM player_tags WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(last_at) AS last_at FROM player_violation_counts WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM report_records WHERE reporter_player_id = ? OR target_player_id = ?", id, id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM command_logs WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(mr.started_at) AS last_at FROM player_match_records pmr JOIN match_records mr ON mr.id = pmr.match_id WHERE pmr.player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(changed_at) AS last_at FROM ladder_rating_history WHERE player_id = ?", id),
+      this.db.get(`SELECT COUNT(*) AS count, MAX(time_ms) AS last_at FROM squad_management_records
+                   WHERE (creator_steam_id = ? AND ? <> '') OR (player_steam_id = ? AND ? <> '')
+                      OR (steam_id = ? AND ? <> '') OR (creator_eos_id = ? AND ? <> '')
+                      OR (player_eos_id = ? AND ? <> '') OR (eos_id = ? AND ? <> '')`,
+        steamID, steamID, steamID, steamID, steamID, steamID, eosID, eosID, eosID, eosID, eosID, eosID),
+      this.db.get("SELECT COUNT(*) AS count, MAX(created_at_ms) AS last_at FROM web_action_audit_records WHERE target_id = ?", String(id)),
+    ]);
+    const keys = ["aliases", "ips", "sessions", "steam-friends", "tags", "violations", "reports", "commands", "matches", "ladder-history", "squad-records", "audit"];
+    return rows.map((row, index) => ({
+      key: keys[index],
+      count: Number(row?.count ?? 0),
+      lastAt: Number(row?.last_at ?? 0) || null,
+    }));
+  }
+
+  async listPlayerContainer(playerId, container, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return { items: [], hasMore: false };
+    const { limit, offset } = this.normalizePaging(options);
+    const take = limit + 1;
+    const player = await this.getPlayerById(id);
+    if (!player) return { items: [], hasMore: false };
+    const steamID = cleanId(player.steam_id) ?? "";
+    const eosID = cleanId(player.eos_id) ?? "";
+    let items = [];
+    switch (String(container ?? "")) {
+      case "aliases": items = await this.listPlayerAliases(id, { limit: take, offset }); break;
+      case "ips": items = await this.listPlayerIps(id, { limit: take, offset }); break;
+      case "sessions": items = await this.listPlayerSessionHistory(id, { limit: take, offset }); break;
+      case "steam-friends": {
+        const friends = await this.listSteamFriends(id);
+        items = friends.slice(offset, offset + take);
+        break;
+      }
+      case "tags": items = await this.db.all("SELECT tag_type, tag_value, created_at, updated_at FROM player_tags WHERE player_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
+      case "violations": items = await this.db.all("SELECT violation_key, violation_label, count, first_at, last_at FROM player_violation_counts WHERE player_id = ? ORDER BY last_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
+      case "reports": items = await this.db.all(`SELECT id, reporter_player_id, target_player_id, reason, status, created_at,
+          CASE WHEN reporter_player_id = ? THEN 'submitted' ELSE 'received' END AS relation
+          FROM report_records WHERE reporter_player_id = ? OR target_player_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`, id, id, id, take, offset); break;
+      case "commands": items = await this.db.all("SELECT id, operator_name, command_text, command_result, created_at FROM command_logs WHERE player_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
+      case "matches": items = await this.db.all(`SELECT pmr.id, pmr.team_id, pmr.was_squad_lead, pmr.was_commander, pmr.won, mr.map_name, mr.layer_name, mr.started_at, mr.ended_at, mr.winner_team
+          FROM player_match_records pmr JOIN match_records mr ON mr.id = pmr.match_id WHERE pmr.player_id = ? ORDER BY mr.started_at DESC LIMIT ? OFFSET ?`, id, take, offset); break;
+      case "ladder-history": items = await this.db.all("SELECT old_rating, new_rating, reason, changed_at FROM ladder_rating_history WHERE player_id = ? ORDER BY changed_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
+      case "squad-records": items = await this.db.all(`SELECT id, kind, time_ms, source, squad_name, team_name, reason, result, error, command, record_type
+          FROM squad_management_records WHERE (creator_steam_id = ? AND ? <> '') OR (player_steam_id = ? AND ? <> '') OR (steam_id = ? AND ? <> '')
+          OR (creator_eos_id = ? AND ? <> '') OR (player_eos_id = ? AND ? <> '') OR (eos_id = ? AND ? <> '')
+          ORDER BY time_ms DESC, id DESC LIMIT ? OFFSET ?`, steamID, steamID, steamID, steamID, steamID, steamID, eosID, eosID, eosID, eosID, eosID, eosID, take, offset); break;
+      case "audit": items = await this.db.all("SELECT id, action, category, actor_username, source_page, result, error_message, created_at, created_at_ms FROM web_action_audit_records WHERE target_id = ? ORDER BY created_at_ms DESC LIMIT ? OFFSET ?", String(id), take, offset); break;
+      default: return { items: [], hasMore: false };
+    }
+    return { items: items.slice(0, limit), hasMore: items.length > limit, offset, limit };
   }
 
   async setPermissionGroup(playerId, permissionGroup) {
