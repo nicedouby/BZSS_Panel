@@ -14,6 +14,9 @@
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('forb-ress')">
           FOB Resource Regeneration
         </button>
+        <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('automatic-heal')">
+          Automatic Heal
+        </button>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('time')">
           Time
         </button>
@@ -101,6 +104,31 @@
                 <span>Command</span>
                 <code>{{ forbRessPreview }}</code>
               </div>
+              <footer class="bzss-core-actions">
+                <button type="button" class="bzss-core-secondary" @click="closeDialog">Cancel</button>
+                <button type="submit" class="bzss-core-primary" :disabled="busy">Run</button>
+              </footer>
+            </form>
+
+            <form v-else-if="dialogMode === 'automatic-heal'" class="bzss-core-form" @submit.prevent="submitAutomaticHealCommands">
+              <label class="bzss-core-field">
+                <span>Automatic heal</span>
+                <select v-model="automaticHealEnabled" class="bzss-core-select">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </label>
+
+              <label class="bzss-core-field">
+                <span>Automatic heal value</span>
+                <input v-model.trim="automaticHealValue" type="number" min="0" placeholder="0" />
+              </label>
+
+              <div class="bzss-core-preview">
+                <span>Commands</span>
+                <code>{{ automaticHealPreview }}</code>
+              </div>
+
               <footer class="bzss-core-actions">
                 <button type="button" class="bzss-core-secondary" @click="closeDialog">Cancel</button>
                 <button type="submit" class="bzss-core-primary" :disabled="busy">Run</button>
@@ -312,6 +340,8 @@
                 <code>RemoveAdminTrack:AdminName</code>
                 <code>SetWeather:SnowHeavy,10</code>
                   <code>SetForbRessSourceRegeneration:1,true,100,500,10</code>
+                  <code>SetAutomaticHeal:true</code>
+                  <code>SetAutomaticHealValue:100</code>
               </div>
 
               <div class="bzss-core-preview">
@@ -340,7 +370,7 @@ import { useUiStore } from "../../stores/ui.store";
 import { hasPermission } from "../../shared/rcon-permissions.js";
 import { usePlayerStore } from "../../stores/player.store";
 
-type DialogMode = "weather" | "time" | "raw" | "vehicle" | "forb-ress";
+type DialogMode = "weather" | "time" | "raw" | "vehicle" | "forb-ress" | "automatic-heal";
 
 interface VehiclePreset {
   name: string;
@@ -426,6 +456,8 @@ const forbRessEnabled = ref<"true" | "false">("true");
 const forbRessAmmo = ref("0");
 const forbRessConstruction = ref("0");
 const forbRessRate = ref("0");
+const automaticHealEnabled = ref<"true" | "false">("true");
+const automaticHealValue = ref("0");
 const timeParameter = ref("");
 const rawCommand = ref("");
 
@@ -450,6 +482,7 @@ const dialogTitleId = computed(() => `bzss-core-${dialogMode.value}-title`);
 const dialogTitle = computed(() => {
   if (dialogMode.value === "weather") return "Set Weather";
   if (dialogMode.value === "forb-ress") return "FOB Resource Regeneration";
+  if (dialogMode.value === "automatic-heal") return "Automatic Heal";
   if (dialogMode.value === "time") return "Set Time";
   if (dialogMode.value === "vehicle") return "Spawn Vehicle";
   return "Raw Command";
@@ -457,12 +490,14 @@ const dialogTitle = computed(() => {
 const dialogSubtitle = computed(() => {
   if (dialogMode.value === "weather") return "Pick a weather keyword and set the transition value.";
   if (dialogMode.value === "forb-ress") return "Set FOB resource regeneration: Team ID, enabled, ammo, construction, total rate.";
+  if (dialogMode.value === "automatic-heal") return "Enable automatic healing and set its value.";
   if (dialogMode.value === "time") return "Final format: SetTime:XXXX";
   if (dialogMode.value === "vehicle") return "Select target player, input asset path or choose from shortcuts.";
   return "Everything except the paths is sent as raw text.";
 });
 const weatherPreview = computed(() => `SetWeather:${selectedWeather.value},${weatherParameter.value || "10"}`);
 const forbRessPreview = computed(() => `SetForbRessSourceRegeneration:${forbRessTeamId.value},${forbRessEnabled.value},${forbRessAmmo.value || "0"},${forbRessConstruction.value || "0"},${forbRessRate.value || "0"}`);
+const automaticHealPreview = computed(() => `SetAutomaticHeal:${automaticHealEnabled.value}\\nSetAutomaticHealValue:${automaticHealValue.value || "0"}`);
 const timePreview = computed(() => `SetTime:${timeParameter.value || "XXXX"}`);
 const rawPreview = computed(() => rawCommand.value || "Enter a full raw command");
 const vehiclePreview = computed(() => {
@@ -613,6 +648,9 @@ function openDialog(mode: DialogMode) {
     forbRessAmmo.value = "0";
     forbRessConstruction.value = "0";
     forbRessRate.value = "0";
+  } else if (mode === "automatic-heal") {
+    automaticHealEnabled.value = "true";
+    automaticHealValue.value = "0";
   } else if (mode === "time") {
     timeParameter.value = "";
   } else if (mode === "raw") {
@@ -662,6 +700,39 @@ async function submitForbRessCommand() {
       forbRessRate.value.trim() || "0",
     ].join(","),
   });
+}
+
+async function submitAutomaticHealCommands() {
+  if (busy.value) return;
+  busy.value = true;
+  try {
+    const enabledResult = await executeBzssCoreCommand({
+      directive: "SetAutomaticHeal",
+      parameter: automaticHealEnabled.value,
+    });
+    if (!enabledResult.ok) throw new Error(enabledResult.message || "SetAutomaticHeal failed.");
+
+    const valueResult = await executeBzssCoreCommand({
+      directive: "SetAutomaticHealValue",
+      parameter: automaticHealValue.value.trim() || "0",
+    });
+    if (!valueResult.ok) throw new Error(valueResult.message || "SetAutomaticHealValue failed.");
+
+    ui.pushToast({
+      title: "Automatic Heal updated",
+      message: automaticHealPreview.value,
+      tone: "ok",
+    });
+    closeDialog();
+  } catch (error: any) {
+    ui.pushToast({
+      title: t("common.error"),
+      message: error?.message || "Automatic Heal update failed.",
+      tone: "error",
+    });
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function submitTimeCommand() {
