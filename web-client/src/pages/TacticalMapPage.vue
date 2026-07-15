@@ -27,6 +27,7 @@
             :tile-base-path="activeMapConfig.tileBasePath"
             :max-zoom="activeMapConfig.maxZoomLevel"
             :tiles-enabled="tilesEnabled"
+            :interaction-active="isDragging"
             :viewport-width="vpWidth"
             :viewport-height="vpHeight"
             :fallback-image="activeMapConfig.image"
@@ -2485,6 +2486,24 @@ function handleTilesReady() {
 const dragStartCoords = { x: 0, y: 0 };
 let dragMoved = false;
 let activeDragPointerId: number | null = null;
+let dragFrameId: number | null = null;
+let pendingDragPoint: { x: number; y: number } | null = null;
+
+function flushPendingDrag() {
+  if (!pendingDragPoint) return;
+  const point = pendingDragPoint;
+  pendingDragPoint = null;
+  camera.onDrag(point.x, point.y);
+}
+
+function scheduleDragFrame(clientX: number, clientY: number) {
+  pendingDragPoint = { x: clientX, y: clientY };
+  if (dragFrameId !== null) return;
+  dragFrameId = requestAnimationFrame(() => {
+    dragFrameId = null;
+    flushPendingDrag();
+  });
+}
 
 function isDragBlockedTarget(target: HTMLElement | null) {
   if (!target) return false;
@@ -2532,11 +2551,20 @@ function onDrag(e: PointerEvent) {
     dragMoved = true;
   }
 
-  camera.onDrag(e.clientX, e.clientY);
+  scheduleDragFrame(e.clientX, e.clientY);
 }
 
 // Re-sync final dragging state (handles cleanup if dragging ends outside viewport)
 function stopDrag(e?: PointerEvent) {
+  if (e && activeDragPointerId !== null && e.pointerId === activeDragPointerId) {
+    pendingDragPoint = { x: e.clientX, y: e.clientY };
+  }
+  if (dragFrameId !== null) {
+    cancelAnimationFrame(dragFrameId);
+    dragFrameId = null;
+  }
+  flushPendingDrag();
+
   if (activeDragPointerId !== null) {
     containerRef.value?.releasePointerCapture?.(activeDragPointerId);
   }
