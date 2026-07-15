@@ -389,6 +389,9 @@ async function testFinalPassBroadcastAssignsOrderAndReplacesPlayerRecord() {
     const squad1Broadcast = harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast").message;
     assert.equal(squad1Broadcast.includes("\u961F\u4F0D\u6027\u8D28"), true);
     assert.equal(squad1Broadcast.includes(squad1Nature), true);
+    assert.equal(state.finalPassRecords[0].event.squadNature, "infantry");
+    assert.equal(state.finalPassRecords[0].event.squadTypeId, "infantry");
+    assert.equal(state.finalPassRecords[0].event.squadTypeLabel, "战斗步兵");
 
     harness.eventBus.emitModuleEvent(
       "module.squadLifecycle",
