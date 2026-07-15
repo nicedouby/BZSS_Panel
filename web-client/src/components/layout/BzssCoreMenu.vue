@@ -11,6 +11,9 @@
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('weather')">
           Weather
         </button>
+        <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('forb-ress')">
+          FOB Resource Regeneration
+        </button>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('time')">
           Time
         </button>
@@ -47,9 +50,9 @@
               </label>
 
               <label class="bzss-core-field">
-                <span>Transition value</span>
+                <span>Parameter value</span>
                 <input
-                  v-model.trim="weatherTransitionValue"
+                  v-model.trim="weatherParameter"
                   type="text"
                   placeholder="10"
                   autocomplete="off"
@@ -61,6 +64,43 @@
                 <code>{{ weatherPreview }}</code>
               </div>
 
+              <footer class="bzss-core-actions">
+                <button type="button" class="bzss-core-secondary" @click="closeDialog">Cancel</button>
+                <button type="submit" class="bzss-core-primary" :disabled="busy">Run</button>
+              </footer>
+            </form>
+
+            <form v-else-if="dialogMode === 'forb-ress'" class="bzss-core-form" @submit.prevent="submitForbRessCommand">
+              <label class="bzss-core-field">
+                <span>Team ID</span>
+                <select v-model="forbRessTeamId" class="bzss-core-select">
+                  <option value="1">Team 1</option>
+                  <option value="2">Team 2</option>
+                </select>
+              </label>
+              <label class="bzss-core-field">
+                <span>Enable regeneration</span>
+                <select v-model="forbRessEnabled" class="bzss-core-select">
+                  <option value="true">Open</option>
+                  <option value="false">Close</option>
+                </select>
+              </label>
+              <label class="bzss-core-field">
+                <span>Ammo quantity</span>
+                <input v-model.trim="forbRessAmmo" type="number" min="0" placeholder="0" />
+              </label>
+              <label class="bzss-core-field">
+                <span>Construction quantity</span>
+                <input v-model.trim="forbRessConstruction" type="number" min="0" placeholder="0" />
+              </label>
+              <label class="bzss-core-field">
+                <span>Total rate</span>
+                <input v-model.trim="forbRessRate" type="number" min="0" placeholder="0" />
+              </label>
+              <div class="bzss-core-preview">
+                <span>Command</span>
+                <code>{{ forbRessPreview }}</code>
+              </div>
               <footer class="bzss-core-actions">
                 <button type="button" class="bzss-core-secondary" @click="closeDialog">Cancel</button>
                 <button type="submit" class="bzss-core-primary" :disabled="busy">Run</button>
@@ -270,7 +310,8 @@
                 <code>CreateVehicle:PlayerName,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,1</code>
                 <code>AdminTrack:AdminName,TrackObject</code>
                 <code>RemoveAdminTrack:AdminName</code>
-                <code>TransitionWeather:SnowHeavy,10</code>
+                <code>SetWeather:SnowHeavy,10</code>
+                  <code>SetForbRessSourceRegeneration:1,true,100,500,10</code>
               </div>
 
               <div class="bzss-core-preview">
@@ -299,7 +340,7 @@ import { useUiStore } from "../../stores/ui.store";
 import { hasPermission } from "../../shared/rcon-permissions.js";
 import { usePlayerStore } from "../../stores/player.store";
 
-type DialogMode = "weather" | "time" | "raw" | "vehicle";
+type DialogMode = "weather" | "time" | "raw" | "vehicle" | "forb-ress";
 
 interface VehiclePreset {
   name: string;
@@ -379,7 +420,12 @@ const dialogOpen = ref(false);
 const dialogMode = ref<DialogMode>("weather");
 const busy = ref(false);
 const selectedWeather = ref<(typeof weatherOptions)[number]>("SnowHeavy");
-const weatherTransitionValue = ref("10");
+const weatherParameter = ref("10");
+const forbRessTeamId = ref<"1" | "2">("1");
+const forbRessEnabled = ref<"true" | "false">("true");
+const forbRessAmmo = ref("0");
+const forbRessConstruction = ref("0");
+const forbRessRate = ref("0");
 const timeParameter = ref("");
 const rawCommand = ref("");
 
@@ -403,17 +449,20 @@ const canUse = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(u
 const dialogTitleId = computed(() => `bzss-core-${dialogMode.value}-title`);
 const dialogTitle = computed(() => {
   if (dialogMode.value === "weather") return "Set Weather";
+  if (dialogMode.value === "forb-ress") return "FOB Resource Regeneration";
   if (dialogMode.value === "time") return "Set Time";
   if (dialogMode.value === "vehicle") return "Spawn Vehicle";
   return "Raw Command";
 });
 const dialogSubtitle = computed(() => {
   if (dialogMode.value === "weather") return "Pick a weather keyword and set the transition value.";
+  if (dialogMode.value === "forb-ress") return "Set FOB resource regeneration: Team ID, enabled, ammo, construction, total rate.";
   if (dialogMode.value === "time") return "Final format: SetTime:XXXX";
   if (dialogMode.value === "vehicle") return "Select target player, input asset path or choose from shortcuts.";
   return "Everything except the paths is sent as raw text.";
 });
-const weatherPreview = computed(() => `TransitionWeather:${selectedWeather.value},${weatherTransitionValue.value || "10"}`);
+const weatherPreview = computed(() => `SetWeather:${selectedWeather.value},${weatherParameter.value || "10"}`);
+const forbRessPreview = computed(() => `SetForbRessSourceRegeneration:${forbRessTeamId.value},${forbRessEnabled.value},${forbRessAmmo.value || "0"},${forbRessConstruction.value || "0"},${forbRessRate.value || "0"}`);
 const timePreview = computed(() => `SetTime:${timeParameter.value || "XXXX"}`);
 const rawPreview = computed(() => rawCommand.value || "Enter a full raw command");
 const vehiclePreview = computed(() => {
@@ -557,7 +606,13 @@ function openDialog(mode: DialogMode) {
 
   if (mode === "weather") {
     selectedWeather.value = "SnowHeavy";
-    weatherTransitionValue.value = "10";
+    weatherParameter.value = "10";
+  } else if (mode === "forb-ress") {
+    forbRessTeamId.value = "1";
+    forbRessEnabled.value = "true";
+    forbRessAmmo.value = "0";
+    forbRessConstruction.value = "0";
+    forbRessRate.value = "0";
   } else if (mode === "time") {
     timeParameter.value = "";
   } else if (mode === "raw") {
@@ -591,8 +646,21 @@ function closeDialog() {
 
 async function submitWeatherCommand() {
   await executeCommand({
-    directive: "TransitionWeather",
-    parameter: `${selectedWeather.value},${weatherTransitionValue.value.trim() || "10"}`,
+    directive: "SetWeather",
+    parameter: `${selectedWeather.value},${weatherParameter.value.trim() || "10"}`,
+  });
+}
+
+async function submitForbRessCommand() {
+  await executeCommand({
+    directive: "SetForbRessSourceRegeneration",
+    parameter: [
+      forbRessTeamId.value,
+      forbRessEnabled.value,
+      forbRessAmmo.value.trim() || "0",
+      forbRessConstruction.value.trim() || "0",
+      forbRessRate.value.trim() || "0",
+    ].join(","),
   });
 }
 
