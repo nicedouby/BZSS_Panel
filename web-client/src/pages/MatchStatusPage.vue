@@ -507,7 +507,11 @@ const healthLookup = computed<Record<string, number | null>>(() => {
   for (const player of healthPlayers) {
     const name = String(player?.name ?? "").trim();
     if (!name) continue;
-    const rawHealth = Number(player?.health);
+    if (player?.health == null) {
+      map[name] = null;
+      continue;
+    }
+    const rawHealth = Number(player.health);
     if (!Number.isFinite(rawHealth)) {
       map[name] = null;
       continue;
