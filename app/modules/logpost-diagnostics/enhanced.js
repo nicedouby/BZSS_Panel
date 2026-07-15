@@ -77,7 +77,12 @@ export function createLogpostDiagnosticsModule(args) {
     parser.stageDurationsMs = { ...(probe.durationsMs ?? {}) };
     parser.slowestStage = String(probe.slowestStage ?? "unknown");
 
-    const directDiagnosis = diagnosePythonProbe(probe, parser);
+    const directDiagnosis = diagnosePythonProbe(probe, parser, {
+      warningBacklogBytes: Number(state.thresholds?.sourceBacklogWarningBytes ?? 2 * 1024 * 1024),
+      criticalBacklogBytes: Number(state.thresholds?.sourceBacklogCriticalBytes ?? 16 * 1024 * 1024),
+      sourceRate: latest.rates?.sourceProducedBytesPerSec,
+      consumeRate: parser.consumedBytesPerSec,
+    });
     latest.bottlenecks = latest.bottlenecks.filter((item) => {
       const stage = String(item?.stage ?? "");
       return !["python-output-io", "python-parse-cpu", "python-pipeline"].includes(stage);
@@ -105,7 +110,7 @@ export function createLogpostDiagnosticsModule(args) {
   return instance;
 }
 
-function diagnosePythonProbe(probe, parser) {
+function diagnosePythonProbe(probe, parser, options = {}) {
   const shares = probe.stageShare ?? {};
   const fileIo = finite(shares.fileIo);
   const parse = finite(shares.parse);
@@ -116,8 +121,17 @@ function diagnosePythonProbe(probe, parser) {
   const maxLineMs = finite(probe.maxLineProcessMs);
   const slowest = String(probe.slowestStage ?? "unknown");
   const durations = probe.durationsMs ?? {};
+  const warningBacklogBytes = finite(options.warningBacklogBytes) || 2 * 1024 * 1024;
+  const criticalBacklogBytes = finite(options.criticalBacklogBytes) || 16 * 1024 * 1024;
+  const sourceRate = finite(options.sourceRate);
+  const consumeRate = finite(options.consumeRate);
+  const fallingBehind = sourceRate > 0 && consumeRate > 0 && consumeRate < sourceRate * 0.9;
+  const slowSingleLine = maxLineMs >= 250;
+  const underPressure = backlog >= warningBacklogBytes || fallingBehind || slowSingleLine;
 
-  let severity = backlog >= 16 * 1024 * 1024 ? "critical" : backlog >= 2 * 1024 * 1024 ? "warning" : "warning";
+  if (!underPressure) return null;
+
+  const severity = backlog >= criticalBacklogBytes || maxLineMs >= 1000 ? "critical" : "warning";
   if (fileIo >= 0.45) {
     return {
       severity,
@@ -154,7 +168,7 @@ function diagnosePythonProbe(probe, parser) {
       recommendation: "合并小事件、控制玩家帧大小；需要可靠背压时改用本地 TCP/IPC 队列。",
     };
   }
-  if (backlog > 0 && other >= 0.45) {
+  if (other >= 0.45) {
     return {
       severity,
       stage: "python-other",
@@ -163,7 +177,13 @@ function diagnosePythonProbe(probe, parser) {
       recommendation: "重点检查控制台逐事件输出、checkpoint 持久化、identity cache 和未被探针单独分类的同步函数。",
     };
   }
-  return null;
+  return {
+    severity,
+    stage: "python-pipeline",
+    title: "Python 消费速度低于日志生成速度",
+    evidence: `backlog=${formatBytes(backlog)}, input=${formatRate(sourceRate)}, consume=${formatRate(consumeRate)}, max line=${maxLineMs.toFixed(1)}ms`,
+    recommendation: "继续观察阶段占比，并对最高耗时函数进行批量化或拆分。",
+  };
 }
 
 function normalizeOverall(latest) {
