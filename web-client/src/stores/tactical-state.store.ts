@@ -6,8 +6,10 @@ import {
   type TacticalStateDelta,
   type TacticalStateSnapshotResponse,
 } from "../app/tacticalStateApi";
+import { useServerStore } from "./server.store";
 
 export const useTacticalStateStore = defineStore("tacticalState", () => {
+  const serverStore = useServerStore();
   const snapshot = shallowRef<any | null>(null);
   const players = shallowRef<any[]>([]);
   const server = shallowRef<any>({});
@@ -38,6 +40,27 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     return next;
   }
 
+  function resolveLiveMapIdentity(source: any) {
+    const candidates = [
+      source?.server?.layer,
+      source?.match?.layer,
+      source?.server?.currentLayer,
+      source?.server?.mapName,
+      source?.server?.map,
+      source?.match?.mapName,
+      source?.match?.map,
+    ];
+    for (const candidate of candidates) {
+      const value = String(candidate ?? "").trim();
+      if (value) return value;
+    }
+    return "";
+  }
+
+  function syncLiveMapIdentity(source: any) {
+    serverStore.applyLiveMapIdentity(resolveLiveMapIdentity(source));
+  }
+
   function applyFullSnapshot(nextSnapshot: any) {
     playersByKey.clear();
     playerOrder = [];
@@ -54,6 +77,7 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     assets.value = nextSnapshot?.assets ?? {};
     diagnostics.value = nextSnapshot?.diagnostics ?? {};
     snapshot.value = nextSnapshot ? { ...nextSnapshot, players: nextPlayers } : null;
+    syncLiveMapIdentity(snapshot.value);
   }
 
   function applyDelta(delta: TacticalStateDelta | undefined, revision?: number | null, generatedAt?: string) {
@@ -95,6 +119,10 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
         ...(revision != null ? { revision } : {}), ...(generatedAt ? { generatedAt } : {}) },
       players: nextPlayers,
     };
+
+    if (Object.hasOwn(delta, "server") || Object.hasOwn(delta, "match")) {
+      syncLiveMapIdentity(snapshot.value);
+    }
   }
 
   async function applySnapshotResponse(response: TacticalStateSnapshotResponse) {

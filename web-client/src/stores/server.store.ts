@@ -21,6 +21,24 @@ export const useServerStore = defineStore("server", () => {
     updatedAt.value = Number(incoming?.updatedAt ?? Date.now());
   }
 
+  /**
+   * Tactical state is the live source for round/layer changes. Unlike the
+   * stable snapshot merger, this method intentionally allows an empty or
+   * unknown map identity to replace the previous value so the UI can return to
+   * its blank-map state instead of displaying the previous round indefinitely.
+   */
+  function applyLiveMapIdentity(value: unknown) {
+    const mapIdentity = String(value ?? "").trim();
+    const existing = isRecord(snapshot.value) ? snapshot.value : {};
+    snapshot.value = {
+      ...existing,
+      mapName: mapIdentity,
+      layer: mapIdentity,
+      currentLayer: mapIdentity,
+    };
+    updatedAt.value = Date.now();
+  }
+
   function markStale() {
     stale.value = true;
   }
@@ -31,6 +49,7 @@ export const useServerStore = defineStore("server", () => {
     updatedAt,
     applySnapshot,
     applyStableSnapshot,
+    applyLiveMapIdentity,
     markStale,
   };
 });
