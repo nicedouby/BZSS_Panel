@@ -27,6 +27,10 @@ import { computed, onBeforeUnmount, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
+import {
+  startPageFrameworkPreload,
+  stopPageFrameworkPreload,
+} from "./app/pageFrameworkPreloader";
 import { setRuntimeSyncRefreshPolicy, startRuntimeSync, stopRuntimeSync } from "./app/runtimeSync";
 import { t } from "./i18n";
 import { useAuthStore } from "./stores/auth.store";
@@ -83,10 +87,12 @@ watch(
   ([authenticated, sessionVerified]) => {
     if (authenticated && sessionVerified) {
       deferRuntimeStart();
+      startPageFrameworkPreload(auth.user, route.path);
       return;
     }
     cancelDeferredRuntimeStart();
     stopRuntimeSync();
+    stopPageFrameworkPreload();
   },
   { immediate: true },
 );
@@ -102,6 +108,7 @@ watch(
 
 onBeforeUnmount(() => {
   cancelDeferredRuntimeStart();
+  stopPageFrameworkPreload();
 });
 </script>
 
