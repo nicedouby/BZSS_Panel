@@ -7,10 +7,10 @@ import {
   type PageDefinition,
 } from "./pageRegistry";
 
-const PRELOAD_START_DELAY_MS = 420;
-const PRELOAD_BATCH_SIZE = 2;
-const IDLE_TIMEOUT_MS = 1_200;
-const FALLBACK_IDLE_DELAY_MS = 90;
+const PRELOAD_START_DELAY_MS = 300;
+const PRELOAD_BATCH_SIZE = 3;
+const IDLE_TIMEOUT_MS = 350;
+const FALLBACK_IDLE_DELAY_MS = 60;
 
 interface NetworkInformationLike {
   saveData?: boolean;
