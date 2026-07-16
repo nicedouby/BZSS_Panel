@@ -282,7 +282,7 @@
               <div class="hud-column right">
                 
                 <!-- Rcon Command console -->
-                <div class="hud-pane-section">
+                <div class="hud-pane-section hud-admin-console">
                   <div class="hud-section-header">
                     <span class="hud-section-title">管理指令面板 / ADMIN CONSOLE</span>
                   </div>
@@ -294,7 +294,7 @@
                       :disabled="actionBusy || !canWarnPlayer"
                     >
                       <div class="btn-inner">
-                        <span class="btn-icon">⚠️</span>
+                        <span class="btn-icon btn-icon--warn" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg></span>
                         <span class="btn-text">{{ t("player.warn") }}</span>
                       </div>
                     </button>
@@ -306,7 +306,7 @@
                       :disabled="actionBusy || !canUseBzssCore"
                     >
                       <div class="btn-inner">
-                        <span class="btn-icon">☠️</span>
+                        <span class="btn-icon btn-icon--cheer" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
                         <span class="btn-text">Cheer / 击杀</span>
                       </div>
                     </button>
@@ -318,7 +318,7 @@
                       :disabled="actionBusy || !canKickPlayer"
                     >
                       <div class="btn-inner">
-                        <span class="btn-icon">🛑</span>
+                        <span class="btn-icon btn-icon--kick" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 19 6v5c0 4.6-2.9 8.3-7 10-4.1-1.7-7-5.4-7-10V6l7-3Z"/><path d="m9 9 6 6M15 9l-6 6"/></svg></span>
                         <span class="btn-text">{{ t("player.kick") }}</span>
                       </div>
                     </button>
@@ -330,7 +330,7 @@
                       :disabled="actionBusy || !canRemovePlayer"
                     >
                       <div class="btn-inner">
-                        <span class="btn-icon">❌</span>
+                        <span class="btn-icon btn-icon--remove" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="8" r="3"/><path d="M5 20c.7-3.3 3-5 7-5s6.3 1.7 7 5"/><path d="M16 11h5"/></svg></span>
                         <span class="btn-text">{{ t("player.removeFromSquad") }}</span>
                       </div>
                     </button>
@@ -342,7 +342,7 @@
                       :disabled="actionBusy || !canSwitchTeam"
                     >
                       <div class="btn-inner">
-                        <span class="btn-icon">🔄</span>
+                        <span class="btn-icon btn-icon--balance" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7h11l-3-3M17 17H6l3 3"/><path d="M18 7a6 6 0 0 1 0 10M6 17A6 6 0 0 1 6 7"/></svg></span>
                         <span class="btn-text">强制跳边</span>
                       </div>
                     </button>
@@ -350,7 +350,7 @@
                 </div>
 
                 <!-- Steam Friends Section (Collapsible Accordion) -->
-                <div class="hud-pane-section">
+                <div class="hud-pane-section hud-friends-panel">
                   <button type="button" class="hud-accordion-btn" @click="showFriendsCollapsed = !showFriendsCollapsed">
                     <span class="title-with-icon">
                       <svg viewBox="0 0 24 24" width="14" height="14" class="acc-arrow" :class="{ open: !showFriendsCollapsed }">
@@ -3808,6 +3808,177 @@ onUnmounted(() => {
     display: grid;
     grid-template-columns: 1fr;
     gap: 4px;
+  }
+}
+
+
+/* ── Admin console refinement ───────────────────────────────────────────── */
+.hud-admin-console {
+  gap: 12px;
+  padding: 14px;
+  border-color: rgba(96, 165, 250, 0.2);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(96, 165, 250, 0.1), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018)),
+    rgba(12, 20, 34, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.hud-admin-console .hud-section-header {
+  margin: 0;
+  padding: 2px 0 2px 9px;
+  border-left-width: 2px;
+}
+
+.hud-admin-console .actions-grid-hud {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.player-detail-floating .hud-admin-console .hud-action-btn-styled {
+  min-width: 0;
+  min-height: 58px !important;
+  height: auto !important;
+  padding: 10px 12px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+    rgba(15, 23, 42, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    0 5px 12px rgba(0, 0, 0, 0.12);
+  color: #cbd5e1;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.player-detail-floating .hud-admin-console .hud-action-btn-styled:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+    rgba(24, 38, 63, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 18px rgba(0, 0, 0, 0.2);
+}
+
+.hud-admin-console .btn-inner {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.hud-admin-console .btn-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #cbd5e1;
+}
+
+.hud-admin-console .btn-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hud-admin-console .btn-icon--warn {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+}
+
+.hud-admin-console .btn-icon--cheer {
+  color: #c084fc;
+  background: rgba(192, 132, 252, 0.13);
+}
+
+.hud-admin-console .btn-icon--kick {
+  color: #fb7185;
+  background: rgba(251, 113, 133, 0.13);
+}
+
+.hud-admin-console .btn-icon--remove {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.hud-admin-console .btn-icon--balance {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.14);
+}
+
+.hud-admin-console .btn-inner .btn-text {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-admin-console .balance-btn {
+  grid-column: 1 / -1;
+}
+
+.hud-admin-console .warn-btn {
+  border-color: rgba(251, 191, 36, 0.2);
+}
+
+.hud-admin-console .cheer-btn {
+  border-color: rgba(192, 132, 252, 0.2);
+}
+
+.hud-admin-console .kick-btn,
+.hud-admin-console .remove-btn {
+  border-color: rgba(248, 113, 113, 0.2);
+}
+
+.hud-admin-console .balance-btn {
+  border-color: rgba(96, 165, 250, 0.24);
+}
+
+.hud-admin-console .hud-action-btn-styled:disabled {
+  opacity: 0.38;
+  filter: saturate(0.55);
+}
+
+.hud-friends-panel {
+  gap: 8px;
+  padding: 10px;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.hud-friends-panel .hud-accordion-btn {
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+@media (max-width: 540px) {
+  .hud-admin-console .actions-grid-hud {
+    grid-template-columns: 1fr;
+  }
+
+  .hud-admin-console .balance-btn {
+    grid-column: auto;
   }
 }
 
