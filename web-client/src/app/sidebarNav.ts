@@ -201,7 +201,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route.includes("group-report") || route.includes("squad-rule-chain") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
   if (route.includes("tactical-report")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
-  if (route === "/combat-manager" || route === "/battle-log" || route === "/combat-log" || route === "/combat-clean") return "combat";
+  if (route === "/combat-manager" || route === "/battle-log" || route === "/combat-log" || route === "/combat-log/query" || route === "/combat-clean") return "combat";
   if (route.includes("weapon") || route.includes("kill") || id.includes("combat") || id.includes("battle")) return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.includes("draw-vote") || route.includes("welcome-join") || id.includes("warn") || id.includes("broadcast")) return "broadcast";

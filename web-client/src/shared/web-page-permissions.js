@@ -13,6 +13,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/kill-manage", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/combat-clean", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/combat-log", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
+  { route: "/combat-log/query", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/battle-log", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/admin-warns", requiredPermission: "admin_warn.view" },
   { route: "/scheduled-broadcasts", requiredPermission: "scheduled_broadcast.view" },

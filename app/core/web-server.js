@@ -2086,6 +2086,20 @@ export class WebServer {
           offset: url.searchParams.get("offset") ?? "0",
         }));
       }
+
+      if (url.pathname === "/api/combat-logs/search" && req.method === "GET") {
+        return this.json(res, 200, await combatLog.searchLog?.({
+          from: url.searchParams.get("from") ?? "",
+          to: url.searchParams.get("to") ?? "",
+          attacker: url.searchParams.get("attacker") ?? "",
+          eventType: url.searchParams.get("eventType") ?? "",
+          victim: url.searchParams.get("victim") ?? "",
+          weapon: url.searchParams.get("weapon") ?? "",
+          damage: url.searchParams.get("damage") ?? "",
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
     }
 
     if (url.pathname.startsWith("/api/combat-clean")) {
