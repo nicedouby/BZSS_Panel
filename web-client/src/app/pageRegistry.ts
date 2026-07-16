@@ -187,7 +187,6 @@ export const pageRegistry: PageDefinition[] = [
     title: "战斗日志查询",
     category: "core",
     refreshPolicy: "manual",
-    nav: { section: "combat", label: "战斗日志查询", icon: "🔎", order: 31 },
     requiredPermission: "combat_manager.view",
     legacyRequiredPermissions: ["kill_manager.view"],
     ...workspacePage,
