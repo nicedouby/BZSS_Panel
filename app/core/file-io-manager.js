@@ -267,10 +267,22 @@ export class FileIOManager {
       this.metrics.errors += 1;
       this.rememberError(error);
     });
-    await Promise.race([
-      once(writer, "open"),
-      once(writer, "error").then(([error]) => { throw error; }),
-    ]);
+    await new Promise((resolve, reject) => {
+      const onOpen = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = (error) => {
+        cleanup();
+        reject(error);
+      };
+      const cleanup = () => {
+        writer.off("open", onOpen);
+        writer.off("error", onError);
+      };
+      writer.once("open", onOpen);
+      writer.once("error", onError);
+    });
 
     entry = {
       key,
