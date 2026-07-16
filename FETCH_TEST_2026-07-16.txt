@@ -1,0 +1,8 @@
+BZSS Panel fetch test branch
+
+Branch: agent/fetch-test-20260716
+Base: NewTest
+Purpose: verify that GitHub Desktop and the deployed server can fetch newly published remote branches and commits.
+Created: 2026-07-16
+
+This file has no runtime effect.
