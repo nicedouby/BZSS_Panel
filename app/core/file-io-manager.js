@@ -219,7 +219,7 @@ export class FileIOManager {
     if (!entry) return;
 
     if (entry.flushing) return entry.flushing;
-    entry.flushing = (async () => {
+    entry.flushing = Promise.resolve().then(async () => {
       try {
         if (entry.timer) {
           clearTimeout(entry.timer);
@@ -244,7 +244,7 @@ export class FileIOManager {
         entry.flushing = null;
         if (entry.pendingBytes > 0) void this.flush(entry);
       }
-    })();
+    });
     return entry.flushing;
   }
 
