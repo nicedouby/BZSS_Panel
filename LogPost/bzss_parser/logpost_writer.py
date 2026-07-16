@@ -6,6 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
+from bzss_parser.buffered_file_writer import BufferedWriterRegistry
 from bzss_parser.helpers import extract_log_time, now_time_string, today_string, to_json_line
 
 
@@ -16,12 +17,15 @@ class LogPostWriter:
         *,
         write_v2_events: bool = True,
         write_legacy_events: bool = False,
+        flush_interval_ms: int = 75,
+        batch_bytes: int = 128 * 1024,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.preserved_file_name = "Preserved.jsonl"
         self._raw_segment_name = "segment-000001.jsonl"
         self.write_v2_events = bool(write_v2_events)
         self.write_legacy_events = bool(write_legacy_events)
+        self._writers = BufferedWriterRegistry(flush_interval_ms=flush_interval_ms, batch_bytes=batch_bytes)
 
     def write_event(self, event: Dict[str, str]) -> None:
         line = to_json_line(event) + "\n"
@@ -138,12 +142,14 @@ class LogPostWriter:
         }
         self._append(date_dir / f"{record['kind']}.jsonl", to_json_line(record) + "\n")
 
-    @staticmethod
-    def _append(path: Path, text: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8", newline="") as f:
-            f.write(text)
-            f.flush()
+    def _append(self, path: Path, text: str) -> None:
+        self._writers.get(path).write(text)
+
+    def flush_all(self, force: bool = False) -> None:
+        self._writers.flush_all(force=force)
+
+    def close(self) -> None:
+        self._writers.close()
 
     def _write_event_line(self, line: str, event: Dict[str, Any]) -> None:
         event_name = str(event.get("Event", "Unknown"))

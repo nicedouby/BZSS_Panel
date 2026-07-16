@@ -75,16 +75,26 @@ class BzssLogParserApp:
             max_raw_chars=int(self.config.get("raw", {}).get("max_raw_chars", 4096)),
         )
         storage_config = self.config.get("storage", {})
+        flush_interval_ms = int(storage_config.get("flush_interval_ms", 75) or 75)
+        batch_bytes = int(storage_config.get("batch_bytes", 128 * 1024) or 128 * 1024)
+        index_interval_ms = int(storage_config.get("index_interval_ms", 5000) or 5000)
+        index_batch_bytes = int(storage_config.get("index_batch_bytes", 1024 * 1024) or 1024 * 1024)
 
         self.writer = LogPostWriter(
             output_dir=str(self.config.get("output_dir", "./LogPost")),
             write_v2_events=bool(storage_config.get("write_v2_events", True)),
             write_legacy_events=bool(storage_config.get("write_legacy_events", False)),
+            flush_interval_ms=flush_interval_ms,
+            batch_bytes=batch_bytes,
         )
         self.raw_archive_writer = RawArchiveWriter(
             output_dir=str(self.config.get("output_dir", "./LogPost")),
             write_v2_raw_archive=bool(storage_config.get("write_v2_raw_archive", True)),
             write_legacy_raw_archive=bool(storage_config.get("write_legacy_raw_archive", False)),
+            flush_interval_ms=flush_interval_ms,
+            batch_bytes=batch_bytes,
+            index_interval_ms=index_interval_ms,
+            index_batch_bytes=index_batch_bytes,
         )
         self.writer.preserved_file_name = str(
             preserve_config.get("file_name", "Preserved.jsonl")
@@ -96,6 +106,8 @@ class BzssLogParserApp:
             output_dir=str(raw_input_config.get("output_dir", "./ReceivedLogs")),
             file_name=str(raw_input_config.get("file_name", "Received.log")),
             fmt=str(raw_input_config.get("format", "raw")),
+            flush_interval_ms=int(raw_input_config.get("flush_interval_ms", flush_interval_ms) or flush_interval_ms),
+            batch_bytes=int(raw_input_config.get("batch_bytes", batch_bytes) or batch_bytes),
         )
         raw_log_output_config = self.config.get("raw_log_output", {})
         self.raw_log_output_enabled = bool(raw_log_output_config.get("enabled", False))
@@ -200,6 +212,8 @@ class BzssLogParserApp:
                 print("")
                 self.console.info("Stopped by user.")
                 self.flush_pending_checkpoint(force=True)
+                self.flush_storage(force=True)
+                self.close_storage()
                 self.tail_reader.close()
                 break
 
@@ -229,6 +243,21 @@ class BzssLogParserApp:
             self._last_stats_report = now
 
         self.flush_pending_checkpoint()
+        self.flush_storage(force=False)
+
+    def flush_storage(self, force: bool = False) -> None:
+        if self.transport_only:
+            return
+        self.writer.flush_all(force=force)
+        self.raw_archive_writer.flush_all(force=force)
+        self.raw_input_writer.flush_all(force=force)
+
+    def close_storage(self) -> None:
+        if self.transport_only:
+            return
+        self.writer.close()
+        self.raw_archive_writer.close()
+        self.raw_input_writer.close()
 
     def process_line(self, record: Dict[str, Any]) -> bool:
         line = str(record.get("line", "")).rstrip("\r\n")

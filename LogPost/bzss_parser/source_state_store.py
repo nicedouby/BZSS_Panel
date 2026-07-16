@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
+from bzss_parser.buffered_file_writer import write_text_atomic
 from bzss_parser.helpers import now_time_string
 
 
@@ -55,8 +56,8 @@ class SourceStateStore:
             "updatedAt": now_time_string(),
         }
 
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.state_path.with_suffix(f"{self.state_path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        tmp_path.replace(self.state_path)
+        write_text_atomic(
+            self.state_path,
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        )
         return payload

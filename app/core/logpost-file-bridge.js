@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-import fs from "node:fs";
+import { FileIOManager } from "./file-io-manager.js";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -14,13 +14,14 @@ const ALL_EVENTS_FILE_NAME = "all.jsonl";
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
 
 export class LogPostFileBridge {
-  constructor({ config, logger, eventBus, eventPipeline, webStatus, logPostMonitor = null }) {
+  constructor({ config, logger, eventBus, eventPipeline, webStatus, logPostMonitor = null, fileIO = null }) {
     this.config = config ?? {};
     this.logger = logger;
     this.eventBus = eventBus;
     this.eventPipeline = eventPipeline;
     this.webStatus = webStatus;
     this.logPostMonitor = logPostMonitor;
+    this.fileIO = fileIO ?? new FileIOManager({ config: {} });
 
     this.enabled = Boolean(this.config.enabled);
     this.workingDirectory = path.resolve(process.cwd(), String(this.config.workingDirectory ?? "./LogPost").trim());
@@ -95,26 +96,24 @@ export class LogPostFileBridge {
   }
 
   async bootstrapCurrentFile() {
-    const filePath = this.resolveCurrentFilePath();
+    const filePath = await this.resolveCurrentFilePath();
     this.currentFilePath = filePath;
     this.currentDateKey = getDateKey(new Date());
     this.currentOffset = 0;
     this.partialLine = "";
 
-    if (!fs.existsSync(filePath)) {
+    if (!(await this.fileIO.exists(filePath))) {
       this.metrics.currentFileSize = 0;
       this.metrics.backlogBytes = 0;
       this.publishDiagnostics();
       return;
     }
 
-    const stat = fs.statSync(filePath);
+    const stat = await this.fileIO.stat(filePath, { cache: false });
     this.metrics.currentFileSize = stat.size;
     if (this.fromEnd) {
       this.currentOffset = stat.size;
-      if (this.replayRecentLines > 0) {
-        await this.replayRecent(filePath, stat.size);
-      }
+      if (this.replayRecentLines > 0) await this.replayRecent(filePath, stat.size);
       this.metrics.backlogBytes = Math.max(0, stat.size - this.currentOffset);
       this.publishDiagnostics();
       return;
@@ -152,38 +151,40 @@ export class LogPostFileBridge {
     }
   }
 
-  resolveCurrentFilePath() {
+  async resolveCurrentFilePath() {
     const dateKey = getDateKey(new Date());
-    return resolveLogPostEventFilePath(this.workingDirectory, dateKey, this.eventName);
+    const candidates = [
+      path.resolve(this.workingDirectory, "events", dateKey, ALL_EVENTS_FILE_NAME),
+      path.resolve(this.workingDirectory, "LogPost", "events", dateKey, ALL_EVENTS_FILE_NAME),
+      path.resolve(this.workingDirectory, "events", dateKey, `${this.eventName}.jsonl`),
+      path.resolve(this.workingDirectory, "LogPost", "events", dateKey, `${this.eventName}.jsonl`),
+    ];
+
+    for (const candidate of candidates) {
+      if (await this.fileIO.exists(candidate)) return candidate;
+    }
+    return candidates[0];
   }
 
   async replayRecent(filePath, fileSize) {
     const replayWindowBytes = Math.min(fileSize, 512 * 1024);
     if (replayWindowBytes <= 0) return;
     const start = Math.max(0, fileSize - replayWindowBytes);
-    const buffer = Buffer.alloc(fileSize - start);
-    const fd = fs.openSync(filePath, "r");
-    try {
-      fs.readSync(fd, buffer, 0, buffer.length, start);
-    } finally {
-      fs.closeSync(fd);
-    }
-
+    const buffer = await this.fileIO.readRange(filePath, start, fileSize - start);
     const rows = buffer.toString("utf8").split(/\r?\n/).filter(Boolean);
-    const recentRows = rows.slice(-this.replayRecentLines);
-    for (const row of recentRows) {
+    for (const row of rows.slice(-this.replayRecentLines)) {
       this.ingestJsonLine(row, { replay: true, filePath });
     }
   }
 
   async readPendingFromFile(filePath) {
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath || !(await this.fileIO.exists(filePath))) {
       this.metrics.currentFileSize = 0;
       this.metrics.backlogBytes = 0;
       return;
     }
 
-    const stat = fs.statSync(filePath);
+    const stat = await this.fileIO.stat(filePath);
     this.metrics.currentFileSize = stat.size;
     if (stat.size < this.currentOffset) {
       this.currentOffset = 0;
@@ -196,17 +197,10 @@ export class LogPostFileBridge {
     }
 
     const length = Math.min(stat.size - this.currentOffset, MAX_READ_CHUNK_BYTES);
-    const buffer = Buffer.alloc(length);
-    const fd = fs.openSync(filePath, "r");
-    try {
-      fs.readSync(fd, buffer, 0, length, this.currentOffset);
-    } finally {
-      fs.closeSync(fd);
-    }
-
-    this.currentOffset += length;
-    this.metrics.bytesRead += length;
-    this.metrics.lastChunkBytes = length;
+    const buffer = await this.fileIO.readRange(filePath, this.currentOffset, length);
+    this.currentOffset += buffer.length;
+    this.metrics.bytesRead += buffer.length;
+    this.metrics.lastChunkBytes = buffer.length;
     this.metrics.lastReadAt = new Date().toISOString();
     const chunkText = this.partialLine + buffer.toString("utf8");
     const lines = chunkText.split(/\r?\n/);
@@ -288,18 +282,5 @@ function getDateKey(now) {
 
 function resolveLogPostEventFilePath(workingDirectory, dateKey, eventName) {
   const baseDirectory = path.resolve(workingDirectory);
-  const candidates = [
-    path.resolve(baseDirectory, "events", dateKey, ALL_EVENTS_FILE_NAME),
-    path.resolve(baseDirectory, "LogPost", "events", dateKey, ALL_EVENTS_FILE_NAME),
-    path.resolve(baseDirectory, "events", dateKey, `${eventName}.jsonl`),
-    path.resolve(baseDirectory, "LogPost", "events", dateKey, `${eventName}.jsonl`),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return candidates[0];
+  return path.resolve(baseDirectory, "events", dateKey, ALL_EVENTS_FILE_NAME);
 }

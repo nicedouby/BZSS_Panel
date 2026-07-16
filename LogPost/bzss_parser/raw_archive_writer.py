@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 from typing import Any, Dict
 
+from bzss_parser.buffered_file_writer import BufferedWriterRegistry, write_text_atomic
 from bzss_parser.helpers import extract_log_time, now_time_string, sha1_hex, today_string, to_json_line
 
 
@@ -16,10 +18,21 @@ class RawArchiveWriter:
         *,
         write_v2_raw_archive: bool = True,
         write_legacy_raw_archive: bool = False,
+        flush_interval_ms: int = 75,
+        batch_bytes: int = 128 * 1024,
+        index_interval_ms: int = 5000,
+        index_batch_bytes: int = 1024 * 1024,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.write_v2_raw_archive = bool(write_v2_raw_archive)
         self.write_legacy_raw_archive = bool(write_legacy_raw_archive)
+        self._writers = BufferedWriterRegistry(flush_interval_ms=flush_interval_ms, batch_bytes=batch_bytes)
+        self.index_interval_s = max(0.1, int(index_interval_ms) / 1000.0)
+        self.index_batch_bytes = max(4096, int(index_batch_bytes))
+        self._index_path = None
+        self._index_dirty = False
+        self._segment_bytes = 0
+        self._last_index_write = 0.0
 
     def write(
         self,
@@ -46,27 +59,48 @@ class RawArchiveWriter:
         line = to_json_line(entry) + "\n"
         if self.write_legacy_raw_archive:
             date_dir = self.output_dir / "Raw" / today_string()
-            date_dir.mkdir(parents=True, exist_ok=True)
-            with (date_dir / "all.jsonl").open("a", encoding="utf-8", newline="") as f:
-                f.write(line)
-                f.flush()
+            self._writers.get(date_dir / "all.jsonl").write(line)
 
         if self.write_v2_raw_archive:
             v2_dir = self.output_dir / "raw" / today_string()
-            v2_dir.mkdir(parents=True, exist_ok=True)
-            with (v2_dir / "segment-000001.jsonl").open("a", encoding="utf-8", newline="") as f:
-                f.write(line)
-                f.flush()
-            with (v2_dir / "index.json").open("w", encoding="utf-8", newline="") as f:
-                f.write(to_json_line({
-                    "schema": "logpost.raw.index.v2",
-                    "updatedAt": read_at,
-                    "segments": [
-                        {
-                            "fileName": "segment-000001.jsonl",
-                            "countHint": None,
-                        }
-                    ],
-                }) + "\n")
+            segment_path = v2_dir / "segment-000001.jsonl"
+            index_path = v2_dir / "index.json"
+            if self._index_path != index_path:
+                self._index_path = index_path
+                self._segment_bytes = 0
+                self._last_index_write = 0.0
+            self._writers.get(segment_path).write(line)
+            self._segment_bytes += len(line.encode("utf-8"))
+            self._index_dirty = True
+            self._write_index_if_needed(force=False)
 
         return entry
+
+    def _write_index_if_needed(self, *, force: bool) -> None:
+        if not self._index_dirty or self._index_path is None:
+            return
+        now = time.monotonic()
+        if not force and now - self._last_index_write < self.index_interval_s and self._segment_bytes < self.index_batch_bytes:
+            return
+
+        self._index_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = to_json_line({
+            "schema": "logpost.raw.index.v2",
+            "updatedAt": now_time_string(),
+            "segments": [{
+                "fileName": "segment-000001.jsonl",
+                "countHint": None,
+                "sizeBytes": self._segment_bytes,
+            }],
+        }) + "\n"
+        write_text_atomic(self._index_path, payload)
+        self._index_dirty = False
+        self._last_index_write = now
+
+    def flush_all(self, force: bool = False) -> None:
+        self._writers.flush_all(force=force)
+        self._write_index_if_needed(force=force)
+
+    def close(self) -> None:
+        self.flush_all(force=True)
+        self._writers.close()

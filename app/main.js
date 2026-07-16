@@ -46,6 +46,7 @@ import { PerformanceMonitor } from "./core/performance-monitor.js";
 import { AuditManager } from "./core/audit/audit-manager.js";
 import { LogPostMonitor } from "./core/logpost-monitor.js";
 import { LogPostFileBridge } from "./core/logpost-file-bridge.js";
+import { FileIOManager } from "./core/file-io-manager.js";
 import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
@@ -91,6 +92,12 @@ async function main() {
     config: configManager,
     logger: logger.child({ moduleId: "core.performanceMonitor", source: "core.performanceMonitor" }),
   });
+
+  const fileIOManager = new FileIOManager({
+    config: configManager.get("fileIO", {}),
+    logger: logger.child({ moduleId: "core.fileIO", source: "core.fileIO" }),
+  });
+  await fileIOManager.start();
 
   const consoleService = new ConsoleService({
     maxEntries: configManager.get("console.maxEntries", 5000),
@@ -147,6 +154,7 @@ async function main() {
     eventPipeline,
     webStatus,
     logPostMonitor,
+    fileIO: fileIOManager,
   });
 
   const coreContext = {
@@ -167,6 +175,7 @@ async function main() {
     auditManager,
     logPostMonitor,
     logPostFileBridge,
+    fileIO: fileIOManager,
   };
   auditManager.core = coreContext;
 
@@ -310,6 +319,7 @@ async function main() {
     performanceMonitor.stop();
     await auditManager.close();
     await authManager.stop();
+    await fileIOManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.", {
       scope: "app",

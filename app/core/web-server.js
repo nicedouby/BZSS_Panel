@@ -181,6 +181,8 @@ export class WebServer {
             rconResponseQueue: rcon?._responseQueue?.length ?? 0,
             rconCallbackIds: rcon?._callbackIds?.length ?? 0,
             rconIncomingBytes: rcon?._incomingData?.byteLength ?? 0,
+            fileIOQueuedBytes: this.core.fileIO?.getPublicDiagnostics?.()?.queuedBytes ?? 0,
+            fileIOActiveChannels: this.core.fileIO?.getPublicDiagnostics?.()?.activeChannels ?? 0,
             tacticalSubscribers: tacticalDiagnostics.subscriberCount ?? 0,
             tacticalProfileCache: tacticalDiagnostics.profileCacheSize ?? 0,
           },
@@ -305,6 +307,7 @@ export class WebServer {
         },
         rcon: this.core.rconManager?.getStatus?.() ?? null,
         runtimeState: Boolean(this.core.runtimeState),
+        fileIO: this.core.fileIO?.getPublicDiagnostics?.() ?? null,
       });
     }
 

@@ -93,7 +93,7 @@ export class LanOptimizedWebServer extends WebServer {
 
     let stat;
     try {
-      stat = await fs.stat(abs);
+      stat = await (this.core.fileIO?.stat?.(abs) ?? fs.stat(abs));
     } catch (error) {
       if (error?.code === "ENOENT" && !path.extname(requestPath)) return this.serveIndex(res);
       res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
@@ -150,10 +150,12 @@ export class LanOptimizedWebServer extends WebServer {
     if (encoding) {
       try {
         const compressed = await this.getCompressedAsset(abs, stat, encoding);
-        headers["Content-Length"] = compressed.length;
-        res.writeHead(200, headers);
-        res.end(compressed);
-        return;
+        if (compressed) {
+          headers["Content-Length"] = compressed.length;
+          res.writeHead(200, headers);
+          res.end(compressed);
+          return;
+        }
       } catch (error) {
         this.logger?.warn?.("Compressed static cache failed; falling back to streaming compression.", {
           operation: "serveStaticCompressedCache",
@@ -164,7 +166,7 @@ export class LanOptimizedWebServer extends WebServer {
 
     res.writeHead(200, headers);
     try {
-      const source = createReadStream(abs);
+      const source = this.core.fileIO?.streamFile?.(abs) ?? createReadStream(abs);
       if (encoding === "br") {
         await pipeline(source, createBrotliCompress({
           params: {
@@ -211,7 +213,10 @@ export class LanOptimizedWebServer extends WebServer {
   }
 
   async buildCompressedAsset(abs, stat, encoding, key) {
-    const source = await fs.readFile(abs);
+    if (stat.size > MAX_CACHEABLE_SOURCE_BYTES) return null;
+    const source = this.core.fileIO?.readText
+      ? Buffer.from(await this.core.fileIO.readText(abs, { maxBytes: MAX_CACHEABLE_SOURCE_BYTES }))
+      : await fs.readFile(abs);
     const result = encoding === "br"
       ? await brotliCompressAsync(source, {
         params: {

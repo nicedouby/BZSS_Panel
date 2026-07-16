@@ -117,6 +117,7 @@ class LogPostPipelineTests(unittest.TestCase):
         app.matchers = []
         app.udp_sender = StubUdpSender()
         app.console = StubConsole()
+        self.addCleanup(app.close_storage)
         return app
 
     def read_jsonl(self, path: pathlib.Path):

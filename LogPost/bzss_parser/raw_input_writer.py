@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from bzss_parser.buffered_file_writer import BufferedWriterRegistry
 from bzss_parser.helpers import now_time_string, today_string, to_json_line
 
 
@@ -21,11 +22,12 @@ class RawInputWriter:
     - jsonl: {"Time":"...","Raw":"..."}
     """
 
-    def __init__(self, enabled: bool, output_dir: str, file_name: str, fmt: str) -> None:
+    def __init__(self, enabled: bool, output_dir: str, file_name: str, fmt: str, *, flush_interval_ms: int = 75, batch_bytes: int = 128 * 1024) -> None:
         self.enabled = enabled
         self.output_dir = Path(output_dir)
         self.file_name = file_name or "Received.log"
         self.fmt = fmt if fmt in ("raw", "jsonl") else "raw"
+        self._writers = BufferedWriterRegistry(flush_interval_ms=flush_interval_ms, batch_bytes=batch_bytes)
 
     def write(self, raw: str) -> None:
         if not self.enabled:
@@ -42,6 +44,10 @@ class RawInputWriter:
         else:
             line = raw + "\n"
 
-        with (date_dir / self.file_name).open("a", encoding="utf-8", newline="") as f:
-            f.write(line)
-            f.flush()
+        self._writers.get(date_dir / self.file_name).write(line)
+
+    def flush_all(self, force: bool = False) -> None:
+        self._writers.flush_all(force=force)
+
+    def close(self) -> None:
+        self._writers.close()
