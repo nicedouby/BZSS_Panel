@@ -4,15 +4,22 @@ import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
+import { promisify } from "node:util";
 import {
+  brotliCompress,
   createBrotliCompress,
   createGzip,
+  gzip,
   constants as zlibConstants,
 } from "node:zlib";
 
 import { WebServer } from "./web-server.js";
 
 const MIN_COMPRESS_BYTES = 1024;
+const MAX_COMPRESSED_CACHE_BYTES = 64 * 1024 * 1024;
+const MAX_CACHEABLE_SOURCE_BYTES = 16 * 1024 * 1024;
+const brotliCompressAsync = promisify(brotliCompress);
+const gzipAsync = promisify(gzip);
 
 const BASE_SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
@@ -25,9 +32,16 @@ const BASE_SECURITY_HEADERS = {
 /**
  * Production web server variant optimized for browsers accessing the panel over
  * a LAN. Hashed Vite assets keep their existing immutable cache policy, while
- * text resources are streamed through Brotli or gzip on first download.
+ * text resources are compressed once and retained in a bounded in-memory LRU.
  */
 export class LanOptimizedWebServer extends WebServer {
+  constructor(options) {
+    super(options);
+    this.compressedAssetCache = new Map();
+    this.compressedAssetCacheBytes = 0;
+    this.compressedAssetJobs = new Map();
+  }
+
   async handleApi(url, req, res) {
     if (url.pathname === "/api/auth/login" && req.method === "POST") {
       return this.handleFastLogin(req, res);
@@ -127,12 +141,28 @@ export class LanOptimizedWebServer extends WebServer {
     if (encoding) headers["Content-Encoding"] = encoding;
     else headers["Content-Length"] = stat.size;
 
-    res.writeHead(200, headers);
     if (req.method === "HEAD") {
+      res.writeHead(200, headers);
       res.end();
       return;
     }
 
+    if (encoding) {
+      try {
+        const compressed = await this.getCompressedAsset(abs, stat, encoding);
+        headers["Content-Length"] = compressed.length;
+        res.writeHead(200, headers);
+        res.end(compressed);
+        return;
+      } catch (error) {
+        this.logger?.warn?.("Compressed static cache failed; falling back to streaming compression.", {
+          operation: "serveStaticCompressedCache",
+          data: { path: abs, encoding, message: error?.message ?? String(error) },
+        });
+      }
+    }
+
+    res.writeHead(200, headers);
     try {
       const source = createReadStream(abs);
       if (encoding === "br") {
@@ -158,6 +188,71 @@ export class LanOptimizedWebServer extends WebServer {
         res.destroy(error);
       }
     }
+  }
+
+  async getCompressedAsset(abs, stat, encoding) {
+    const key = `${abs}\u0000${stat.size}\u0000${Math.trunc(stat.mtimeMs)}\u0000${encoding}`;
+    const cached = this.compressedAssetCache.get(key);
+    if (cached) {
+      this.compressedAssetCache.delete(key);
+      this.compressedAssetCache.set(key, cached);
+      return cached.buffer;
+    }
+
+    const pending = this.compressedAssetJobs.get(key);
+    if (pending) return pending;
+
+    const job = this.buildCompressedAsset(abs, stat, encoding, key)
+      .finally(() => {
+        this.compressedAssetJobs.delete(key);
+      });
+    this.compressedAssetJobs.set(key, job);
+    return job;
+  }
+
+  async buildCompressedAsset(abs, stat, encoding, key) {
+    const source = await fs.readFile(abs);
+    const result = encoding === "br"
+      ? await brotliCompressAsync(source, {
+        params: {
+          [zlibConstants.BROTLI_PARAM_QUALITY]: 4,
+        },
+      })
+      : await gzipAsync(source, { level: 5 });
+    const buffer = Buffer.isBuffer(result) ? result : Buffer.from(result);
+
+    if (stat.size <= MAX_CACHEABLE_SOURCE_BYTES && buffer.length <= MAX_COMPRESSED_CACHE_BYTES) {
+      this.storeCompressedAsset(key, abs, encoding, buffer);
+    }
+    return buffer;
+  }
+
+  storeCompressedAsset(key, abs, encoding, buffer) {
+    for (const [cachedKey, entry] of this.compressedAssetCache) {
+      if (cachedKey !== key && entry.abs === abs && entry.encoding === encoding) {
+        this.compressedAssetCache.delete(cachedKey);
+        this.compressedAssetCacheBytes -= entry.bytes;
+      }
+    }
+
+    while (
+      this.compressedAssetCache.size > 0
+      && this.compressedAssetCacheBytes + buffer.length > MAX_COMPRESSED_CACHE_BYTES
+    ) {
+      const oldestKey = this.compressedAssetCache.keys().next().value;
+      if (!oldestKey) break;
+      const oldest = this.compressedAssetCache.get(oldestKey);
+      this.compressedAssetCache.delete(oldestKey);
+      this.compressedAssetCacheBytes -= oldest?.bytes ?? 0;
+    }
+
+    this.compressedAssetCache.set(key, {
+      abs,
+      encoding,
+      bytes: buffer.length,
+      buffer,
+    });
+    this.compressedAssetCacheBytes += buffer.length;
   }
 }
 

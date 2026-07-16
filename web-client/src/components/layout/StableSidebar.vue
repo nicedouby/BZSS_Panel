@@ -41,6 +41,8 @@
           :class="{ active: expandedSectionKey === section.key }"
           :title="section.label"
           :aria-expanded="expandedSectionKey === section.key"
+          @pointerenter="preloadSection(section.key)"
+          @focus="preloadSection(section.key)"
           @click="handleSectionClick(section.key)"
         >
           <span class="section-icon" aria-hidden="true">{{ section.icon }}</span>
@@ -64,7 +66,10 @@
               pending: navigationTarget === item.path,
             }"
             :title="item.label"
-            :disabled="Boolean(navigationTarget) && navigationTarget !== item.path"
+            @pointerenter="preloadPath(item.path)"
+            @pointerdown="preloadPath(item.path)"
+            @touchstart.passive="preloadPath(item.path)"
+            @focus="preloadPath(item.path)"
             @click="navigateTo(item.path)"
           >
             <span class="child-icon" aria-hidden="true">{{ item.icon }}</span>
@@ -86,6 +91,10 @@ import {
   isRouteActive,
   type NavSectionKey,
 } from "../../app/sidebarNav";
+import {
+  preloadPageFrameworkByPath,
+  preloadPageFrameworksByPaths,
+} from "../../app/pageFrameworkPreloader";
 import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
@@ -121,7 +130,22 @@ watch(
   { immediate: true },
 );
 
+function preloadPath(path: string) {
+  void preloadPageFrameworkByPath(path, auth.user);
+}
+
+function preloadSection(key: NavSectionKey) {
+  const section = sections.value.find((item) => item.key === key);
+  if (!section) return;
+  void preloadPageFrameworksByPaths(
+    section.items.map((item) => item.path),
+    auth.user,
+  );
+}
+
 function handleSectionClick(key: NavSectionKey) {
+  preloadSection(key);
+
   // The compact rail was the source of a previous navigation dead zone.
   // Expand it first so every child page has a full-size, unambiguous click target.
   if (ui.sidebarCollapsed && !isNavDrawer.value) {
@@ -143,8 +167,13 @@ async function navigateTo(path: string) {
     return;
   }
 
+  preloadPath(target);
   const version = ++navigationVersion;
   navigationTarget.value = target;
+
+  // On tablets the drawer must disappear immediately. Waiting for router.push()
+  // made a cold route download look like the click was ignored.
+  ui.closeMobileSidebar();
 
   try {
     await router.push(target);
@@ -152,7 +181,6 @@ async function navigateTo(path: string) {
     console.error(`[sidebar] navigation failed: ${target}`, error);
   } finally {
     if (version === navigationVersion) navigationTarget.value = "";
-    ui.closeMobileSidebar();
   }
 }
 
@@ -364,11 +392,6 @@ function toggleSidebar() {
   color: var(--color-text-primary);
   border-color: color-mix(in srgb, var(--section-accent) 24%, var(--color-border-soft));
   background: color-mix(in srgb, var(--section-accent) 11%, transparent);
-}
-
-.child-link:disabled {
-  cursor: wait;
-  opacity: 0.55;
 }
 
 .child-icon {
