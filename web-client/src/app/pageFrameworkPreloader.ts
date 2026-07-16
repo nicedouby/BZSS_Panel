@@ -16,19 +16,6 @@ interface NetworkInformationLike {
   saveData?: boolean;
 }
 
-interface IdleDeadlineLike {
-  didTimeout: boolean;
-  timeRemaining(): number;
-}
-
-interface WindowWithIdleCallback extends Window {
-  requestIdleCallback?: (
-    callback: (deadline: IdleDeadlineLike) => void,
-    options?: { timeout: number },
-  ) => number;
-  cancelIdleCallback?: (handle: number) => void;
-}
-
 interface SupplementalPageDefinition {
   path: string;
   superAdminOnly?: boolean;
@@ -80,9 +67,8 @@ export function stopPageFrameworkPreload() {
     preloadStartTimer = null;
   }
 
-  const idleWindow = window as WindowWithIdleCallback;
   if (idleHandle != null) {
-    idleWindow.cancelIdleCallback?.(idleHandle);
+    if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idleHandle);
     idleHandle = null;
   }
 
@@ -121,9 +107,8 @@ function scheduleNextBatch(
     void preloadBatch(generation, pageQueue, supplementalQueue, user);
   };
 
-  const idleWindow = window as WindowWithIdleCallback;
-  if (typeof idleWindow.requestIdleCallback === "function") {
-    idleHandle = idleWindow.requestIdleCallback(() => run(), { timeout: IDLE_TIMEOUT_MS });
+  if (typeof window.requestIdleCallback === "function") {
+    idleHandle = window.requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
   } else {
     fallbackIdleTimer = window.setTimeout(run, FALLBACK_IDLE_DELAY_MS);
   }
@@ -155,7 +140,7 @@ async function preloadBatch(
 
 function loadPageDefinition(page: PageDefinition) {
   if (typeof page.component !== "function") {
-    loadedPaths.add(page.path);
+    loadedPaths.add(normalizePath(page.path));
     return Promise.resolve();
   }
 
