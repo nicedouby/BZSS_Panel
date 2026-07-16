@@ -109,7 +109,7 @@ export class LogPostFileBridge {
       return;
     }
 
-    const stat = await this.fileIO.stat(filePath);
+    const stat = await this.fileIO.stat(filePath, { cache: false });
     this.metrics.currentFileSize = stat.size;
     if (this.fromEnd) {
       this.currentOffset = stat.size;
