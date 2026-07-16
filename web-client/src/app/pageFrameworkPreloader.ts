@@ -7,10 +7,11 @@ import {
   type PageDefinition,
 } from "./pageRegistry";
 
-const PRELOAD_START_DELAY_MS = 300;
-const PRELOAD_BATCH_SIZE = 3;
-const IDLE_TIMEOUT_MS = 350;
-const FALLBACK_IDLE_DELAY_MS = 60;
+const PRELOAD_START_DELAY_MS = 120;
+const INITIAL_BURST_SIZE = 8;
+const PRELOAD_BATCH_SIZE = 5;
+const IDLE_TIMEOUT_MS = 220;
+const FALLBACK_IDLE_DELAY_MS = 35;
 
 interface NetworkInformationLike {
   saveData?: boolean;
@@ -44,6 +45,8 @@ export function startPageFrameworkPreload(user: AuthUser | null, currentPath = "
 
   const generation = ++preloadGeneration;
   const normalizedCurrentPath = normalizePath(currentPath);
+  if (normalizedCurrentPath !== "/") loadedPaths.add(normalizedCurrentPath);
+
   const pageQueue = pageRegistry
     .filter((page) => canUserAccessPage(page, user))
     .filter((page) => normalizePath(page.path) !== normalizedCurrentPath)
@@ -54,7 +57,7 @@ export function startPageFrameworkPreload(user: AuthUser | null, currentPath = "
 
   preloadStartTimer = window.setTimeout(() => {
     preloadStartTimer = null;
-    scheduleNextBatch(generation, pageQueue, supplementalQueue, user);
+    void preloadInitialBurst(generation, pageQueue, supplementalQueue, user);
   }, PRELOAD_START_DELAY_MS);
 }
 
@@ -81,14 +84,37 @@ export function stopPageFrameworkPreload() {
 export function preloadPageFrameworkByPath(path: string, user: AuthUser | null) {
   if (!user) return Promise.resolve();
 
-  const page = getPageDefinitionByPath(normalizePath(path));
+  const normalizedPath = normalizePath(path);
+  const page = getPageDefinitionByPath(normalizedPath);
   if (page && canUserAccessPage(page, user)) {
     return loadPageDefinition(page);
   }
 
-  const supplemental = supplementalPages.find((item) => normalizePath(item.path) === normalizePath(path));
+  const supplemental = supplementalPages.find((item) => normalizePath(item.path) === normalizedPath);
   if (!supplemental || (supplemental.superAdminOnly && !user.isSuperAdmin)) return Promise.resolve();
   return loadFramework(supplemental.path, supplemental.load);
+}
+
+export function preloadPageFrameworksByPaths(paths: string[], user: AuthUser | null) {
+  if (!user) return Promise.resolve();
+
+  const uniquePaths = [...new Set(paths.map(normalizePath).filter((path) => path !== "/"))];
+  return Promise.allSettled(
+    uniquePaths.map((path) => preloadPageFrameworkByPath(path, user)),
+  ).then(() => undefined);
+}
+
+async function preloadInitialBurst(
+  generation: number,
+  pageQueue: PageDefinition[],
+  supplementalQueue: SupplementalPageDefinition[],
+  user: AuthUser,
+) {
+  if (generation !== preloadGeneration) return;
+
+  const jobs = takePreloadJobs(INITIAL_BURST_SIZE, pageQueue, supplementalQueue, user);
+  if (jobs.length > 0) await Promise.allSettled(jobs);
+  scheduleNextBatch(generation, pageQueue, supplementalQueue, user);
 }
 
 function scheduleNextBatch(
@@ -120,22 +146,32 @@ async function preloadBatch(
   supplementalQueue: SupplementalPageDefinition[],
   user: AuthUser,
 ) {
+  const jobs = takePreloadJobs(PRELOAD_BATCH_SIZE, pageQueue, supplementalQueue, user);
+  if (jobs.length > 0) await Promise.allSettled(jobs);
+  scheduleNextBatch(generation, pageQueue, supplementalQueue, user);
+}
+
+function takePreloadJobs(
+  limit: number,
+  pageQueue: PageDefinition[],
+  supplementalQueue: SupplementalPageDefinition[],
+  user: AuthUser,
+) {
   const jobs: Promise<void>[] = [];
 
-  while (jobs.length < PRELOAD_BATCH_SIZE && pageQueue.length > 0) {
+  while (jobs.length < limit && pageQueue.length > 0) {
     const page = pageQueue.shift();
     if (!page || !canUserAccessPage(page, user)) continue;
     jobs.push(loadPageDefinition(page));
   }
 
-  while (jobs.length < PRELOAD_BATCH_SIZE && supplementalQueue.length > 0) {
+  while (jobs.length < limit && supplementalQueue.length > 0) {
     const page = supplementalQueue.shift();
     if (!page || (page.superAdminOnly && !user.isSuperAdmin)) continue;
     jobs.push(loadFramework(page.path, page.load));
   }
 
-  if (jobs.length > 0) await Promise.allSettled(jobs);
-  scheduleNextBatch(generation, pageQueue, supplementalQueue, user);
+  return jobs;
 }
 
 function loadPageDefinition(page: PageDefinition) {
