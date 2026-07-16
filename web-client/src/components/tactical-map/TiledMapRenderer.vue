@@ -27,16 +27,17 @@
 
     <!-- Only viewport tiles are requested; full-map cache warming is forbidden. -->
     <img
-      v-for="tile in renderedTiles"
-      :key="tile.key"
-      :src="tile.src"
+      v-for="entry in renderedTiles"
+      :key="`${entry.layerId}-${entry.tile.key}`"
+      :src="entry.tile.src"
       class="map-tile"
-      :style="tileStyle(tile)"
+      :class="{ 'map-tile--pending': entry.pending }"
+      :style="tileStyle(entry.tile)"
       draggable="false"
       decoding="async"
-      loading="lazy"
-      @load="onTileLoad"
-      @error="onTileError(tile.key, tile.src)"
+      :loading="entry.pending ? 'eager' : 'lazy'"
+      @load="entry.pending && onPendingTileLoad(entry.layerId, entry.tile.src)"
+      @error="entry.pending ? onPendingTileError(entry.layerId, entry.tile.key, entry.tile.src) : onTileError(entry.tile.key, entry.tile.src)"
     />
   </div>
 </template>
@@ -100,12 +101,22 @@ const { visibleTiles, currentTileZoom } = useTileLoader({
   interactionActive: computed(() => props.interactionActive === true),
 });
 
-const renderedTiles = computed(() => (
-  resourceActive.value ? visibleTiles.value : []
-));
+interface TileLayer {
+  id: number;
+  pending: boolean;
+  tiles: TileInfo[];
+}
+
+const tileLayers = ref<TileLayer[]>([]);
+const renderedTiles = computed(() => tileLayers.value.flatMap((layer) => (
+  layer.tiles.map((tile) => ({ layerId: layer.id, pending: layer.pending, tile }))
+)));
+const loadedTileSources = new Set<string>();
+const pendingSources = new Set<string>();
 
 let readyEmitted = false;
 let loadGeneration = 0;
+let pendingGeneration = 0;
 let activationTimer: number | null = null;
 let readySafetyTimer: number | null = null;
 
@@ -118,6 +129,13 @@ function cancelPendingResourceWork() {
   clearTimer(readySafetyTimer);
   activationTimer = null;
   readySafetyTimer = null;
+}
+
+function clearTileLayers() {
+  pendingGeneration += 1;
+  tileLayers.value = [];
+  pendingSources.clear();
+  loadedTileSources.clear();
 }
 
 function emitReadyOnce() {
@@ -151,6 +169,7 @@ function scheduleResourceActivation() {
   readyEmitted = false;
   fallbackFailed.value = false;
   resourceActive.value = false;
+  clearTileLayers();
 
   if (!hasMapResource.value) {
     resourceState.value = "idle";
@@ -183,9 +202,53 @@ function onFallbackError() {
   }
 }
 
-function onTileLoad() {
+function stageTiles(nextTiles: TileInfo[]) {
+  const nextSources = nextTiles.map((tile) => tile.src);
+  const pendingLayer = tileLayers.value.find((layer) => layer.pending);
+  const committedLayer = tileLayers.value.find((layer) => !layer.pending);
+  const currentSources = pendingLayer?.tiles.map((tile) => tile.src) ?? [];
+  const committedSources = committedLayer?.tiles.map((tile) => tile.src) ?? [];
+  if (nextSources.join("|") === currentSources.join("|") || nextSources.join("|") === committedSources.join("|")) return;
+
+  pendingGeneration += 1;
+  tileLayers.value = [
+    ...tileLayers.value.filter((layer) => !layer.pending),
+    { id: pendingGeneration, pending: true, tiles: nextTiles },
+  ];
+  pendingSources.clear();
+  for (const source of nextSources) {
+    if (!loadedTileSources.has(source)) pendingSources.add(source);
+  }
+
+  if (pendingSources.size === 0) commitPendingTiles(pendingGeneration);
+}
+
+function commitPendingTiles(generation: number) {
+  if (generation !== pendingGeneration) return;
+  const pendingLayer = tileLayers.value.find((layer) => layer.id === generation && layer.pending);
+  if (!pendingLayer) return;
+  // Retaining the layer id lets Vue promote the already-decoded <img> nodes
+  // in place instead of removing them and creating a fresh, blank layer.
+  tileLayers.value = [{ ...pendingLayer, pending: false }];
+  pendingSources.clear();
   // Tiles can make the map ready when no base image exists or the base failed.
   if (!props.fallbackImage || fallbackFailed.value) markResourceReady();
+}
+
+function onPendingTileLoad(generation: number, source: string) {
+  if (generation !== pendingGeneration) return;
+  loadedTileSources.add(source);
+  pendingSources.delete(source);
+  if (pendingSources.size === 0) commitPendingTiles(generation);
+}
+
+function onPendingTileError(generation: number, key: string, src: string) {
+  if (generation !== pendingGeneration) return;
+  // Missing tiles should not freeze a map transition forever. Keep the full-map
+  // fallback visible and commit the remaining decoded tiles as one layer.
+  pendingSources.delete(src);
+  onTileError(key, src);
+  if (pendingSources.size === 0) commitPendingTiles(generation);
 }
 
 function onTileError(key: string, src: string) {
@@ -199,6 +262,18 @@ watch(
   scheduleResourceActivation,
   { immediate: true },
 );
+
+watch(
+  visibleTiles,
+  (tiles) => {
+    if (resourceActive.value) stageTiles(tiles);
+  },
+  { deep: false },
+);
+
+watch(tilesActive, (active) => {
+  if (active) stageTiles(visibleTiles.value);
+});
 
 function tileStyle(tile: TileInfo) {
   return {
@@ -253,6 +328,10 @@ defineExpose({ currentTileZoom, resourceState });
 .map-tile {
   image-rendering: auto;
   z-index: 1;
+}
+
+.map-tile--pending {
+  visibility: hidden;
 }
 
 .tiled-map-renderer.is-interacting .map-tile {

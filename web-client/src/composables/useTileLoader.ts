@@ -53,6 +53,7 @@ export interface UseTileLoaderOptions {
 const TILE_SIZE_PX = 256;
 const LOAD_MARGIN = 1; // Extra tile margin around viewport for preloading
 const MAX_TRACKED_TILE_KEYS = 256;
+const ZOOM_HYSTERESIS = 0.18;
 
 // ── Composable ──────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
 
   const visibleTiles = ref<TileInfo[]>([]);
   const fallbackTiles = ref<TileInfo[]>([]);
+  const activeTileZoom = ref(0);
 
   /**
    * Map continuous zoom value to the best discrete tile zoom level.
@@ -91,8 +93,15 @@ export function useTileLoader(options: UseTileLoaderOptions) {
   function pickZoomLevel(viewZoom: number): number {
     const maxZ = maxZoom.value;
     const raw = Math.log2((mapSize * viewZoom) / TILE_SIZE_PX);
-    const z = Math.max(0, Math.min(maxZ, Math.floor(raw)));
-    return z;
+    const next = Math.max(0, Math.min(maxZ, Math.floor(raw)));
+    const current = Math.max(0, Math.min(maxZ, activeTileZoom.value));
+
+    // Do not flip tile resolutions around a zoom boundary. The renderer keeps
+    // the old layer while the next one loads, but avoiding needless requests
+    // here is what makes a slow pinch/scroll feel calm rather than twitchy.
+    if (next > current && raw < current + 1 + ZOOM_HYSTERESIS) return current;
+    if (next < current && raw >= current - ZOOM_HYSTERESIS) return current;
+    return next;
   }
 
   /**
@@ -103,6 +112,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
 
     const vZoom = zoom.value;
     const z = pickZoomLevel(vZoom);
+    activeTileZoom.value = z;
     const tilesPerAxis = Math.pow(2, z);
     const tileSizeCss = mapSize / tilesPerAxis;
 
@@ -277,7 +287,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
   }
 
   // Current tile zoom level (exposed for debug / display)
-  const currentTileZoom = computed(() => pickZoomLevel(zoom.value));
+  const currentTileZoom = computed(() => activeTileZoom.value);
 
   // Watch all viewport parameters
   watch([zoom, panX, panY, viewportWidth, viewportHeight, tileBasePath, maxZoom, enabled, ...(interactionActive ? [interactionActive] : [])], markDirty, {
@@ -289,6 +299,7 @@ export function useTileLoader(options: UseTileLoaderOptions) {
     seenTileKeys.clear();
     visibleTiles.value = [];
     fallbackTiles.value = [];
+    activeTileZoom.value = 0;
     markDirty();
   });
 
