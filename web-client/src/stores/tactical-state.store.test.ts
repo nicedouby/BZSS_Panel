@@ -21,6 +21,7 @@ vi.mock("../app/tacticalStateApi", () => ({
   streamTacticalStateSnapshot: hooks.streamMock,
 }));
 
+import { useServerStore } from "./server.store";
 import { useTacticalStateStore } from "./tactical-state.store";
 
 function player(key: string, x: number) {
@@ -131,6 +132,68 @@ describe("tactical-state store", () => {
     expect(hooks.fetchMock).toHaveBeenCalledTimes(1);
     expect(store.snapshot.meta.revision).toBe(7);
     expect(store.players[0].identity.key).toBe("fresh");
+    store.stopStream();
+  });
+
+  it("propagates live layer changes and clears stale map identity without F5", async () => {
+    const store = useTacticalStateStore();
+    const serverStore = useServerStore();
+    store.startStream();
+
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.snapshot",
+      snapshot: {
+        meta: { revision: 1 },
+        server: { layer: "Tallil_RAAS_v1" },
+        match: { layer: "Tallil_RAAS_v1" },
+        teams: [],
+        assets: {},
+        diagnostics: {},
+        players: [],
+      },
+    });
+    await flushPromises();
+    expect(serverStore.snapshot.mapName).toBe("Tallil_RAAS_v1");
+
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.delta",
+      revision: 2,
+      delta: {
+        meta: { revision: 2 },
+        server: { layer: "Yehorivka_RAAS_v2" },
+        match: { layer: "Yehorivka_RAAS_v2" },
+      },
+    });
+    await flushPromises();
+    expect(serverStore.snapshot.mapName).toBe("Yehorivka_RAAS_v2");
+
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.delta",
+      revision: 3,
+      delta: {
+        meta: { revision: 3 },
+        server: { layer: "Unregistered_Custom_Layer" },
+        match: { layer: "Unregistered_Custom_Layer" },
+      },
+    });
+    await flushPromises();
+    expect(serverStore.snapshot.mapName).toBe("Unregistered_Custom_Layer");
+
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.delta",
+      revision: 4,
+      delta: {
+        meta: { revision: 4 },
+        server: {},
+        match: {},
+      },
+    });
+    await flushPromises();
+    expect(serverStore.snapshot.mapName).toBe("");
     store.stopStream();
   });
 });
