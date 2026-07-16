@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 from typing import Any, Dict
 
-from bzss_parser.buffered_file_writer import BufferedWriterRegistry
+from bzss_parser.buffered_file_writer import BufferedWriterRegistry, write_text_atomic
 from bzss_parser.helpers import extract_log_time, now_time_string, sha1_hex, today_string, to_json_line
 
 
@@ -93,9 +93,7 @@ class RawArchiveWriter:
                 "sizeBytes": self._segment_bytes,
             }],
         }) + "\n"
-        temporary = self._index_path.with_suffix(".json.tmp")
-        temporary.write_text(payload, encoding="utf-8", newline="")
-        temporary.replace(self._index_path)
+        write_text_atomic(self._index_path, payload)
         self._index_dirty = False
         self._last_index_write = now
 
