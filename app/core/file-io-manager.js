@@ -264,6 +264,7 @@ export class FileIOManager {
       this.metrics.errors += 1;
       this.rememberError(error);
     });
+    await once(writer, "open");
 
     entry = {
       key,
