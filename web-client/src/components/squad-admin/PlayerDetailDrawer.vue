@@ -3599,4 +3599,222 @@ onUnmounted(() => {
   display: none !important;
 }
 
+
+/* ── Player detail floating window: layout pass ───────────────────────────
+ * Keep the existing HUD content and actions, but make the shell deterministic:
+ * the header keeps its natural height, the body owns scrolling, and the
+ * dashboard columns collapse only when the available width really requires it.
+ */
+.floating-window-layer {
+  padding: clamp(10px, 2vw, 24px);
+  overflow: hidden;
+}
+
+.player-detail-floating {
+  width: min(1000px, calc(100vw - 32px)) !important;
+  height: min(780px, calc(var(--app-viewport-height) - 32px)) !important;
+  max-height: calc(var(--app-viewport-height) - 32px) !important;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+}
+
+.player-detail-floating > .hud-accent-bar {
+  flex: 0 0 auto;
+}
+
+.drawer-header-hud {
+  flex: 0 0 auto;
+  gap: 14px;
+  min-height: 0;
+  padding: 16px 18px 14px;
+}
+
+.hud-profile-row {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  min-height: 64px;
+}
+
+.hud-title-block {
+  padding-top: 2px;
+}
+
+.hud-name-row {
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.drawer-player-name {
+  max-width: clamp(150px, 30vw, 360px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-detail-floating .hud-header-actions {
+  gap: 5px;
+  margin-left: auto;
+}
+
+.hud-header-identities {
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.hud-header-ident {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-session-ctx-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 0;
+}
+
+.hud-ctx-item {
+  min-height: 56px;
+  padding: 8px 10px;
+}
+
+.drawer-body-hud {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+  scrollbar-gutter: stable;
+}
+
+.hud-dashboard-grid {
+  grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.92fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.hud-column {
+  min-width: 0;
+  gap: 12px;
+}
+
+.hud-pane-section {
+  min-width: 0;
+  gap: 10px;
+  padding: 13px 14px;
+  border-radius: 12px;
+}
+
+.hud-section-header {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.player-stat-line.scoreboard-line {
+  margin: 4px 0 0 !important;
+  gap: 6px !important;
+}
+
+.actions-grid-hud {
+  gap: 8px;
+}
+
+.hud-action-btn-styled {
+  min-width: 0;
+  min-height: 46px;
+  padding: 8px 6px;
+}
+
+.hud-accordion-btn {
+  padding: 10px 12px;
+}
+
+.friends-scroll-container {
+  max-height: 180px;
+}
+
+@media (max-width: 860px), (max-height: 700px) {
+  .floating-window-layer {
+    padding: 8px;
+  }
+
+  .player-detail-floating {
+    width: calc(100vw - 16px) !important;
+    height: calc(var(--app-viewport-height) - 16px) !important;
+    max-height: calc(var(--app-viewport-height) - 16px) !important;
+  }
+
+  .drawer-header-hud {
+    padding: 12px 12px 10px;
+    gap: 10px;
+  }
+
+  .hud-profile-row {
+    gap: 10px;
+  }
+
+  .hud-avatar-frame {
+    width: 46px;
+    height: 46px;
+  }
+
+  .hud-name-row {
+    flex-wrap: wrap;
+  }
+
+  .player-detail-floating .hud-header-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-left: 0;
+  }
+
+  .hud-session-ctx-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .hud-ctx-item-wide {
+    grid-column: span 2;
+  }
+
+  .drawer-body-hud {
+    padding: 12px 12px 16px;
+  }
+
+  .hud-dashboard-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .hud-session-ctx-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hud-ctx-item-wide {
+    grid-column: 1 / -1;
+  }
+
+  .hud-section-header {
+    align-items: flex-start;
+  }
+
+  .hud-section-subtitle {
+    width: 100%;
+  }
+
+  .actions-grid-hud {
+    grid-template-columns: 1fr;
+  }
+
+  .hud-header-identities {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
 </style>
