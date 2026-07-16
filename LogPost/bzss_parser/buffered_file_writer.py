@@ -33,10 +33,12 @@ class BufferedFileWriter:
         *,
         flush_interval_ms: int = 75,
         batch_bytes: int = 128 * 1024,
+        flush_first_write: bool = False,
     ) -> None:
         self.path = Path(path)
         self.flush_interval_s = max(0.01, int(flush_interval_ms) / 1000.0)
         self.batch_bytes = max(4096, int(batch_bytes))
+        self.flush_first_write = bool(flush_first_write)
         self.file: Optional[TextIO] = None
         self.pending: list[str] = []
         self.pending_bytes = 0
@@ -52,7 +54,9 @@ class BufferedFileWriter:
         self.pending.append(value)
         self.pending_bytes += len(value.encode("utf-8"))
         self.writes += 1
-        if self.pending_bytes >= self.batch_bytes:
+        if self.flush_first_write and self.flushes == 0:
+            self.flush(force=True)
+        elif self.pending_bytes >= self.batch_bytes:
             self.flush()
 
     def flush(self, force: bool = False) -> None:
@@ -93,9 +97,11 @@ class BufferedWriterRegistry:
         *,
         flush_interval_ms: int = 75,
         batch_bytes: int = 128 * 1024,
+        flush_first_write: bool = True,
     ) -> None:
         self.flush_interval_ms = flush_interval_ms
         self.batch_bytes = batch_bytes
+        self.flush_first_write = flush_first_write
         self.writers: Dict[str, BufferedFileWriter] = {}
 
     def get(self, path: str | Path, **kwargs) -> BufferedFileWriter:
@@ -105,6 +111,7 @@ class BufferedWriterRegistry:
             options = {
                 "flush_interval_ms": self.flush_interval_ms,
                 "batch_bytes": self.batch_bytes,
+                "flush_first_write": self.flush_first_write,
                 **kwargs,
             }
             writer = BufferedFileWriter(path, **options)
