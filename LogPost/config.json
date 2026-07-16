@@ -20,7 +20,11 @@
     "write_v2_events": true,
     "write_legacy_events": false,
     "write_v2_raw_archive": true,
-    "write_legacy_raw_archive": false
+    "write_legacy_raw_archive": false,
+    "flush_interval_ms": 75,
+    "batch_bytes": 131072,
+    "index_interval_ms": 5000,
+    "index_batch_bytes": 1048576
   },
   "preserve": {
     "enabled": true,
@@ -69,7 +73,7 @@
   "checkpoint": {
     "flush_every_lines": 500,
     "flush_every_ms": 500,
-    "force_on_event": true
+    "force_on_event": false
   },
   "blacklist_contains": [
     "GetDefaultPawnClassForController_Implementation()",
