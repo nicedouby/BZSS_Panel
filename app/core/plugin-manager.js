@@ -179,6 +179,7 @@ export class PluginManager {
           eventBus: this.core.eventBus,
           config: this.config,
           pluginSubscriptions: this.core.pluginSubscriptions,
+          rconManager: this.core.rconManager,
           webRegistry: this.core.webRegistry,
           pluginManager: this,
           webStatus: this.core.webStatus,

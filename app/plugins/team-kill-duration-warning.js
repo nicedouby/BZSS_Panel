@@ -1,97 +1,62 @@
 // -*- coding: utf-8 -*-
 
+/**
+ * TK apology guard
+ *
+ * Deliberately consumes only the remote TEAM_KILL core event.  Log derived
+ * combat events are not subscribed to here, so one kill can never create two
+ * apology cases through the log pipeline.
+ */
 const PLUGIN_ID = "plugin.team-kill-duration-warning";
-const SUBSCRIPTIONS = [
-  ["module.combatManager", "KILL_MANAGER_EVENT"],
-  ["module.killManage", "teamKillResolved"],
+const CONFIG_KEY = "plugins.teamKillApology";
+const PAGE_ROUTE = "/tk-apology";
+const DEFAULT_DEADLINE_SECONDS = 600;
+const DEFAULT_REMINDER_SECONDS = 60;
+const MAX_HISTORY = 300;
+const APOLOGY_WORDS = [
+  "sorry", "sry", "sor", "sory", "apologize", "apologies", "my bad",
+  "抱歉", "对不起", "不好意思", "不好意思啊", "dbq", "抱一丝", "歉意",
 ];
 
 export function createPlugin(context = {}) {
-  const {
-    core = null,
-    modules = {},
-    logger = null,
-    playerRepository = null,
-    steamGameDurationService = null,
-  } = context;
-
-  const pluginLogger =
-    logger ??
-    core?.createLogger?.({
-      moduleId: PLUGIN_ID,
-      source: PLUGIN_ID,
-      channel: "module",
-    }) ??
-    core?.logger ??
-    console;
-
+  const { core = {}, modules = {}, config = null, logger = console } = context;
   const unsubscribers = [];
-  const handledEventKeys = new Map();
+  const pendingByPlayer = new Map();
+  const tkCountByPlayer = new Map();
+  const handledEventIds = new Map();
   const history = [];
+  let timer = null;
+  let runtimeConfig = readConfig(config);
   let serial = Promise.resolve();
 
   const state = {
-    enabled: true,
-    subscribed: true,
-    teamKillCount: 0,
-    warningSuccessCount: 0,
-    warningFailCount: 0,
-    lastTeamKillAt: "",
-    lastWarnAt: "",
+    lastResetAt: new Date().toISOString(),
+    lastResetReason: "startup",
     lastError: "",
-    recent: [],
+    totalTeamKills: 0,
+    totalApologies: 0,
+    totalHandled: 0,
+    totalBroadcasts: 0,
+    totalWarnings: 0,
   };
 
   function enqueue(task) {
-    const next = Promise.resolve().then(task);
-    serial = next.catch(() => { });
+    const next = serial.then(task, task);
+    serial = next.catch(() => {});
     return next;
   }
 
-  function isPluginSubscribed() {
-    const isSubscribed = core?.pluginSubscriptions?.isSubscribed;
-    if (typeof isSubscribed !== "function") return true;
-    return isSubscribed(PLUGIN_ID);
+  function isSubscribed() {
+    const check = core?.pluginSubscriptions?.isSubscribed;
+    return typeof check !== "function" || check(PLUGIN_ID) !== false;
   }
 
   function isActive() {
-    return Boolean(state.enabled) && isPluginSubscribed();
+    return runtimeConfig.enabled && isSubscribed();
   }
 
-  function pushHistory(entry) {
-    const record = {
-      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      at: new Date().toISOString(),
-      ...entry,
-    };
-    history.push(record);
-    state.recent.push(record);
-    if (history.length > 100) history.splice(0, history.length - 100);
-    if (state.recent.length > 50) state.recent.splice(0, state.recent.length - 50);
-  }
-
-  function pruneHandledKeys(now = Date.now()) {
-    for (const [key, timestamp] of handledEventKeys.entries()) {
-      if (now - timestamp > 10 * 60_000) {
-        handledEventKeys.delete(key);
-      }
-    }
-    while (handledEventKeys.size > 500) {
-      const firstKey = handledEventKeys.keys().next().value;
-      if (!firstKey) break;
-      handledEventKeys.delete(firstKey);
-    }
-  }
-
-  function buildEventKey(event = {}, record = {}) {
-    const direct = String(event?.eventId ?? record?.combatEventId ?? record?.sourceEventId ?? "").trim();
-    if (direct) return direct;
-
-    const source = String(event?.source ?? record?.sourceModule ?? "").trim();
-    const time = String(record?.time ?? event?.time ?? "").trim();
-    const attacker = String(record?.attackerName ?? record?.attacker?.name ?? "").trim();
-    const victim = String(record?.victimName ?? record?.victim?.name ?? "").trim();
-    return [source, time, attacker, victim].filter(Boolean).join("|");
+  function nowIso() {
+    return new Date().toISOString();
   }
 
   function normalizeText(value, fallback = "") {
@@ -99,402 +64,443 @@ export function createPlugin(context = {}) {
     return text || fallback;
   }
 
-  function normalizeSteamID(value) {
-    const text = String(value ?? "").trim();
-    return text || "";
+  function normalizeName(value) {
+    return normalizeText(value).toLocaleLowerCase().replace(/\s+/g, " ");
   }
 
-  function formatDuration(seconds) {
-    const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
-    if (!totalSeconds) return "未知";
-
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-
-    if (hours <= 0) return `${Math.max(1, minutes)}分钟`;
-    if (minutes <= 0) return `${hours}小时`;
-    return `${hours}小时${minutes}分钟`;
+  function normalizeIdentity(value) {
+    return normalizeText(value);
   }
 
-  function extractSide(record = {}, side = "attacker") {
-    const source = record?.[side] && typeof record[side] === "object" ? record[side] : {};
-    const prefix = side === "attacker" ? "attacker" : "victim";
-    const name = normalizeText(
-      record?.[`${prefix}Name`],
-      source.name || source.displayName || source.playerName || source.nickname || "",
-    );
-    const steamID = normalizeSteamID(
-      record?.[`${prefix}Steam64ID`]
-      ?? record?.[`${prefix}SteamId`]
-      ?? record?.[`${prefix}SteamID`]
-      ?? source.steam64ID
-      ?? source.steamID
-      ?? source.steamId
-      ?? source.steam_id
-      ?? "",
-    );
-    const eosID = normalizeText(
-      record?.[`${prefix}EOSID`]
-      ?? record?.[`${prefix}EosID`]
-      ?? source.eosID
-      ?? source.eosId
-      ?? source.eos_id
-      ?? "",
-    );
-
-    return { name, steamID, eosID };
+  function identityKey(identity = {}) {
+    const steamId = normalizeIdentity(identity.steamId ?? identity.steamID ?? identity.steam64ID);
+    if (steamId) return `steam:${steamId}`;
+    const eosId = normalizeIdentity(identity.eosId ?? identity.eosID);
+    if (eosId) return `eos:${eosId}`;
+    const name = normalizeName(identity.name ?? identity.playerName);
+    return name ? `name:${name}` : "";
   }
 
   function resolveRecord(event = {}) {
-    return event?.record ?? event?.payload?.record ?? event?.data?.record ?? event?.rejection?.record ?? null;
+    return event?.record ?? event?.payload?.record ?? event?.payload ?? event?.data?.record ?? event?.data ?? event ?? {};
   }
 
-  function isTeamKill(event = {}, record = {}) {
-    if (event?.eventName === "teamKillResolved") {
-      return true;
-    }
-
-    const type = normalizeCombatType(record?.type ?? record?.eventType ?? record?.eventName ?? "");
-    const friendlyFireType = String(record?.friendlyFireType ?? "").trim().toLowerCase();
-
-    // 明确的击杀 / 击倒标记直接允许。
-    if (
-      record?.isTeamKill
-      || record?.tk
-      || record?.teamKillReason
-      || friendlyFireType === "team_kill"
-      || friendlyFireType === "team_wound"
-      || friendlyFireType === "tk_down"
-    ) {
-      return true;
-    }
-
-    // damage / team_damage 只代表受伤，不允许显示游戏时长。
-    if (
-      type === "damage"
-      || friendlyFireType === "team_damage"
-      || friendlyFireType === "friendly_damage"
-    ) {
-      return false;
-    }
-
-    // KILL_MANAGER_EVENT 是兼容事件名，不能只靠 friendly_fire 判断。
-    // 必须同时满足：友军事件 + 类型是 wound/kill/death/tk。
-    if (event?.eventName === "KILL_MANAGER_EVENT") {
-      const isFriendly = isFriendlyFireRecord(record);
-      const isDownOrKill = type === "wound" || type === "kill" || type === "death" || type === "tk";
-      return Boolean(isFriendly && isDownOrKill);
-    }
-
-    return false;
-  }
-
-  function normalizeCombatType(value) {
-    const text = String(value ?? "").trim().toLowerCase();
-    if (text === "wounded" || text === "down" || text === "downed" || text === "tk_down") return "wound";
-    if (text === "died" || text === "dead" || text === "death") return "death";
-    if (text === "teamkill" || text === "team_kill") return "tk";
-    if (text === "damage" || text === "wound" || text === "kill" || text === "death" || text === "tk") return text;
-    return text;
-  }
-
-  function isFriendlyFireRecord(record = {}) {
-    if (record?.isFriendlyFire || record?.relation?.isFriendlyFire) return true;
-
-    const friendlyFireType = String(record?.friendlyFireType ?? "").trim().toLowerCase();
-    if (
-      friendlyFireType === "team_damage"
-      || friendlyFireType === "team_wound"
-      || friendlyFireType === "team_kill"
-      || friendlyFireType === "tk_down"
-      || friendlyFireType === "friendly_fire"
-    ) {
-      return true;
-    }
-
-    const tags = Array.isArray(record?.tags)
-      ? record.tags.map((tag) => String(tag ?? "").trim().toLowerCase())
-      : [];
-
-    if (
-      tags.includes("friendly_fire")
-      || tags.includes("combat.team_damage")
-      || tags.includes("combat.team_wound")
-      || tags.includes("combat.team_kill")
-    ) {
-      return true;
-    }
-
-    const flags = Array.isArray(record?.eventFlags) ? record.eventFlags : [];
-    return flags.some((flag) => {
-      const key = String(flag?.key ?? "").trim().toLowerCase();
-      const label = String(flag?.label ?? "").trim();
-      return (
-        key === "friendly_fire"
-        || key === "team_damage"
-        || key === "team_wound"
-        || key === "team_kill"
-        || key === "tk_down"
-        || label === "友伤"
-        || label === "TK击倒"
-        || label === "友军击杀"
-      );
-    });
-  }
-
-  function getServerId(event = {}, record = {}) {
-    return normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId ?? "");
-  }
-
-  function findLivePlayer(serverId, identity = {}) {
-    const name = normalizeText(identity.name);
-    const steamID = normalizeSteamID(identity.steamID);
-
-    if (steamID && typeof modules?.playerState?.getPlayerBySteamID === "function") {
-      const hit = modules.playerState.getPlayerBySteamID(serverId, steamID);
-      if (hit) return hit;
-    }
-
-    if (name && typeof modules?.playerState?.getPlayerByName === "function") {
-      const hit = modules.playerState.getPlayerByName(serverId, name);
-      if (hit) return hit;
-    }
-
-    return null;
-  }
-
-  async function resolveAttackerDurationSeconds(serverId, attacker = {}) {
-    const steamID = normalizeSteamID(attacker.steamID);
-    const attackerName = normalizeText(attacker.name);
-    const repo = playerRepository ?? modules?.playerDatabase ?? null;
-
-    const cachedSeconds = await readCachedDuration(repo, { steamID, name: attackerName });
-    if (cachedSeconds != null) return cachedSeconds;
-
-    if (steamID && typeof steamGameDurationService?.fetchGameDurationSeconds === "function") {
-      return await steamGameDurationService.fetchGameDurationSeconds(steamID);
-    }
-
-    if (steamID && typeof steamGameDurationService?.lookupSteamDuration === "function") {
-      const lookup = await steamGameDurationService.lookupSteamDuration(steamID, {
-        lastSeenName: attackerName || null,
-      });
-      if (lookup && typeof lookup === "object") {
-        return Number(lookup.gameSeconds ?? lookup.game_seconds ?? lookup.seconds ?? 0) || 0;
-      }
-      return Number(lookup ?? 0) || 0;
-    }
-
-    if (cachedSeconds != null) return cachedSeconds;
-    return 0;
-  }
-
-  async function readCachedDuration(repo, identity = {}) {
-    if (!repo) return null;
-
-    if (identity.steamID && typeof repo.getCachedPlayer === "function") {
-      const player = await repo.getCachedPlayer({ steamID: identity.steamID });
-      const seconds = Number(player?.game_seconds ?? player?.gameSeconds ?? 0);
-      if (Number.isFinite(seconds) && seconds > 0) return Math.floor(seconds);
-    }
-
-    if (identity.steamID && typeof repo.listPlayersBySteamIDs === "function") {
-      const players = await repo.listPlayersBySteamIDs([identity.steamID]);
-      const player = Array.isArray(players) ? players[0] : null;
-      const seconds = Number(player?.game_seconds ?? player?.gameSeconds ?? 0);
-      if (Number.isFinite(seconds) && seconds > 0) return Math.floor(seconds);
-    }
-
-    if (identity.name && typeof repo.getCachedPlayer === "function") {
-      const player = await repo.getCachedPlayer({ name: identity.name });
-      const seconds = Number(player?.game_seconds ?? player?.gameSeconds ?? 0);
-      if (Number.isFinite(seconds) && seconds > 0) return Math.floor(seconds);
-    }
-
-    return null;
-  }
-
-  function resolvePlayerIdentity(serverId, sideIdentity = {}) {
-    const livePlayer = findLivePlayer(serverId, sideIdentity);
-    if (livePlayer) {
-      return {
-        name: normalizeText(livePlayer.name, sideIdentity.name),
-        steamID: normalizeSteamID(livePlayer.steamID ?? livePlayer.steam64ID ?? sideIdentity.steamID),
-      };
-    }
-
+  function resolveIdentity(record = {}, side = "attacker") {
+    const nested = record?.[side] && typeof record[side] === "object" ? record[side] : {};
+    const prefix = side === "attacker" ? "attacker" : "victim";
     return {
-      name: normalizeText(sideIdentity.name),
-      steamID: normalizeSteamID(sideIdentity.steamID),
+      name: normalizeText(record?.[`${prefix}Name`] ?? record?.[side === "attacker" ? "killerName" : "victim"] ?? nested.name ?? nested.playerName),
+      steamId: normalizeIdentity(record?.[`${prefix}Steam64ID`] ?? record?.[`${prefix}SteamId`] ?? record?.[`${prefix}SteamID`] ?? nested.steamId ?? nested.steamID ?? nested.steam64ID),
+      eosId: normalizeIdentity(record?.[`${prefix}EOSID`] ?? record?.[`${prefix}EosID`] ?? nested.eosId ?? nested.eosID),
+      playerId: normalizeIdentity(record?.[`${prefix}PlayerID`] ?? record?.[`${prefix}PlayerId`] ?? nested.playerId ?? nested.playerID),
     };
   }
 
-  function makeWarningMessage(attackerName, durationText) {
-    return `[BZSS]攻击你的友军 ${attackerName} 游戏时长为${durationText}`;
+  function resolveLivePlayer(serverId, identity) {
+    const playerState = modules?.playerState;
+    const live = identity.steamId && playerState?.getPlayerBySteamID?.(serverId, identity.steamId)
+      || identity.eosId && playerState?.getPlayerByEOSID?.(serverId, identity.eosId)
+      || identity.playerId && playerState?.getPlayerByControllerID?.(serverId, identity.playerId)
+      || identity.name && playerState?.getPlayerByName?.(serverId, identity.name)
+      || null;
+    if (!live) return identity;
+    return {
+      name: normalizeText(live.name, identity.name),
+      steamId: normalizeIdentity(live.steamId ?? live.steamID ?? live.steam64ID ?? identity.steamId),
+      eosId: normalizeIdentity(live.eosId ?? live.eosID ?? identity.eosId),
+      playerId: normalizeIdentity(live.playerId ?? live.playerID ?? live.controllerID ?? identity.playerId),
+      playerKey: normalizeIdentity(live.playerKey),
+    };
   }
 
-  async function sendWarning({ serverId, victim, attacker, eventId }) {
-    const adminWarn = modules?.adminWarn;
-    const sender = adminWarn?.sendAdminWarn ?? adminWarn?.warnPlayer;
-    if (typeof sender !== "function") {
-      throw new Error("adminWarn API unavailable");
+  function buildEventId(event, record) {
+    return normalizeText(event?.eventId ?? record?.sourceEventId ?? record?.id)
+      || [record?.time ?? event?.time, record?.attackerSteam64ID ?? record?.attackerName, record?.victimSteam64ID ?? record?.victimName].map(normalizeText).join("|");
+  }
+
+  function alreadyHandled(eventId) {
+    const now = Date.now();
+    for (const [key, time] of handledEventIds) {
+      if (now - time > 15 * 60_000) handledEventIds.delete(key);
     }
+    if (!eventId || handledEventIds.has(eventId)) return true;
+    handledEventIds.set(eventId, now);
+    return false;
+  }
 
-    const victimIdentity = resolvePlayerIdentity(serverId, victim);
-    if (!victimIdentity.name) {
-      throw new Error("victim name unavailable");
-    }
+  function pushHistory(entry = {}) {
+    history.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, at: nowIso(), ...entry });
+    if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+  }
 
-    const attackerDurationSeconds = await resolveAttackerDurationSeconds(serverId, attacker);
-    const message = makeWarningMessage(attacker.name || "未知玩家", formatDuration(attackerDurationSeconds));
-
-    return sender.call(adminWarn, {
-      targetName: victimIdentity.name,
-      targetSteamId: victimIdentity.steamID || undefined,
+  async function warnPlayer(target, message, reason, relatedEventId) {
+    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
+    if (typeof sender !== "function") throw new Error("adminWarn API unavailable");
+    const result = await sender.call(modules.adminWarn, {
+      targetName: target.name,
+      targetSteamId: target.steamId || undefined,
+      targetEosId: target.eosId || undefined,
       message,
-      reason: "team_kill_duration_warning",
+      reason,
       sourceModule: PLUGIN_ID,
-      relatedEventId: eventId,
+      relatedEventId,
       system: true,
     });
+    if (result?.success) state.totalWarnings += 1;
+    return result;
   }
 
-  async function handleCombatEvent(event = {}) {
+  async function broadcast(message, reason, relatedEventId) {
+    const sender = modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage;
+    if (typeof sender !== "function") throw new Error("adminWarn broadcast API unavailable");
+    const result = await sender.call(modules.adminWarn, {
+      message,
+      reason,
+      sourceModule: PLUGIN_ID,
+      relatedEventId,
+      system: true,
+    });
+    if (result?.success) state.totalBroadcasts += 1;
+    return result;
+  }
+
+  function remainingSeconds(caseItem, now = Date.now()) {
+    return Math.max(0, Math.ceil((caseItem.deadlineAtMs - now) / 1000));
+  }
+
+  function makeInitialWarning(caseItem) {
+    return `[TK处理] 你击杀了队友 ${caseItem.victim.name || "未知玩家"}，请在 ${runtimeConfig.deadlineSeconds} 秒内输入 Sorry 道歉。`;
+  }
+
+  function makeReminder(caseItem, remaining) {
+    return `[TK处理] 你仍未输入 Sorry，请在 ${remaining} 秒内完成道歉，否则将被处理。`;
+  }
+
+  function makeBroadcast(caseItem, tkCount) {
+    return `[TK] ${caseItem.attacker.name || "未知玩家"} 攻击了队友 ${caseItem.victim.name || "未知玩家"}，本局已 PK ${tkCount} 名队友。`;
+  }
+
+  async function handleTeamKill(event = {}) {
+    // This check is intentionally strict: this plugin does not consume
+    // combat-state, combat-clean, or any log parser event.
+    if (String(event?.eventName ?? "TEAM_KILL").toUpperCase() !== "TEAM_KILL") return null;
     const record = resolveRecord(event);
-    if (!record || !isTeamKill(event, record)) return null;
+    const eventId = buildEventId(event, record);
+    if (alreadyHandled(eventId)) return null;
+    if (!isActive()) return null;
 
-    const key = buildEventKey(event, record);
-    const now = Date.now();
-    pruneHandledKeys(now);
-    if (handledEventKeys.has(key)) return null;
-    handledEventKeys.set(key, now);
-
-    state.teamKillCount += 1;
-    state.lastTeamKillAt = new Date().toISOString();
-
-    const serverId = getServerId(event, record);
-    const attacker = resolvePlayerIdentity(serverId, extractSide(record, "attacker"));
-    const victim = resolvePlayerIdentity(serverId, extractSide(record, "victim"));
-    const eventId = normalizeText(event?.eventId ?? record?.combatEventId ?? record?.sourceEventId ?? key);
-
-    if (!isActive()) {
-      pushHistory({
-        kind: "teamKill",
-        success: false,
-        skipped: true,
-        reason: !state.enabled ? "plugin_disabled" : "plugin_unsubscribed",
-        serverId,
-        attacker,
-        victim,
-        eventId,
-      });
+    const serverId = normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId);
+    const attacker = resolveLivePlayer(serverId, resolveIdentity(record, "attacker"));
+    const victim = resolveLivePlayer(serverId, resolveIdentity(record, "victim"));
+    const playerKey = identityKey(attacker);
+    if (!playerKey || !attacker.name) {
+      pushHistory({ kind: "team_kill", eventId, success: false, skipped: true, reason: "attacker_identity_missing", serverId, attacker, victim });
       return null;
     }
 
-    return enqueue(async () => {
+    const now = Date.now();
+    const tkCount = (tkCountByPlayer.get(playerKey)?.count ?? 0) + 1;
+    tkCountByPlayer.set(playerKey, { count: tkCount, attacker: { ...attacker }, updatedAt: nowIso() });
+    state.totalTeamKills += 1;
+
+    const previous = pendingByPlayer.get(playerKey);
+    const caseItem = {
+      id: eventId || `tk:${now}:${Math.random().toString(16).slice(2)}`,
+      eventId,
+      serverId,
+      attacker,
+      victim,
+      tkCount,
+      createdAt: nowIso(),
+      createdAtMs: now,
+      deadlineAtMs: now + runtimeConfig.deadlineSeconds * 1000,
+      deadlineAt: new Date(now + runtimeConfig.deadlineSeconds * 1000).toISOString(),
+      lastReminderAtMs: now,
+      reminderCount: 0,
+      status: "pending",
+      source: "remote_TEAM_KILL",
+    };
+    pendingByPlayer.set(playerKey, caseItem);
+
+    await enqueue(async () => {
       try {
-        const result = await sendWarning({ serverId, victim, attacker, eventId });
-        state.warningSuccessCount += 1;
-        state.lastWarnAt = new Date().toISOString();
-        state.lastError = "";
-        pushHistory({
-          kind: "teamKill",
-          success: true,
-          skipped: false,
-          serverId,
-          attacker,
-          victim,
-          eventId,
-          message: result?.message ?? makeWarningMessage(attacker.name || "未知玩家", "未知"),
-          commandText: result?.commandText ?? "",
-          relatedEventId: result?.relatedEventId ?? eventId,
-        });
-        return result;
+        await broadcast(makeBroadcast(caseItem, tkCount), "tk_apology_broadcast", caseItem.id);
+        await warnPlayer(attacker, makeInitialWarning(caseItem), "tk_apology_initial", caseItem.id);
+        pushHistory({ kind: "team_kill", success: true, serverId, eventId: caseItem.id, attacker, victim, tkCount, replacedPending: Boolean(previous) });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        state.warningFailCount += 1;
-        state.lastError = errorMessage;
-        pushHistory({
-          kind: "teamKill",
-          success: false,
-          skipped: false,
-          serverId,
-          attacker,
-          victim,
-          eventId,
-          errorMessage,
-        });
-        pluginLogger?.warn?.(`[TeamKillDurationWarning] warn failed: ${errorMessage}`);
-        return {
-          success: false,
-          skipped: false,
-          errorMessage,
-        };
+        state.lastError = error instanceof Error ? error.message : String(error);
+        pushHistory({ kind: "team_kill", success: false, serverId, eventId: caseItem.id, attacker, victim, tkCount, error: state.lastError });
+        logger?.warn?.(`[TKApology] initial notification failed: ${state.lastError}`);
       }
     });
+    return caseItem;
+  }
+
+  function isApology(message) {
+    const normalized = normalizeName(message);
+    return normalized && APOLOGY_WORDS.some((word) => normalized.includes(normalizeName(word)));
+  }
+
+  function resolveChatIdentity(event = {}) {
+    const record = event?.record ?? event?.payload ?? event?.data ?? event;
+    return {
+      name: normalizeText(record?.playerName ?? record?.name),
+      steamId: normalizeIdentity(record?.steamId ?? record?.steamID),
+      eosId: normalizeIdentity(record?.eosId ?? record?.eosID),
+      playerId: normalizeIdentity(record?.playerId ?? record?.playerID),
+    };
+  }
+
+  async function handleChat(event = {}) {
+    const record = event?.record ?? event?.payload ?? event?.data ?? event;
+    const message = normalizeText(record?.message);
+    if (!isActive() || !isApology(message)) return null;
+    const identity = resolveChatIdentity(event);
+    let playerKey = identityKey(identity);
+    let caseItem = playerKey ? pendingByPlayer.get(playerKey) : null;
+    if (!caseItem && identity.name) {
+      for (const [key, item] of pendingByPlayer) {
+        if (normalizeName(item.attacker.name) === normalizeName(identity.name)) {
+          playerKey = key;
+          caseItem = item;
+          break;
+        }
+      }
+    }
+    if (!caseItem || !playerKey) return null;
+    if (remainingSeconds(caseItem) <= 0) return null;
+
+    pendingByPlayer.delete(playerKey);
+    state.totalApologies += 1;
+    await enqueue(async () => {
+      try {
+        await warnPlayer(caseItem.attacker, `[TK处理] 已收到你的道歉。`, "tk_apology_received", caseItem.id);
+        pushHistory({ kind: "apology", success: true, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, message, tkCount: caseItem.tkCount });
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : String(error);
+        pushHistory({ kind: "apology", success: false, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, message, error: state.lastError });
+      }
+    });
+    return caseItem;
+  }
+
+  async function executeHandling(caseItem) {
+    const request = {
+      serverId: caseItem.serverId,
+      name: caseItem.attacker.name,
+      steamId: caseItem.attacker.steamId,
+      eosId: caseItem.attacker.eosId,
+      playerId: caseItem.attacker.playerId,
+      playerKey: caseItem.attacker.playerKey,
+      reason: "TK apology timeout",
+      source: PLUGIN_ID,
+      system: true,
+    };
+    const action = runtimeConfig.timeoutAction;
+    if (action === "remove_from_squad") {
+      const result = await modules?.squadManagement?.executeAction?.({ ...request, type: "remove_from_squad" });
+      if (!result) throw new Error("squadManagement API unavailable");
+      return result;
+    }
+    if (action === "kick_player") {
+      const result = await modules?.squadManagement?.executeAction?.({ ...request, type: "kick_player" });
+      if (!result) throw new Error("squadManagement API unavailable");
+      return result;
+    }
+    if (action === "kill_player") {
+      // AdminSlay is name-based on Squad RCON; do not pass a controller id
+      // here because it is not a stable RCON player identifier.
+      const target = request.name || request.playerId;
+      if (!target || typeof core?.rconManager?.dispatchCommand !== "function") {
+        throw new Error("RCON kill command unavailable");
+      }
+      return await core.rconManager.dispatchCommand({
+        command: `AdminSlay ${escapeRconArgument(target)}`,
+        requestedBy: PLUGIN_ID,
+        reason: "tk_apology_timeout",
+        sourceEventId: caseItem.id,
+        priority: "high",
+        system: true,
+      });
+    }
+    throw new Error(`Unsupported timeout action: ${action}`);
+  }
+
+  async function tick() {
+    if (!isActive()) return;
+    const now = Date.now();
+    for (const [playerKey, caseItem] of [...pendingByPlayer]) {
+      const remaining = remainingSeconds(caseItem, now);
+      if (remaining <= 0) {
+        pendingByPlayer.delete(playerKey);
+        await enqueue(async () => {
+          try {
+            const result = await executeHandling(caseItem);
+            state.totalHandled += 1;
+            pushHistory({ kind: "timeout_handled", success: Boolean(result?.ok ?? result?.success), eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, action: runtimeConfig.timeoutAction, result });
+          } catch (error) {
+            state.lastError = error instanceof Error ? error.message : String(error);
+            pushHistory({ kind: "timeout_handled", success: false, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, action: runtimeConfig.timeoutAction, error: state.lastError });
+            logger?.warn?.(`[TKApology] timeout handling failed: ${state.lastError}`);
+          }
+        });
+        continue;
+      }
+      if (now - caseItem.lastReminderAtMs < runtimeConfig.reminderSeconds * 1000) continue;
+      caseItem.lastReminderAtMs = now;
+      caseItem.reminderCount += 1;
+      await enqueue(async () => {
+        try {
+          await warnPlayer(caseItem.attacker, makeReminder(caseItem, remaining), "tk_apology_reminder", caseItem.id);
+          pushHistory({ kind: "reminder", success: true, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, remaining });
+        } catch (error) {
+          state.lastError = error instanceof Error ? error.message : String(error);
+          pushHistory({ kind: "reminder", success: false, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, remaining, error: state.lastError });
+        }
+      });
+    }
+  }
+
+  function resetMatch(reason = "match_reset") {
+    const pendingCount = pendingByPlayer.size;
+    pendingByPlayer.clear();
+    tkCountByPlayer.clear();
+    handledEventIds.clear();
+    state.totalTeamKills = 0;
+    state.totalApologies = 0;
+    state.totalHandled = 0;
+    state.totalBroadcasts = 0;
+    state.totalWarnings = 0;
+    state.lastError = "";
+    state.lastResetAt = nowIso();
+    state.lastResetReason = reason;
+    pushHistory({ kind: "match_reset", success: true, reason, pendingCount });
+    return getState();
+  }
+
+  function updateConfig(patch = {}) {
+    runtimeConfig = { ...runtimeConfig, ...normalizeConfig(patch, runtimeConfig) };
+    config?.set?.(CONFIG_KEY, { ...runtimeConfig });
+    void config?.save?.().catch(() => {});
+    return getState();
+  }
+
+  function setEnabled(enabled) {
+    return updateConfig({ enabled: Boolean(enabled) });
   }
 
   function getState() {
+    const now = Date.now();
+    const pending = [...pendingByPlayer.values()]
+      .map((item) => ({ ...item, remainingSeconds: remainingSeconds(item, now) }))
+      .sort((a, b) => a.deadlineAtMs - b.deadlineAtMs);
+    const players = [...tkCountByPlayer.entries()]
+      .map(([key, item]) => ({ key, ...item }))
+      .sort((a, b) => b.count - a.count || String(b.updatedAt).localeCompare(String(a.updatedAt)));
     return {
-      enabled: state.enabled,
-      subscribed: isPluginSubscribed(),
-      teamKillCount: state.teamKillCount,
-      warningSuccessCount: state.warningSuccessCount,
-      warningFailCount: state.warningFailCount,
-      lastTeamKillAt: state.lastTeamKillAt,
-      lastWarnAt: state.lastWarnAt,
-      lastError: state.lastError,
-      recent: [...state.recent].reverse(),
+      enabled: runtimeConfig.enabled,
+      subscribed: isSubscribed(),
+      active: isActive(),
+      config: { ...runtimeConfig, apologyWords: [...APOLOGY_WORDS] },
+      summary: {
+        pending: pending.length,
+        totalTeamKills: state.totalTeamKills,
+        totalApologies: state.totalApologies,
+        totalHandled: state.totalHandled,
+        totalBroadcasts: state.totalBroadcasts,
+        totalWarnings: state.totalWarnings,
+      },
+      pending,
+      players,
       history: [...history].reverse(),
+      lastError: state.lastError,
+      lastResetAt: state.lastResetAt,
+      lastResetReason: state.lastResetReason,
     };
   }
 
   return {
     manifest: {
       id: PLUGIN_ID,
-      name: "Team Kill Duration Warning",
+      name: "TK 道歉处理",
       kind: "plugin",
-      version: "1.0.0",
-      category: "Combat",
-      description: "订阅战斗管理的团队击杀事件，向受害者发送攻击者游戏时长警告。",
+      version: "2.0.0",
+      category: "Moderation",
+      description: "仅订阅远端 TEAM_KILL 事件，要求 TK 玩家在时限内通过聊天道歉。",
     },
-
-    apiName: "teamKillDurationWarning",
-    api: {
-      getState,
-    },
+    apiName: "teamKillApology",
+    api: { getState, resetMatch, updateConfig, setEnabled, handleTeamKill, handleChat, tick },
 
     async start() {
-      if (!core?.eventBus?.onModuleEvent) {
-        pluginLogger?.warn?.("[TeamKillDurationWarning] eventBus.onModuleEvent unavailable.");
-        return;
-      }
-
-      for (const [moduleId, eventName] of SUBSCRIPTIONS) {
-        unsubscribers.push(
-          core.eventBus.onModuleEvent(moduleId, eventName, (event) => {
-            void handleCombatEvent(event);
-          }),
-        );
-      }
-
-      pluginLogger?.info?.("[TeamKillDurationWarning] plugin started.", {
-        operation: "start",
+      runtimeConfig = readConfig(config);
+      core?.webRegistry?.registerPage?.({
+        id: "web.teamKillApology",
+        title: "TK 道歉处理",
+        group: "战斗",
+        route: PAGE_ROUTE,
+        pageModule: "/pages/tk-apology.js",
+        source: PLUGIN_ID,
+        description: "远端 TK 事件的道歉、倒计时与处理状态。",
+        required: false,
+        enabled: true,
+        order: 34,
+        icon: "TK",
       });
+      if (typeof core?.eventBus?.onCoreEvent === "function") {
+        unsubscribers.push(core.eventBus.onCoreEvent("TEAM_KILL", (event) => { void handleTeamKill(event); }));
+        unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => resetMatch("round_world_bring_up")));
+      }
+      if (typeof core?.eventBus?.onModuleEvent === "function") {
+        unsubscribers.push(core.eventBus.onModuleEvent("module.chatManager", "CHAT_RECEIVED", (event) => { void handleChat(event); }));
+        unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "matchChanged", () => resetMatch("match_changed")));
+      }
+      timer = setInterval(() => { void tick(); }, 1_000);
+      timer.unref?.();
+      logger?.info?.("[TKApology] plugin started; listening only to remote TEAM_KILL.");
     },
 
     async stop() {
+      if (timer) clearInterval(timer);
+      timer = null;
       for (const unsubscribe of unsubscribers.splice(0)) {
-        try {
-          unsubscribe?.();
-        } catch { }
+        try { unsubscribe?.(); } catch {}
       }
-      handledEventKeys.clear();
-      pluginLogger?.info?.("[TeamKillDurationWarning] plugin stopped.", {
-        operation: "stop",
-      });
+      pendingByPlayer.clear();
+      tkCountByPlayer.clear();
+      handledEventIds.clear();
     },
   };
+}
+
+function readConfig(config) {
+  return normalizeConfig(config?.get?.(CONFIG_KEY, {}) ?? {}, {
+    enabled: true,
+    deadlineSeconds: DEFAULT_DEADLINE_SECONDS,
+    reminderSeconds: DEFAULT_REMINDER_SECONDS,
+    timeoutAction: "remove_from_squad",
+  });
+}
+
+function normalizeConfig(raw = {}, fallback = {}) {
+  const deadlineSeconds = positiveInteger(raw.deadlineSeconds, fallback.deadlineSeconds ?? DEFAULT_DEADLINE_SECONDS, 30, 3600);
+  const reminderSeconds = positiveInteger(raw.reminderSeconds, fallback.reminderSeconds ?? DEFAULT_REMINDER_SECONDS, 10, deadlineSeconds);
+  const action = String(raw.timeoutAction ?? fallback.timeoutAction ?? "remove_from_squad").trim();
+  return {
+    enabled: raw.enabled === undefined ? Boolean(fallback.enabled ?? true) : Boolean(raw.enabled),
+    deadlineSeconds,
+    reminderSeconds,
+    timeoutAction: ["remove_from_squad", "kill_player", "kick_player"].includes(action) ? action : "remove_from_squad",
+  };
+}
+
+function positiveInteger(value, fallback, min, max) {
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function escapeRconArgument(value) {
+  return `"${String(value ?? "").replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`;
 }
 
 export default createPlugin;

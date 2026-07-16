@@ -1259,6 +1259,60 @@ export class WebServer {
 
     }
 
+    if (url.pathname.startsWith("/api/plugins/team-kill-apology")) {
+      const pluginApi = this.getPluginApi("plugin.team-kill-duration-warning");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "TeamKillApologyUnavailable",
+          message: "TK apology plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/team-kill-apology/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/team-kill-apology/enabled" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (typeof body?.enabled !== "boolean") {
+          return this.json(res, 400, { error: "InvalidBody", message: "enabled must be boolean" });
+        }
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.setEnabled?.(body.enabled) ?? pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/team-kill-apology/config" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return this.json(res, 400, { error: "InvalidBody", message: "body must be object" });
+        }
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.updateConfig?.(body) ?? pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/team-kill-apology/reset" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.resetMatch?.("manual_web_reset") ?? pluginApi.getState?.() ?? null,
+        });
+      }
+
+      return this.json(res, 405, {
+        error: "MethodNotAllowed",
+        message: "Unsupported TK apology API route.",
+      });
+    }
+
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
     if (pluginMatch && req.method === "PATCH") {
       if (!this.requireSuperAdmin(user, res)) return;
@@ -2189,3934 +2243,470 @@ export class WebServer {
       if (url.pathname === "/api/battle-log/events" && req.method === "GET") {
         return this.json(res, 200, cleanBattleLogEventsResponseForClient({
           events: battleLog.getEvents?.({
-            serverId: battleServerId,
-            type: url.searchParams.get("type") ?? "all",
-            search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
-            limit: url.searchParams.get("limit") ?? "300",
-            offset: url.searchParams.get("offset") ?? "0",
-            playerKey: url.searchParams.get("playerKey") ?? url.searchParams.get("player") ?? "",
-          }) ?? [],
-          overview: battleLog.getOverview?.(battleServerId) ?? null,
-        }));
-      }
-
-      if (url.pathname === "/api/battle-log/player" && req.method === "GET") {
-        return this.json(res, 200, cleanBattleLogPlayerResponseForClient(battleLog.getPlayerStats?.(battleServerId, {
-          q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
-          playerKey: url.searchParams.get("playerKey") ?? "",
-          steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
-          eosID: url.searchParams.get("eosID") ?? "",
-          controllerID: url.searchParams.get("controllerID") ?? "",
-          name: url.searchParams.get("name") ?? "",
-        })));
-      }
-
-      if (url.pathname === "/api/battle-log/rates" && req.method === "GET") {
-        const windowMinutes = Number(url.searchParams.get("window") ?? 30);
-        return this.json(res, 200, {
-          rates: battleLog.getRateHistory?.(battleServerId, windowMinutes) ?? [],
-        });
-      }
-
-      if (url.pathname === "/api/battle-log/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, battleLog.clear?.(body?.serverId ?? battleServerId));
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/fair-team-balance")) {
-      const pluginApi = this.getPluginApi("plugin.fairTeamBalance");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "FairTeamBalanceUnavailable",
-          message: "Fair team balance plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/requests" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: {
-            requests: pluginApi.listRequests?.() ?? [],
-          },
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/history" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: {
-            history: await pluginApi.listHistory?.({
-              limit: Number(url.searchParams.get("limit") ?? "100") || 100,
-            }) ?? [],
-          },
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/approve" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.approveRequest?.({
-            requestId: body?.requestId,
-            direct: body?.direct === true,
-            actor: user,
-          }),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/reject" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.rejectRequest?.({
-            requestId: body?.requestId,
-            reason: body?.reason,
-            actor: user,
-          }),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/reset-period-quotas" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.resetPeriodQuotas?.("manual_period_reset", {
-            by: user?.username || user?.name || "admin",
-            serverId: this.core?.webStatus?.serverId ?? "",
-          }),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/reset-round" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.resetRound?.("manual_round_reset", {
-            by: user?.username || user?.name || "admin",
-            serverId: this.core?.webStatus?.serverId ?? "",
-          }),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/reset-player-quota" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.resetPlayerQuota?.({
-            playerKey: body?.playerKey,
-            reason: "manual_player_reset",
-            meta: {
-              by: user?.username || user?.name || "admin",
-              serverId: this.core?.webStatus?.serverId ?? "",
-            },
-          }),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/fair-team-balance/clear-history" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.clearHistory?.(),
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {
-      const pluginApi = this.getPluginApi("plugin.pjscAverageDuration");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "PjscAverageDurationUnavailable",
-          message: "PJSC average duration plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/pjsc-average-duration/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/pjsc-average-duration/history" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: {
-            history: pluginApi.getHistory?.(Number(url.searchParams.get("limit") ?? "50") || 50) ?? [],
-          },
-        });
-      }
-
-      if (url.pathname === "/api/plugins/pjsc-average-duration/simulate" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.simulateChatMessage?.(body ?? {}),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/pjsc-average-duration/broadcast" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.broadcastNow?.(body?.reason ?? "manual_trigger"),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/pjsc-average-duration/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.clearHistory?.() ?? null,
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/admin-camera-duration")) {
-      const pluginApi = this.getPluginApi("plugin.adminCameraDuration");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "AdminCameraDurationUnavailable",
-          message: "Admin camera duration plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/admin-camera-duration/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/draw-vote-guard")) {
-      const pluginApi = this.getPluginApi("plugin.drawVoteGuard");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "DrawVoteGuardUnavailable",
-          message: "Draw vote guard plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/draw-vote-guard/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/draw-vote-guard/simulate" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.simulateTrigger?.(body ?? {}),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/draw-vote-guard/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.clearHistory?.() ?? null,
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/welcome-join-warning")) {
-      const pluginApi = this.getPluginApi("welcome-join-warning");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "WelcomeJoinWarningUnavailable",
-          message: "Welcome join warning plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/welcome-join-warning/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/welcome-join-warning/recent-events" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getRecentEvents?.(Number(url.searchParams.get("limit") ?? "50") || 50) ?? [],
-        });
-      }
-
-      if (url.pathname === "/api/plugins/welcome-join-warning/simulate" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.simulateJoin?.(body ?? {}),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/welcome-join-warning/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.clearHistory?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/welcome-join-warning/clear-events" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.clearRecentEvents?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/welcome-join-warning/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.updateConfig?.(body ?? {}),
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/tactical-report")) {
-      const pluginApi = this.getPluginApi("plugin.tacticalReport");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "TacticalReportUnavailable",
-          message: "Tactical report plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getConfig?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.updateConfig?.(body ?? {}),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.clearHistory?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/recent" && req.method === "GET") {
-        const limit = Number(url.searchParams.get("limit") ?? "100") || 100;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.()?.recentRecords?.slice(0, limit) ?? [],
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/logs" && req.method === "GET") {
-        const limit = Number(url.searchParams.get("limit") ?? "100") || 100;
-        const logs = pluginApi.getLogs?.() ?? pluginApi.getState?.()?.history ?? [];
-        return this.json(res, 200, {
-          ok: true,
-          data: logs.slice(0, limit),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/tactical-report/user-codes" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getUserCodes?.() ?? pluginApi.getState?.()?.userCodes ?? {},
-        });
-      }
-
-      const deleteUserCodeMatch = url.pathname.match(/^\/api\/plugins\/tactical-report\/user-codes\/([^/]+)\/([^/]+)$/);
-      if (deleteUserCodeMatch && req.method === "DELETE") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.deleteUserCode?.(
-            decodeURIComponent(deleteUserCodeMatch[1]),
-            decodeURIComponent(deleteUserCodeMatch[2]),
-          ) ?? { ok: false, error: "Unavailable" },
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
-      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/enabled" && req.method === "PATCH") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        if (typeof body?.enabled !== "boolean") {
-          return this.json(res, 400, { error: "InvalidBody", message: "enabled must be boolean" });
-        }
-        const current = this.core.config?.get?.("plugins.stepwiseSquadPlaytimeGuard", {}) ?? {};
-        this.core.config?.set?.("plugins.stepwiseSquadPlaytimeGuard", { ...current, enabled: body.enabled });
-        await this.core.config?.save?.().catch(() => {});
-        return this.json(res, 200, { ok: true, enabled: body.enabled });
-      }
-
-      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/config" && req.method === "PATCH") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        if (!body || typeof body !== "object" || Array.isArray(body)) {
-          return this.json(res, 400, { error: "InvalidBody", message: "body must be object" });
-        }
-        const current = this.core.config?.get?.("plugins.stepwiseSquadPlaytimeGuard", {}) ?? {};
-        this.core.config?.set?.("plugins.stepwiseSquadPlaytimeGuard", { ...current, ...body });
-        await this.core.config?.save?.().catch(() => {});
-        const pluginApiForState = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
-        return this.json(res, 200, { ok: true, data: pluginApiForState?.getState?.() ?? null });
-      }
-
-      const pluginApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "StepwiseSquadPlaytimeGuardUnavailable",
-          message: "Stepwise squad playtime guard plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/simulate" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.simulateCreation?.(body ?? {}),
-        });
-      }
-
-    }
-
-    if (url.pathname.startsWith("/api/plugins/panel-ban")) {
-      const pluginApi = this.getPluginApi("plugin.panelBan");
-      if (!pluginApi) {
-        return this.json(res, 404, {
-          error: "PanelBanUnavailable",
-          message: "Panel ban plugin is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/panel-ban/state" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.getState?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: pluginApi.listEntries?.({
-            status: url.searchParams.get("status") ?? "all",
-            search: url.searchParams.get("search") ?? "",
-            includeExpired: url.searchParams.get("includeExpired") !== "false",
-          }) ?? [],
-        });
-      }
-
-      if (url.pathname === "/api/plugins/panel-ban/load" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.load?.(),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/panel-ban/reload" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.reload?.(),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/panel-ban/rescan" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.rescan?.(body?.serverId ?? core.webStatus?.serverId ?? ""),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          data: await pluginApi.createEntry?.({
-            ...body,
-            actor: user,
-            createdBy: user?.username ?? "",
-          }),
-        });
-      }
-
-      if (url.pathname.startsWith("/api/plugins/panel-ban/entries/")) {
-        const entryId = decodeURIComponent(url.pathname.slice("/api/plugins/panel-ban/entries/".length));
-        if (!entryId) {
-          return this.json(res, 400, {
-            error: "InvalidBanEntryId",
-            message: "Ban entry id is required.",
-          });
-        }
-
-        if (req.method === "PATCH") {
-          if (!this.requireSuperAdmin(user, res)) return;
-          const body = await this.readJsonBody(req);
-          return this.json(res, 200, {
-            ok: true,
-            data: await pluginApi.updateEntry?.(entryId, {
-              ...body,
-              actor: user,
-              updatedBy: user?.username ?? "",
-            }),
-          });
-        }
-
-        if (req.method === "DELETE") {
-          if (!this.requireSuperAdmin(user, res)) return;
-          return this.json(res, 200, {
-            ok: true,
-            data: await pluginApi.deleteEntry?.(entryId, {
-              actor: user,
-            }),
-          });
-        }
-      }
-    }
-
-    if (url.pathname.startsWith("/api/modules/player-session-records")) {
-      const moduleApi = this.modules.playerSessionRecords;
-      if (!moduleApi) {
-        return this.json(res, 404, {
-          error: "PlayerSessionRecordsUnavailable",
-          message: "Player session records module is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/modules/player-session-records/state" && req.method === "GET") {
-        const limit = Number(url.searchParams.get("limit") ?? "200") || 200;
-        return this.json(res, 200, {
-          ok: true,
-          data: moduleApi.getState?.(limit) ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/modules/player-session-records/records" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          data: moduleApi.getRecords?.({
-            limit: Number(url.searchParams.get("limit") ?? "200") || 200,
-            kind: url.searchParams.get("kind") ?? "all",
-            serverId: url.searchParams.get("serverId") ?? "",
-            playerName: url.searchParams.get("playerName") ?? "",
-          }) ?? [],
-        });
-      }
-
-      if (url.pathname === "/api/modules/player-session-records/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, {
-          ok: true,
-          data: moduleApi.clearRecords?.() ?? null,
-        });
-      }
-    }
-
-    if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
-      const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
-      if (!infantryCombatEnhancer) {
-        return this.json(res, 404, {
-          error: "InfantryCombatEnhancerUnavailable",
-          message: "Infantry combat enhancer module is not loaded.",
-        });
-      }
-
-      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "GET") {
-        return this.json(res, 200, {
-          ok: true,
-          config: infantryCombatEnhancer.getConfig?.() ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        const body = await this.readJsonBody(req);
-        return this.json(res, 200, {
-          ok: true,
-          config: await infantryCombatEnhancer.updateConfig?.(body ?? {}),
-        });
-      }
-
-      if (url.pathname === "/api/plugins/infantry-combat-enhancer/events" && req.method === "GET") {
-        const filter = {
-          serverId: url.searchParams.get("serverId") ?? "",
-          type: url.searchParams.get("type") ?? "all",
-          warning: url.searchParams.get("warning") ?? "all",
-          relation: url.searchParams.get("relation") ?? "all",
-          weapon: url.searchParams.get("weapon") ?? "all",
-          search: url.searchParams.get("search") ?? "",
-          limit: url.searchParams.get("limit") ?? "100",
-          offset: url.searchParams.get("offset") ?? "0",
-        };
-        return this.json(res, 200, {
-          events: infantryCombatEnhancer.getEvents?.(filter) ?? [],
-          overview: infantryCombatEnhancer.getOverview?.(filter) ?? null,
-        });
-      }
-
-      if (url.pathname === "/api/plugins/infantry-combat-enhancer/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
-        return this.json(res, 200, infantryCombatEnhancer.clear?.() ?? { ok: true, cleared: 0 });
-      }
-    }
-
-    if (url.pathname === "/api/player-database/list") {
-      const result = await this.modules.playerDatabase.listPlayers({
-        query: url.searchParams.get("q") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "100",
-        offset: url.searchParams.get("offset") ?? "0",
-        sort: url.searchParams.get("sort") ?? "updated_desc",
-      });
-      return this.json(res, 200, result);
-    }
-
-    if (url.pathname === "/api/player-database/detail") {
-      const playerId = url.searchParams.get("id");
-      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail", playerId, async () => {
-        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
-        if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
-        return this.json(res, 200, detail);
-      });
-    }
-
-    if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(
-        res,
-        200,
-        await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.getCurrentServerId("")),
-      );
-    }
-
-    if (url.pathname === "/api/db/stats") {
-      return this.runTimedPlayerDatabaseQuery("/api/db/stats", null, async () => this.json(res, 200, await this.modules.playerDatabase.getStats({
-        top: url.searchParams.get("top") ?? "10",
-        days: url.searchParams.get("days") ?? "14",
-      })));
-    }
-
-    if (url.pathname === "/api/player-database/detail/aliases") {
-      const playerId = url.searchParams.get("id");
-      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/aliases", playerId, async () => {
-        return this.json(res, 200, {
-          items: await this.modules.playerDatabase.listPlayerAliases(playerId, {
-            limit: url.searchParams.get("limit") ?? "12",
-            offset: url.searchParams.get("offset") ?? "0",
-          }),
-        });
-      });
-    }
-
-    if (url.pathname === "/api/player-database/detail/ips") {
-      const playerId = url.searchParams.get("id");
-      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/ips", playerId, async () => {
-        return this.json(res, 200, {
-          items: await this.modules.playerDatabase.listPlayerIps(playerId, {
-            limit: url.searchParams.get("limit") ?? "12",
-            offset: url.searchParams.get("offset") ?? "0",
-          }),
-        });
-      });
-    }
-
-    if (url.pathname === "/api/player-database/detail/steam-friends") {
-      const playerId = url.searchParams.get("id");
-      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/steam-friends", playerId, async () => {
-        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
-        if (!detail?.player?.steam_id) {
-          return this.json(res, 200, { items: [] });
-        }
-        const steamID = detail.player.steam_id;
-
-        let friends = await this.modules.playerDatabase.listSteamFriends(playerId);
-        const staleThreshold = 24 * 60 * 60 * 1000;
-        const force = url.searchParams.get("force") === "true";
-        const isStale = friends.length === 0 || force || (friends[0]?.updated_at && (Date.now() - friends[0].updated_at > staleThreshold));
-
-        const playtimeApi = this.modules.playtime?.api ?? this.modules.playtime;
-        if (isStale && playtimeApi?.fetchSteamFriends) {
-          try {
-            const fetchedFriends = await playtimeApi.fetchSteamFriends(steamID);
-            await this.modules.playerDatabase.upsertSteamFriends(playerId, fetchedFriends);
-            friends = await this.modules.playerDatabase.listSteamFriends(playerId);
-          } catch (err) {
-            this.logger.warn(`Failed to on-demand fetch Steam friends for player ${playerId} (${steamID}): ${err.message}`);
-          }
-        }
-
-        return this.json(res, 200, { items: friends });
-      });
-    }
-
-    if (url.pathname.startsWith("/api/player-database/detail/container/")) {
-      const playerId = url.searchParams.get("id");
-      const container = decodeURIComponent(url.pathname.slice("/api/player-database/detail/container/".length));
-      return this.runTimedPlayerDatabaseQuery(`/api/player-database/detail/container/${container}`, playerId, async () => {
-        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
-        if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
-        if (container === "steam-friends" && url.searchParams.get("refresh") === "true" && detail.player?.steam_id) {
-          const playtimeApi = this.modules.playtime?.api ?? this.modules.playtime;
-          if (playtimeApi?.fetchSteamFriends) {
-            const friends = await playtimeApi.fetchSteamFriends(detail.player.steam_id);
-            await this.modules.playerDatabase.upsertSteamFriends(Number(playerId), friends);
-          }
-        }
-        return this.json(res, 200, await this.modules.playerDatabase.listPlayerContainer(playerId, container, {
-          limit: url.searchParams.get("limit") ?? "30",
-          offset: url.searchParams.get("offset") ?? "0",
-        }));
-      });
-    }
-
-    if (url.pathname === "/api/db/players") {
-      const searchQuery = url.searchParams.get("q") ?? url.searchParams.get("query") ?? "";
-      const result = await this.modules.playerDatabase.listPlayers({
-        query: searchQuery,
-        q: searchQuery,
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-        sort: url.searchParams.get("sort") ?? "updated_desc",
-        top: url.searchParams.get("top") ?? "10",
-        days: url.searchParams.get("days") ?? "14",
-      });
-      return this.json(res, 200, {
-        items: result.items ?? [],
-        total: result.total ?? 0,
-      });
-    }
-
-    const dbPlayerMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)$/);
-    if (dbPlayerMatch && req.method === "GET") {
-      const detail = await this.modules.playerDatabase.getPlayerDetail(dbPlayerMatch[1]);
-      if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
-      return this.json(res, 200, detail);
-    }
-
-    const dbPermissionMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/permission-group$/);
-    if (dbPermissionMatch && req.method === "PATCH") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      return this.json(res, 200, await this.modules.playerDatabase.setPermissionGroup(dbPermissionMatch[1], body.permissionGroup));
-    }
-
-    const dbPlayerPlaytimeMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/playtime$/);
-    if (dbPlayerPlaytimeMatch && req.method === "PATCH") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return this.json(res, 400, {
-          error: "InvalidRequestBody",
-          message: "Request body must be an object.",
-        });
-      }
-
-      const hasGameHours = Object.prototype.hasOwnProperty.call(body, "gameHours");
-      const hasGameSeconds = Object.prototype.hasOwnProperty.call(body, "gameSeconds");
-      const rawValue = hasGameHours ? body.gameHours : (hasGameSeconds ? body.gameSeconds : undefined);
-      let overrideSeconds = null;
-
-      if (rawValue != null && String(rawValue).trim() !== "") {
-        const numeric = Number(rawValue);
-        if (!Number.isFinite(numeric) || numeric < 0) {
-          return this.json(res, 400, {
-            error: "InvalidGameHours",
-            message: "gameHours must be a non-negative number or null.",
-          });
-        }
-        overrideSeconds = hasGameHours ? Math.round(numeric * 3600) : Math.floor(numeric);
-      } else if (rawValue === 0) {
-        overrideSeconds = 0;
-      } else {
-        overrideSeconds = null;
-      }
-
-      const updatedDetail = await this.modules.playerDatabase.setGameDurationOverride(dbPlayerPlaytimeMatch[1], overrideSeconds);
-      if (!updatedDetail) {
-        return this.json(res, 404, {
-          error: "PlayerNotFound",
-          message: "Player not found.",
-        });
-      }
-
-      return this.json(res, 200, {
-        ok: true,
-        data: updatedDetail,
-      });
-    }
-
-    if (dbPlayerMatch && req.method === "DELETE") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));
-    }
-
-    if (url.pathname === "/api/squads/list") {
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-      const squadManagement = this.modules.squadManagement;
-      return this.json(res, 200, {
-        squads: squadManagement?.getSquads?.(serverId) ?? [],
-      });
-    }
-
-    if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-      const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId);
-      return this.json(res, 200, {
-        current: lifecycle ?? {
-          serverId,
-          matchId: null,
-          updatedAt: new Date().toISOString(),
-          list: [],
-          byKey: {},
-        },
-      });
-    }
-
-    if (url.pathname === "/api/squad-creation-order/clear" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-      this.modules.squadLifecycle?.clearCurrent?.(serverId);
-      const ruleChain = this.modules.squadRuleChain?.clearCurrent?.() ?? null;
-      return this.json(res, 200, {
-        ok: true,
-        data: {
-          serverId,
-          ruleChain,
-        },
-      });
-    }
-
-    if (url.pathname === "/api/squad-name-tracking/state" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId?.("") ?? this.core.webStatus?.serverId ?? "";
-      const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId) ?? { list: [] };
-      const guard = this.modules.squadNamePolicyGuard?.getState?.() ?? { enabled: false, recent: [] };
-      const patrol = this.modules.squadNamePolicyPatrol?.getState?.() ?? { enabled: false, recent: [] };
-      const ruleChain = this.modules.squadRuleChain?.getState?.() ?? { recent: [], stats: {} };
-
-      const stepwiseApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
-      const fairApi = this.getPluginApi("plugin.fairSquadGuard");
-
-      const stepwise = stepwiseApi?.getStatus?.() ?? stepwiseApi?.getState?.() ?? { recentRecords: [] };
-      const fair = fairApi?.getStatus?.() ?? fairApi?.getState?.() ?? { recentRecords: [] };
-
-      const records = buildSquadNameTrackingRecords({
-        guard,
-        stepwise,
-        fair,
-        ruleChain,
-        lifecycle,
-      });
-
-      return this.json(res, 200, {
-        ok: true,
-        data: {
-          lifecycle,
-          guard,
-          patrol,
-          ruleChain,
-          stepwise,
-          fair,
-          records,
-        },
-      });
-    }
-
-    if (url.pathname === "/api/kills/recent") {
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-      const records = this.modules.combatManager?.getEvents
-        ? this.modules.combatManager.getEvents({
-            serverId,
-            type: url.searchParams.get("type") ?? "all",
-            search: url.searchParams.get("search") ?? "",
-            limit: url.searchParams.get("limit") ?? "100",
-          })
-        : this.modules.killManage?.getRecentKills?.(serverId, 100) ?? [];
-      return this.json(res, 200, {
-        records,
-        viewer: {
-          username: user.username,
-          role: user.role,
-          isSuperAdmin: this.core.authManager.hasEverything(user),
-        },
-      });
-    }
-
-    if (url.pathname === "/api/weapon-collector/stats" && req.method === "GET") {
-      const pluginApi = this.getPluginApi("plugin.weaponCollector");
-      if (!pluginApi) {
-        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
-      }
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-      const weapons = pluginApi.getWeaponStats(serverId);
-      const totals = weapons.reduce(
-        (acc, w) => {
-          acc.damaged += w.damaged;
-          acc.wounded += w.wounded;
-          acc.died += w.died;
-          return acc;
-        },
-        { damaged: 0, wounded: 0, died: 0 },
-      );
-      return this.json(res, 200, {
-        serverId,
-        weapons,
-        totals,
-        weaponTypeMap: pluginApi.getWeaponTypeMap?.() ?? {},
-      });
-    }
-
-    if (url.pathname === "/api/weapon-collector/type-map" && req.method === "GET") {
-      const pluginApi = this.getPluginApi("plugin.weaponCollector");
-      if (!pluginApi) {
-        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
-      }
-      return this.json(res, 200, {
-        weaponTypeMap: pluginApi.getWeaponTypeMap?.() ?? {},
-      });
-    }
-
-    if (url.pathname === "/api/squad-management/actions" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      const api = this.modules.squadManagement;
-      if (!api?.executeAction) {
-        return this.json(res, 404, { error: "SquadManagementUnavailable" });
-      }
-
-      const result = await api.executeAction({
-        ...body,
-        actor: user,
-        source: body.source ?? "web.squadManagement",
-        system: false,
-      });
-
-      return this.json(res, result.ok ? 200 : 400, result);
-    }
-
-    if (url.pathname === "/api/squad-disband/execute" && req.method === "POST") {
-      const body = await this.readJsonBody(req);
-      const api = this.modules.squadManagement;
-      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
-      try {
-        const result = await api.executeAction({
-          ...body,
-          actor: user,
-          type: "disband_squad",
-          source: body.source ?? "web.squadDisband",
-          system: Boolean(body.system ?? false),
-        });
-        return this.json(res, result.ok ? 200 : 400, result);
-      } catch (err) {
-        return this.json(res, 500, { error: "InternalError", message: err.message });
-      }
-    }
-
-    if (url.pathname === "/api/squad-kick/execute" && req.method === "POST") {
-      const body = await this.readJsonBody(req);
-      const api = this.modules.squadManagement;
-      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
-      try {
-        const result = await api.executeAction({
-          ...body,
-          actor: user,
-          type: "kick_player",
-          source: body.source ?? "web.squadKick",
-          system: Boolean(body.system ?? false),
-        });
-        return this.json(res, result.ok ? 200 : 400, result);
-      } catch (err) {
-        return this.json(res, 500, { error: "InternalError", message: err.message });
-      }
-    }
-
-    if (url.pathname === "/api/squad-remove/execute" && req.method === "POST") {
-      const body = await this.readJsonBody(req);
-      const api = this.modules.squadManagement;
-      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
-      try {
-        const auditContext = this.buildRemoveFromSquadAuditContext(req, user, body);
-        const result = await this.executeAudited(auditContext, ({ requestId }) => api.executeAction({
-            ...body,
-            actor: user,
-            type: "remove_from_squad",
-            source: body.source ?? "web.squadRemove",
-            system: false,
-            operatorName: user?.username ?? "",
-            requestId,
-          }), {
-            relatedRecordIdBuilder: (payload) => payload?.record?.id ?? payload?.recordId ?? "",
-          });
-        return this.json(res, result.ok ? 200 : 400, result);
-      } catch (err) {
-        return this.json(res, 500, { error: "InternalError", message: err.message });
-      }
-    }
-
-    if (url.pathname === "/api/admin-warns/warn" && req.method === "POST") {
-      const api = this.modules.adminWarn;
-      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
-      const body = await this.readJsonBody(req);
-      try {
-        const auditContext = {
-          action: AUDIT_ACTIONS.PLAYER_WARN,
-          category: AUDIT_CATEGORIES.PLAYER_MANAGEMENT,
-          actor: user,
-          request: req,
-          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
-          serverId: body.serverId ?? this.getCurrentServerId(""),
-          target: {
-            type: "player",
-            id: body.targetSteamId ?? body.steamId ?? body.steamID ?? body.targetEosId ?? body.eosId ?? body.eosID ?? body.targetName,
-            name: body.targetName ?? body.name ?? "",
-            steamId: body.targetSteamId ?? body.steamId ?? body.steamID ?? "",
-            eosId: body.targetEosId ?? body.eosId ?? body.eosID ?? "",
-          },
-          parameters: { message: body.message ?? "" },
-          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
-        };
-        const result = await this.executeAudited(auditContext, ({ requestId }) => api.warnPlayer({
-          ...body,
-          origin: "web",
-          actor: user,
-          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
-          requestId,
-          system: false,
-        }));
-        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
-      } catch (err) {
-        return this.json(res, 500, { error: "InternalError", message: err.message });
-      }
-    }
-
-    if (url.pathname === "/api/admin-warns/broadcast" && req.method === "POST") {
-      const api = this.modules.adminWarn;
-      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
-      const body = await this.readJsonBody(req);
-      try {
-        const auditContext = {
-          action: AUDIT_ACTIONS.SERVER_BROADCAST,
-          category: AUDIT_CATEGORIES.SERVER_MANAGEMENT,
-          actor: user,
-          request: req,
-          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
-          serverId: body.serverId ?? this.getCurrentServerId(""),
-          target: { type: "server", id: body.serverId ?? this.getCurrentServerId(""), name: this.getServerName(body.serverId ?? this.getCurrentServerId("")) },
-          parameters: {
-            message: body.message ?? "",
-            messageLength: String(body.message ?? "").length,
-          },
-          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
-        };
-        const result = await this.executeAudited(auditContext, ({ requestId }) => api.broadcastMessage({
-          ...body,
-          origin: "web",
-          actor: user,
-          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
-          requestId,
-          system: false,
-        }));
-        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
-      } catch (err) {
-        return this.json(res, 500, { error: "InternalError", message: err.message });
-      }
-    }
-
-    if (url.pathname === "/api/kill-manage/kill" && req.method === "POST") {
-      const api = this.modules.killManage;
-      if (!api?.killPlayer) return this.json(res, 404, { error: "ModuleNotFound" });
-      const body = await this.readJsonBody(req);
-      try {
-        const result = await api.killPlayer({ ...body, actor: user, system: Boolean(body?.system ?? false) });
-        return this.json(res, result?.success ? 200 : result?.skipped ? 400 : 500, result);
-      } catch (err) {
-        return this.json(res, 500, { error: "InternalError", message: err.message });
-      }
-    }
-
-    if (url.pathname === "/api/kill-manage/recent" && req.method === "GET") {
-      const api = this.modules.killManage;
-      if (!api?.getRecentKills) return this.json(res, 404, { error: "ModuleNotFound" });
-      const limit = url.searchParams.get("limit") ?? 20;
-      return this.json(res, 200, { records: api.getRecentKills("", limit) });
-    }
-
-    if (url.pathname === "/api/match-snapshot/list" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const pluginApi = this.getPluginApi("match-snapshot");
-      if (!pluginApi?.listSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
-      return this.json(res, 200, await pluginApi.listSnapshots());
-    }
-
-    if (url.pathname === "/api/match-snapshot/capture" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      const pluginApi = this.getPluginApi("match-snapshot");
-      if (!pluginApi?.takeManualSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
-      const snapshot = await pluginApi.takeManualSnapshot({
-        includeSteamID: body?.includeSteamID ?? body?.options?.includeSteamID,
-        includeEOSID: body?.includeEOSID ?? body?.options?.includeEOSID,
-        overview: body?.overview ?? body?.matchState ?? body?.snapshot ?? null,
-      });
-      return this.json(res, 200, { ok: true, snapshot });
-    }
-
-    if (url.pathname === "/api/match-snapshot/delete" && req.method === "DELETE") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const id = url.searchParams.get("id");
-      if (!id) return this.json(res, 400, { error: "MissingId" });
-      const pluginApi = this.getPluginApi("match-snapshot");
-      if (!pluginApi?.deleteSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
-      const result = await pluginApi.deleteSnapshot(id);
-      if (!result?.removed) return this.json(res, 404, { error: "SnapshotNotFound" });
-      return this.json(res, 200, { ok: true, snapshot: result });
-    }
-
-    if (url.pathname === "/api/match-snapshot/view" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const id = url.searchParams.get("id");
-      if (!id) return this.json(res, 400, { error: "MissingId" });
-
-      try {
-        const pluginApi = this.getPluginApi("match-snapshot");
-        if (pluginApi?.readSnapshotArtifact) {
-          const artifact = await pluginApi.readSnapshotArtifact(
-            id,
-            url.searchParams.get("format") ?? url.searchParams.get("type") ?? "json",
-          );
-          const headers = {
-            "Content-Type": artifact.contentType,
-            "Cache-Control": "no-store",
-          };
-          if (url.searchParams.get("download") === "1") {
-            headers["Content-Disposition"] = `attachment; filename="${safeHeaderFileName(artifact.fileName)}"`;
-          }
-          res.writeHead(200, headers);
-          return res.end(artifact.content);
-        }
-
-        const safeId = path.basename(id);
-        const filePath = path.join(process.cwd(), "data", "match-snapshots", safeId);
-        const content = await fs.readFile(filePath);
-        res.writeHead(200, {
-          "Content-Type": contentType(filePath),
-          "Cache-Control": "no-store",
-        });
-        return res.end(content);
-      } catch (err) {
-        if (err?.statusCode === 400) {
-          return this.json(res, 400, { error: err.code ?? "InvalidSnapshotArtifact", message: err.message });
-        }
-        return this.json(res, 404, { error: "FileNotFound" });
-      }
-    }
-
-    if (url.pathname === "/api/server-stats/history" && req.method === "GET") {
-      const api = this.modules.serverStats;
-      if (!api?.getHistory) {
-        return this.json(res, 404, {
-          error: "ServerStatsUnavailable",
-          message: "Server stats module is not loaded.",
-        });
-      }
-
-      const controller = new AbortController();
-      const abortRequest = () => controller.abort();
-      req.once("aborted", abortRequest);
-      res.once("close", abortRequest);
-      try {
-        const history = await api.getHistory({
-          serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
-          fromMs: url.searchParams.get("from_ms") ?? url.searchParams.get("fromMs"),
-          toMs: url.searchParams.get("to_ms") ?? url.searchParams.get("toMs"),
-          maxPoints: url.searchParams.get("max_points") ?? url.searchParams.get("maxPoints") ?? 1500,
-          includeCurrent: (url.searchParams.get("include_current") ?? url.searchParams.get("includeCurrent")) === "1",
-          signal: controller.signal,
-        });
-        if (!controller.signal.aborted && !res.writableEnded) {
-          return this.json(res, 200, history);
-        }
-        return undefined;
-      } catch (error) {
-        if (error?.name === "AbortError" || controller.signal.aborted) return undefined;
-        if (error?.statusCode === 400) {
-          return this.json(res, 400, { error: "InvalidServerStatsRange", message: error.message });
-        }
-        throw error;
-      } finally {
-        req.removeListener("aborted", abortRequest);
-        res.removeListener("close", abortRequest);
-      }
-    }
-
-    if (url.pathname === "/api/server-stats/current" && req.method === "GET") {
-      const api = this.modules.serverStats;
-      if (!api?.getCurrent) {
-        return this.json(res, 404, {
-          error: "ServerStatsUnavailable",
-          message: "Server stats module is not loaded.",
-        });
-      }
-
-      return this.json(res, 200, await api.getCurrent({
-        serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
-      }));
-    }
-
-    if (url.pathname === "/api/server-stats/dates" && req.method === "GET") {
-      const api = this.modules.serverStats;
-      if (!api?.listAvailableDates) {
-        return this.json(res, 404, {
-          error: "ServerStatsUnavailable",
-          message: "Server stats module is not loaded.",
-        });
-      }
-
-      return this.json(res, 200, {
-        dates: await api.listAvailableDates({
-          serverId: url.searchParams.get("server_id") ?? url.searchParams.get("serverId") ?? this.getCurrentServerId(""),
-        }),
-      });
-    }
-
-    if (url.pathname === "/api/logpost/state" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.getLogPostState());
-    }
-
-    if (url.pathname === "/api/logpost/v2/state" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.getLogPostState());
-    }
-
-    if (url.pathname === "/api/logpost/raw" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.queryLogPostRawArchive({
-        date: url.searchParams.get("date") ?? "",
-        start: url.searchParams.get("start") ?? "",
-        end: url.searchParams.get("end") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-      }));
-    }
-
-    if (url.pathname === "/api/logpost/v2/raw" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.queryLogPostRawArchive({
-        date: url.searchParams.get("date") ?? "",
-        start: url.searchParams.get("start") ?? "",
-        end: url.searchParams.get("end") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-      }));
-    }
-
-    if (url.pathname === "/api/logpost/events" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.queryLogPostStructuredEvents({
-        date: url.searchParams.get("date") ?? "",
-        event: url.searchParams.get("event") ?? "",
-        start: url.searchParams.get("start") ?? "",
-        end: url.searchParams.get("end") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-      }));
-    }
-
-    if (url.pathname === "/api/logpost/v2/events" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.queryLogPostStructuredEvents({
-        date: url.searchParams.get("date") ?? "",
-        event: url.searchParams.get("event") ?? "",
-        start: url.searchParams.get("start") ?? "",
-        end: url.searchParams.get("end") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-      }));
-    }
-
-    if (url.pathname === "/api/logpost/gaps" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, this.getLogPostGapState());
-    }
-
-    if (url.pathname === "/api/logpost/v2/gaps" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, this.getLogPostGapState());
-    }
-
-    if (url.pathname === "/api/logpost/v2/outbox" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.queryLogPostOutbox({
-        date: url.searchParams.get("date") ?? "",
-        kind: url.searchParams.get("kind") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-      }));
-    }
-
-    if (url.pathname === "/api/logpost/v2/safety" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      return this.json(res, 200, await this.queryLogPostSafety({
-        date: url.searchParams.get("date") ?? "",
-        kind: url.searchParams.get("kind") ?? "",
-        q: url.searchParams.get("q") ?? "",
-        limit: url.searchParams.get("limit") ?? "200",
-        offset: url.searchParams.get("offset") ?? "0",
-      }));
-    }
-
-    if (url.pathname === "/api/logpost/v2/replay" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      await this.writeLogPostAuditRecord("replay-requested", {
-        requestedAt: new Date().toISOString(),
-        body: body ?? {},
-      });
-      return this.json(res, 200, {
-        ok: true,
-        auditOnly: true,
-        message: "Replay requests are audit-only in LogPost v2.",
-      });
-    }
-
-    if (url.pathname === "/api/logpost/v2/checkpoint/repair" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      await this.writeLogPostAuditRecord("checkpoint-repair-requested", {
-        requestedAt: new Date().toISOString(),
-        body: body ?? {},
-      });
-      return this.json(res, 200, {
-        ok: true,
-        auditOnly: true,
-        message: "Checkpoint repair requests are audit-only in LogPost v2.",
-      });
-    }
-
-    if (url.pathname === "/api/remote-telemetry/state" && req.method === "GET") {
-      const api = this.modules.remoteTelemetry;
-      if (!api?.getState) {
-        return this.json(res, 404, {
-          error: "RemoteTelemetryUnavailable",
-          message: "Remote telemetry module is not loaded.",
-        });
-      }
-
-      return this.json(res, 200, {
-        ok: true,
-        source: "module.remoteTelemetry",
-        remoteTelemetry: api.getState(),
-      });
-    }
-
-    if (url.pathname === "/api/remote-telemetry/write-tickets" && req.method === "POST") {
-      const hasPerm = this.core.authManager?.hasPermission
-        ? this.core.authManager.hasPermission(user, "rcon.settickets")
-        : this.core.authManager?.hasEverything?.(user);
-      if (!hasPerm) {
-        return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
-      }
-      const api = this.modules.remoteTelemetry;
-      if (!api?.writeTickets) {
-        return this.json(res, 404, {
-          error: "RemoteTelemetryUnavailable",
-          message: "Remote telemetry module is not loaded.",
-        });
-      }
-
-      try {
-        const body = await this.readJsonBody(req);
-        const result = await api.writeTickets(body);
-        return this.json(res, result?.ok ? 200 : 502, {
-          ok: Boolean(result?.ok),
-          source: "module.remoteTelemetry",
-          type: "ticket_write",
-          ...result,
-        });
-      } catch (error) {
-        return this.json(res, 400, {
-          ok: false,
-          source: "module.remoteTelemetry",
-          error: error?.message || "Ticket write failed.",
-        });
-      }
-    }
-
-    if (url.pathname === "/api/remote-telemetry/adjust-tickets" && req.method === "POST") {
-      const hasPerm = this.core.authManager?.hasPermission
-        ? this.core.authManager.hasPermission(user, "rcon.settickets")
-        : this.core.authManager?.hasEverything?.(user);
-      if (!hasPerm) {
-        return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
-      }
-      const api = this.modules.remoteTelemetry;
-      if (!api?.adjustTickets) {
-        return this.json(res, 404, {
-          error: "RemoteTelemetryUnavailable",
-          message: "Remote telemetry module is not loaded.",
-        });
-      }
-
-      try {
-        const body = await this.readJsonBody(req);
-        const result = await api.adjustTickets(body);
-        return this.json(res, result?.ok ? 200 : 502, {
-          ok: Boolean(result?.ok),
-          source: "module.remoteTelemetry",
-          type: "ticket_adjust",
-          ...result,
-        });
-      } catch (error) {
-        return this.json(res, 400, {
-          ok: false,
-          source: "module.remoteTelemetry",
-          error: error?.message || "Ticket adjust failed.",
-        });
-      }
-    }
-
-    if (url.pathname === "/api/chat/history" && req.method === "GET") {
-      const history = this.modules.chatManager.getHistory();
-      return this.json(res, 200, { history });
-    }
-
-    if (url.pathname === "/api/chat/stats" && req.method === "GET") {
-      return this.json(res, 200, {
-        timeline: this.modules.chatManager.getStats(),
-        spammers: this.modules.chatManager.getSpammers(),
-        playerFrequencies: this.modules.chatManager.getPlayerFrequencies(),
-      });
-    }
-
-    if (url.pathname === "/api/weapon-collector/clear" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const pluginApi = this.getPluginApi("plugin.weaponCollector");
-      if (!pluginApi) {
-        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
-      }
-      const serverId = url.searchParams.get("serverId") ?? null;
-      await pluginApi.clearWeaponStats(serverId);
-      return this.json(res, 200, { ok: true });
-    }
-
-    return this.json(res, 404, { error: "ApiNotFound" });
-  }
-
-  async readJsonBody(req) {
-    const text = (await this.readTextBody(req)).trim();
-    if (!text) return {};
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
-    }
-  }
-
-  async readTextBody(req) {
-    const chunks = [];
-    let totalLength = 0;
-
-    for await (const chunk of req) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      totalLength += buffer.length;
-      if (totalLength > MAX_JSON_BODY_BYTES) {
-        throw createHttpError(413, "RequestBodyTooLarge", "Request body too large.");
-      }
-      chunks.push(buffer);
-    }
-
-    return Buffer.concat(chunks, totalLength).toString("utf8");
-  }
-
-  async ensureInitialMatchPlayers() {
-    const runtimeState = this.core.runtimeState;
-    const currentPlayers = runtimeState?.getPlayers?.() ?? null;
-    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
-
-    // Only hydrate an uninitialized snapshot. Once a valid RCON result exists,
-    // ordinary snapshot reads must remain cheap and must not issue commands.
-    if (!rconStatus.connected || Number(currentPlayers?.updatedAt ?? 0) > 0) return;
-    const refresh = this.modules.matchState?.refresh;
-    if (typeof refresh !== "function") return;
-
-    if (!this.initialMatchHydration) {
-      this.initialMatchHydration = Promise.resolve()
-        .then(() => refresh("players"))
-        .catch((error) => {
-          this.logger.warn?.(`Initial match player hydration failed: ${error?.message ?? error}`);
-          return null;
-        })
-        .finally(() => {
-          this.initialMatchHydration = null;
-        });
-    }
-
-    await this.initialMatchHydration;
-  }
-
-  getMatchOverviewFromRuntime() {
-    if (!this.core.runtimeState) {
-      return this.modules.matchState?.getOverview?.() ?? {};
-    }
-
-    const match = this.core.runtimeState.getMatch();
-    const webStatus = this.core.webStatus?.getSnapshot?.() ?? {};
-    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
-    return {
-      status: webStatus,
-      matchState: match,
-      serverStatus: {
-        ...webStatus,
-        ...(match.server ?? {}),
-      },
-      match,
-      players: match.players?.active ?? [],
-      recentlyDisconnected: match.players?.recentlyDisconnected ?? [],
-      squads: match.squads?.list ?? [],
-      teams: match.teams ?? [],
-      rconStatus,
-      logAccess: {
-        granted: webStatus.pythonLogParser === "running" || webStatus.udpReceiver === "listening",
-        pythonLogParser: webStatus.pythonLogParser ?? "unknown",
-        udpReceiver: webStatus.udpReceiver ?? "unknown",
-      },
-    };
-  }
-
-  getRoundStateFromRuntime() {
-    const snapshot = this.core.runtimeState?.getAll?.() ?? null;
-    const roundEvents = snapshot?.events?.round ?? [];
-    return {
-      serverId: this.core.webStatus?.serverId ?? "",
-      updatedAt: snapshot?.events?.updatedAt ?? "",
-      current: roundEvents.length ? roundEvents[roundEvents.length - 1] : null,
-      history: roundEvents,
-      lastAcceptedAt: roundEvents.length ? String(roundEvents[roundEvents.length - 1]?.receivedAt ?? roundEvents[roundEvents.length - 1]?.time ?? "") : "",
-      lastDedupedAt: "",
-    };
-  }
-
-  getRoundOverviewFromRuntime() {
-    const roundState = this.getRoundStateFromRuntime();
-    const status = this.core.webStatus?.getSnapshot?.() ?? {};
-    return {
-      status,
-      roundState,
-      latest: roundState.history.slice(-20).reverse(),
-    };
-  }
-
-  getMatchOverview() {
-    return this.modules.matchState?.getOverview?.() ?? this.getMatchOverviewFromRuntime();
-  }
-
-  getMatchStateSnapshotResponse() {
-    const matchStateModule = this.modules.matchState;
-    const matchState = matchStateModule?.getState?.() ?? null;
-    const overview = matchStateModule?.getOverview?.(matchState) ?? this.getMatchOverview();
-    const resolvedMatchState = matchState ?? overview?.matchState ?? null;
-    return {
-      ok: true,
-      source: "module.matchState",
-      type: "snapshot",
-      matchState: resolvedMatchState,
-      overview,
-    };
-  }
-
-  async refreshMatchState(type = "all") {
-    const matchStateModule = this.modules.matchState;
-    if (!matchStateModule?.refresh) {
-      return {
-        ok: false,
-        source: "module.matchState",
-        type,
-        error: "MatchStateUnavailable",
-        message: "Match state module is not loaded.",
-      };
-    }
-
-    const matchState = await matchStateModule.refresh(type);
-    const snapshot = matchStateModule.getState?.() ?? matchState ?? null;
-    const overview = matchStateModule.getOverview?.() ?? null;
-    return {
-      ok: true,
-      source: "module.matchState",
-      type,
-      matchState: snapshot,
-      overview,
-    };
-  }
-
-  normalizeMatchRefreshType(type) {
-    const normalized = String(type ?? "all").trim();
-    if (["players", "squads", "serverInfo", "currentMap", "nextMap", "all"].includes(normalized)) {
-      return normalized;
-    }
-    return "all";
-  }
-
-  createLocalJob(type, input = {}) {
-    const now = Date.now();
-    const job = {
-      id: `local-${now}-${++this.jobCounter}`,
-      type,
-      status: "queued",
-      createdAt: now,
-      startedAt: null,
-      finishedAt: null,
-      input,
-      result: null,
-      error: null,
-    };
-    this.pruneLocalJobs();
-    this.jobs.set(job.id, job);
-    this.core.runtimeState?.updateJob?.(job);
-    return { ...job };
-  }
-
-  runLocalJob(publicJob, runner) {
-    const job = this.jobs.get(publicJob.id);
-    if (!job) return;
-    job.status = "running";
-    job.startedAt = Date.now();
-    this.core.runtimeState?.updateJob?.(job);
-
-    Promise.resolve()
-      .then(runner)
-      .then((result) => {
-        job.status = "completed";
-        job.result = result;
-      })
-      .catch((error) => {
-        job.status = "failed";
-        job.error = {
-          message: error?.message || "Job failed.",
-        };
-      })
-      .finally(() => {
-        job.finishedAt = Date.now();
-        this.core.runtimeState?.updateJob?.(job);
-        this.pruneLocalJobs();
-      });
-  }
-    // API route handling has been refactored to appropriate modules.
-
-
-
-  async readJsonBody(req) {
-    const text = (await this.readTextBody(req)).trim();
-    if (!text) return {};
-
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw createHttpError(400, "InvalidJson", "Request body must be valid JSON.");
-    }
-  }
-
-  async readTextBody(req) {
-    const chunks = [];
-    let totalLength = 0;
-
-    for await (const chunk of req) {
-      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      totalLength += buffer.length;
-      if (totalLength > MAX_JSON_BODY_BYTES) {
-        throw createHttpError(413, "RequestBodyTooLarge", "Request body too large.");
-      }
-      chunks.push(buffer);
-    }
-
-    return Buffer.concat(chunks, totalLength).toString("utf8");
-  }
-
-  getMatchOverviewFromRuntime() {
-    if (!this.core.runtimeState) {
-      return this.modules.matchState?.getOverview?.() ?? {};
-    }
-
-    const match = this.core.runtimeState.getMatch();
-    const webStatus = this.core.webStatus?.getSnapshot?.() ?? {};
-    const rconStatus = this.core.rconManager?.getStatus?.() ?? {};
-    return {
-      status: webStatus,
-      matchState: match,
-      serverStatus: {
-        ...webStatus,
-        ...(match.server ?? {}),
-      },
-      match,
-      players: match.players?.active ?? [],
-      recentlyDisconnected: match.players?.recentlyDisconnected ?? [],
-      squads: match.squads?.list ?? [],
-      teams: match.teams ?? [],
-      rconStatus,
-      logAccess: {
-        granted: webStatus.pythonLogParser === "running" || webStatus.udpReceiver === "listening",
-        pythonLogParser: webStatus.pythonLogParser ?? "unknown",
-        udpReceiver: webStatus.udpReceiver ?? "unknown",
-      },
-    };
-  }
-
-  getRoundStateFromRuntime() {
-    const snapshot = this.core.runtimeState?.getAll?.() ?? null;
-    const roundEvents = snapshot?.events?.round ?? [];
-    return {
-      serverId: this.core.webStatus?.serverId ?? "",
-      updatedAt: snapshot?.events?.updatedAt ?? "",
-      current: roundEvents.length ? roundEvents[roundEvents.length - 1] : null,
-      history: roundEvents,
-      lastAcceptedAt: roundEvents.length ? String(roundEvents[roundEvents.length - 1]?.receivedAt ?? roundEvents[roundEvents.length - 1]?.time ?? "") : "",
-      lastDedupedAt: "",
-    };
-  }
-
-  getRoundOverviewFromRuntime() {
-    const roundState = this.getRoundStateFromRuntime();
-    const status = this.core.webStatus?.getSnapshot?.() ?? {};
-    return {
-      status,
-      roundState,
-      latest: roundState.history.slice(-20).reverse(),
-    };
-  }
-
-  getMatchOverview() {
-    return this.modules.matchState?.getOverview?.() ?? this.getMatchOverviewFromRuntime();
-  }
-
-  getMatchStateSnapshotResponse() {
-    const matchStateModule = this.modules.matchState;
-    const remoteTelemetry = this.modules.remoteTelemetry?.getState?.() ?? null;
-    const matchState = matchStateModule?.getState?.() ?? null;
-    const overview = matchStateModule?.getOverview?.(matchState) ?? this.getMatchOverview();
-    const resolvedMatchState = matchState ?? overview?.matchState ?? null;
-    return {
-      ok: true,
-      source: "module.matchState",
-      type: "snapshot",
-      matchState: resolvedMatchState,
-      overview,
-      remoteTelemetry,
-    };
-  }
-
-  async refreshMatchState(type = "all") {
-    const matchStateModule = this.modules.matchState;
-    if (!matchStateModule?.refresh) {
-      return {
-        ok: false,
-        source: "module.matchState",
-        type,
-        error: "MatchStateUnavailable",
-        message: "Match state module is not loaded.",
-      };
-    }
-
-    const matchState = await matchStateModule.refresh(type);
-    const snapshot = matchStateModule.getState?.() ?? matchState ?? null;
-    const overview = matchStateModule.getOverview?.() ?? null;
-    return {
-      ok: true,
-      source: "module.matchState",
-      type,
-      matchState: snapshot,
-      overview,
-    };
-  }
-
-  normalizeMatchRefreshType(type) {
-    const normalized = String(type ?? "all").trim();
-    if (["players", "squads", "serverInfo", "currentMap", "nextMap", "all"].includes(normalized)) {
-      return normalized;
-    }
-    return "all";
-  }
-
-  createLocalJob(type, input = {}) {
-    const now = Date.now();
-    const job = {
-      id: `local-${now}-${++this.jobCounter}`,
-      type,
-      status: "queued",
-      createdAt: now,
-      startedAt: null,
-      finishedAt: null,
-      input,
-      result: null,
-      error: null,
-    };
-    this.pruneLocalJobs();
-    this.jobs.set(job.id, job);
-    this.core.runtimeState?.updateJob?.(job);
-    return { ...job };
-  }
-
-  runLocalJob(publicJob, runner) {
-    const job = this.jobs.get(publicJob.id);
-    if (!job) return;
-    job.status = "running";
-    job.startedAt = Date.now();
-    this.core.runtimeState?.updateJob?.(job);
-
-    Promise.resolve()
-      .then(runner)
-      .then((result) => {
-        job.status = "completed";
-        job.result = result;
-      })
-      .catch((error) => {
-        job.status = "failed";
-        job.error = {
-          message: error?.message || "Job failed.",
-        };
-      })
-      .finally(() => {
-        job.finishedAt = Date.now();
-        this.core.runtimeState?.updateJob?.(job);
-        this.pruneLocalJobs();
-      });
-  }
-
-  pruneLocalJobs(now = Date.now()) {
-    const removable = [...this.jobs.values()]
-      .filter((job) => job?.status !== "queued" && job?.status !== "running")
-      .sort((a, b) => Number(a?.finishedAt ?? a?.createdAt ?? 0) - Number(b?.finishedAt ?? b?.createdAt ?? 0));
-
-    for (const job of removable) {
-      const completedAt = Number(job?.finishedAt ?? job?.createdAt ?? 0);
-      if (completedAt > 0 && now - completedAt > LOCAL_JOB_TTL_MS) {
-        this.jobs.delete(job.id);
-      }
-    }
-
-    if (this.jobs.size <= MAX_LOCAL_JOB_HISTORY) return;
-    for (const job of removable) {
-      if (this.jobs.size <= MAX_LOCAL_JOB_HISTORY) break;
-      this.jobs.delete(job.id);
-    }
-  }
-
-  async getJob(jobId, { waitMs = 0 } = {}) {
-    const localJob = this.jobs.get(String(jobId ?? ""));
-    if (localJob) return { ...localJob };
-
-    if (this.modules.playtime?.waitForJob && Number(waitMs) > 0) {
-      return this.modules.playtime.waitForJob(jobId, waitMs);
-    }
-    return this.modules.playtime?.getJob?.(jobId) ?? null;
-  }
-
-  async serveStatic(url, req, res) {
-    let filePath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
-    filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
-    const abs = path.join(this.staticDirectory, filePath);
-
-    let stat;
-    try {
-      stat = await fs.stat(abs);
-    } catch (error) {
-      if (error?.code === "ENOENT" && !path.extname(filePath)) return this.serveIndex(res);
-      res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not Found");
-      return;
-    }
-    if (!stat.isFile()) {
-      if (!path.extname(filePath)) return this.serveIndex(res);
-      res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
-      res.end("Not Found");
-      return;
-    }
-
-    const isHtml = abs.endsWith(".html");
-    let mime = contentType(abs);
-    if (isHtml && (!mime || !mime.includes("charset"))) {
-      mime = mime ? `${mime}; charset=utf-8` : "text/html; charset=utf-8";
-    }
-    const etag = `W/"${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs).toString(16)}"`;
-    const lastModified = stat.mtime.toUTCString();
-    if (req.headers["if-none-match"] === etag
-      || (!req.headers["if-none-match"] && req.headers["if-modified-since"]
-        && Date.parse(req.headers["if-modified-since"]) >= Math.trunc(stat.mtimeMs / 1000) * 1000)) {
-      res.writeHead(304, {
-        ...BASE_SECURITY_HEADERS,
-        ETag: etag,
-        "Last-Modified": lastModified,
-        "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
-      });
-      res.end();
-      return;
-    }
-
-    res.writeHead(200, {
-      ...BASE_SECURITY_HEADERS,
-      "Content-Type": mime,
-      "Content-Length": stat.size,
-      "Last-Modified": lastModified,
-      ETag: etag,
-      "Cache-Control": isHtml ? "no-store" : "public, max-age=31536000, immutable",
-    });
-    if (req.method === "HEAD") {
-      res.end();
-      return;
-    }
-
-    const stream = createReadStream(abs);
-    stream.on("error", (error) => {
-      this.logger?.error?.("Static file stream failed.", {
-        operation: "serveStatic",
-        data: { path: abs, message: error?.message ?? String(error) },
-      });
-      if (!res.headersSent) {
-        res.writeHead(500, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
-        res.end("Internal Server Error");
-      } else {
-        res.destroy(error);
-      }
-    });
-    stream.pipe(res);
-  }
-
-  async serveIndex(res) {
-    const indexPath = path.join(this.staticDirectory, "index.html");
-    let data;
-    try {
-      data = await fs.readFile(indexPath);
-    } catch (error) {
-      throw createHttpError(
-        503,
-        "VueClientNotBuilt",
-        `Vue client index.html not found at ${indexPath}. Run npm run client:build before using production static hosting.`,
-      );
-    }
-    res.writeHead(200, {
-      ...BASE_SECURITY_HEADERS,
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
-    });
-    res.end(data);
-  }
-
-  async warnIfStaticIndexMissing() {
-    const indexPath = path.join(this.staticDirectory, "index.html");
-    try {
-      await fs.access(indexPath);
-    } catch {
-      this.logger.warn(
-        `Web static index missing: ${indexPath}. Run npm run client:build before opening Vue production routes.`,
-      );
-    }
-  }
-
-  json(res, status, obj, extraHeaders = {}) {
-    const start = performance.now();
-    const store = requestStorage.getStore();
-    const req = store?.req;
-    let pretty = false;
-    if (req) {
-      try {
-        const host = req.headers.host || "localhost";
-        const url = new URL(req.url, `http://${host}`);
-        pretty = url.searchParams.has("pretty");
-      } catch {}
-    }
-    const data = pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
-    const durationMs = performance.now() - start;
-    const sizeBytes = Buffer.byteLength(data);
-
-    let urlObj = null;
-    try {
-      urlObj = new URL(req?.url ?? "/", `http://${req?.headers?.host ?? "localhost"}`);
-    } catch {}
-
-    if (urlObj?.pathname === "/api/snapshot/all") {
-      this.lastSnapshotSizeBytes = sizeBytes;
-    }
-
-    const performanceConfig = this.core?.config?.get?.("performance") ?? {};
-    const largeJsonBytes = performanceConfig.largeJsonBytes ?? 262144;
-    const slowJsonMs = performanceConfig.slowJsonMs ?? 50;
-
-    if (sizeBytes > largeJsonBytes || durationMs > slowJsonMs) {
-      const urlStr = req?.url ?? "unknown";
-      this.logger?.warn(`[large-slow-json] url=${urlStr} sizeBytes=${sizeBytes} durationMs=${durationMs.toFixed(2)}ms`);
-    }
-
-    res.writeHead(status, {
-      ...BASE_SECURITY_HEADERS,
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      ...extraHeaders,
-    });
-    res.end(data);
-  }
-
-  getRequestIp(req) {
-    const remoteAddress = req.socket?.remoteAddress ?? "";
-    // Only trust X-Forwarded-For when the connection source is a trusted proxy to prevent client IP spoofing
-    if (this.trustedProxies.size > 0 && this.trustedProxies.has(remoteAddress)) {
-      const forwarded = req.headers["x-forwarded-for"];
-      if (typeof forwarded === "string" && forwarded.trim()) {
-        return forwarded.split(",")[0].trim();
-      }
-    }
-    return remoteAddress;
-  }
-
-  async handleUpgrade(req, socket, head) {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const connectionKind = url.pathname === "/ws/console"
-      ? "console"
-      : url.pathname === "/ws/chat"
-        ? "chat"
-        : null;
-
-    if (!connectionKind) {
-      return this.rejectUpgrade(socket, 404, "Not Found");
-    }
-
-    const user = this.core.authManager?.getUserFromRequest(req);
-    if (!user) {
-      return this.rejectUpgrade(socket, 401, "Authentication required.");
-    }
-    if (connectionKind === "console" && !this.core.authManager?.hasEverything?.(user)) {
-      return this.rejectUpgrade(socket, 403, "SuperAdmin role is required.");
-    }
-
-    const key = String(req.headers["sec-websocket-key"] ?? "").trim();
-    if (!key) {
-      return this.rejectUpgrade(socket, 400, "Missing WebSocket key.");
-    }
-
-    const acceptKey = crypto
-      .createHash("sha1")
-      .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-      .digest("base64");
-
-    socket.write(
-      [
-        "HTTP/1.1 101 Switching Protocols",
-        "Upgrade: websocket",
-        "Connection: Upgrade",
-        `Sec-WebSocket-Accept: ${acceptKey}`,
-        "",
-        "",
-      ].join("\r\n"),
-    );
-
-    const client = {
-      socket,
-      buffer: Buffer.alloc(0),
-      user,
-      kind: connectionKind,
-    };
-
-    if (connectionKind === "console") {
-      this.consoleConnections.add(client);
-    } else {
-      this.chatConnections.add(client);
-    }
-
-    socket.on("data", (chunk) => {
-      this.handleWebSocketData(client, chunk);
-    });
-
-    socket.on("close", () => {
-      this.closeWebSocketClient(client);
-    });
-
-    socket.on("error", () => {
-      this.closeWebSocketClient(client);
-    });
-
-    if (connectionKind === "chat") {
-      this.sendChatRecentSnapshot(client);
-    }
-
-    if (head && head.length) {
-      this.handleWebSocketData(client, head);
-    }
-  }
-
-  rejectUpgrade(socket, statusCode, message) {
-    const body = Buffer.from(String(message ?? ""), "utf8");
-    socket.end(
-      Buffer.concat([
-        Buffer.from(
-          [
-            `HTTP/1.1 ${statusCode} ${statusText(statusCode)}`,
-            "Connection: close",
-            "Content-Type: text/plain; charset=utf-8",
-            `Content-Length: ${body.length}`,
-            "",
-            "",
-          ].join("\r\n"),
-          "utf8",
-        ),
-        body,
-      ]),
-    );
-  }
-
-  handleWebSocketData(client, chunk) {
-    client.buffer = Buffer.concat([client.buffer, chunk]);
-
-    while (client.buffer.length >= 2) {
-      const first = client.buffer[0];
-      const second = client.buffer[1];
-      const opcode = first & 0x0f;
-      const masked = (second & 0x80) !== 0;
-      let payloadLength = second & 0x7f;
-      let offset = 2;
-
-      if (payloadLength === 126) {
-        if (client.buffer.length < offset + 2) return;
-        payloadLength = client.buffer.readUInt16BE(offset);
-        offset += 2;
-      } else if (payloadLength === 127) {
-        if (client.buffer.length < offset + 8) return;
-        const lengthBig = client.buffer.readBigUInt64BE(offset);
-        if (lengthBig > BigInt(Number.MAX_SAFE_INTEGER)) {
-          this.closeWebSocketClient(client);
-          return;
-        }
-        payloadLength = Number(lengthBig);
-        offset += 8;
-      }
-
-      // Prevent client from sending oversized frames to exhaust server memory (DoS protection)
-      if (payloadLength > MAX_WS_FRAME_BYTES) {
-        this.logger?.warn?.(`WebSocket: oversized frame (${payloadLength} bytes) from ${client.user?.username ?? "unknown"}, closing connection.`);
-        this.closeWebSocketClient(client);
-        return;
-      }
-
-      let mask;
-      if (masked) {
-        if (client.buffer.length < offset + 4) return;
-        mask = client.buffer.subarray(offset, offset + 4);
-        offset += 4;
-      }
-
-      if (client.buffer.length < offset + payloadLength) {
-        return;
-      }
-
-      const payload = client.buffer.subarray(offset, offset + payloadLength);
-      client.buffer = client.buffer.subarray(offset + payloadLength);
-
-      if (masked && mask) {
-        for (let i = 0; i < payload.length; i += 1) {
-          payload[i] ^= mask[i % 4];
-        }
-      }
-
-      if (opcode === 0x8) {
-        this.closeWebSocketClient(client);
-        return;
-      }
-
-      if (opcode === 0x9) {
-        this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0xA);
-      }
-    }
-  }
-
-  closeWebSocketClient(client) {
-    this.consoleConnections.delete(client);
-    this.chatConnections.delete(client);
-    try {
-      this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0x8);
-    } catch {}
-    try {
-      client.socket.end();
-    } catch {}
-  }
-
-  broadcastConsoleEntry(entry) {
-    if (!this.consoleConnections.size) return;
-    const payload = Buffer.from(JSON.stringify(entry), "utf8");
-
-    for (const client of [...this.consoleConnections]) {
-      if (!client?.user?.isSuperAdmin) continue;
-      try {
-        this.sendWebSocketFrame(client.socket, payload, 0x1);
-      } catch {
-        this.consoleConnections.delete(client);
-      }
-    }
-  }
-
-  sendChatRecentSnapshot(client) {
-    const history = this.modules.chatManager?.getHistory?.() ?? [];
-    const payload = Buffer.from(JSON.stringify({
-      event: "server:chat:recent",
-      items: history,
-    }), "utf8");
-
-    try {
-      this.sendWebSocketFrame(client.socket, payload, 0x1);
-    } catch {
-      this.closeWebSocketClient(client);
-    }
-  }
-
-  broadcastChatEntry(entry) {
-    if (!this.chatConnections.size) return;
-    const payload = Buffer.from(JSON.stringify({
-      event: "server:chat:message",
-      item: entry,
-    }), "utf8");
-
-    for (const client of [...this.chatConnections]) {
-      try {
-        this.sendWebSocketFrame(client.socket, payload, 0x1);
-      } catch {
-        this.chatConnections.delete(client);
-      }
-    }
-  }
-
-  sendWebSocketFrame(socket, payload, opcode = 0x1) {
-    const body = Buffer.isBuffer(payload) ? payload : Buffer.from(payload);
-    const length = body.length;
-
-    let header;
-    if (length < 126) {
-      header = Buffer.alloc(2);
-      header[1] = length;
-    } else if (length < 65536) {
-      header = Buffer.alloc(4);
-      header[1] = 126;
-      header.writeUInt16BE(length, 2);
-    } else {
-      header = Buffer.alloc(10);
-      header[1] = 127;
-      header.writeBigUInt64BE(BigInt(length), 2);
-    }
-
-    header[0] = 0x80 | (opcode & 0x0f);
-    if (!socket?.writable || socket.destroyed || Number(socket.writableLength ?? 0) > MAX_WS_BUFFERED_BYTES) {
-      try {
-        socket?.destroy?.();
-      } catch {}
-      throw new Error("WebSocket client is not keeping up with broadcasts.");
-    }
-
-    const accepted = socket.write(Buffer.concat([header, body]));
-    if (!accepted && Number(socket.writableLength ?? 0) > MAX_WS_BUFFERED_BYTES) {
-      try {
-        socket.destroy();
-      } catch {}
-      throw new Error("WebSocket send buffer limit exceeded.");
-    }
-  }
-
-  getCurrentServerId(fallback = "") {
-    return this.core.webStatus?.serverId ?? fallback;
-  }
-
-  getConsoleChannels(options = {}) {
-    if (this.core.console?.getLegacyChannels) {
-      return this.core.console.getLegacyChannels(options);
-    }
-
-    if (this.modules.console?.getChannels) {
-      return this.modules.console.getChannels(options);
-    }
-
-    return {
-      streams: [],
-      scopes: [],
-      levels: [],
-    };
-  }
-
-  getConsoleLines(options = {}) {
-    if (this.core.console?.getLegacyLines) {
-      return this.core.console.getLegacyLines(options);
-    }
-
-    if (this.modules.console?.getLines) {
-      return this.modules.console.getLines(options);
-    }
-
-    return [];
-  }
-
-  executeConsoleRconCommand(command, meta = {}) {
-    if (this.core.console?.executeRconCommand) {
-      return this.core.console.executeRconCommand(command, meta);
-    }
-
-    if (this.modules.console?.executeRconCommand) {
-      return this.modules.console.executeRconCommand(command, meta);
-    }
-
-    return {
-      success: false,
-      ok: false,
-      message: "Console service unavailable.",
-      response: "",
-      status: "failed",
-      durationMs: 0,
-    };
-  }
-
-  async executeAudited(context, executor, options = {}) {
-    if (!this.core.auditManager?.execute) {
-      return executor({ requestId: "" });
-    }
-    return this.core.auditManager.execute(context, executor, options);
-  }
-
-  async auditForbidden(context, message = "Permission denied.") {
-    await this.auditSyntheticFailure(context, {
-      statusCode: 403,
-      code: "Forbidden",
-      message,
-    });
-  }
-
-  async auditInvalid(context, code = "InvalidRequest", message = "Invalid request.") {
-    await this.auditSyntheticFailure(context, {
-      statusCode: 400,
-      code,
-      message,
-    });
-  }
-
-  async auditSyntheticFailure(context, errorInfo) {
-    if (!this.core.auditManager?.execute) return;
-    try {
-      await this.core.auditManager.execute(context, async () => {
-        const error = new Error(errorInfo.message);
-        error.statusCode = errorInfo.statusCode;
-        error.code = errorInfo.code;
-        throw error;
-      });
-    } catch {}
-  }
-
-  buildRconAuditContext(req, user, body = {}, route = "") {
-    const serverId = body.serverId ?? this.core.webStatus?.serverId ?? "";
-    return {
-      action: AUDIT_ACTIONS.RCON_COMMAND_EXECUTE,
-      category: AUDIT_CATEGORIES.RCON,
-      actor: user,
-      request: req,
-      sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
-      serverId,
-      target: { type: "server", id: serverId, name: this.getServerName(serverId) },
-      parameters: {
-        command: sanitizeRconCommand(body.command),
-        route,
-      },
-      resultResolver: (payload) => payload?.code === "Forbidden"
-        ? AUDIT_RESULTS.FORBIDDEN
-        : payload?.success === false
-          ? AUDIT_RESULTS.FAILED
-          : AUDIT_RESULTS.SUCCESS,
-      resultDataBuilder: (payload) => ({
-        success: Boolean(payload?.success),
-        message: payload?.message ?? "",
-        status: payload?.status ?? "",
-        durationMs: payload?.durationMs ?? null,
-      }),
-    };
-  }
-
-  buildRemoveFromSquadAuditContext(req, user, body = {}) {
-    const serverId = body.serverId ?? body.serverID ?? this.getCurrentServerId("");
-    return {
-      action: AUDIT_ACTIONS.PLAYER_REMOVE_FROM_SQUAD,
-      category: AUDIT_CATEGORIES.PLAYER_MANAGEMENT,
-      actor: user,
-      request: req,
-      sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
-      serverId,
-      target: {
-        type: "player",
-        id: body.steamId ?? body.steamID ?? body.anyId ?? body.playerKey ?? body.playerId ?? "",
-        name: body.name ?? body.playerName ?? body.creatorName ?? "",
-        steamId: body.steamId ?? body.steamID ?? "",
-        eosId: body.eosId ?? body.eosID ?? "",
-        teamId: body.teamId ?? body.teamID ?? null,
-        squadId: body.squadId ?? body.squadID ?? null,
-      },
-      parameters: {
-        reason: body.reason ?? "",
-        source: body.source ?? "web.squadRemove",
-      },
-      resultResolver: (payload) => payload?.ok
-        ? AUDIT_RESULTS.SUCCESS
-        : payload?.error === "Forbidden"
-          ? AUDIT_RESULTS.FORBIDDEN
-          : AUDIT_RESULTS.FAILED,
-    };
-  }
-
-  async executeTankBattleCommands(commands, meta = {}) {
-    const results = [];
-    for (const command of commands) {
-      const result = await this.executeConsoleRconCommand(command, {
-        requestedBy: meta.requestedBy ?? "web.tankBattle",
-        actor: meta.actor ?? null,
-        system: false,
-      });
-      results.push({
-        command: sanitizeRconCommand(command),
-        result: result?.success ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILED,
-        message: result?.message ?? "",
-      });
-    }
-
-    const succeeded = results.filter((item) => item.result === AUDIT_RESULTS.SUCCESS).length;
-    const failed = results.length - succeeded;
-    const auditResult = failed === 0
-      ? AUDIT_RESULTS.SUCCESS
-      : succeeded > 0
-        ? AUDIT_RESULTS.PARTIAL
-        : AUDIT_RESULTS.FAILED;
-
-    return {
-      ok: failed === 0,
-      success: failed === 0,
-      auditResult,
-      totalCommands: results.length,
-      succeededCommands: succeeded,
-      failedCommands: failed,
-      commands: results,
-    };
-  }
-
-  async executeBzssCoreCommand(body = {}) {
-    const config = this.core.config?.get?.("bzssCore", {}) ?? {};
-    const scriptPath = String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim();
-    const saveGamePath = String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim();
-    const batchCommands = Array.isArray(body?.batch)
-      ? body.batch
-        .map((item) => typeof item === "string" ? item : item?.command)
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean)
-        .map((item) => this.normalizeBzssCoreCommand({ command: item }))
-      : null;
-    if (batchCommands?.some((item) => !item.ok)) {
-      return batchCommands.find((item) => !item.ok);
-    }
-    const command = batchCommands?.length
-      ? {
-          ok: true,
-          directive: "Batch",
-          command: batchCommands.map((item) => item.command),
-        }
-      : this.normalizeBzssCoreCommand(body);
-
-    if (!scriptPath) {
-      return {
-        ok: false,
-        error: "MissingModifyScriptPath",
-        message: "ModifySaveGame.py path is not configured.",
-      };
-    }
-
-    if (!saveGamePath) {
-      return {
-        ok: false,
-        error: "MissingRemoteSaveGamePath",
-        message: "Remote save game path is not configured.",
-      };
-    }
-
-    if (!command.ok) {
-      return command;
-    }
-
-    const resolvedScriptPath = path.isAbsolute(scriptPath)
-      ? scriptPath
-      : path.resolve(process.cwd(), scriptPath);
-
-    const startedAt = Date.now();
-    try {
-      const output = await this.execFileAsync("python", [
-        resolvedScriptPath,
-        saveGamePath,
-        ...(Array.isArray(command.command) ? command.command : [command.command]),
-      ], {
-        cwd: path.dirname(resolvedScriptPath),
-        timeout: Math.max(1000, Number(this.core.config?.get?.("bzssCore.timeoutMs", 15000)) || 15000),
-        windowsHide: true,
-        maxBuffer: 1024 * 1024,
-      });
-
-      return {
-        ok: true,
-        command: Array.isArray(command.command) ? command.command.join("\n") : command.command,
-        directive: command.directive,
-        scriptPath: resolvedScriptPath,
-        remoteSaveGamePath: saveGamePath,
-        stdout: output.stdout,
-        stderr: output.stderr,
-        durationMs: Date.now() - startedAt,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: "BzssCoreExecuteFailed",
-        message: error?.message ?? "Failed to execute BZSS-Core command.",
-        command: Array.isArray(command.command) ? command.command.join("\n") : command.command,
-        directive: command.directive,
-        scriptPath: resolvedScriptPath,
-        remoteSaveGamePath: saveGamePath,
-        stdout: String(error?.stdout ?? ""),
-        stderr: String(error?.stderr ?? ""),
-        exitCode: error?.code ?? null,
-        durationMs: Date.now() - startedAt,
-      };
-    }
-  }
-
-  normalizeBzssCoreCommand(body = {}) {
-    const directive = String(body.directive ?? "").trim();
-    const parameter = String(body.parameter ?? body.value ?? "").trim();
-    const rawCommand = String(body.command ?? "").trim();
-    const rawMode = body?.raw === true;
-
-    if (rawMode) {
-      if (!rawCommand) {
-        return {
-          ok: false,
-          error: "MissingBzssCoreCommand",
-          message: "Raw command is required.",
-        };
-      }
-      if (/[\r\n]/.test(rawCommand)) {
-        return {
-          ok: false,
-          error: "InvalidBzssCoreCommand",
-          message: "Raw command must be a single line.",
-        };
-      }
-      const rawDirectiveMatch = rawCommand.match(/^([A-Za-z]+):(.*)$/);
-      if (rawDirectiveMatch?.[1] === "CreateVehicle") {
-        const validation = this.validateCreateVehicleParameter(rawDirectiveMatch[2]);
-        if (!validation.ok) return validation;
-      }
-      return {
-        ok: true,
-        directive: "Raw",
-        parameter: rawCommand,
-        command: rawCommand,
-        raw: true,
-      };
-    }
-
-    if (rawCommand) {
-      const match = rawCommand.match(/^([A-Za-z]+):(.*)$/);
-      if (!match) {
-        return {
-          ok: false,
-          error: "InvalidBzssCoreCommand",
-          message: "Command must use Directive:Value format.",
-        };
-      }
-      return this.normalizeBzssCoreDirective(match[1], match[2]);
-    }
-
-    return this.normalizeBzssCoreDirective(directive, parameter);
-  }
-
-  normalizeBzssCoreDirective(directive, parameter) {
-    const normalizedDirective = String(directive ?? "").trim();
-    const text = String(parameter ?? "").trim();
-    const allowed = new Set([
-      "SetTime",
-      "SetWeather",
-      "Cheer",
-      "SetFobResourceRegeneration",
-      "SetAutomaticHeal",
-      "SetAutomaticHealValue",
-      "CreateVehicle",
-      "AdminTrack",
-      "RemoveAdminTrack",
-    ]);
-
-    if (!allowed.has(normalizedDirective)) {
-      return {
-        ok: false,
-        error: "UnsupportedBzssCoreDirective",
-        message: "Supported directives: SetTime, SetWeather, Cheer, SetFobResourceRegeneration, SetAutomaticHeal, SetAutomaticHealValue, CreateVehicle, AdminTrack, RemoveAdminTrack.",
-      };
-    }
-
-    if (!text) {
-      return {
-        ok: false,
-        error: "MissingBzssCoreParameter",
-        message: `${normalizedDirective} requires a parameter.`,
-      };
-    }
-
-    if (/[\r\n]/.test(text)) {
-      return {
-        ok: false,
-        error: "InvalidBzssCoreParameter",
-        message: "Parameter must be a single line.",
-      };
-    }
-
-    if (normalizedDirective === "CreateVehicle") {
-      const validation = this.validateCreateVehicleParameter(text);
-      if (!validation.ok) return validation;
-    }
-
-    return {
-      ok: true,
-      directive: normalizedDirective,
-      parameter: text,
-      command: `${normalizedDirective}:${text}`,
-    };
-  }
-
-  getBzssCorePlayerInfo(query = {}) {
-    const monitor = this.modules.bzssCoreMonitor;
-    const state = monitor?.getState?.() ?? {
-      status: "unavailable",
-      revision: 0,
-      updatedAt: "",
-      markerSeen: false,
-      runtimePlayerCount: 0,
-      scoreboardPlayerCount: 0,
-      mainZoneCount: 0,
-      rawLineHash: "",
-      rawFields: [],
-      lastError: "",
-    };
-    const includeAll = query?.all === true || query?.all === "1" || query?.all === 1;
-    const snapshot = monitor?.getRawSnapshot?.() ?? null;
-    const players = includeAll ? (monitor?.getPlayers?.() ?? []) : undefined;
-    return {
-      ok: true,
-      state,
-      status: state.status,
-      runtimePlayers: includeAll ? (snapshot?.runtimePlayers ?? []) : undefined,
-      scoreboardPlayers: includeAll ? (snapshot?.scoreboardPlayers ?? []) : undefined,
-      players,
-      captureZones: includeAll ? (snapshot?.captureZones ?? []) : undefined,
-      fobs: includeAll ? (snapshot?.fobs ?? []) : undefined,
-      mainZones: includeAll ? (snapshot?.mainZones ?? []) : undefined,
-      explosions: includeAll ? (snapshot?.explosions ?? []) : undefined,
-    };
-  }
-
-  getBzssCorePlayerInfoRaw() {
-    const monitor = this.modules.bzssCoreMonitor;
-    const snapshot = monitor?.getRawSnapshot?.();
-    if (snapshot) {
-      return {
-        ok: true,
-        ...snapshot,
-        players: monitor?.getPlayers?.() ?? [],
-      };
-    }
-
-    return {
-      ok: true,
-      status: "unavailable",
-      revision: 0,
-      updatedAt: "",
-      markerSeen: false,
-      runtimePlayerCount: 0,
-      scoreboardPlayerCount: 0,
-      mainZoneCount: 0,
-      rawLineHash: "",
-      rawFields: [],
-      lastError: "",
-    };
-  }
-
-  getServerInfoSnapshotState(options = {}) {
-    const text = (...values) => {
-      for (const value of values) {
-        const str = value == null ? "" : String(value).trim();
-        if (str) return str;
-      }
-      return "";
-    };
-    const number = (...values) => {
-      for (const value of values) {
-        const num = Number(value);
-        if (Number.isFinite(num)) return num;
-      }
-      return null;
-    };
-
-    const runtime = this.core.runtimeState?.getAll?.() ?? null;
-    const runtimeServer = runtime?.server ?? {};
-    const runtimeMatch = runtime?.match ?? {};
-    const runtimePlayers = Array.isArray(runtime?.players?.active) ? runtime.players.active : [];
-    const runtimeSquads = Array.isArray(runtime?.squads?.list) ? runtime.squads.list : [];
-    const overview = this.getMatchOverview();
-    const bzssCore = this.getBzssCorePlayerInfo({ all: Boolean(options.includeAll ?? true) ? 1 : 0 });
-    const bzssState = bzssCore?.state ?? null;
-    const bzssRuntimePlayers = Array.isArray(bzssCore?.runtimePlayers) ? bzssCore.runtimePlayers : [];
-    const bzssScoreboardPlayers = Array.isArray(bzssCore?.scoreboardPlayers) ? bzssCore.scoreboardPlayers : [];
-    const captureZones = Array.isArray(bzssCore?.captureZones) ? bzssCore.captureZones : [];
-    const fobs = Array.isArray(bzssCore?.fobs) ? bzssCore.fobs : [];
-    const mergedPlayers = new Map();
-    for (const player of bzssRuntimePlayers) {
-      const key = player?.playerIndex ?? player?.playerId;
-      if (key == null) continue;
-      mergedPlayers.set(key, { ...player });
-    }
-    for (const player of bzssScoreboardPlayers) {
-      const key = player?.playerIndex ?? player?.playerId;
-      if (key == null) continue;
-      const existing = mergedPlayers.get(key);
-      mergedPlayers.set(key, existing ? { ...existing, ...player } : { ...player });
-    }
-
-    return {
-      generatedAt: new Date().toISOString(),
-      source: runtime ? "runtimeState" : "matchState",
-      server: {
-        serverId: text(runtimeServer?.serverId, runtimeMatch?.serverId, overview?.serverId, this.core.webStatus?.serverId, ""),
-        serverName: text(runtimeServer?.serverName, runtimeServer?.name, overview?.serverName, this.core.webStatus?.serverName, ""),
-        playerCount: number(runtimeServer?.playerCount, runtimeMatch?.players?.active?.length, overview?.status?.playerCount, this.core.webStatus?.playerCount, runtimePlayers.length) ?? 0,
-        queueCount: number(runtimeServer?.queueCount, overview?.status?.queueCount, this.core.webStatus?.queueCount) ?? 0,
-        tps: number(runtimeServer?.tps, overview?.status?.tps, this.core.webStatus?.tps),
-        isWarmup: runtimeServer?.isWarmup ?? overview?.status?.isWarmup ?? this.core.webStatus?.isWarmup ?? false,
-      },
-      match: {
-        map: text(runtimeMatch?.server?.map, runtimeServer?.map, overview?.status?.map, this.core.webStatus?.map, ""),
-        layer: text(runtimeMatch?.server?.layer, runtimeServer?.layer, overview?.status?.layer, this.core.webStatus?.layer, ""),
-        mode: text(runtimeMatch?.server?.mode, runtimeServer?.mode, overview?.status?.gameMode, this.core.webStatus?.gameMode, ""),
-        nextLayer: text(runtimeMatch?.server?.nextLayer, runtimeServer?.nextLayer, overview?.status?.nextLayer, this.core.webStatus?.nextLayer, ""),
-      },
-      overview,
-      runtime: {
-        players: runtimePlayers,
-        squads: runtimeSquads,
-      },
-      bzssCore: {
-        state: bzssState,
-        runtimePlayers: bzssRuntimePlayers,
-        scoreboardPlayers: bzssScoreboardPlayers,
-        players: [...mergedPlayers.values()],
-        captureZones,
-        fobs,
-        explosions: Array.isArray(bzssCore?.explosions) ? bzssCore.explosions : [],
-      },
-    };
-  }
-
-  validateCreateVehicleParameter(parameter) {
-    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
-    if (parts.length !== 2 && parts.length !== 3) {
-      return {
-        ok: false,
-        error: "InvalidCreateVehicleParameter",
-        message: "CreateVehicle requires player, vehicle asset path, and optional team id.",
-      };
-    }
-
-    if (!parts[0] || !parts[1]) {
-      return {
-        ok: false,
-        error: "InvalidCreateVehicleParameter",
-        message: "CreateVehicle requires player and vehicle asset path.",
-      };
-    }
-
-    if (parts.length === 3) {
-      const teamId = parts[2];
-      if (teamId !== "0" && teamId !== "1" && teamId !== "2") {
-        return {
-          ok: false,
-          error: "InvalidCreateVehicleTeamId",
-          message: "CreateVehicle team id must be 0, 1, or 2.",
-        };
-      }
-    }
-
-    return { ok: true };
-  }
-
-  execFileAsync(file, args, options = {}) {
-    return new Promise((resolve, reject) => {
-      execFile(file, args, options, (error, stdout, stderr) => {
-        if (error) {
-          error.stdout = stdout;
-          error.stderr = stderr;
-          reject(error);
-          return;
-        }
-        resolve({
-          stdout: String(stdout ?? ""),
-          stderr: String(stderr ?? ""),
-        });
-      });
-    });
-  }
-
-  summarizePlaytimeJobForAudit(job) {
-    const progress = job?.progress ?? {};
-    const result = job?.result ?? {};
-    return {
-      jobId: job?.id ?? "",
-      status: job?.status ?? "",
-      selected: Number(result.selected ?? progress.selected ?? 0),
-      updated: Number(result.updated ?? progress.updated ?? 0),
-      skipped: Number(result.skipped ?? progress.skipped ?? 0),
-      failed: Number(result.failed ?? progress.failed ?? 0),
-      total: Number(result.total ?? progress.total ?? progress.selected ?? 0),
-    };
-  }
-
-  watchPlaytimeAuditJob(jobId, context = {}) {
-    const id = String(jobId ?? "").trim();
-    if (!id || !this.core.auditManager?.update || !this.modules.playtime?.getJob) return;
-    const requestId = String(context?.requestId ?? "").trim();
-    if (!requestId && !context) return;
-
-    const auditRequestId = context.requestId;
-    const startedAt = Date.now();
-    const timeoutMs = Math.max(10_000, Number(this.core.config?.get?.("audit.playtimeJobWatchTimeoutMs", 30 * 60_000)) || 30 * 60_000);
-    const tick = async () => {
-      const job = this.modules.playtime.getJob(id);
-      if (!job) return;
-      const done = job.status === "completed" || job.status === "failed";
-      if (done) {
-        await this.core.auditManager.update(auditRequestId, {
-          result: job.status === "completed" ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILED,
-          resultData: this.summarizePlaytimeJobForAudit(job),
-          errorCode: job.status === "failed" ? "PlaytimeJobFailed" : null,
-          errorMessage: job.status === "failed" ? job?.error?.message ?? "Playtime job failed." : null,
-          completedAt: new Date().toISOString(),
-          durationMs: Date.now() - Number(context?.createdAtMs ?? startedAt),
-        });
-        return;
-      }
-      if (Date.now() - startedAt >= timeoutMs) return;
-      setTimeout(() => {
-        tick().catch((error) => this.logger?.warn?.(`[AuditManager] playtime audit watcher failed: ${error.message}`));
-      }, 2000).unref?.();
-    };
-
-    setTimeout(() => {
-      tick().catch((error) => this.logger?.warn?.(`[AuditManager] playtime audit watcher failed: ${error.message}`));
-    }, 500).unref?.();
-  }
-
-  getOnlinePlayerCount(serverId = this.getCurrentServerId("")) {
-    try {
-      return this.modules.playerState?.getOnlinePlayers?.(serverId)?.length ?? null;
-    } catch {
-      return null;
-    }
-  }
-
-  getServerName(serverId = "") {
-    const status = this.core.webStatus?.getSnapshot?.() ?? {};
-    return status.serverName ?? status.server?.name ?? String(serverId ?? "");
-  }
-
-  canViewAudit(user) {
-    return Boolean(
-      this.core.authManager?.hasEverything?.(user)
-      || this.core.authManager?.hasPermission?.(user, "audit.view"),
-    );
-  }
-
-  canManagePlugins(user) {
-    if (this.core.authManager?.hasEverything?.(user)) return true;
-    const permissions = user?.permissions ?? user?.permission ?? [];
-    if (Array.isArray(permissions)) return permissions.includes("plugins.manage");
-    if (permissions && typeof permissions === "object") return Boolean(permissions["plugins.manage"]);
-    return false;
-  }
-
-  canManageSettingsTools(user) {
-    return Boolean(
-      this.core.authManager?.hasEverything?.(user)
-      || this.core.authManager?.hasPermission?.(user, "settings.manage"),
-    );
-  }
-
-  canUseBzssCoreTool(user) {
-    return Boolean(
-      this.core.authManager?.hasEverything?.(user)
-      || this.core.authManager?.hasPermission?.(user, "bzss_core.use"),
-    );
-  }
-
-  async handleAdminUsersApi(url, req, res, user) {
-    if (
-      url.pathname !== "/api/admin/users"
-      && !url.pathname.startsWith("/api/admin/users/")
-      && url.pathname !== "/api/admin/permission-groups"
-      && !url.pathname.startsWith("/api/admin/permission-groups/")
-    ) {
-      return false;
-    }
-
-    if (!this.requireSuperAdmin(user, res)) return true;
-
-    const store = this.core.authManager?.userStore;
-    if (!store) {
-      this.json(res, 503, {
-        error: "AuthUserStoreUnavailable",
-        message: "Auth user store is unavailable.",
-      });
-      return true;
-    }
-
-    try {
-      if (url.pathname === "/api/admin/permission-groups" && req.method === "GET") {
-        const items = this.serializePermissionGroups(store.listPermissionGroups(), store.listUsers());
-        return this.json(res, 200, {
-          ok: true,
-          items,
-        });
-      }
-
-      if (url.pathname === "/api/admin/permission-groups" && req.method === "POST") {
-        const body = await this.readJsonBody(req);
-        const created = await store.createPermissionGroup({
-          name: body?.name,
-          enabled: body?.enabled ?? true,
-          permissions: body?.permissions ?? [],
-        });
-        return this.json(res, 201, {
-          ok: true,
-          group: this.serializePermissionGroup(created, store.listUsers()),
-        });
-      }
-
-      const permissionGroupMatch = url.pathname.match(/^\/api\/admin\/permission-groups\/([^/]+)$/);
-      if (permissionGroupMatch) {
-        const groupId = decodeURIComponent(permissionGroupMatch[1]);
-
-        if (req.method === "PATCH") {
-          const body = await this.readJsonBody(req);
-          const updated = await store.updatePermissionGroup(groupId, {
-            name: body?.name,
-            enabled: body?.enabled,
-            permissions: body?.permissions,
-          });
-          return this.json(res, 200, {
-            ok: true,
-            group: this.serializePermissionGroup(updated, store.listUsers()),
-          });
-        }
-
-        if (req.method === "DELETE") {
-          const deleted = await store.deletePermissionGroup(groupId);
-          return this.json(res, 200, {
-            ok: true,
-            group: this.serializePermissionGroup(deleted, store.listUsers()),
-          });
-        }
-      }
-
-      if (url.pathname === "/api/admin/users" && req.method === "GET") {
-        const avatarMap = await this.getAdminSteamAvatarMap(store.listUsers());
-        const groups = store.listPermissionGroups();
-        const items = store.listUsers().map((item) => this.serializeAdminUser(item, avatarMap, groups));
-        return this.json(res, 200, {
-          ok: true,
-          items,
-          stats: this.buildAdminUserStats(items),
-          permissionGroups: this.serializePermissionGroups(groups, store.listUsers()),
-        });
-      }
-
-      if (url.pathname === "/api/admin/users" && req.method === "POST") {
-        const body = await this.readJsonBody(req);
-        const username = String(body?.username ?? "").trim();
-        const password = String(body?.password ?? "");
-        if (!username) {
-          return this.json(res, 400, { error: "InvalidUsername", message: "Username is required." });
-        }
-        if (password.length < 8) {
-          return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
-        }
-
-        const steam64 = normalizeAdminSteam64ForRequest(body?.steam64);
-        if (steam64) store.assertSteam64Available(steam64);
-
-        const passwordHash = await this.core.authManager.hashPassword(password);
-        const created = await store.createUser({
-          username,
-          passwordHash,
-          role: body?.role ?? "Admin",
-          displayName: body?.displayName ?? "",
-          steam64,
-          viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
-          enabled: body?.enabled ?? true,
-          note: body?.note ?? "",
-          permissionGroupId: this.normalizePermissionGroupIdForRequest(store, body?.permissionGroupId),
-        });
-        return this.json(res, 201, {
-          ok: true,
-          user: this.serializeAdminUser(created, await this.getAdminSteamAvatarMap([created]), store.listPermissionGroups()),
-        });
-      }
-
-      const resetMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)\/reset-password$/);
-      if (resetMatch && req.method === "POST") {
-        const userId = decodeURIComponent(resetMatch[1]);
-        const body = await this.readJsonBody(req);
-        const password = String(body?.password ?? "");
-        if (password.length < 8) {
-          return this.json(res, 400, { error: "InvalidPassword", message: "Password must be at least 8 characters." });
-        }
-
-        const passwordHash = await this.core.authManager.hashPassword(password);
-        const updated = await store.updatePassword(userId, passwordHash);
-        return this.json(res, 200, {
-          ok: true,
-          user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated]), store.listPermissionGroups()),
-        });
-      }
-
-      const userMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
-      if (!userMatch) {
-        return this.json(res, 404, {
-          error: "ApiNotFound",
-          message: "Admin user API route not found.",
-        });
-      }
-
-      const userId = decodeURIComponent(userMatch[1]);
-
-      if (req.method === "PATCH") {
-        const target = store.requireExistingUser(userId);
-        const body = await this.readJsonBody(req);
-        const nextEnabled = body?.enabled === undefined ? target.enabled : Boolean(body.enabled);
-        const nextRole = body?.role === undefined ? target.role : body.role;
-        if (target.id === user.id && target.enabled && !nextEnabled) {
-          return this.json(res, 400, {
-            error: "CannotDisableSelf",
-            message: "Cannot disable the current account.",
-          });
-        }
-
-        const steam64 = body?.steam64 === undefined ? undefined : normalizeAdminSteam64ForRequest(body.steam64);
-        const updated = await store.updateUser(userId, {
-          displayName: body?.displayName,
-          role: nextRole,
-          steam64,
-          viewerTeamAutoSwapEnabled: body?.viewerTeamAutoSwapEnabled,
-          enabled: nextEnabled,
-          note: body?.note,
-          permissionGroupId: body?.permissionGroupId === undefined
-            ? undefined
-            : this.normalizePermissionGroupIdForRequest(store, body?.permissionGroupId),
-        });
-        return this.json(res, 200, {
-          ok: true,
-          user: this.serializeAdminUser(updated, await this.getAdminSteamAvatarMap([updated]), store.listPermissionGroups()),
-        });
-      }
-
-      if (req.method === "DELETE") {
-        const target = store.requireExistingUser(userId);
-        if (target.id === user.id) {
-          return this.json(res, 400, {
-            error: "CannotDeleteSelf",
-            message: "Cannot delete the current account.",
-          });
-        }
-
-        const deleted = await store.deleteUser(userId);
-        return this.json(res, 200, {
-          ok: true,
-          user: this.serializeAdminUser(deleted, new Map(), store.listPermissionGroups()),
-        });
-      }
-
-      return this.json(res, 405, {
-        error: "MethodNotAllowed",
-        message: "Unsupported admin user API method.",
-      });
-    } catch (error) {
-      return this.json(res, Number(error?.statusCode ?? 500), {
-        error: String(error?.code ?? "AdminUserApiError"),
-        message: String(error?.message ?? "Admin user API request failed."),
-      });
-    }
-  }
-
-  async getAdminSteamAvatarMap(users = []) {
-    const steamIDs = [...new Set(
-      (Array.isArray(users) ? users : [])
-        .map((item) => String(item?.steam64 ?? "").trim())
-        .filter((item) => /^\d{17}$/.test(item)),
-    )];
-    if (!steamIDs.length) return new Map();
-
-    const listPlayersBySteamIDs = this.modules.playerDatabase?.listPlayersBySteamIDs;
-    if (typeof listPlayersBySteamIDs !== "function") return new Map();
-
-    try {
-      const rows = await listPlayersBySteamIDs.call(this.modules.playerDatabase, steamIDs);
-      const map = new Map();
-      for (const row of Array.isArray(rows) ? rows : []) {
-        const steamID = String(row?.steam_id ?? row?.steamID ?? row?.steam64 ?? "").trim();
-        const avatar = String(row?.steam_avatar ?? row?.steamAvatar ?? "").trim();
-        if (steamID && avatar) map.set(steamID, avatar);
-      }
-      return map;
-    } catch (error) {
-      this.logger?.warn?.(`Failed to resolve admin Steam avatars: ${error.message}`);
-      return new Map();
-    }
-  }
-
-  serializeAuthSessionUser(user) {
-    if (!user) return null;
-    return {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      isSuperAdmin: user.role === "SuperAdmin",
-      steam64: user.steam64 ?? null,
-      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
-      permissions: Array.isArray(user.permissions) ? [...user.permissions] : [],
-    };
-  }
-  async enrichAuthUserWithSteamAvatar(user) {
-    if (!user) return null;
-    const steam64 = String(user?.steam64 ?? "").trim();
-    if (!/^\d{17}$/.test(steam64)) {
-      return {
-        ...user,
-        steamAvatar: null,
-      };
-    }
-
-    const steamAvatar = await this.getSteamAvatarBySteam64(steam64);
-    return {
-      ...user,
-      steamAvatar,
-    };
-  }
-
-  async getSteamAvatarBySteam64(steam64) {
-    const listPlayersBySteamIDs = this.modules.playerDatabase?.listPlayersBySteamIDs;
-    if (typeof listPlayersBySteamIDs !== "function") return null;
-
-    try {
-      const rows = await listPlayersBySteamIDs.call(this.modules.playerDatabase, [steam64]);
-      const first = Array.isArray(rows) ? rows[0] : null;
-      const avatar = String(first?.steam_avatar ?? first?.steamAvatar ?? "").trim();
-      return avatar || null;
-    } catch (error) {
-      this.logger?.warn?.(`Failed to resolve Steam avatar for auth user: ${error.message}`);
-      return null;
-    }
-  }
-
-  serializeAdminUser(user, steamAvatarMap = new Map()) {
-    const groups = arguments[2] ?? [];
-    const groupMap = new Map((Array.isArray(groups) ? groups : []).map((group) => [group.id, group]));
-    const permissionGroup = user.permissionGroupId ? groupMap.get(user.permissionGroupId) : null;
-    const permissions = user.role === "SuperAdmin"
-      ? ["*"]
-      : (permissionGroup?.enabled !== false ? [...(permissionGroup?.permissions ?? [])] : []);
-    return {
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName ?? "",
-      role: user.role,
-      steam64: user.steam64 ?? null,
-      steamAvatar: user.steam64 ? (steamAvatarMap.get(user.steam64) ?? null) : null,
-      viewerTeamAutoSwapEnabled: user.viewerTeamAutoSwapEnabled !== false,
-      enabled: user.enabled !== false,
-      note: user.note ?? "",
-      permissionGroupId: user.permissionGroupId ?? null,
-      permissionGroupName: permissionGroup?.name ?? "",
-      permissions,
-      createdAt: Number(user.createdAt ?? 0),
-      updatedAt: Number(user.updatedAt ?? 0),
-      passwordChangedAt: Number(user.passwordChangedAt ?? 0),
-    };
-  }
-
-  serializePermissionGroup(group, users = []) {
-    const count = (Array.isArray(users) ? users : []).filter((user) => user.permissionGroupId === group.id).length;
-    return {
-      id: group.id,
-      name: group.name,
-      enabled: group.enabled !== false,
-      permissions: Array.isArray(group.permissions) ? [...group.permissions] : [],
-      assignedUsers: count,
-      createdAt: Number(group.createdAt ?? 0),
-      updatedAt: Number(group.updatedAt ?? 0),
-    };
-  }
-
-  serializePermissionGroups(groups = [], users = []) {
-    return (Array.isArray(groups) ? groups : []).map((group) => this.serializePermissionGroup(group, users));
-  }
-
-  buildAdminUserStats(items) {
-    return {
-      total: items.length,
-      enabled: items.filter((item) => item.enabled).length,
-      superAdmins: items.filter((item) => item.role === "SuperAdmin").length,
-      steamBound: items.filter((item) => Boolean(item.steam64)).length,
-    };
-  }
-
-  normalizePermissionGroupIdForRequest(store, value) {
-    if (value === undefined) return undefined;
-    if (value === null || String(value ?? "").trim() === "") return null;
-    const groupId = String(value ?? "").trim();
-    const group = store.getPermissionGroupById(groupId);
-    if (!group) {
-      const error = new Error("Permission group not found.");
-      error.statusCode = 400;
-      error.code = "PermissionGroupNotFound";
-      throw error;
-    }
-    return groupId;
-  }
-
-  requireSuperAdmin(user, res) {
-    if (!this.core.authManager?.hasEverything?.(user)) {
-      this.json(res, 403, {
-        error: "Forbidden",
-        message: "SuperAdmin role is required.",
-      });
-      return false;
-    }
-    return true;
-  }
-
-  getLogPostConfigPath() {
-    const parserConfig = this.core.config?.get?.("pythonLogParser", {}) ?? {};
-    const workingDirectory = path.resolve(process.cwd(), String(parserConfig.workingDirectory ?? "./LogPost").trim());
-    return path.resolve(workingDirectory, String(parserConfig.configPath ?? "./config.json").trim());
-  }
-
-  async readLogPostConfig() {
-    const configPath = this.getLogPostConfigPath();
-    const text = await fs.readFile(configPath, "utf8");
-    return {
-      configPath,
-      config: JSON.parse(text),
-    };
-  }
-
-  async getLogPostRawOutputConfig() {
-    const { configPath, config } = await this.readLogPostConfig();
-    return {
-      enabled: Boolean(config.raw_log_output?.enabled),
-      source: String(config.raw_log_output?.source ?? "Squad.log"),
-      configPath,
-    };
-  }
-
-  async setLogPostRawOutputConfig(enabled) {
-    const { configPath, config } = await this.readLogPostConfig();
-    config.raw_log_output = {
-      ...(config.raw_log_output ?? {}),
-      enabled: Boolean(enabled),
-      source: String(config.raw_log_output?.source ?? "Squad.log"),
-    };
-
-    await fs.writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
-
-    if (this.core.pythonLogParserManager?.restart) {
-      await this.core.pythonLogParserManager.restart();
-    }
-
-    return {
-      ok: true,
-      enabled: Boolean(config.raw_log_output.enabled),
-      source: String(config.raw_log_output.source),
-      configPath,
-      restarted: Boolean(this.core.pythonLogParserManager?.restart),
-    };
-  }
-
-  getPluginApi(pluginId) {
-    return this.core.pluginManager?.instances
-      ?.find((instance) => instance.manifest?.id === pluginId)?.api ?? null;
-  }
-
-  getLogPostWorkingDirectory() {
-    const parserConfig = this.core.config?.get?.("pythonLogParser", {}) ?? {};
-    return path.resolve(process.cwd(), String(parserConfig.workingDirectory ?? "./LogPost").trim());
-  }
-
-  async getLogPostState() {
-    const workingDirectory = this.getLogPostWorkingDirectory();
-    const outputDir = resolveLogPostOutputDir(workingDirectory);
-    const legacyStatePath = path.resolve(outputDir, ".state", "tailer-state.json");
-    const v2StatePath = path.resolve(outputDir, "state", "source-state.json");
-    const legacyState = await this.readJsonFileSafe(legacyStatePath, {});
-    const sourceState = await this.readJsonFileSafe(v2StatePath, legacyState);
-    const tailerState = sourceState;
-    const gapState = this.getLogPostGapState();
-
-    return {
-      workingDirectory,
-      outputDir,
-      tailerState,
-      sourceState,
-      gapState,
-    };
-  }
-
-  getLogPostGapState() {
-    return this.core.logPostMonitor?.getState?.() ?? {
-      lastSourceSeq: 0,
-      lastEventId: "",
-      recentGaps: [],
-    };
-  }
-
-  async queryLogPostRawArchive({ date, start, end, q, limit, offset }) {
-    const normalizedDate = normalizeLogPostDate(date);
-    const workingDir = resolveLogPostOutputDir(this.getLogPostWorkingDirectory());
-    const v2FilePath = path.resolve(workingDir, "raw", normalizedDate, "segment-000001.jsonl");
-    const legacyFilePath = path.resolve(workingDir, "Raw", normalizedDate, "all.jsonl");
-    const filePath = await this.resolveFirstExistingPath([v2FilePath, legacyFilePath]);
-    const items = await this.readJsonlFile(filePath);
-    const filtered = filterLogPostRows(items, {
-      start,
-      end,
-      q,
-      eventField: "",
-      timeField: "readAt",
-      messageFields: ["rawLine", "rawLineHash", "sourcePath"],
-    });
-    return paginateLogPostRows(filtered, limit, offset, {
-      date: normalizedDate,
-      filePath,
-    });
-  }
-
-  async queryLogPostStructuredEvents({ date, event, start, end, q, limit, offset }) {
-    const normalizedDate = normalizeLogPostDate(date);
-    const workingDir = resolveLogPostOutputDir(this.getLogPostWorkingDirectory());
-    const v2FilePath = path.resolve(workingDir, "events", normalizedDate, "all.jsonl");
-    const legacyFilePath = path.resolve(workingDir, normalizedDate, "All.jsonl");
-    const filePath = await this.resolveFirstExistingPath([v2FilePath, legacyFilePath]);
-    const items = await this.readJsonlFile(filePath);
-    const filtered = filterLogPostRows(items, {
-      start,
-      end,
-      q,
-      eventField: "Event",
-      eventValue: event,
-      timeField: "Time",
-      messageFields: ["Raw", "Event", "EventId", "RawLineHash", "SourceSeq", "SourceOffset", "SourceMode"],
-    });
-    return paginateLogPostRows(filtered, limit, offset, {
-      date: normalizedDate,
-      filePath,
-    });
-  }
-
-  async queryLogPostOutbox({ date, kind, q, limit, offset }) {
-    const normalizedDate = normalizeLogPostDate(date);
-    const dir = path.resolve(resolveLogPostOutputDir(this.getLogPostWorkingDirectory()), "outbox", normalizedDate);
-    const items = await this.readJsonlDirectory(dir);
-    const filtered = filterLogPostRows(items, {
-      q,
-      eventField: "status",
-      eventValue: kind,
-      timeField: "time",
-      messageFields: ["eventName", "eventId", "sourceSeq", "sourceMode", "error"],
-    });
-    return paginateLogPostRows(filtered, limit, offset, {
-      date: normalizedDate,
-      filePath: dir,
-    });
-  }
-
-  async queryLogPostSafety({ date, kind, q, limit, offset }) {
-    const normalizedDate = normalizeLogPostDate(date);
-    const dir = path.resolve(resolveLogPostOutputDir(this.getLogPostWorkingDirectory()), "audit", normalizedDate);
-    const items = await this.readJsonlDirectory(dir);
-    const filtered = filterLogPostRows(items, {
-      q,
-      eventField: "kind",
-      eventValue: kind,
-      timeField: "time",
-      messageFields: ["kind", "reason", "sourceMode", "message", "eventName", "eventId"],
-    });
-    return paginateLogPostRows(filtered, limit, offset, {
-      date: normalizedDate,
-      filePath: dir,
-    });
-  }
-
-  async writeLogPostAuditRecord(kind, payload = {}) {
-    const outputDir = resolveLogPostOutputDir(this.getLogPostWorkingDirectory());
-    const dir = path.resolve(outputDir, "audit", new Date().toISOString().slice(0, 10));
-    await fs.mkdir(dir, { recursive: true });
-    const filePath = path.resolve(dir, `${kind}.jsonl`);
-    const record = {
-      schema: "logpost.audit.v2",
-      kind: String(kind ?? "unknown"),
-      time: new Date().toISOString(),
-      ...payload,
-    };
-    await fs.appendFile(filePath, `${JSON.stringify(record)}\n`, "utf8");
-  }
-
-  async readJsonlFile(filePath) {
-    try {
-      const text = await fs.readFile(filePath, "utf8");
-      return text
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          try {
-            return JSON.parse(line);
-          } catch {
-            return null;
-          }
-        })
-        .filter(Boolean);
-    } catch (error) {
-      if (error?.code === "ENOENT") return [];
-      throw error;
-    }
-  }
-
-  async readJsonlDirectory(dirPath) {
-    try {
-      const entries = await fs.readdir(dirPath, { withFileTypes: true });
-      const files = entries
-        .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".jsonl"))
-        .map((entry) => path.join(dirPath, entry.name))
-        .sort((left, right) => left.localeCompare(right));
-      const rows = [];
-      for (const filePath of files) {
-        rows.push(...await this.readJsonlFile(filePath));
-      }
-      return rows;
-    } catch (error) {
-      if (error?.code === "ENOENT") return [];
-      throw error;
-    }
-  }
-
-  async resolveFirstExistingPath(paths) {
-    for (const filePath of paths) {
-      try {
-        await fs.access(filePath);
-        return filePath;
-      } catch {}
-    }
-    return paths[0] ?? "";
-  }
-
-  async readJsonFileSafe(filePath, fallback) {
-    try {
-      const text = await fs.readFile(filePath, "utf8");
-      return JSON.parse(text);
-    } catch {
-      return fallback;
-    }
-  }
-}
-
-function resolveLogPostOutputDir(workingDirectory) {
-  const baseDirectory = path.resolve(workingDirectory);
-  const candidates = [
-    baseDirectory,
-    path.resolve(baseDirectory, "LogPost"),
-  ];
-
-  for (const candidate of candidates) {
-    if (
-      existsSync(path.resolve(candidate, "events"))
-      || existsSync(path.resolve(candidate, "raw"))
-      || existsSync(path.resolve(candidate, "audit"))
-      || existsSync(path.resolve(candidate, "state"))
-      || existsSync(path.resolve(candidate, ".state"))
-    ) {
-      return candidate;
-    }
-  }
-
-  return candidates[0];
-}
-
-function contentType(filePath) {
-  if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
-  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
-  if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
-  if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
-  if (filePath.endsWith(".png")) return "image/png";
-  if (filePath.endsWith(".svg")) return "image/svg+xml";
-  if (filePath.endsWith(".csv")) return "text/csv; charset=utf-8";
-  if (filePath.endsWith(".md")) return "text/markdown; charset=utf-8";
-  return "application/octet-stream";
-}
-
-function safeHeaderFileName(fileName) {
-  return path.basename(String(fileName ?? "download"))
-    .replace(/[^\x20-\x7E]/g, "_")
-    .replace(/["\\]/g, "_");
-}
-
-function createHttpError(statusCode, code, message) {
-  const error = new Error(message);
-  error.statusCode = statusCode;
-  error.code = code;
-  return error;
-}
-
-function statusText(code) {
-  switch (code) {
-    case 400:
-      return "Bad Request";
-    case 401:
-      return "Unauthorized";
-    case 403:
-      return "Forbidden";
-    case 404:
-      return "Not Found";
-    default:
-      return "Error";
-  }
-}
-
-function parseOptionalBoolean(value) {
-  if (value == null || String(value).trim() === "") return null;
-  const text = String(value).trim().toLowerCase();
-  if (text === "true" || text === "1") return true;
-  if (text === "false" || text === "0") return false;
-  return null;
-}
-
-function normalizeLogPostDate(value) {
-  const text = String(value ?? "").trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
-  return new Date().toISOString().slice(0, 10);
-}
-
-function filterLogPostRows(items, options = {}) {
-  const startMs = parseOptionalDateMs(options.start);
-  const endMs = parseOptionalDateMs(options.end);
-  const keyword = String(options.q ?? "").trim().toLowerCase();
-  const eventField = String(options.eventField ?? "").trim();
-  const eventValue = String(options.eventValue ?? "").trim();
-  const timeField = String(options.timeField ?? "Time").trim();
-  const messageFields = Array.isArray(options.messageFields) ? options.messageFields : [];
-
-  return (Array.isArray(items) ? items : []).filter((item) => {
-    if (!item || typeof item !== "object") return false;
-
-    if (eventField && eventValue) {
-      if (String(item[eventField] ?? "").trim() !== eventValue) return false;
-    }
-
-    const currentMs = parseOptionalDateMs(item[timeField]);
-    if (startMs != null && (currentMs == null || currentMs < startMs)) return false;
-    if (endMs != null && (currentMs == null || currentMs > endMs)) return false;
-
-    if (!keyword) return true;
-    return messageFields.some((field) => String(item[field] ?? "").toLowerCase().includes(keyword));
-  });
-}
-
-function paginateLogPostRows(items, limit, offset, extra = {}) {
-  const safeLimit = Math.max(1, Math.min(Number(limit) || 200, 2000));
-  const safeOffset = Math.max(0, Number(offset) || 0);
-  return {
-    ...extra,
-    total: items.length,
-    limit: safeLimit,
-    offset: safeOffset,
-    items: items.slice(safeOffset, safeOffset + safeLimit),
-  };
-}
-
-function parseOptionalDateMs(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function normalizePlaytimeRow(row) {
-  const steamSeconds = Number(row?.steam_game_seconds ?? row?.steamGameSeconds ?? row?.steam_seconds ?? row?.steamSeconds ?? row?.game_seconds ?? row?.gameSeconds ?? 0);
-  const overrideValue = row?.game_seconds_override ?? row?.gameSecondsOverride;
-  const normalizedOverride = overrideValue == null || String(overrideValue).trim() === ""
-    ? null
-    : Number(overrideValue);
-  const safeOverrideSeconds = normalizedOverride == null || !Number.isFinite(normalizedOverride)
-    ? null
-    : Math.max(0, Math.floor(normalizedOverride));
-  const effectiveSeconds = Number(safeOverrideSeconds ?? row?.game_seconds ?? row?.gameSeconds ?? steamSeconds ?? 0);
-  const safeSeconds = Number.isFinite(effectiveSeconds) ? effectiveSeconds : 0;
-  const safeSteamSeconds = Number.isFinite(steamSeconds) ? steamSeconds : 0;
-  return {
-    steamID: String(row?.steam_id ?? row?.steamID ?? ""),
-    appId: Number(row?.app_id ?? row?.appId ?? 393380),
-    gameName: String(row?.game_name ?? row?.gameName ?? "Squad"),
-    gameSeconds: safeSeconds,
-    steamGameSeconds: safeSteamSeconds,
-    gameSecondsOverride: safeOverrideSeconds,
-    gameHours: Number((safeSeconds / 3600).toFixed(2)),
-    steamGameHours: Number((safeSteamSeconds / 3600).toFixed(2)),
-    fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? 0) || null,
-    lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
-    steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
-    steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
-  };
-}
-
-function cleanPlayerForClient(player) {
-  if (!player) return player;
-  const cleaned = { ...player };
-  delete cleaned.raw;
-  return cleaned;
-}
-
-function cleanPlayersForClient(players) {
-  if (!players) return players;
-  const cleaned = { ...players };
-  delete cleaned.bySteamID;
-  delete cleaned.byEOSID;
-  delete cleaned.byPlayerID;
-  delete cleaned.byName;
-  if (Array.isArray(cleaned.active)) {
-    cleaned.active = cleaned.active.map(cleanPlayerForClient);
-  }
-  if (Array.isArray(cleaned.recentlyDisconnected)) {
-    cleaned.recentlyDisconnected = cleaned.recentlyDisconnected.map(cleanPlayerForClient);
-  }
-  return cleaned;
-}
-
-function cleanSquadsForClient(squads) {
-  if (!squads) return squads;
-  const cleaned = { ...squads };
-  delete cleaned.byKey;
-  delete cleaned.byTeamID;
-  return cleaned;
-}
-
-function cleanSnapshotAllForClient(all) {
-  if (!all) return all;
-  return {
-    ...all,
-    players: cleanPlayersForClient(all.players),
-    squads: cleanSquadsForClient(all.squads),
-    match: all.match ? {
-      ...all.match,
-      players: cleanPlayersForClient(all.match.players),
-      squads: cleanSquadsForClient(all.match.squads),
-    } : all.match,
-  };
-}
-
-function cleanCombatEventForClient(event) {
-  if (!event) return event;
-  const cleaned = { ...event };
-  delete cleaned.raw;
-  delete cleaned.rawEvent;
-  if (cleaned.attacker) {
-    cleaned.attacker = { ...cleaned.attacker };
-    delete cleaned.attacker.raw;
-  }
-  if (cleaned.victim) {
-    cleaned.victim = { ...cleaned.victim };
-    delete cleaned.victim.raw;
-  }
-  return cleaned;
-}
-
-function cleanCombatEventsForClient(events) {
-  if (!Array.isArray(events)) return [];
-  return events.map(cleanCombatEventForClient);
-}
-
-function cleanCombatOverviewForClient(overview) {
-  if (!overview) return overview;
-  const cleaned = { ...overview };
-  delete cleaned.events;
-  delete cleaned.latest;
-  delete cleaned.rawLatest;
-  delete cleaned.processedLatest;
-  return cleaned;
-}
-
-function cleanBattleLogEventForClient(event) {
-  if (!event) return event;
-  const cleaned = { ...event };
-  delete cleaned.raw;
-  delete cleaned.rawEvent;
-  if (cleaned.player) {
-    cleaned.player = { ...cleaned.player };
-    delete cleaned.player.raw;
-  }
-  if (cleaned.counterparty) {
-    cleaned.counterparty = { ...cleaned.counterparty };
-    delete cleaned.counterparty.raw;
-  }
-  if (cleaned.attacker) {
-    cleaned.attacker = { ...cleaned.attacker };
-    delete cleaned.attacker.raw;
-  }
-  if (cleaned.victim) {
-    cleaned.victim = { ...cleaned.victim };
-    delete cleaned.victim.raw;
-  }
-  return cleaned;
-}
-
-function cleanBattleLogEventsForClient(events) {
-  if (!Array.isArray(events)) return [];
-  return events.map(cleanBattleLogEventForClient);
-}
-
-function cleanBattleLogOverviewForClient(overview) {
-  if (!overview) return overview;
-  const cleaned = { ...overview };
-  if (Array.isArray(cleaned.latest)) {
-    cleaned.latest = cleanBattleLogEventsForClient(cleaned.latest);
-  }
-  return cleaned;
-}
-
-function cleanBattleLogEventsResponseForClient(data) {
-  if (!data) return data;
-  return {
-    ...data,
-    events: cleanBattleLogEventsForClient(data.events),
-    overview: cleanBattleLogOverviewForClient(data.overview),
-  };
-}
-
-function cleanBattleLogPlayerResponseForClient(data) {
-  if (!data) return data;
-  return {
-    ...data,
-    events: cleanBattleLogEventsForClient(data.events),
-    latest: cleanBattleLogEventsForClient(data.latest),
-  };
-}
-
-function normalizeSquadName(name) {
-  return String(name ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
-function buildTrackingKey(record = {}) {
-  return [
-    String(record.serverId ?? "").trim(),
-    String(record.matchId ?? "").trim(),
-    record.teamId == null ? "" : String(record.teamId),
-    record.squadId == null ? "" : String(record.squadId),
-    normalizeSquadName(record.squadName),
-  ].join("|");
-}
-
-function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifecycle }) {
-  const grouped = new Map();
-
-  for (const item of Array.isArray(guard?.recent) ? guard.recent : []) {
-    const status = String(item.status ?? "").trim();
-    if (status !== "violation" && status !== "handled" && status !== "error") continue;
-    const key = buildTrackingKey({
-      serverId: item.serverId ?? item.event?.serverId ?? "",
-      matchId: item.matchId ?? item.event?.matchId ?? "",
-      teamId: item.event?.teamId ?? null,
-      squadId: item.event?.squadId ?? null,
-      squadName: item.event?.squadName ?? "",
-    });
-    if (!grouped.has(key)) grouped.set(key, { squadName: [], stepwise: [], fair: [] });
-    grouped.get(key).squadName.push({
-      id: item.id,
-      serverId: item.serverId ?? item.event?.serverId ?? "",
-      matchId: item.matchId ?? item.event?.matchId ?? "",
-      teamId: item.event?.teamId ?? null,
-      squadId: item.event?.squadId ?? null,
-      squadName: item.event?.squadName ?? "",
-      creatorName: item.event?.creatorName ?? "",
-      creatorSteamId: item.event?.creatorSteamId ?? item.event?.creatorSteamID ?? item.event?.steamId ?? item.event?.steamID ?? "",
-      source: "squad_name_rule",
-      stage: "squad_name",
-      status: "violation",
-      decisionLabel: "йџеђЌиїќи§„",
-      decisionTone: "danger",
-      reason: item.reason ?? "",
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
-      canWhitelist: true,
-    });
-  }
-
-  for (const item of Array.isArray(stepwise?.recentRecords) ? stepwise.recentRecords : []) {
-    if (item?.violation !== true) continue;
-    const key = buildTrackingKey({
-      serverId: item.serverId ?? "",
-      matchId: item.matchId ?? "",
-      teamId: item.teamId ?? null,
-      squadId: item.squadId ?? null,
-      squadName: item.squadName ?? "",
-    });
-    if (!grouped.has(key)) grouped.set(key, { squadName: [], stepwise: [], fair: [] });
-    grouped.get(key).stepwise.push({
-      id: item.id,
-      serverId: item.serverId ?? "",
-      matchId: item.matchId ?? "",
-      teamId: item.teamId ?? null,
-      squadId: item.squadId ?? null,
-      squadName: item.squadName ?? "",
-      creatorName: item.creatorName ?? item.leaderName ?? "",
-      creatorSteamId: item.creatorSteamId ?? item.leaderSteamId ?? item.steamId ?? item.steamID ?? "",
-      squadNature: item.squadNature ?? item.squadType ?? "",
-      squadNatureLabel: item.squadNatureLabel ?? "",
-      source: "tiered_squad_time",
-      stage: "stepwise",
-      status: "violation",
-      decisionLabel: "й¶жўЇејЏж—¶й•їж‹’з»ќ",
-      decisionTone: "danger",
-      reason: item.decisionReason ?? item.reason ?? "",
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
-      canWhitelist: false,
-    });
-  }
-
-  for (const item of Array.isArray(fair?.recentRecords) ? fair.recentRecords : []) {
-    const violation = item?.violation === true;
-    const approved = item?.approved === true && !violation;
-    if (!violation && !approved) continue;
-
-    const key = buildTrackingKey({
-      serverId: item.serverId ?? "",
-      matchId: item.matchId ?? "",
-      teamId: item.teamId ?? null,
-      squadId: item.squadId ?? null,
-      squadName: item.squadName ?? "",
-    });
-    if (!grouped.has(key)) grouped.set(key, { squadName: [], stepwise: [], fair: [] });
-    grouped.get(key).fair.push({
-      id: item.id,
-      serverId: item.serverId ?? "",
-      matchId: item.matchId ?? "",
-      teamId: item.teamId ?? null,
-      squadId: item.squadId ?? null,
-      squadName: item.squadName ?? "",
-      creatorName: item.creatorName ?? "",
-      creatorSteamId: item.creatorSteamId ?? item.steamId ?? item.steamID ?? "",
-      source: violation ? "fair_squad_creation" : "final_allowed",
-      stage: violation ? "fair" : "final",
-      status: violation ? "violation" : "allowed",
-      decisionLabel: violation ? "е…¬е№іе»єйџж‹’з»ќ" : "жњЂз»€йЂљиї‡",
-      decisionTone: violation ? "danger" : "ok",
-      reason: Array.isArray(item.reasons) ? item.reasons.join(" ") : item.reason ?? "",
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-      actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
-      canWhitelist: false,
-    });
-  }
-
-  return Array.from(grouped.values())
-    .map((bucket) => selectTrackingRecord(bucket))
-    .filter(Boolean)
-    .sort((left, right) => {
-      const rightMs = Date.parse(right.updatedAt ?? right.createdAt ?? "") || 0;
-      const leftMs = Date.parse(left.updatedAt ?? left.createdAt ?? "") || 0;
-      return rightMs - leftMs;
-    })
-    .slice(0, 300);
-}
-
-function selectTrackingRecord(bucket) {
-  if (!bucket) return null;
-  const latestSquadName = pickLatestRecord(bucket.squadName);
-  if (latestSquadName) return latestSquadName;
-
-  const latestStepwise = pickLatestRecord(bucket.stepwise);
-  if (latestStepwise) return latestStepwise;
-
-  return pickLatestRecord(bucket.fair);
-}
-
-function pickLatestRecord(records) {
-  if (!Array.isArray(records) || records.length === 0) return null;
-  let latest = records[0];
-  let latestMs = Date.parse(latest.updatedAt ?? latest.createdAt ?? "") || 0;
-  for (const record of records.slice(1)) {
-    const currentMs = Date.parse(record.updatedAt ?? record.createdAt ?? "") || 0;
-    if (currentMs > latestMs) {
-      latest = record;
-      latestMs = currentMs;
-    }
-  }
-  return latest;
-}
+            serverId: battleServerId/~9зKh‘йм¶»§q«^tЩ\ќ™\’YH€ЉHВ€ЫЫњЭЭ]\ИH\ЛЫЬ™KќЩX”Э]\ПЛ™Щ]Ы\ЪЭЛЉ
+HПИЯNВ€™]\›€Э]\ЛњЩ\ќ™\“[YHПИЭ]\ЛњЩ\ќ™\ЏЛ›[YHПИЭљ[™КЩ\ќ™\’YПИ€ЉNВ€B‚€Ш[•љY]Р]Y]
+\Щ\ЉHВ€™]\›€›ЫЫX[Љ€\ЛЫЬ™K]]X[YЩ\ЏЛљ\С]™\ћ][™ПЛЉ\Щ\ЉB€\ЛЫЬ™K]]X[YЩ\ЏЛљ\Ф\›Z\ЬЪ[ЫЏЛЉ\Щ\‹]Y]ќљY]ИЉK€
+NВ€B‚€Ш[“X[YЩTYЪ[њК\Щ\ЉHВ€Y€
+\ЛЫЬ™K]]X[YЩ\ЏЛљ\С]™\ћ][™ПЛЉ\Щ\ЉJH™]\›€ќYNВ€ЫЫњЭ\›Z\ЬЪ[ЫњИH\Щ\ЏЛњ\›Z\ЬЪ[ЫњИПИ\Щ\ЏЛњ\›Z\ЬЪ[Ы€ПИЧNВ€Y€
+\њ^Kљ\Р\њ^J\›Z\ЬЪ[ЫњКJH™]\›€\›Z\ЬЪ[ЫњЛљ[ЫY\КњYЪ[њЛ›X[YЩHЉNВ€Y€
+\›Z\ЬЪ[ЫњИ	‰€\[Щ€\›Z\ЬЪ[ЫњИOOH›Шљ™XЭЉH™]\›€›ЫЫX[Љ\›Z\ЬЪ[ЫњЦИњYЪ[њЛ›X[YЩH—JNВ€™]\›€[ЩNВ€B‚€Ш[“X[YЩTЩ][™ЬХЫЫК\Щ\ЉHВ€™]\›€›ЫЫX[Љ€\ЛЫЬ™K]]X[YЩ\ЏЛљ\С]™\ћ][™ПЛЉ\Щ\ЉB€\ЛЫЬ™K]]X[YЩ\ЏЛљ\Ф\›Z\ЬЪ[ЫЏЛЉ\Щ\‹њЩ][™ЬЛ›X[YЩHЉK€
+NВ€B‚€Ш[•\ЩPћњЬРЫЬ™UЫЫ
+\Щ\ЉHВ€™]\›€›ЫЫX[Љ€\ЛЫЬ™K]]X[YЩ\ЏЛљ\С]™\ћ][™ПЛЉ\Щ\ЉB€\ЛЫЬ™K]]X[YЩ\ЏЛљ\Ф\›Z\ЬЪ[ЫЏЛЉ\Щ\‹ћњЬЧШЫЬ™Kќ\ЩHЉK€
+NВ€B‚€\Ю[И[™PYZ[•\Щ\њР\J\›™\K™\Л\Щ\ЉHВ€Y€
+€\›њ][YHOOH‹Ш\KШYZ[‹Э\Щ\њИ‚€	‰€]\›њ][YKњЭ\ќХЪ]
+‹Ш\KШYZ[‹Э\Щ\њЛИЉB€	‰€\›њ][YHOOH‹Ш\KШYZ[‹Ь\›Z\ЬЪ[Ы‹YЬ›Э\И‚€	‰€]\›њ][YKњЭ\ќХЪ]
+‹Ш\KШYZ[‹Ь\›Z\ЬЪ[Ы‹YЬ›Э\ЛИЉB€
+HВ€™]\›€[ЩNВ€B‚€Y€
+]\Лњ™\]Z\™TЭ\\ђYZ[Љ\Щ\‹™\КJH™]\›€ќYNВ‚€ЫЫњЭЭЬ™HH\ЛЫЬ™K]]X[YЩ\ЏЛќ\Щ\”ЭЬ™NВ€Y€
+\ЭЬ™JHВ€\ЛљњЫЫЉ™\ЛLЛВ€\њ›ЬЋ€ђ]]\Щ\”ЭЬ™U[]Z[X›H‹€Y\ЬШYЩN€ђ]]\Щ\€ЭЬ™H\И[]Z[X›K€‹€JNВ€™]\›€ќYNВ€B‚€ћHВ€Y€
+\›њ][YHOOH‹Ш\KШYZ[‹Ь\›Z\ЬЪ[Ы‹YЬ›Э\И€	‰€™\K›Y]ЩOOH‘СUЉHВ€ЫЫњЭ][\ИH\ЛњЩ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\КЭЬ™K›\Э\›Z\ЬЪ[Ы‘Ь›Э\К
+KЭЬ™K›\Э\Щ\њК
+JNВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€][\Л€JNВ€B‚€Y€
+\›њ][YHOOH‹Ш\KШYZ[‹Ь\›Z\ЬЪ[Ы‹YЬ›Э\И€	‰€™\K›Y]ЩOOH”ФХЉHВ€ЫЫњЭ›ЩHH]ШZ]\Лњ™XYњЫЫђ›ЩJ™\JNВ€ЫЫњЭЬ™X]YH]ШZ]ЭЬ™KЬ™X]T\›Z\ЬЪ[Ы‘Ь›Э\
+В€[YN€›ЩOЛ›[YK€[X›Y€›ЩOЛ™[X›YПИќYK€\›Z\ЬЪ[ЫњО€›ЩOЛњ\›Z\ЬЪ[ЫњИПИЧK€JNВ€™]\›€\ЛљњЫЫЉ™\ЛЊKВ€ЪО€ќYK€Ь›Э\€\ЛњЩ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\
+Ь™X]YЭЬ™K›\Э\Щ\њК
+JK€JNВ€B‚€ЫЫњЭ\›Z\ЬЪ[Ы‘Ь›Э\X]ЪH\›њ][YK›X]Ъ
+Ч—Ш\WШYZ[—Ь\›Z\ЬЪ[Ы‹YЬ›Э\ЧКЧ‹ЧJКIКNВ€Y€
+\›Z\ЬЪ[Ы‘Ь›Э\X]Ъ
+HВ€ЫЫњЭЬ›Э\YHXЫЩUT’PЫЫ\Ы™[ќ
+\›Z\ЬЪ[Ы‘Ь›Э\X]ЪМWJNВ‚€Y€
+™\K›Y]ЩOOH”UТЉHВ€ЫЫњЭ›ЩHH]ШZ]\Лњ™XYњЫЫђ›ЩJ™\JNВ€ЫЫњЭ\]YH]ШZ]ЭЬ™Kќ\]T\›Z\ЬЪ[Ы‘Ь›Э\
+Ь›Э\YВ€[YN€›ЩOЛ›[YK€[X›Y€›ЩOЛ™[X›Y€\›Z\ЬЪ[ЫњО€›ЩOЛњ\›Z\ЬЪ[ЫњЛ€JNВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€Ь›Э\€\ЛњЩ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\
+\]YЭЬ™K›\Э\Щ\њК
+JK€JNВ€B‚€Y€
+™\K›Y]ЩOOH‘SUHЉHВ€ЫЫњЭ[]YH]ШZ]ЭЬ™K™[]T\›Z\ЬЪ[Ы‘Ь›Э\
+Ь›Э\Y
+NВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€Ь›Э\€\ЛњЩ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\
+[]YЭЬ™K›\Э\Щ\њК
+JK€JNВ€B€B‚€Y€
+\›њ][YHOOH‹Ш\KШYZ[‹Э\Щ\њИ€	‰€™\K›Y]ЩOOH‘СUЉHВ€ЫЫњЭ]]\“X\H]ШZ]\Л™Щ]YZ[”ЭX[P]]\“X\
+ЭЬ™K›\Э\Щ\њК
+JNВ€ЫЫњЭЬ›Э\ИHЭЬ™K›\Э\›Z\ЬЪ[Ы‘Ь›Э\К
+NВ€ЫЫњЭ][\ИHЭЬ™K›\Э\Щ\њК
+K›X\
+
+][JHO€\ЛњЩ\љX[^™PYZ[•\Щ\Љ][K]]\“X\Ь›Э\КJNВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€][\Л€Э]О€\ЛќZ[YZ[•\Щ\”Э]К][\КK€\›Z\ЬЪ[Ы‘Ь›Э\О€\ЛњЩ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\КЬ›Э\ЛЭЬ™K›\Э\Щ\њК
+JK€JNВ€B‚€Y€
+\›њ][YHOOH‹Ш\KШYZ[‹Э\Щ\њИ€	‰€™\K›Y]ЩOOH”ФХЉHВ€ЫЫњЭ›ЩHH]ШZ]\Лњ™XYњЫЫђ›ЩJ™\JNВ€ЫЫњЭ\Щ\›[YHHЭљ[™К›ЩOЛќ\Щ\›[YHПИ€ЉKќљ[J
+NВ€ЫЫњЭ\ЬЭЫЬ™HЭљ[™К›ЩOЛњ\ЬЭЫЬ™ПИ€ЉNВ€Y€
+]\Щ\›[YJHВ€™]\›€\ЛљњЫЫЉ™\ЛИ\њ›ЬЋ€’[ќ[Y\Щ\›[YH‹Y\ЬШYЩN€•\Щ\›[YH\И™\]Z\™Y€€JNВ€B€Y€
+\ЬЭЫЬ™›[™Э
+HВ€™]\›€\ЛљњЫЫЉ™\ЛИ\њ›ЬЋ€’[ќ[Y\ЬЭЫЬ™‹Y\ЬШYЩN€”\ЬЭЫЬ™]\Э™H]X\ЭЪ\XЭ\њЛ€€JNВ€B‚€ЫЫњЭЭX[MЌH›Ь›X[^™PYZ[”ЭX[MЌ›Ь”™\]Y\Э
+›ЩOЛњЭX[MЌ
+NВ€Y€
+ЭX[MЌ
+HЭЬ™K\ЬЩ\ќЭX[MЌ]Z[X›JЭX[MЌ
+NВ‚€ЫЫњЭ\ЬЭЫЬ™\ЪH]ШZ]\ЛЫЬ™K]]X[YЩ\‹љ\Ъ\ЬЭЫЬ™
+\ЬЭЫЬ™
+NВ€ЫЫњЭЬ™X]YH]ШZ]ЭЬ™KЬ™X]U\Щ\ЉВ€\Щ\›[YK€\ЬЭЫЬ™\Ъ€›ЫN€›ЩOЛњ›ЫHПИђYZ[€‹€\Ь^S[YN€›ЩOЛ™\Ь^S[YHПИ€‹€ЭX[MЌ€љY]Щ\•X[P]]ФЭШ\[X›Y€›ЩOЛќљY]Щ\•X[P]]ФЭШ\[X›Y€[X›Y€›ЩOЛ™[X›YПИќYK€›ЭN€›ЩOЛ››ЭHПИ€‹€\›Z\ЬЪ[Ы‘Ь›Э\Y€\Л››Ь›X[^™T\›Z\ЬЪ[Ы‘Ь›Э\Y›Ь”™\]Y\Э
+ЭЬ™K›ЩOЛњ\›Z\ЬЪ[Ы‘Ь›Э\Y
+K€JNВ€™]\›€\ЛљњЫЫЉ™\ЛЊKВ€ЪО€ќYK€\Щ\Ћ€\ЛњЩ\љX[^™PYZ[•\Щ\ЉЬ™X]Y]ШZ]\Л™Щ]YZ[”ЭX[P]]\“X\
+ШЬ™X]YJKЭЬ™K›\Э\›Z\ЬЪ[Ы‘Ь›Э\К
+JK€JNВ€B‚€ЫЫњЭ™\Щ]X]ЪH\›њ][YK›X]Ъ
+Ч—Ш\WШYZ[—Э\Щ\њЧКЧ‹ЧJКWЬ™\Щ]\\ЬЭЫЬ™	КNВ€Y€
+™\Щ]X]Ъ	‰€™\K›Y]ЩOOH”ФХЉHВ€ЫЫњЭ\Щ\’YHXЫЩUT’PЫЫ\Ы™[ќ
+™\Щ]X]ЪМWJNВ€ЫЫњЭ›ЩHH]ШZ]\Лњ™XYњЫЫђ›ЩJ™\JNВ€ЫЫњЭ\ЬЭЫЬ™HЭљ[™К›ЩOЛњ\ЬЭЫЬ™ПИ€ЉNВ€Y€
+\ЬЭЫЬ™›[™Э
+HВ€™]\›€\ЛљњЫЫЉ™\ЛИ\њ›ЬЋ€’[ќ[Y\ЬЭЫЬ™‹Y\ЬШYЩN€”\ЬЭЫЬ™]\Э™H]X\ЭЪ\XЭ\њЛ€€JNВ€B‚€ЫЫњЭ\ЬЭЫЬ™\ЪH]ШZ]\ЛЫЬ™K]]X[YЩ\‹љ\Ъ\ЬЭЫЬ™
+\ЬЭЫЬ™
+NВ€ЫЫњЭ\]YH]ШZ]ЭЬ™Kќ\]T\ЬЭЫЬ™
+\Щ\’Y\ЬЭЫЬ™\Ъ
+NВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€\Щ\Ћ€\ЛњЩ\љX[^™PYZ[•\Щ\Љ\]Y]ШZ]\Л™Щ]YZ[”ЭX[P]]\“X\
+Э\]YJKЭЬ™K›\Э\›Z\ЬЪ[Ы‘Ь›Э\К
+JK€JNВ€B‚€ЫЫњЭ\Щ\“X]ЪH\›њ][YK›X]Ъ
+Ч—Ш\WШYZ[—Э\Щ\њЧКЧ‹ЧJКIКNВ€Y€
+]\Щ\“X]Ъ
+HВ€™]\›€\ЛљњЫЫЉ™\ЛВ€\њ›ЬЋ€ђ\S›Э›Э[™‹€Y\ЬШYЩN€ђYZ[€\Щ\€TH›Э]H›Э›Э[™€‹€JNВ€B‚€ЫЫњЭ\Щ\’YHXЫЩUT’PЫЫ\Ы™[ќ
+\Щ\“X]ЪМWJNВ‚€Y€
+™\K›Y]ЩOOH”UТЉHВ€ЫЫњЭ\™Щ]HЭЬ™Kњ™\]Z\™Q^\Э[™Х\Щ\Љ\Щ\’Y
+NВ€ЫЫњЭ›ЩHH]ШZ]\Лњ™XYњЫЫђ›ЩJ™\JNВ€ЫЫњЭ™^[X›YH›ЩOЛ™[X›YOOH[™Yљ[™YИ\™Щ]™[X›Y€›ЫЫX[Љ›ЩK™[X›Y
+NВ€ЫЫњЭ™^›ЫHH›ЩOЛњ›ЫHOOH[™Yљ[™YИ\™Щ]њ›ЫH€›ЩKњ›ЫNВ€Y€
+\™Щ]љYOOH\Щ\‹љY	‰€\™Щ]™[X›Y	‰€[™^[X›Y
+HВ€™]\›€\ЛљњЫЫЉ™\ЛВ€\њ›ЬЋ€ђШ[››Э\ШX›TЩ[€‹€Y\ЬШYЩN€ђШ[››Э\ШX›HHЭ\њ™[ќXШЫЭ[ќ€‹€JNВ€B‚€ЫЫњЭЭX[MЌH›ЩOЛњЭX[MЌOOH[™Yљ[™YИ[™Yљ[™Y€›Ь›X[^™PYZ[”ЭX[MЌ›Ь”™\]Y\Э
+›ЩKњЭX[MЌ
+NВ€ЫЫњЭ\]YH]ШZ]ЭЬ™Kќ\]U\Щ\Љ\Щ\’YВ€\Ь^S[YN€›ЩOЛ™\Ь^S[YK€›ЫN€™^›ЫK€ЭX[MЌ€љY]Щ\•X[P]]ФЭШ\[X›Y€›ЩOЛќљY]Щ\•X[P]]ФЭШ\[X›Y€[X›Y€™^[X›Y€›ЭN€›ЩOЛ››ЭK€\›Z\ЬЪ[Ы‘Ь›Э\Y€›ЩOЛњ\›Z\ЬЪ[Ы‘Ь›Э\YOOH[™Yљ[™Y€И[™Yљ[™Y€€\Л››Ь›X[^™T\›Z\ЬЪ[Ы‘Ь›Э\Y›Ь”™\]Y\Э
+ЭЬ™K›ЩOЛњ\›Z\ЬЪ[Ы‘Ь›Э\Y
+K€JNВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€\Щ\Ћ€\ЛњЩ\љX[^™PYZ[•\Щ\Љ\]Y]ШZ]\Л™Щ]YZ[”ЭX[P]]\“X\
+Э\]YJKЭЬ™K›\Э\›Z\ЬЪ[Ы‘Ь›Э\К
+JK€JNВ€B‚€Y€
+™\K›Y]ЩOOH‘SUHЉHВ€ЫЫњЭ\™Щ]HЭЬ™Kњ™\]Z\™Q^\Э[™Х\Щ\Љ\Щ\’Y
+NВ€Y€
+\™Щ]љYOOH\Щ\‹љY
+HВ€™]\›€\ЛљњЫЫЉ™\ЛВ€\њ›ЬЋ€ђШ[››Э[]TЩ[€‹€Y\ЬШYЩN€ђШ[››Э[]HHЭ\њ™[ќXШЫЭ[ќ€‹€JNВ€B‚€ЫЫњЭ[]YH]ШZ]ЭЬ™K™[]U\Щ\Љ\Щ\’Y
+NВ€™]\›€\ЛљњЫЫЉ™\ЛЊВ€ЪО€ќYK€\Щ\Ћ€\ЛњЩ\љX[^™PYZ[•\Щ\Љ[]Y™]ИX\
+
+KЭЬ™K›\Э\›Z\ЬЪ[Ы‘Ь›Э\К
+JK€JNВ€B‚€™]\›€\ЛљњЫЫЉ™\ЛKВ€\њ›ЬЋ€“Y]Щ›Э[ЭЩY‹€Y\ЬШYЩN€•[њЭ\ЬќYYZ[€\Щ\€THY]Щ€‹€JNВ€HШ]Ъ
+\њ›ЬЉHВ€™]\›€\ЛљњЫЫЉ™\Лќ[X™\Љ\њ›ЬЏЛњЭ]\РЫЩHПИL
+KВ€\њ›ЬЋ€Эљ[™К\њ›ЬЏЛЫЩHПИђYZ[•\Щ\ђ\Q\њ›Ь€ЉK€Y\ЬШYЩN€Эљ[™К\њ›ЬЏЛ›Y\ЬШYЩHПИђYZ[€\Щ\€TH™\]Y\ЭZ[Y€ЉK€JNВ€B€B‚€\Ю[ИЩ]YZ[”ЭX[P]]\“X\
+\Щ\њИHЧJHВ€ЫЫњЭЭX[RQИHЛ‹‹›™]ИЩ]
+€
+\њ^Kљ\Р\њ^J\Щ\њКHИ\Щ\њИ€ЧJB€›X\
+
+][JHO€Эљ[™К][OЛњЭX[MЌПИ€ЉKќљ[J
+JB€™љ[\Љ
+][JHO€Ч—МMЯIЛќ\Э
+][JJK€
+WNВ€Y€
+\ЭX[RQЛ›[™Э
+H™]\›€™]ИX\
+
+NВ‚€ЫЫњЭ\Э^Y\њРћTЭX[RQИH\Л›[Щ[\Лњ^Y\‘]X\ЩOЛ›\Э^Y\њРћTЭX[RQОВ€Y€
+\[Щ€\Э^Y\њРћTЭX[RQИOOH™ќ[Э[Ы€ЉH™]\›€™]ИX\
+
+NВ‚€ћHВ€ЫЫњЭ›ЭЬИH]ШZ]\Э^Y\њРћTЭX[RQЛШ[
+\Л›[Щ[\Лњ^Y\‘]X\ЩKЭX[RQКNВ€ЫЫњЭX\H™]ИX\
+
+NВ€›Ь€
+ЫЫњЭ›ЭИЩ€\њ^Kљ\Р\њ^J›ЭЬКHИ›ЭЬИ€ЧJHВ€ЫЫњЭЭX[RQHЭљ[™К›ЭПЛњЭX[WЪYПИ›ЭПЛњЭX[RQПИ›ЭПЛњЭX[MЌПИ€ЉKќљ[J
+NВ€ЫЫњЭ]]\€HЭљ[™К›ЭПЛњЭX[WШ]]\€ПИ›ЭПЛњЭX[P]]\€ПИ€ЉKќљ[J
+NВ€Y€
+ЭX[RQ	‰€]]\ЉHX\њЩ]
+ЭX[RQ]]\ЉNВ€B€™]\›€X\В€HШ]Ъ
+\њ›ЬЉHВ€\Л›ЩЩЩ\ЏЛќШ\›ЏЛЉZ[YИ™\ЫЫ™HYZ[€ЭX[H]]\њО€	Щ\њ›Ь‹›Y\ЬШYЩ_X
+NВ€™]\›€™]ИX\
+
+NВ€B€B‚€Щ\љX[^™P]]Щ\ЬЪ[Ы•\Щ\Љ\Щ\ЉHВ€Y€
+]\Щ\ЉH™]\›€ќ[В€™]\›€В€Y€\Щ\‹љY€\Щ\›[YN€\Щ\‹ќ\Щ\›[YK€›ЫN€\Щ\‹њ›ЫK€\ФЭ\\ђYZ[Ћ€\Щ\‹њ›ЫHOOH”Э\\ђYZ[€‹€ЭX[MЌ€\Щ\‹њЭX[MЌПИќ[€љY]Щ\•X[P]]ФЭШ\[X›Y€\Щ\‹ќљY]Щ\•X[P]]ФЭШ\[X›YOOH[ЩK€\›Z\ЬЪ[ЫњО€\њ^Kљ\Р\њ^J\Щ\‹њ\›Z\ЬЪ[ЫњКHИЛ‹‹ќ\Щ\‹њ\›Z\ЬЪ[ЫњЧH€ЧK€NВ€B€\Ю[И[њљXЪ]]\Щ\•Ъ]ЭX[P]]\Љ\Щ\ЉHВ€Y€
+]\Щ\ЉH™]\›€ќ[В€ЫЫњЭЭX[MЌHЭљ[™К\Щ\ЏЛњЭX[MЌПИ€ЉKќљ[J
+NВ€Y€
+KЧ—МMЯIЛќ\Э
+ЭX[MЌ
+JHВ€™]\›€В€‹‹ќ\Щ\‹€ЭX[P]]\Ћ€ќ[€NВ€B‚€ЫЫњЭЭX[P]]\€H]ШZ]\Л™Щ]ЭX[P]]\ђћTЭX[MЌ
+ЭX[MЌ
+NВ€™]\›€В€‹‹ќ\Щ\‹€ЭX[P]]\‹€NВ€B‚€\Ю[ИЩ]ЭX[P]]\ђћTЭX[MЌ
+ЭX[MЌ
+HВ€ЫЫњЭ\Э^Y\њРћTЭX[RQИH\Л›[Щ[\Лњ^Y\‘]X\ЩOЛ›\Э^Y\њРћTЭX[RQОВ€Y€
+\[Щ€\Э^Y\њРћTЭX[RQИOOH™ќ[Э[Ы€ЉH™]\›€ќ[В‚€ћHВ€ЫЫњЭ›ЭЬИH]ШZ]\Э^Y\њРћTЭX[RQЛШ[
+\Л›[Щ[\Лњ^Y\‘]X\ЩKЬЭX[MЌJNВ€ЫЫњЭљ\њЭH\њ^Kљ\Р\њ^J›ЭЬКHИ›ЭЬЦМH€ќ[В€ЫЫњЭ]]\€HЭљ[™Кљ\њЭЛњЭX[WШ]]\€ПИљ\њЭЛњЭX[P]]\€ПИ€ЉKќљ[J
+NВ€™]\›€]]\€ќ[В€HШ]Ъ
+\њ›ЬЉHВ€\Л›ЩЩЩ\ЏЛќШ\›ЏЛЉZ[YИ™\ЫЫ™HЭX[H]]\€›Ь€]]\Щ\Ћ€	Щ\њ›Ь‹›Y\ЬШYЩ_X
+NВ€™]\›€ќ[В€B€B‚€Щ\љX[^™PYZ[•\Щ\Љ\Щ\‹ЭX[P]]\“X\H™]ИX\
+
+JHВ€ЫЫњЭЬ›Э\ИH\™Э[Y[ќЦМ—HПИЧNВ€ЫЫњЭЬ›Э\X\H™]ИX\
+
+\њ^Kљ\Р\њ^JЬ›Э\КHИЬ›Э\И€ЧJK›X\
+
+Ь›Э\
+HO€ЩЬ›Э\љYЬ›Э\JJNВ€ЫЫњЭ\›Z\ЬЪ[Ы‘Ь›Э\H\Щ\‹њ\›Z\ЬЪ[Ы‘Ь›Э\YИЬ›Э\X\™Щ]
+\Щ\‹њ\›Z\ЬЪ[Ы‘Ь›Э\Y
+H€ќ[В€ЫЫњЭ\›Z\ЬЪ[ЫњИH\Щ\‹њ›ЫHOOH”Э\\ђYZ[€‚€ИИЉ€—B€€
+\›Z\ЬЪ[Ы‘Ь›Э\Л™[X›YOOH[ЩHИЛ‹‹Љ\›Z\ЬЪ[Ы‘Ь›Э\Лњ\›Z\ЬЪ[ЫњИПИЧJWH€ЧJNВ€™]\›€В€Y€\Щ\‹љY€\Щ\›[YN€\Щ\‹ќ\Щ\›[YK€\Ь^S[YN€\Щ\‹™\Ь^S[YHПИ€‹€›ЫN€\Щ\‹њ›ЫK€ЭX[MЌ€\Щ\‹њЭX[MЌПИќ[€ЭX[P]]\Ћ€\Щ\‹њЭX[MЌИ
+ЭX[P]]\“X\™Щ]
+\Щ\‹њЭX[MЌ
+HПИќ[
+H€ќ[€љY]Щ\•X[P]]ФЭШ\[X›Y€\Щ\‹ќљY]Щ\•X[P]]ФЭШ\[X›YOOH[ЩK€[X›Y€\Щ\‹™[X›YOOH[ЩK€›ЭN€\Щ\‹››ЭHПИ€‹€\›Z\ЬЪ[Ы‘Ь›Э\Y€\Щ\‹њ\›Z\ЬЪ[Ы‘Ь›Э\YПИќ[€\›Z\ЬЪ[Ы‘Ь›Э\[YN€\›Z\ЬЪ[Ы‘Ь›Э\Л›[YHПИ€‹€\›Z\ЬЪ[ЫњЛ€Ь™X]Y]€ќ[X™\Љ\Щ\‹Ь™X]Y]ПИ
+K€\]Y]€ќ[X™\Љ\Щ\‹ќ\]Y]ПИ
+K€\ЬЭЫЬ™Ъ[™ЩY]€ќ[X™\Љ\Щ\‹њ\ЬЭЫЬ™Ъ[™ЩY]ПИ
+K€NВ€B‚€Щ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\
+Ь›Э\\Щ\њИHЧJHВ€ЫЫњЭЫЭ[ќH
+\њ^Kљ\Р\њ^J\Щ\њКHИ\Щ\њИ€ЧJK™љ[\Љ
+\Щ\ЉHO€\Щ\‹њ\›Z\ЬЪ[Ы‘Ь›Э\YOOHЬ›Э\љY
+K›[™ЭВ€™]\›€В€Y€Ь›Э\љY€[YN€Ь›Э\›[YK€[X›Y€Ь›Э\™[X›YOOH[ЩK€\›Z\ЬЪ[ЫњО€\њ^Kљ\Р\њ^JЬ›Э\њ\›Z\ЬЪ[ЫњКHИЛ‹‹™Ь›Э\њ\›Z\ЬЪ[ЫњЧH€ЧK€\ЬЪYЫ™Y\Щ\њО€ЫЭ[ќ€Ь™X]Y]€ќ[X™\ЉЬ›Э\Ь™X]Y]ПИ
+K€\]Y]€ќ[X™\ЉЬ›Э\ќ\]Y]ПИ
+K€NВ€B‚€Щ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\КЬ›Э\ИHЧK\Щ\њИHЧJHВ€™]\›€
+\њ^Kљ\Р\њ^JЬ›Э\КHИЬ›Э\И€ЧJK›X\
+
+Ь›Э\
+HO€\ЛњЩ\љX[^™T\›Z\ЬЪ[Ы‘Ь›Э\
+Ь›Э\\Щ\њКJNВ€B‚€ќZ[YZ[•\Щ\”Э]К][\КHВ€™]\›€В€Э[€][\Л›[™Э€[X›Y€][\Л™љ[\Љ
+][JHO€][K™[X›Y
+K›[™Э€Э\\ђYZ[њО€][\Л™љ[\Љ
+][JHO€][Kњ›ЫHOOH”Э\\ђYZ[€ЉK›[™Э€ЭX[P›Э[™€][\Л™љ[\Љ
+][JHO€›ЫЫX[Љ][KњЭX[MЌ
+JK›[™Э€NВ€B‚€›Ь›X[^™T\›Z\ЬЪ[Ы‘Ь›Э\Y›Ь”™\]Y\Э
+ЭЬ™K[YJHВ€Y€
+[YHOOH[™Yљ[™Y
+H™]\›€[™Yљ[™YВ€Y€
+[YHOOHќ[Эљ[™К[YHПИ€ЉKќљ[J
+HOOH€ЉH™]\›€ќ[В€ЫЫњЭЬ›Э\YHЭљ[™К[YHПИ€ЉKќљ[J
+NВ€ЫЫњЭЬ›Э\HЭЬ™K™Щ]\›Z\ЬЪ[Ы‘Ь›Э\ћRY
+Ь›Э\Y
+NВ€Y€
+YЬ›Э\
+HВ€ЫЫњЭ\њ›Ь€H™]И\њ›ЬЉ”\›Z\ЬЪ[Ы€Ь›Э\›Э›Э[™€ЉNВ€\њ›Ь‹њЭ]\РЫЩHHВ€\њ›Ь‹ЫЩHH”\›Z\ЬЪ[Ы‘Ь›Э\›Э›Э[™ЋВ€›ЭИ\њ›ЬЋВ€B€™]\›€Ь›Э\YВ€B‚€™\]Z\™TЭ\\ђYZ[Љ\Щ\‹™\КHВ€Y€
+]\ЛЫЬ™K]]X[YЩ\ЏЛљ\С]™\ћ][™ПЛЉ\Щ\ЉJHВ€\ЛљњЫЫЉ™\ЛЛВ€\њ›ЬЋ€‘›ЬљY[€‹€Y\ЬШYЩN€”Э\\ђYZ[€›ЫH\И™\]Z\™Y€‹€JNВ€™]\›€[ЩNВ€B€™]\›€ќYNВ€B‚€Щ]ЩФЬЭЫЫ™љYФ]
+
+HВ€ЫЫњЭ\њЩ\ђЫЫ™љYИH\ЛЫЬ™KЫЫ™љYПЛ™Щ]ЛЉњ]Ы“ЩФ\њЩ\€‹ЯJHПИЯNВ€ЫЫњЭЫЬљЪ[™С\™XЭЬћHH]њ™\ЫЫ™J›ШЩ\ЬЛЭЩ
+
+KЭљ[™К\њЩ\ђЫЫ™љYЛќЫЬљЪ[™С\™XЭЬћHПИ‹‹УЩФЬЭЉKќљ[J
+JNВ€™]\›€]њ™\ЫЫ™JЫЬљЪ[™С\™XЭЬћKЭљ[™К\њЩ\ђЫЫ™љYЛЫЫ™љYФ]ПИ‹‹ШЫЫ™љYЛљњЫЫ€ЉKќљ[J
+JNВ€B‚€\Ю[И™XYЩФЬЭЫЫ™љYК
+HВ€ЫЫњЭЫЫ™љYФ]H\Л™Щ]ЩФЬЭЫЫ™љYФ]
+
+NВ€ЫЫњЭ^H]ШZ]њЛњ™XYљ[JЫЫ™љYФ]ќ]ЋЉNВ€™]\›€В€ЫЫ™љYФ]€ЫЫ™љYО€”УУ‹њ\њЩJ^
+K€NВ€B‚€\Ю[ИЩ]ЩФЬЭ]УЭ]]ЫЫ™љYК
+HВ€ЫЫњЭИЫЫ™љYФ]ЫЫ™љYИHH]ШZ]\Лњ™XYЩФЬЭЫЫ™љYК
+NВ€™]\›€В€[X›Y€›ЫЫX[ЉЫЫ™љYЛњ]ЧЫЩЧЫЭ]]Л™[X›Y
+K€ЫЭ\ЩN€Эљ[™КЫЫ™љYЛњ]ЧЫЩЧЫЭ]]ЛњЫЭ\ЩHПИ”Ь]XY›ЩИЉK€ЫЫ™љYФ]€NВ€B‚€\Ю[ИЩ]ЩФЬЭ]УЭ]]ЫЫ™љYК[X›Y
+HВ€ЫЫњЭИЫЫ™љYФ]ЫЫ™љYИHH]ШZ]\Лњ™XYЩФЬЭЫЫ™љYК
+NВ€ЫЫ™љYЛњ]ЧЫЩЧЫЭ]]HВ€‹‹ЉЫЫ™љYЛњ]ЧЫЩЧЫЭ]]ПИЯJK€[X›Y€›ЫЫX[Љ[X›Y
+K€ЫЭ\ЩN€Эљ[™КЫЫ™љYЛњ]ЧЫЩЧЫЭ]]ЛњЫЭ\ЩHПИ”Ь]XY›ЩИЉK€NВ‚€]ШZ]њЛќЬљ]Qљ[JЫЫ™љYФ]	Т”УУ‹њЭљ[™ЪYћJЫЫ™љYЛќ[Љ_Wќ]ЋЉNВ‚€Y€
+\ЛЫЬ™Kњ]Ы“ЩФ\њЩ\“X[YЩ\ЏЛњ™\Э\ќ
+HВ€]ШZ]\ЛЫЬ™Kњ]Ы“ЩФ\њЩ\“X[YЩ\‹њ™\Э\ќ
+
+NВ€B‚€™]\›€В€ЪО€ќYK€[X›Y€›ЫЫX[ЉЫЫ™љYЛњ]ЧЫЩЧЫЭ]]™[X›Y
+K€ЫЭ\ЩN€Эљ[™КЫЫ™љYЛњ]ЧЫЩЧЫЭ]]њЫЭ\ЩJK€ЫЫ™љYФ]€™\Э\ќY€›ЫЫX[Љ\ЛЫЬ™Kњ]Ы“ЩФ\њЩ\“X[YЩ\ЏЛњ™\Э\ќ
+K€NВ€B‚€Щ]YЪ[ђ\JYЪ[’Y
+HВ€™]\›€\ЛЫЬ™KњYЪ[“X[YЩ\ЏЛљ[њЭ[Щ\В€Л™љ[™
+
+[њЭ[ЩJHO€[њЭ[ЩK›X[љY™\ЭЛљYOOHYЪ[’Y
+OЛ\HПИќ[В€B‚€Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+HВ€ЫЫњЭ\њЩ\ђЫЫ™љYИH\ЛЫЬ™KЫЫ™љYПЛ™Щ]ЛЉњ]Ы“ЩФ\њЩ\€‹ЯJHПИЯNВ€™]\›€]њ™\ЫЫ™J›ШЩ\ЬЛЭЩ
+
+KЭљ[™К\њЩ\ђЫЫ™љYЛќЫЬљЪ[™С\™XЭЬћHПИ‹‹УЩФЬЭЉKќљ[J
+JNВ€B‚€\Ю[ИЩ]ЩФЬЭЭ]J
+HВ€ЫЫњЭЫЬљЪ[™С\™XЭЬћHH\Л™Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+NВ€ЫЫњЭЭ]]\€H™\ЫЫ™SЩФЬЭЭ]]\ЉЫЬљЪ[™С\™XЭЬћJNВ€ЫЫњЭYШXЮTЭ]T]H]њ™\ЫЫ™JЭ]]\‹‹њЭ]H‹ќZ[\‹\Э]KљњЫЫ€ЉNВ€ЫЫњЭЊ”Э]T]H]њ™\ЫЫ™JЭ]]\‹њЭ]H‹њЫЭ\ЩK\Э]KљњЫЫ€ЉNВ€ЫЫњЭYШXЮTЭ]HH]ШZ]\Лњ™XYњЫЫ‘љ[TШY™JYШXЮTЭ]T]ЯJNВ€ЫЫњЭЫЭ\ЩTЭ]HH]ШZ]\Лњ™XYњЫЫ‘љ[TШY™JЊ”Э]T]YШXЮTЭ]JNВ€ЫЫњЭZ[\”Э]HHЫЭ\ЩTЭ]NВ€ЫЫњЭШ\Э]HH\Л™Щ]ЩФЬЭШ\Э]J
+NВ‚€™]\›€В€ЫЬљЪ[™С\™XЭЬћK€Э]]\‹€Z[\”Э]K€ЫЭ\ЩTЭ]K€Ш\Э]K€NВ€B‚€Щ]ЩФЬЭШ\Э]J
+HВ€™]\›€\ЛЫЬ™K›ЩФЬЭ[Ыљ]ЬЏЛ™Щ]Э]OЛЉ
+HПИВ€\ЭЫЭ\ЩTЩ\N€€\Э]™[ќY€€‹€™XЩ[ќШ\О€ЧK€NВ€B‚€\Ю[И]Y\ћSЩФЬЭ]Р\Ъ]™JИ]KЭ\ќ[™K[Z]Щ™њЩ]JHВ€ЫЫњЭ›Ь›X[^™Y]HH›Ь›X[^™SЩФЬЭ]J]JNВ€ЫЫњЭЫЬљЪ[™С\€H™\ЫЫ™SЩФЬЭЭ]]\Љ\Л™Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+JNВ€ЫЫњЭЊ‘љ[T]H]њ™\ЫЫ™JЫЬљЪ[™С\‹њ]И‹›Ь›X[^™Y]KњЩYЫY[ќLKљњЫЫ›ЉNВ€ЫЫњЭYШXЮQљ[T]H]њ™\ЫЫ™JЫЬљЪ[™С\‹”]И‹›Ь›X[^™Y]K[љњЫЫ›ЉNВ€ЫЫњЭљ[T]H]ШZ]\Лњ™\ЫЫ™Qљ\њЭ^\Э[™Ф]
+ЭЊ‘љ[T]YШXЮQљ[T]JNВ€ЫЫњЭ][\ИH]ШZ]\Лњ™XYњЫЫ›љ[Jљ[T]
+NВ€ЫЫњЭљ[\™YHљ[\“ЩФЬЭ›ЭЬК][\ЛВ€Э\ќ€[™€K€]™[ќљY[€€‹€[YQљY[€њ™XY]‹€Y\ЬШYЩQљY[О€Ињ]У[™H‹њ]У[™R\Ъ‹њЫЭ\ЩT]—K€JNВ€™]\›€YЪ[]SЩФЬЭ›ЭЬКљ[\™Y[Z]Щ™њЩ]В€]N€›Ь›X[^™Y]K€љ[T]€JNВ€B‚€\Ю[И]Y\ћSЩФЬЭЭќXЭ\™Y]™[ќКИ]K]™[ќЭ\ќ[™K[Z]Щ™њЩ]JHВ€ЫЫњЭ›Ь›X[^™Y]HH›Ь›X[^™SЩФЬЭ]J]JNВ€ЫЫњЭЫЬљЪ[™С\€H™\ЫЫ™SЩФЬЭЭ]]\Љ\Л™Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+JNВ€ЫЫњЭЊ‘љ[T]H]њ™\ЫЫ™JЫЬљЪ[™С\‹™]™[ќИ‹›Ь›X[^™Y]K[љњЫЫ›ЉNВ€ЫЫњЭYШXЮQљ[T]H]њ™\ЫЫ™JЫЬљЪ[™С\‹›Ь›X[^™Y]Kђ[љњЫЫ›ЉNВ€ЫЫњЭљ[T]H]ШZ]\Лњ™\ЫЫ™Qљ\њЭ^\Э[™Ф]
+ЭЊ‘љ[T]YШXЮQљ[T]JNВ€ЫЫњЭ][\ИH]ШZ]\Лњ™XYњЫЫ›љ[Jљ[T]
+NВ€ЫЫњЭљ[\™YHљ[\“ЩФЬЭ›ЭЬК][\ЛВ€Э\ќ€[™€K€]™[ќљY[€‘]™[ќ‹€]™[ќ[YN€]™[ќ€[YQљY[€•[YH‹€Y\ЬШYЩQљY[О€И”]И‹‘]™[ќ‹‘]™[ќY‹”]У[™R\Ъ‹”ЫЭ\ЩTЩ\H‹”ЫЭ\ЩSЩ™њЩ]‹”ЫЭ\ЩS[ЩH—K€JNВ€™]\›€YЪ[]SЩФЬЭ›ЭЬКљ[\™Y[Z]Щ™њЩ]В€]N€›Ь›X[^™Y]K€љ[T]€JNВ€B‚€\Ю[И]Y\ћSЩФЬЭЭ]›Ю
+И]KЪ[™K[Z]Щ™њЩ]JHВ€ЫЫњЭ›Ь›X[^™Y]HH›Ь›X[^™SЩФЬЭ]J]JNВ€ЫЫњЭ\€H]њ™\ЫЫ™J™\ЫЫ™SЩФЬЭЭ]]\Љ\Л™Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+JK›Э]›Ю‹›Ь›X[^™Y]JNВ€ЫЫњЭ][\ИH]ШZ]\Лњ™XYњЫЫ›\™XЭЬћJ\ЉNВ€ЫЫњЭљ[\™YHљ[\“ЩФЬЭ›ЭЬК][\ЛВ€K€]™[ќљY[€њЭ]\И‹€]™[ќ[YN€Ъ[™€[YQљY[€ќ[YH‹€Y\ЬШYЩQљY[О€И™]™[ќ[YH‹™]™[ќY‹њЫЭ\ЩTЩ\H‹њЫЭ\ЩS[ЩH‹™\њ›Ь€—K€JNВ€™]\›€YЪ[]SЩФЬЭ›ЭЬКљ[\™Y[Z]Щ™њЩ]В€]N€›Ь›X[^™Y]K€љ[T]€\‹€JNВ€B‚€\Ю[И]Y\ћSЩФЬЭШY™]JИ]KЪ[™K[Z]Щ™њЩ]JHВ€ЫЫњЭ›Ь›X[^™Y]HH›Ь›X[^™SЩФЬЭ]J]JNВ€ЫЫњЭ\€H]њ™\ЫЫ™J™\ЫЫ™SЩФЬЭЭ]]\Љ\Л™Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+JK]Y]‹›Ь›X[^™Y]JNВ€ЫЫњЭ][\ИH]ШZ]\Лњ™XYњЫЫ›\™XЭЬћJ\ЉNВ€ЫЫњЭљ[\™YHљ[\“ЩФЬЭ›ЭЬК][\ЛВ€K€]™[ќљY[€љЪ[™‹€]™[ќ[YN€Ъ[™€[YQљY[€ќ[YH‹€Y\ЬШYЩQљY[О€ИљЪ[™‹њ™X\ЫЫ€‹њЫЭ\ЩS[ЩH‹›Y\ЬШYЩH‹™]™[ќ[YH‹™]™[ќY—K€JNВ€™]\›€YЪ[]SЩФЬЭ›ЭЬКљ[\™Y[Z]Щ™њЩ]В€]N€›Ь›X[^™Y]K€љ[T]€\‹€JNВ€B‚€\Ю[ИЬљ]SЩФЬЭ]Y]™XЫЬ™
+Ъ[™^[ШYHЯJHВ€ЫЫњЭЭ]]\€H™\ЫЫ™SЩФЬЭЭ]]\Љ\Л™Щ]ЩФЬЭЫЬљЪ[™С\™XЭЬћJ
+JNВ€ЫЫњЭ\€H]њ™\ЫЫ™JЭ]]\‹]Y]‹™]И]J
+KќТTУФЭљ[™К
+KњЫXЩJL
+JNВ€]ШZ]њЛ›ZЩ\Љ\‹И™XЭ\њЪ]™N€ќYHJNВ€ЫЫњЭљ[T]H]њ™\ЫЫ™J\‹	ЪЪ[™KљњЫЫ›
+NВ€ЫЫњЭ™XЫЬ™HВ€ШЪ[XN€›ЩЬЬЭ]Y]ќЊ€‹€Ъ[™€Эљ[™КЪ[™ПИќ[љЫ›ЭЫ€ЉK€[YN€™]И]J
+KќТTУФЭљ[™К
+K€‹‹њ^[ШY€NВ€]ШZ]њЛ\[™љ[Jљ[T]	Т”УУ‹њЭљ[™ЪYћJ™XЫЬ™
+_Wќ]ЋЉNВ€B‚€\Ю[И™XYњЫЫ›љ[Jљ[T]
+HВ€ћHВ€ЫЫњЭ^H]ШZ]њЛњ™XYљ[Jљ[T]ќ]ЋЉNВ€™]\›€^€њЬ]
+ЧЏЧ‹КB€›X\
+
+[™JHO€[™Kќљ[J
+JB€™љ[\Љ›ЫЫX[ЉB€›X\
+
+[™JHO€В€ћHВ€™]\›€”УУ‹њ\њЩJ[™JNВ€HШ]ЪВ€™]\›€ќ[В€B€JB€™љ[\Љ›ЫЫX[ЉNВ€HШ]Ъ
+\њ›ЬЉHВ€Y€
+\њ›ЬЏЛЫЩHOOH‘S“СS•ЉH™]\›€ЧNВ€›ЭИ\њ›ЬЋВ€B€B‚€\Ю[И™XYњЫЫ›\™XЭЬћJ\”]
+HВ€ћHВ€ЫЫњЭ[ќљY\ИH]ШZ]њЛњ™XY\Љ\”]ИЪ]љ[U\\О€ќYHJNВ€ЫЫњЭљ[\ИH[ќљY\В€™љ[\Љ
+[ќћJHO€[ќћKљ\Сљ[J
+H	‰€[ќћK›[YKќУЭЩ\ђШ\ЩJ
+K™[™ХЪ]
+‹љњЫЫ›ЉJB€›X\
+
+[ќћJHO€]љ›Ъ[Љ\”][ќћK›[YJJB€њЫЬќ
+
+YќљYЪ
+HO€Yќ›ШШ[PЫЫ\\™JљYЪ
+JNВ€ЫЫњЭ›ЭЬИHЧNВ€›Ь€
+ЫЫњЭљ[T]Щ€љ[\КHВ€›ЭЬЛњ\Ъ
+‹‹]ШZ]\Лњ™XYњЫЫ›љ[Jљ[T]
+JNВ€B€™]\›€›ЭЬОВ€HШ]Ъ
+\њ›ЬЉHВ€Y€
+\њ›ЬЏЛЫЩHOOH‘S“СS•ЉH™]\›€ЧNВ€›ЭИ\њ›ЬЋВ€B€B‚€\Ю[И™\ЫЫ™Qљ\њЭ^\Э[™Ф]
+]КHВ€›Ь€
+ЫЫњЭљ[T]Щ€]КHВ€ћHВ€]ШZ]њЛXШЩ\ЬКљ[T]
+NВ€™]\›€љ[T]В€HШ]ЪЯB€B€™]\›€]ЦМHПИ€ЋВ€B‚€\Ю[И™XYњЫЫ‘љ[TШY™Jљ[T][XЪКHВ€ћHВ€ЫЫњЭ^H]ШZ]њЛњ™XYљ[Jљ[T]ќ]ЋЉNВ€™]\›€”УУ‹њ\њЩJ^
+NВ€HШ]ЪВ€™]\›€[XЪОВ€B€BџB‚™ќ[Э[Ы€™\ЫЫ™SЩФЬЭЭ]]\ЉЫЬљЪ[™С\™XЭЬћJHВ€ЫЫњЭ\ЩQ\™XЭЬћHH]њ™\ЫЫ™JЫЬљЪ[™С\™XЭЬћJNВ€ЫЫњЭШ[™Y]\ИHВ€\ЩQ\™XЭЬћK€]њ™\ЫЫ™J\ЩQ\™XЭЬћK“ЩФЬЭЉK€NВ‚€›Ь€
+ЫЫњЭШ[™Y]HЩ€Ш[™Y]\КHВ€Y€
+€^\ЭФЮ[К]њ™\ЫЫ™JШ[™Y]K™]™[ќИЉJB€^\ЭФЮ[К]њ™\ЫЫ™JШ[™Y]Kњ]ИЉJB€^\ЭФЮ[К]њ™\ЫЫ™JШ[™Y]K]Y]ЉJB€^\ЭФЮ[К]њ™\ЫЫ™JШ[™Y]KњЭ]HЉJB€^\ЭФЮ[К]њ™\ЫЫ™JШ[™Y]K‹њЭ]HЉJB€
+HВ€™]\›€Ш[™Y]NВ€B€B‚€™]\›€Ш[™Y]\ЦМNВџB‚™ќ[Э[Ы€ЫЫќ[ќ\Jљ[T]
+HВ€Y€
+љ[T]™[™ХЪ]
+‹љ[ЉJH™]\›€ќ^Ъ[ИЪ\њЩ]]]‹NЋВ€Y€
+љ[T]™[™ХЪ]
+‹ЬЬИЉJH™]\›€ќ^ШЬЬОИЪ\њЩ]]]‹NЋВ€Y€
+љ[T]™[™ХЪ]
+‹љњИЉJH™]\›€ќ^Ъ]\ШЬљ\ИЪ\њЩ]]]‹NЋВ€Y€
+љ[T]™[™ХЪ]
+‹љњЫЫ€ЉJH™]\›€\XШ][Ы‹ЪњЫЫЋИЪ\њЩ]]]‹NЋВ€Y€
+љ[T]™[™ХЪ]
+‹њ™ИЉJH™]\›€љ[XYЩKЬ™ИЋВ€Y€
+љ[T]™[™ХЪ]
+‹њЭ™ИЉJH™]\›€љ[XYЩKЬЭ™КЮ[ЋВ€Y€
+љ[T]™[™ХЪ]
+‹ЬЭ€ЉJH™]\›€ќ^ШЬЭЋИЪ\њЩ]]]‹NЋВ€Y€
+љ[T]™[™ХЪ]
+‹›YЉJH™]\›€ќ^ЫX\љЩЭЫЋИЪ\њЩ]]]‹NЋВ€™]\›€\XШ][Ы‹ЫШЭ]\Э™X[HЋВџB‚™ќ[Э[Ы€ШY™RXY\‘љ[S[YJљ[S[YJHВ€™]\›€]\Щ[[YJЭљ[™Кљ[S[YHПИ™ЭЫ›ШYЉJB€њ™\XЩJЦЧ—ЊWСWKЩЛ—ИЉB€њ™\XЩJЦИ—KЩЛ—ИЉNВџB‚™ќ[Э[Ы€Ь™X]R\њ›ЬЉЭ]\РЫЩKЫЩKY\ЬШYЩJHВ€ЫЫњЭ\њ›Ь€H™]И\њ›ЬЉY\ЬШYЩJNВ€\њ›Ь‹њЭ]\РЫЩHHЭ]\РЫЩNВ€\њ›Ь‹ЫЩHHЫЩNВ€™]\›€\њ›ЬЋВџB‚™ќ[Э[Ы€Э]\Х^
+ЫЩJHВ€ЭЪ]Ъ
+ЫЩJHВ€Ш\ЩH‚€™]\›€ђY™\]Y\ЭЋВ€Ш\ЩHN‚€™]\›€•[]]Ьљ^™YЋВ€Ш\ЩHО‚€™]\›€‘›ЬљY[€ЋВ€Ш\ЩH‚€™]\›€“›Э›Э[™ЋВ€Y][‚€™]\›€‘\њ›Ь€ЋВ€BџB‚™ќ[Э[Ы€\њЩSЬ[Ы[›ЫЫX[Љ[YJHВ€Y€
+[YHOHќ[Эљ[™К[YJKќљ[J
+HOOH€ЉH™]\›€ќ[В€ЫЫњЭ^HЭљ[™К[YJKќљ[J
+KќУЭЩ\ђШ\ЩJ
+NВ€Y€
+^OOHќќYH€^OOHЊHЉH™]\›€ќYNВ€Y€
+^OOH™[ЩH€^OOHЊЉH™]\›€[ЩNВ€™]\›€ќ[ВџB‚™ќ[Э[Ы€›Ь›X[^™SЩФЬЭ]J[YJHВ€ЫЫњЭ^HЭљ[™К[YHПИ€ЉKќљ[J
+NВ€Y€
+Ч—НKWМџKWМџIЛќ\Э
+^
+JH™]\›€^В€™]\›€™]И]J
+KќТTУФЭљ[™К
+KњЫXЩJL
+NВџB‚™ќ[Э[Ы€љ[\“ЩФЬЭ›ЭЬК][\ЛЬ[ЫњИHЯJHВ€ЫЫњЭЭ\ќ\ИH\њЩSЬ[Ы[]S\КЬ[ЫњЛњЭ\ќ
+NВ€ЫЫњЭ[™\ИH\њЩSЬ[Ы[]S\КЬ[ЫњЛ™[™
+NВ€ЫЫњЭЩ^]ЫЬ™HЭљ[™КЬ[ЫњЛњHПИ€ЉKќљ[J
+KќУЭЩ\ђШ\ЩJ
+NВ€ЫЫњЭ]™[ќљY[HЭљ[™КЬ[ЫњЛ™]™[ќљY[ПИ€ЉKќљ[J
+NВ€ЫЫњЭ]™[ќ[YHHЭљ[™КЬ[ЫњЛ™]™[ќ[YHПИ€ЉKќљ[J
+NВ€ЫЫњЭ[YQљY[HЭљ[™КЬ[ЫњЛќ[YQљY[ПИ•[YHЉKќљ[J
+NВ€ЫЫњЭY\ЬШYЩQљY[ИH\њ^Kљ\Р\њ^JЬ[ЫњЛ›Y\ЬШYЩQљY[КHИЬ[ЫњЛ›Y\ЬШYЩQљY[И€ЧNВ‚€™]\›€
+\њ^Kљ\Р\њ^J][\КHИ][\И€ЧJK™љ[\Љ
+][JHO€В€Y€
+Z][H\[Щ€][HOOH›Шљ™XЭЉH™]\›€[ЩNВ‚€Y€
+]™[ќљY[	‰€]™[ќ[YJHВ€Y€
+Эљ[™К][VЩ]™[ќљY[HПИ€ЉKќљ[J
+HOOH]™[ќ[YJH™]\›€[ЩNВ€B‚€ЫЫњЭЭ\њ™[ќ\ИH\њЩSЬ[Ы[]S\К][VЭ[YQљY[JNВ€Y€
+Э\ќ\ИOHќ[	‰€
+Э\њ™[ќ\ИOHќ[Э\њ™[ќ\ИЭ\ќ\КJH™]\›€[ЩNВ€Y€
+[™\ИOHќ[	‰€
+Э\њ™[ќ\ИOHќ[Э\њ™[ќ\И€[™\КJH™]\›€[ЩNВ‚€Y€
+ZЩ^]ЫЬ™
+H™]\›€ќYNВ€™]\›€Y\ЬШYЩQљY[ЛњЫЫYJ
+љY[
+HO€Эљ[™К][VЩљY[HПИ€ЉKќУЭЩ\ђШ\ЩJ
+Kљ[ЫY\КЩ^]ЫЬ™
+JNВ€JNВџB‚™ќ[Э[Ы€YЪ[]SЩФЬЭ›ЭЬК][\Л[Z]Щ™њЩ]^HHЯJHВ€ЫЫњЭШY™S[Z]HX]›X^
+KX]›Z[Љќ[X™\Љ[Z]
+HЊЊ
+JNВ€ЫЫњЭШY™SЩ™њЩ]HX]›X^
+ќ[X™\ЉЩ™њЩ]
+H
+NВ€™]\›€В€‹‹™^K€Э[€][\Л›[™Э€[Z]€ШY™S[Z]€Щ™њЩ]€ШY™SЩ™њЩ]€][\О€][\ЛњЫXЩJШY™SЩ™њЩ]ШY™SЩ™њЩ]
+ИШY™S[Z]
+K€NВџB‚™ќ[Э[Ы€\њЩSЬ[Ы[]S\К[YJHВ€ЫЫњЭ^HЭљ[™К[YHПИ€ЉKќљ[J
+NВ€Y€
+]^
+H™]\›€ќ[В€ЫЫњЭ\њЩYH]Kњ\њЩJ^
+NВ€™]\›€ќ[X™\‹љ\Сљ[љ]J\њЩY
+HИ\њЩY€ќ[ВџB‚™ќ[Э[Ы€›Ь›X[^™T^][YT›ЭК›ЭКHВ€ЫЫњЭЭX[TЩXЫЫ™ИHќ[X™\Љ›ЭПЛњЭX[WЩШ[YWЬЩXЫЫ™ИПИ›ЭПЛњЭX[QШ[YTЩXЫЫ™ИПИ›ЭПЛњЭX[WЬЩXЫЫ™ИПИ›ЭПЛњЭX[TЩXЫЫ™ИПИ›ЭПЛ™Ш[YWЬЩXЫЫ™ИПИ›ЭПЛ™Ш[YTЩXЫЫ™ИПИ
+NВ€ЫЫњЭЭ™\њљYU[YHH›ЭПЛ™Ш[YWЬЩXЫЫ™ЧЫЭ™\њљYHПИ›ЭПЛ™Ш[YTЩXЫЫ™УЭ™\њљYNВ€ЫЫњЭ›Ь›X[^™YЭ™\њљYHHЭ™\њљYU[YHOHќ[Эљ[™КЭ™\њљYU[YJKќљ[J
+HOOH€‚€Иќ[€€ќ[X™\ЉЭ™\њљYU[YJNВ€ЫЫњЭШY™SЭ™\њљYTЩXЫЫ™ИH›Ь›X[^™YЭ™\њљYHOHќ[Sќ[X™\‹љ\Сљ[љ]J›Ь›X[^™YЭ™\њљYJB€Иќ[€€X]›X^
+X]™›ЫЬЉ›Ь›X[^™YЭ™\њљYJJNВ€ЫЫњЭY™™XЭ]™TЩXЫЫ™ИHќ[X™\ЉШY™SЭ™\њљYTЩXЫЫ™ИПИ›ЭПЛ™Ш[YWЬЩXЫЫ™ИПИ›ЭПЛ™Ш[YTЩXЫЫ™ИПИЭX[TЩXЫЫ™ИПИ
+NВ€ЫЫњЭШY™TЩXЫЫ™ИHќ[X™\‹љ\Сљ[љ]JY™™XЭ]™TЩXЫЫ™КHИY™™XЭ]™TЩXЫЫ™И€В€ЫЫњЭШY™TЭX[TЩXЫЫ™ИHќ[X™\‹љ\Сљ[љ]JЭX[TЩXЫЫ™КHИЭX[TЩXЫЫ™И€В€™]\›€В€ЭX[RQ€Эљ[™К›ЭПЛњЭX[WЪYПИ›ЭПЛњЭX[RQПИ€ЉK€\Y€ќ[X™\Љ›ЭПЛ\ЪYПИ›ЭПЛ\YПИОLМО
+K€Ш[YS[YN€Эљ[™К›ЭПЛ™Ш[YWЫ[YHПИ›ЭПЛ™Ш[YS[YHПИ”Ь]XYЉK€Ш[YTЩXЫЫ™О€ШY™TЩXЫЫ™Л€ЭX[QШ[YTЩXЫЫ™О€ШY™TЭX[TЩXЫЫ™Л€Ш[YTЩXЫЫ™УЭ™\њљYN€ШY™SЭ™\њљYTЩXЫЫ™Л€Ш[YRЭ\њО€ќ[X™\Љ
+ШY™TЩXЫЫ™ИИНЊ
+KќСљ^Y
+ЉJK€ЭX[QШ[YRЭ\њО€ќ[X™\Љ
+ШY™TЭX[TЩXЫЫ™ИИНЊ
+KќСљ^Y
+ЉJK€™]ЪY]€ќ[X™\Љ›ЭПЛ™™]ЪYШ]ПИ›ЭПЛ™™]ЪY]ПИ
+Hќ[€\ЭЩY[“[YN€›ЭПЛ›\ЭЬЩY[—Ы[YHПИ›ЭПЛ›\ЭЩY[“[YHПИќ[€ЭX[WШ]]\Ћ€›ЭПЛњЭX[WШ]]\€ПИ›ЭПЛњЭX[P]]\€ПИќ[€ЭX[P]]\Ћ€›ЭПЛњЭX[WШ]]\€ПИ›ЭПЛњЭX[P]]\€ПИќ[€NВџB‚™ќ[Э[Ы€ЫX[”^Y\‘›ЬђЫY[ќ
+^Y\ЉHВ€Y€
+\^Y\ЉH™]\›€^Y\ЋВ€ЫЫњЭЫX[™YHИ‹‹њ^Y\€NВ€[]HЫX[™Yњ]ОВ€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[”^Y\њС›ЬђЫY[ќ
+^Y\њКHВ€Y€
+\^Y\њКH™]\›€^Y\њОВ€ЫЫњЭЫX[™YHИ‹‹њ^Y\њИNВ€[]HЫX[™YћTЭX[RQВ€[]HЫX[™YћQSФТQВ€[]HЫX[™YћT^Y\’QВ€[]HЫX[™YћS[YNВ€Y€
+\њ^Kљ\Р\њ^JЫX[™YXЭ]™JJHВ€ЫX[™YXЭ]™HHЫX[™YXЭ]™K›X\
+ЫX[”^Y\‘›ЬђЫY[ќ
+NВ€B€Y€
+\њ^Kљ\Р\њ^JЫX[™Yњ™XЩ[ќQ\ШЫЫ›™XЭY
+JHВ€ЫX[™Yњ™XЩ[ќQ\ШЫЫ›™XЭYHЫX[™Yњ™XЩ[ќQ\ШЫЫ›™XЭY›X\
+ЫX[”^Y\‘›ЬђЫY[ќ
+NВ€B€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[”Ь]XYС›ЬђЫY[ќ
+Ь]XYКHВ€Y€
+\Ь]XYКH™]\›€Ь]XYОВ€ЫЫњЭЫX[™YHИ‹‹њЬ]XYИNВ€[]HЫX[™YћRЩ^NВ€[]HЫX[™YћUX[RQВ€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[”Ы\ЪЭ[›ЬђЫY[ќ
+[
+HВ€Y€
+X[
+H™]\›€[В€™]\›€В€‹‹[€^Y\њО€ЫX[”^Y\њС›ЬђЫY[ќ
+[њ^Y\њКK€Ь]XYО€ЫX[”Ь]XYС›ЬђЫY[ќ
+[њЬ]XYКK€X]Ъ€[›X]ЪИВ€‹‹[›X]Ъ€^Y\њО€ЫX[”^Y\њС›ЬђЫY[ќ
+[›X]Ъњ^Y\њКK€Ь]XYО€ЫX[”Ь]XYС›ЬђЫY[ќ
+[›X]ЪњЬ]XYКK€H€[›X]Ъ€NВџB‚™ќ[Э[Ы€ЫX[ђЫЫX]]™[ќ›ЬђЫY[ќ
+]™[ќ
+HВ€Y€
+Y]™[ќ
+H™]\›€]™[ќВ€ЫЫњЭЫX[™YHИ‹‹™]™[ќNВ€[]HЫX[™Yњ]ОВ€[]HЫX[™Yњ]С]™[ќВ€Y€
+ЫX[™Y]XЪЩ\ЉHВ€ЫX[™Y]XЪЩ\€HИ‹‹ЫX[™Y]XЪЩ\€NВ€[]HЫX[™Y]XЪЩ\‹њ]ОВ€B€Y€
+ЫX[™YќљXЭ[JHВ€ЫX[™YќљXЭ[HHИ‹‹ЫX[™YќљXЭ[HNВ€[]HЫX[™YќљXЭ[Kњ]ОВ€B€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[ђЫЫX]]™[ќС›ЬђЫY[ќ
+]™[ќКHВ€Y€
+P\њ^Kљ\Р\њ^J]™[ќКJH™]\›€ЧNВ€™]\›€]™[ќЛ›X\
+ЫX[ђЫЫX]]™[ќ›ЬђЫY[ќ
+NВџB‚™ќ[Э[Ы€ЫX[ђЫЫX]Э™\ќљY]С›ЬђЫY[ќ
+Э™\ќљY]КHВ€Y€
+[Э™\ќљY]КH™]\›€Э™\ќљY]ОВ€ЫЫњЭЫX[™YHИ‹‹›Э™\ќљY]ИNВ€[]HЫX[™Y™]™[ќОВ€[]HЫX[™Y›]\ЭВ€[]HЫX[™Yњ]У]\ЭВ€[]HЫX[™Yњ›ШЩ\ЬЩY]\ЭВ€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[ђ]SЩС]™[ќ›ЬђЫY[ќ
+]™[ќ
+HВ€Y€
+Y]™[ќ
+H™]\›€]™[ќВ€ЫЫњЭЫX[™YHИ‹‹™]™[ќNВ€[]HЫX[™Yњ]ОВ€[]HЫX[™Yњ]С]™[ќВ€Y€
+ЫX[™Yњ^Y\ЉHВ€ЫX[™Yњ^Y\€HИ‹‹ЫX[™Yњ^Y\€NВ€[]HЫX[™Yњ^Y\‹њ]ОВ€B€Y€
+ЫX[™YЫЭ[ќ\њ\ќJHВ€ЫX[™YЫЭ[ќ\њ\ќHHИ‹‹ЫX[™YЫЭ[ќ\њ\ќHNВ€[]HЫX[™YЫЭ[ќ\њ\ќKњ]ОВ€B€Y€
+ЫX[™Y]XЪЩ\ЉHВ€ЫX[™Y]XЪЩ\€HИ‹‹ЫX[™Y]XЪЩ\€NВ€[]HЫX[™Y]XЪЩ\‹њ]ОВ€B€Y€
+ЫX[™YќљXЭ[JHВ€ЫX[™YќљXЭ[HHИ‹‹ЫX[™YќљXЭ[HNВ€[]HЫX[™YќљXЭ[Kњ]ОВ€B€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[ђ]SЩС]™[ќС›ЬђЫY[ќ
+]™[ќКHВ€Y€
+P\њ^Kљ\Р\њ^J]™[ќКJH™]\›€ЧNВ€™]\›€]™[ќЛ›X\
+ЫX[ђ]SЩС]™[ќ›ЬђЫY[ќ
+NВџB‚™ќ[Э[Ы€ЫX[ђ]SЩУЭ™\ќљY]С›ЬђЫY[ќ
+Э™\ќљY]КHВ€Y€
+[Э™\ќљY]КH™]\›€Э™\ќљY]ОВ€ЫЫњЭЫX[™YHИ‹‹›Э™\ќљY]ИNВ€Y€
+\њ^Kљ\Р\њ^JЫX[™Y›]\Э
+JHВ€ЫX[™Y›]\ЭHЫX[ђ]SЩС]™[ќС›ЬђЫY[ќ
+ЫX[™Y›]\Э
+NВ€B€™]\›€ЫX[™YВџB‚™ќ[Э[Ы€ЫX[ђ]SЩС]™[ќФ™\ЬЫњЩQ›ЬђЫY[ќ
+]JHВ€Y€
+Y]JH™]\›€]NВ€™]\›€В€‹‹™]K€]™[ќО€ЫX[ђ]SЩС]™[ќС›ЬђЫY[ќ
+]K™]™[ќКK€Э™\ќљY]О€ЫX[ђ]SЩУЭ™\ќљY]С›ЬђЫY[ќ
+]K›Э™\ќљY]КK€NВџB‚™ќ[Э[Ы€ЫX[ђ]SЩФ^Y\”™\ЬЫњЩQ›ЬђЫY[ќ
+]JHВ€Y€
+Y]JH™]\›€]NВ€™]\›€В€‹‹™]K€]™[ќО€ЫX[ђ]SЩС]™[ќС›ЬђЫY[ќ
+]K™]™[ќКK€]\Э€ЫX[ђ]SЩС]™[ќС›ЬђЫY[ќ
+]K›]\Э
+K€NВџB‚™ќ[Э[Ы€›Ь›X[^™TЬ]XY[YJ[YJHВ€™]\›€Эљ[™К[YHПИ€ЉKќљ[J
+Kњ™\XЩJЧКЛЩЛ€ЉKќУЭЩ\ђШ\ЩJ
+NВџB‚™ќ[Э[Ы€ќZ[XЪЪ[™ТЩ^J™XЫЬ™HЯJHВ€™]\›€В€Эљ[™К™XЫЬ™њЩ\ќ™\’YПИ€ЉKќљ[J
+K€Эљ[™К™XЫЬ™›X]ЪYПИ€ЉKќљ[J
+K€™XЫЬ™ќX[RYOHќ[И€€€Эљ[™К™XЫЬ™ќX[RY
+K€™XЫЬ™њЬ]XYYOHќ[И€€€Эљ[™К™XЫЬ™њЬ]XYY
+K€›Ь›X[^™TЬ]XY[YJ™XЫЬ™њЬ]XY[YJK€Kљ›Ъ[ЉџЉNВџB‚™ќ[Э[Ы€ќZ[Ь]XY[YUXЪЪ[™Ф™XЫЬ™КИЭX\™Э\Ъ\ЩKZ\‹ќ[PЪZ[‹Y™XЮXЫHJHВ€ЫЫњЭЬ›Э\YH™]ИX\
+
+NВ‚€›Ь€
+ЫЫњЭ][HЩ€\њ^Kљ\Р\њ^JЭX\™Лњ™XЩ[ќ
+HИЭX\™њ™XЩ[ќ€ЧJHВ€ЫЫњЭЭ]\ИHЭљ[™К][KњЭ]\ИПИ€ЉKќљ[J
+NВ€Y€
+Э]\ИOOHќљ[Ы][Ы€€	‰€Э]\ИOOHљ[™Y€	‰€Э]\ИOOH™\њ›Ь€ЉHЫЫќ[ќYNВ€ЫЫњЭЩ^HHќZ[XЪЪ[™ТЩ^JВ€Щ\ќ™\’Y€][KњЩ\ќ™\’YПИ][K™]™[ќЛњЩ\ќ™\’YПИ€‹€X]ЪY€][K›X]ЪYПИ][K™]™[ќЛ›X]ЪYПИ€‹€X[RY€][K™]™[ќЛќX[RYПИќ[€Ь]XYY€][K™]™[ќЛњЬ]XYYПИќ[€Ь]XY[YN€][K™]™[ќЛњЬ]XY[YHПИ€‹€JNВ€Y€
+YЬ›Э\Yљ\КЩ^JJHЬ›Э\YњЩ]
+Щ^KИЬ]XY[YN€ЧKЭ\Ъ\ЩN€ЧKZ\Ћ€ЧHJNВ€Ь›Э\Y™Щ]
+Щ^JKњЬ]XY[YKњ\Ъ
+В€Y€][KљY€Щ\ќ™\’Y€][KњЩ\ќ™\’YПИ][K™]™[ќЛњЩ\ќ™\’YПИ€‹€X]ЪY€][K›X]ЪYПИ][K™]™[ќЛ›X]ЪYПИ€‹€X[RY€][K™]™[ќЛќX[RYПИќ[€Ь]XYY€][K™]™[ќЛњЬ]XYYПИќ[€Ь]XY[YN€][K™]™[ќЛњЬ]XY[YHПИ€‹€Ь™X]Ь“[YN€][K™]™[ќЛЬ™X]Ь“[YHПИ€‹€Ь™X]Ь”ЭX[RY€][K™]™[ќЛЬ™X]Ь”ЭX[RYПИ][K™]™[ќЛЬ™X]Ь”ЭX[RQПИ][K™]™[ќЛњЭX[RYПИ][K™]™[ќЛњЭX[RQПИ€‹€ЫЭ\ЩN€њЬ]XYЫ[YWЬќ[H‹€ЭYЩN€њЬ]XYЫ[YH‹€Э]\О€ќљ[Ы][Ы€‹€XЪ\Ъ[Ы“X™[€єf'щd#z/зz)б‹€XЪ\Ъ[Ы•Ы™N€™[™Щ\€‹€™X\ЫЫЋ€][Kњ™X\ЫЫ€ПИ€‹€Ь™X]Y]€][KЬ™X]Y]€\]Y]€][Kќ\]Y]€XЭ[ЫњО€\њ^Kљ\Р\њ^J][KXЭ[ЫњКHИ][KXЭ[ЫњЛ›X\
+
+XЭ[ЫЉHO€XЭ[Ы‹ќ\JK™љ[\Љ›ЫЫX[ЉH€ЧK€Ш[•Ъ][\Э€ќYK€JNВ€B‚€›Ь€
+ЫЫњЭ][HЩ€\њ^Kљ\Р\њ^JЭ\Ъ\ЩOЛњ™XЩ[ќ™XЫЬ™КHИЭ\Ъ\ЩKњ™XЩ[ќ™XЫЬ™И€ЧJHВ€Y€
+][OЛќљ[Ы][Ы€OOHќYJHЫЫќ[ќYNВ€ЫЫњЭЩ^HHќZ[XЪЪ[™ТЩ^JВ€Щ\ќ™\’Y€][KњЩ\ќ™\’YПИ€‹€X]ЪY€][K›X]ЪYПИ€‹€X[RY€][KќX[RYПИќ[€Ь]XYY€][KњЬ]XYYПИќ[€Ь]XY[YN€][KњЬ]XY[YHПИ€‹€JNВ€Y€
+YЬ›Э\Yљ\КЩ^JJHЬ›Э\YњЩ]
+Щ^KИЬ]XY[YN€ЧKЭ\Ъ\ЩN€ЧKZ\Ћ€ЧHJNВ€Ь›Э\Y™Щ]
+Щ^JKњЭ\Ъ\ЩKњ\Ъ
+В€Y€][KљY€Щ\ќ™\’Y€][KњЩ\ќ™\’YПИ€‹€X]ЪY€][K›X]ЪYПИ€‹€X[RY€][KќX[RYПИќ[€Ь]XYY€][KњЬ]XYYПИќ[€Ь]XY[YN€][KњЬ]XY[YHПИ€‹€Ь™X]Ь“[YN€][KЬ™X]Ь“[YHПИ][K›XY\“[YHПИ€‹€Ь™X]Ь”ЭX[RY€][KЬ™X]Ь”ЭX[RYПИ][K›XY\”ЭX[RYПИ][KњЭX[RYПИ][KњЭX[RQПИ€‹€Ь]XY]\™N€][KњЬ]XY]\™HПИ][KњЬ]XY\HПИ€‹€Ь]XY]\™SX™[€][KњЬ]XY]\™SX™[ПИ€‹€ЫЭ\ЩN€ќY\™YЬЬ]XYЭ[YH‹€ЭYЩN€њЭ\Ъ\ЩH‹€Э]\О€ќљ[Ы][Ы€‹€XЪ\Ъ[Ы“X™[€єf-№Ё«щo#щҐнєeoщўд№озH‹€XЪ\Ъ[Ы•Ы™N€™[™Щ\€‹€™X\ЫЫЋ€][K™XЪ\Ъ[Ы”™X\ЫЫ€ПИ][Kњ™X\ЫЫ€ПИ€‹€Ь™X]Y]€][KЬ™X]Y]€\]Y]€][Kќ\]Y]€XЭ[ЫњО€\њ^Kљ\Р\њ^J][KXЭ[ЫњКHИ][KXЭ[ЫњЛ›X\
+
+XЭ[ЫЉHO€XЭ[Ы‹ќ\JK™љ[\Љ›ЫЫX[ЉH€ЧK€Ш[•Ъ][\Э€[ЩK€JNВ€B‚€›Ь€
+ЫЫњЭ][HЩ€\њ^Kљ\Р\њ^JZ\ЏЛњ™XЩ[ќ™XЫЬ™КHИZ\‹њ™XЩ[ќ™XЫЬ™И€ЧJHВ€ЫЫњЭљ[Ы][Ы€H][OЛќљ[Ы][Ы€OOHќYNВ€ЫЫњЭ\›Э™YH][OЛ\›Э™YOOHќYH	‰€]љ[Ы][ЫЋВ€Y€
+]љ[Ы][Ы€	‰€X\›Э™Y
+HЫЫќ[ќYNВ‚€ЫЫњЭЩ^HHќZ[XЪЪ[™ТЩ^JВ€Щ\ќ™\’Y€][KњЩ\ќ™\’YПИ€‹€X]ЪY€][K›X]ЪYПИ€‹€X[RY€][KќX[RYПИќ[€Ь]XYY€][KњЬ]XYYПИќ[€Ь]XY[YN€][KњЬ]XY[YHПИ€‹€JNВ€Y€
+YЬ›Э\Yљ\КЩ^JJHЬ›Э\YњЩ]
+Щ^KИЬ]XY[YN€ЧKЭ\Ъ\ЩN€ЧKZ\Ћ€ЧHJNВ€Ь›Э\Y™Щ]
+Щ^JK™Z\‹њ\Ъ
+В€Y€][KљY€Щ\ќ™\’Y€][KњЩ\ќ™\’YПИ€‹€X]ЪY€][K›X]ЪYПИ€‹€X[RY€][KќX[RYПИќ[€Ь]XYY€][KњЬ]XYYПИќ[€Ь]XY[YN€][KњЬ]XY[YHПИ€‹€Ь™X]Ь“[YN€][KЬ™X]Ь“[YHПИ€‹€Ь™X]Ь”ЭX[RY€][KЬ™X]Ь”ЭX[RYПИ][KњЭX[RYПИ][KњЭX[RQПИ€‹€ЫЭ\ЩN€љ[Ы][Ы€И™Z\—ЬЬ]XYШЬ™X][Ы€€€™љ[[Ш[ЭЩY‹€ЭYЩN€љ[Ы][Ы€И™Z\€€€™љ[[‹€Э]\О€љ[Ы][Ы€Иќљ[Ы][Ы€€€[ЭЩY‹€XЪ\Ъ[Ы“X™[€љ[Ы][Ы€И№ak9nlщnоєf'щўд№озH€€№§ 9ов:`&є/бИ‹€XЪ\Ъ[Ы•Ы™N€љ[Ы][Ы€И™[™Щ\€€€›ЪИ‹€™X\ЫЫЋ€\њ^Kљ\Р\њ^J][Kњ™X\ЫЫњКHИ][Kњ™X\ЫЫњЛљ›Ъ[Љ€ЉH€][Kњ™X\ЫЫ€ПИ€‹€Ь™X]Y]€][KЬ™X]Y]€\]Y]€][Kќ\]Y]€XЭ[ЫњО€\њ^Kљ\Р\њ^J][KXЭ[ЫњКHИ][KXЭ[ЫњЛ›X\
+
+XЭ[ЫЉHO€XЭ[Ы‹ќ\JK™љ[\Љ›ЫЫX[ЉH€ЧK€Ш[•Ъ][\Э€[ЩK€JNВ€B‚€™]\›€\њ^K™њ›ЫJЬ›Э\Yќ[Y\К
+JB€›X\
+
+ќXЪЩ]
+HO€Щ[XЭXЪЪ[™Ф™XЫЬ™
+ќXЪЩ]
+JB€™љ[\Љ›ЫЫX[ЉB€њЫЬќ
+
+YќљYЪ
+HO€В€ЫЫњЭљYЪ\ИH]Kњ\њЩJљYЪќ\]Y]ПИљYЪЬ™X]Y]ПИ€ЉHВ€ЫЫњЭYќ\ИH]Kњ\њЩJYќќ\]Y]ПИYќЬ™X]Y]ПИ€ЉHВ€™]\›€љYЪ\ИHYќ\ОВ€JB€њЫXЩJМ
+NВџB‚™ќ[Э[Ы€Щ[XЭXЪЪ[™Ф™XЫЬ™
+ќXЪЩ]
+HВ€Y€
+XќXЪЩ]
+H™]\›€ќ[В€ЫЫњЭ]\ЭЬ]XY[YHHXЪУ]\Э™XЫЬ™
+ќXЪЩ]њЬ]XY[YJNВ€Y€
+]\ЭЬ]XY[YJH™]\›€]\ЭЬ]XY[YNВ‚€ЫЫњЭ]\ЭЭ\Ъ\ЩHHXЪУ]\Э™XЫЬ™
+ќXЪЩ]њЭ\Ъ\ЩJNВ€Y€
+]\ЭЭ\Ъ\ЩJH™]\›€]\ЭЭ\Ъ\ЩNВ‚€™]\›€XЪУ]\Э™XЫЬ™
+ќXЪЩ]™Z\ЉNВџB‚™ќ[Э[Ы€XЪУ]\Э™XЫЬ™
+™XЫЬ™КHВ€Y€
+P\њ^Kљ\Р\њ^J™XЫЬ™КH™XЫЬ™Л›[™ЭOOH
+H™]\›€ќ[В€]]\ЭH™XЫЬ™ЦМNВ€]]\Э\ИH]Kњ\њЩJ]\Эќ\]Y]ПИ]\ЭЬ™X]Y]ПИ€ЉHВ€›Ь€
+ЫЫњЭ™XЫЬ™Щ€™XЫЬ™ЛњЫXЩJJJHВ€ЫЫњЭЭ\њ™[ќ\ИH]Kњ\њЩJ™XЫЬ™ќ\]Y]ПИ™XЫЬ™Ь™X]Y]ПИ€ЉHВ€Y€
+Э\њ™[ќ\И€]\Э\КHВ€]\ЭH™XЫЬ™В€]\Э\ИHЭ\њ™[ќ\ОВ€B€B€™]\›€]\ЭВџB

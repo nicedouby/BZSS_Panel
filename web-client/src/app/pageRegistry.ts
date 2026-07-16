@@ -181,6 +181,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "tk-apology",
+    path: "/tk-apology",
+    component: () => import("../pages/TeamKillApologyPage.vue"),
+    title: "TK 道歉处理",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "combat", label: "TK 道歉处理", icon: "⚠️", order: 35 },
+    superAdminOnly: true,
+    ...workspacePage,
+  },
+  {
     name: "combat-log-query",
     path: "/combat-log/query",
     component: () => import("../pages/CombatLogQueryPage.vue"),
