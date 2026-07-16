@@ -83,10 +83,10 @@ export class FileIOManager {
     }
   }
 
-  async stat(filePath) {
+  async stat(filePath, { cache = true } = {}) {
     const absolute = this.resolve(filePath);
     this.metrics.statCalls += 1;
-    const cached = this.statCache.get(absolute);
+    const cached = cache ? this.statCache.get(absolute) : null;
     if (cached && cached.expiresAt > Date.now()) return cached.value;
 
     const existing = this.statJobs.get(absolute);
@@ -94,7 +94,7 @@ export class FileIOManager {
 
     const job = fs.stat(absolute)
       .then((value) => {
-        this.statCache.set(absolute, { value, expiresAt: Date.now() + this.statCacheMs });
+        if (cache) this.statCache.set(absolute, { value, expiresAt: Date.now() + this.statCacheMs });
         return value;
       })
       .catch((error) => {
