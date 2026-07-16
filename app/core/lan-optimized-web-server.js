@@ -5,7 +5,6 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import {
-  BROTLI_PARAM_QUALITY,
   createBrotliCompress,
   createGzip,
   constants as zlibConstants,
@@ -102,7 +101,7 @@ export class LanOptimizedWebServer extends WebServer {
       if (encoding === "br") {
         await pipeline(source, createBrotliCompress({
           params: {
-            [zlibConstants.BROTLI_PARAM_QUALITY ?? BROTLI_PARAM_QUALITY]: 4,
+            [zlibConstants.BROTLI_PARAM_QUALITY]: 4,
           },
         }), res);
       } else if (encoding === "gzip") {
