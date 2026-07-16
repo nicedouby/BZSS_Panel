@@ -139,8 +139,7 @@ export class FileIOManager {
     const info = await this.stat(absolute);
     const key = `${absolute}\0${info.size}\0${Math.trunc(info.mtimeMs)}`;
     if (cache) {
-      const cached = this.readCache.get(key);
-      if (cached) return cached;
+      if (this.readCache.has(key)) return this.readCache.get(key);
     }
 
     const text = await this.readText(absolute, { maxBytes });
@@ -186,7 +185,11 @@ export class FileIOManager {
         this.metrics.droppedDebugWrites += 1;
         return false;
       }
-      await this.flush(entry);
+      await Promise.all([...this.channels.values()].map((channel) => this.flush(channel)));
+      if (this.metrics.queuedBytes + bytes > this.maxQueuedBytes) {
+        this.metrics.errors += 1;
+        throw new Error("FileIO write queue is full.");
+      }
     }
 
     entry.pending.push(value);
@@ -264,7 +267,10 @@ export class FileIOManager {
       this.metrics.errors += 1;
       this.rememberError(error);
     });
-    await once(writer, "open");
+    await Promise.race([
+      once(writer, "open"),
+      once(writer, "error").then(([error]) => { throw error; }),
+    ]);
 
     entry = {
       key,
