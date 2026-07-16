@@ -34,7 +34,7 @@ import { WebRegistry } from "./core/web-registry.js";
 import { WebStatus } from "./core/web-status.js";
 import { RconManager } from "./core/rcon-manager.js";
 import { UdpEventReceiver } from "./core/udp-event-receiver.js";
-import { WebServer } from "./core/web-server.js";
+import { LanOptimizedWebServer } from "./core/lan-optimized-web-server.js";
 import { PythonLogParserManager } from "./core/python-log-parser-manager.js";
 import { ModuleManager } from "./core/module-manager.js";
 import { PluginManager } from "./core/plugin-manager.js";
@@ -215,7 +215,7 @@ async function main() {
   });
   coreContext.pluginManager = pluginManager;
 
-  const webServer = new WebServer({
+  const webServer = new LanOptimizedWebServer({
     config: configManager.get("web", {}),
     logger: logger.child({ moduleId: "core.webServer", source: "core.webServer", channel: "web" }),
     core: coreContext,
