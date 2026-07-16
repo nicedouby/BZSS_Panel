@@ -28,6 +28,43 @@ const BASE_SECURITY_HEADERS = {
  * text resources are streamed through Brotli or gzip on first download.
  */
 export class LanOptimizedWebServer extends WebServer {
+  async handleApi(url, req, res) {
+    if (url.pathname === "/api/auth/login" && req.method === "POST") {
+      return this.handleFastLogin(req, res);
+    }
+    return super.handleApi(url, req, res);
+  }
+
+  async handleFastLogin(req, res) {
+    const body = await this.readJsonBody(req);
+    const result = await this.core.authManager.login({
+      username: body.username,
+      password: body.password,
+      ip: this.getRequestIp(req),
+    });
+
+    if (!result.ok) {
+      const statusCode = result.error === "AuthDisabled" ? 503 : 401;
+      return this.json(res, statusCode, {
+        ok: false,
+        error: result.error ?? "InvalidCredentials",
+        message: result.error === "AuthDisabled"
+          ? "Authentication is disabled."
+          : "Invalid username or password.",
+      });
+    }
+
+    // Login should only establish the authenticated shell. Steam avatar and
+    // other optional profile fields are fetched later by /api/auth/me/profile.
+    return this.json(res, 200, {
+      ok: true,
+      authenticated: true,
+      user: this.serializeAuthSessionUser(result.user),
+    }, {
+      "Set-Cookie": result.cookie,
+    });
+  }
+
   async serveStatic(url, req, res) {
     let requestPath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
     requestPath = path.normalize(requestPath).replace(/^([/\\])+/, "").replace(/^(\.\.[/\\])+/, "");
