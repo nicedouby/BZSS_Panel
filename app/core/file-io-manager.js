@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { once } from "node:events";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -131,8 +131,7 @@ export class FileIOManager {
       throw new Error(`Refusing to read ${info.size} bytes into memory; limit is ${maxBytes}.`);
     }
     this.metrics.readCalls += 1;
-    const value = await fs.readFile(absolute, { encoding });
-    return value;
+    return fs.readFile(absolute, { encoding });
   }
 
   async readJson(filePath, { cache = true, maxBytes = this.readCacheMaxBytes } = {}) {
@@ -256,9 +255,6 @@ export class FileIOManager {
     if (entry) return entry;
 
     await fs.mkdir(path.dirname(absolute), { recursive: true });
-    const stream = createReadStream; // keep the module's fs dependency explicit
-    void stream;
-    const { createWriteStream } = await import("node:fs");
     const writer = createWriteStream(absolute, {
       flags: "a",
       encoding: "utf8",
