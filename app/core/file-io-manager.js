@@ -292,6 +292,31 @@ export class FileIOManager {
     this.statCache.delete(absolute);
   }
 
+  getPublicDiagnostics() {
+    const diagnostics = this.getDiagnostics();
+    return {
+      startedAt: diagnostics.startedAt,
+      appendCalls: diagnostics.appendCalls,
+      appendBytes: diagnostics.appendBytes,
+      flushCount: diagnostics.flushCount,
+      flushBytes: diagnostics.flushBytes,
+      activeChannels: diagnostics.activeChannels,
+      queuedBytes: diagnostics.queuedBytes,
+      maxQueuedBytes: diagnostics.maxQueuedBytes,
+      droppedDebugWrites: diagnostics.droppedDebugWrites,
+      statCalls: diagnostics.statCalls,
+      readCalls: diagnostics.readCalls,
+      atomicWrites: diagnostics.atomicWrites,
+      errors: diagnostics.errors,
+      lastError: diagnostics.lastError,
+      channels: diagnostics.channels.map(({ channel, pendingBytes, writableLength }) => ({
+        channel,
+        pendingBytes,
+        writableLength,
+      })),
+    };
+  }
+
   getDiagnostics() {
     return {
       startedAt: this.startedAt ? new Date(this.startedAt).toISOString() : "",
