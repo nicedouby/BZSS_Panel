@@ -13,6 +13,13 @@
         <button
           type="button"
           class="refresh-button"
+          @click="openQueryPage"
+        >
+          查询日志
+        </button>
+        <button
+          type="button"
+          class="refresh-button"
           :disabled="refreshing"
           @click="refreshAll()"
         >
@@ -344,6 +351,10 @@ async function bootstrap() {
   } finally {
     bootLoading.value = false;
   }
+}
+
+function openQueryPage() {
+  void router.push({ path: "/combat-log/query" });
 }
 
 async function refreshAll() {
