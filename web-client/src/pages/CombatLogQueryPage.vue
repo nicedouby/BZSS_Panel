@@ -83,8 +83,8 @@
       >
         <div class="results-shell">
           <div v-if="!searched && !loading" class="initial-state">
-            <strong>输入条件后开始查询</strong>
-            <span>默认查询最近 24 小时的记录。</span>
+            <strong>默认显示最近战斗事件</strong>
+            <span>当前显示最近 24 小时的记录，也可以通过上方条件进一步筛选。</span>
           </div>
 
           <div v-else class="table-shell">
