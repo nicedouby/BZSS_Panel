@@ -93,7 +93,7 @@ export class LanOptimizedWebServer extends WebServer {
 
     let stat;
     try {
-      stat = await fs.stat(abs);
+      stat = await (this.core.fileIO?.stat?.(abs) ?? fs.stat(abs));
     } catch (error) {
       if (error?.code === "ENOENT" && !path.extname(requestPath)) return this.serveIndex(res);
       res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
