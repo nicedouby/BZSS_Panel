@@ -218,6 +218,53 @@ async function testProjectileWeaponWritesBotInCombatLog() {
   });
 }
 
+async function testSearchesAcrossFilesAndMatchesVictimTeamId() {
+  await withTempCombatLog(async ({ module, emit }) => {
+    await module.start();
+
+    await emit("module.combatState", "updated", {
+      record: {
+        sourceEventId: "combat-search-1",
+        time: "2026-06-02T10:00:00+08:00",
+        type: "damaged",
+        attackerName: "Alpha",
+        victimName: "Bravo",
+        victimTeamID: "2",
+        damage: 37.5,
+        weapon: "Rifle",
+      },
+    });
+    await emit("module.combatState", "updated", {
+      record: {
+        sourceEventId: "combat-search-2",
+        time: "2026-06-03T11:00:00+08:00",
+        type: "died",
+        attackerName: "Charlie",
+        victimName: "Delta",
+        victimTeamID: "1",
+        damage: 100,
+        weapon: "Pistol",
+      },
+    });
+    await module.stop();
+
+    const result = await module.api.searchLog({
+      from: "2026-06-02T00:00:00+08:00",
+      to: "2026-06-02T23:59:59+08:00",
+      victim: "2",
+      eventType: "damage",
+      weapon: "rifle",
+      damage: "37.5",
+      limit: 50,
+    });
+
+    assert.equal(result.total, 1);
+    assert.equal(result.lines[0].victim, "Bravo");
+    assert.equal(result.lines[0].victimTeamId, "2");
+    assert.equal(result.lines[0].weapon, "Rifle");
+  });
+}
+
 
 async function testRawAndCleanRepresentationsAreWrittenOnce() {
   await withTempCombatLog(async ({ module, emit, tempDir }) => {
@@ -266,5 +313,6 @@ await testDuplicateEventKeyIsWrittenOnce();
 await testRawAndCleanRepresentationsAreWrittenOnce();
 await testSquidBotAttackerWritesBotInCombatLog();
 await testProjectileWeaponWritesBotInCombatLog();
+await testSearchesAcrossFilesAndMatchesVictimTeamId();
 
 console.log("combat log tests passed");
