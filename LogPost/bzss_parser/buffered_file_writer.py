@@ -3,9 +3,25 @@
 
 from __future__ import annotations
 
+import os
 import time
+import uuid
 from pathlib import Path
 from typing import Dict, Iterable, Optional, TextIO
+
+
+def write_text_atomic(path: str | Path, text: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(str(text), encoding="utf-8", newline="")
+        temporary.replace(target)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 class BufferedFileWriter:
