@@ -119,7 +119,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         unsubscribers.push(
           core.eventBus.onCoreEvent?.("round.world_bring_up", (event) => {
             void handleRoundWorldBringUp(event);
-          }) ?? (() => {}),
+          }) ?? (() => { }),
         );
       }
     },
@@ -130,9 +130,9 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       }
       pendingFinalPassTimers.clear();
       for (const unsubscribe of unsubscribers.splice(0)) {
-        try { unsubscribe(); } catch {}
+        try { unsubscribe(); } catch { }
       }
-      await finalPassCacheWrite.catch(() => {});
+      await finalPassCacheWrite.catch(() => { });
     },
   };
 
@@ -560,9 +560,9 @@ function buildFinalPassBroadcastMessageV2(record) {
   const playtimeText = resolvePlaytimeText(event.playtime);
   return [
     `${creator} 建立了${squadName}`,
-    `队伍性质：${squadNatureLabel}`,
-    `队伍类型：${squadTypeLabel}`,
-    `游戏时长：${playtimeText}`,
+    `性质：${squadNatureLabel}`,
+    `类型：${squadTypeLabel}`,
+    `时长：${playtimeText}`,
     `建队码：${record.creationOrderCode ?? "?"}`,
   ].join("，");
 }
@@ -860,16 +860,16 @@ function remember(bucket, record, limit) {
   }
 }
 
-  function recentLimit() {
-    return DEFAULT_RECENT_LIMIT;
-  }
+function recentLimit() {
+  return DEFAULT_RECENT_LIMIT;
+}
 
-  function isLiveActionEvent(event = {}) {
-    const sourceMode = normalizeText(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode).toLowerCase();
-    const canTriggerActions = normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true);
-    if (sourceMode && sourceMode !== "live") return false;
-    return canTriggerActions !== false;
-  }
+function isLiveActionEvent(event = {}) {
+  const sourceMode = normalizeText(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode).toLowerCase();
+  const canTriggerActions = normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true);
+  if (sourceMode && sourceMode !== "live") return false;
+  return canTriggerActions !== false;
+}
 
 function nowIso() {
   return new Date().toISOString();
