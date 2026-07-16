@@ -11,6 +11,11 @@
       <!-- Tech Grid Overlay Behind Map -->
       <div class="viewport-bg-grid"></div>
 
+      <div class="tactical-map-viewer-count" role="status" aria-live="polite">
+        <span class="tactical-map-viewer-count__indicator" aria-hidden="true"></span>
+        <span>{{ tacticalMapViewerCount === null ? "正在统计查看人数" : `${tacticalMapViewerCount} 人正在查看` }}</span>
+      </div>
+
       <!-- Centered Transform Container -->
         <div
           ref="mapRef"
@@ -774,6 +779,7 @@ import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
 import { getChineseNameByFaction, getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
+import { apiDelete, apiPost } from "../app/apiClient";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -1210,6 +1216,49 @@ let resizeObserver: ResizeObserver | null = null;
 let fitViewportTimeout: number | null = null;
 let mapPageActive = false;
 const tilesReady = ref(false);
+const tacticalMapViewerCount = ref<number | null>(null);
+const TACTICAL_MAP_VIEWER_HEARTBEAT_MS = 15 * 1000;
+let tacticalMapViewerHeartbeat: number | null = null;
+let tacticalMapViewerPresenceGeneration = 0;
+const tacticalMapViewerSessionId = typeof crypto.randomUUID === "function"
+  ? crypto.randomUUID()
+  : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+async function refreshTacticalMapViewerCount(generation: number) {
+  try {
+    const response = await apiPost<{ viewerCount?: unknown }>("/api/tactical-map/viewers", {
+      sessionId: tacticalMapViewerSessionId,
+    });
+    if (generation !== tacticalMapViewerPresenceGeneration || !mapPageActive) return;
+
+    const viewerCount = Number(response?.viewerCount);
+    tacticalMapViewerCount.value = Number.isFinite(viewerCount)
+      ? Math.max(0, Math.floor(viewerCount))
+      : null;
+  } catch {
+    // Presence is informational only; map interaction should continue if this request fails.
+  }
+}
+
+function startTacticalMapViewerPresence() {
+  const generation = ++tacticalMapViewerPresenceGeneration;
+  if (tacticalMapViewerHeartbeat !== null) window.clearInterval(tacticalMapViewerHeartbeat);
+  void refreshTacticalMapViewerCount(generation);
+  tacticalMapViewerHeartbeat = window.setInterval(() => {
+    void refreshTacticalMapViewerCount(generation);
+  }, TACTICAL_MAP_VIEWER_HEARTBEAT_MS);
+}
+
+function stopTacticalMapViewerPresence() {
+  ++tacticalMapViewerPresenceGeneration;
+  if (tacticalMapViewerHeartbeat !== null) {
+    window.clearInterval(tacticalMapViewerHeartbeat);
+    tacticalMapViewerHeartbeat = null;
+  }
+  tacticalMapViewerCount.value = null;
+  const sessionId = encodeURIComponent(tacticalMapViewerSessionId);
+  void apiDelete(`/api/tactical-map/viewers?sessionId=${sessionId}`, { keepalive: true }).catch(() => undefined);
+}
 
 const dynamicMarkerScale = computed(() => {
   const zoom = Math.max(camera.zoom.value, 0.05);
@@ -3209,6 +3258,7 @@ function attachResizeObserver() {
 function activateMapPage() {
   if (mapPageActive) return;
   mapPageActive = true;
+  startTacticalMapViewerPresence();
   tilesEnabled.value = false;
   renderedPlayerLimit.value = 0;
 
@@ -3246,6 +3296,7 @@ function activateMapPage() {
 function deactivateMapPage() {
   if (!mapPageActive) return;
   mapPageActive = false;
+  stopTacticalMapViewerPresence();
   stopDrag();
 
   if (isStandaloneMapRoute.value) {
@@ -3296,4 +3347,33 @@ onBeforeUnmount(deactivateMapPage);
 
 <style scoped>
 @import "../styles/tactical-map.css";
+
+.tactical-map-viewer-count {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(103, 232, 249, 0.32);
+  border-radius: 999px;
+  background: rgba(5, 12, 24, 0.82);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.28);
+  color: #d9faff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.tactical-map-viewer-count__indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #41f5b5;
+  box-shadow: 0 0 0 3px rgba(65, 245, 181, 0.14), 0 0 10px rgba(65, 245, 181, 0.82);
+}
 </style>

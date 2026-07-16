@@ -77,6 +77,13 @@ const MAP_IMAGE_BY_KEY = {
   Yehorivka_RAAS_v1: "Yehorivka_Minimap.PNG",
 };
 
+// Keep the tactical map deliberately low-bandwidth. The runtime never uses
+// the original 4096px PNG minimaps; it starts from a generated 1024px WebP
+// preview and only asks the tile loader for levels 0–2. Higher tile levels
+// remain available on disk for a future quality preset, but are not requested.
+const TACTICAL_MAP_PREVIEW_PATH = "/assets/map-previews";
+const TACTICAL_MAP_MAX_ZOOM_LEVEL = 2;
+
 const MAP_NAME_BY_KEY = {
   AlBasrah_AAS_v1: "Al Basrah",
   Anvil_RAAS_v1: "Anvil",
@@ -143,9 +150,9 @@ function buildConfig(key, entry) {
   return {
     key,
     name,
-    image: `/${imageName}`,
+    image: `${TACTICAL_MAP_PREVIEW_PATH}/${key}.webp`,
     tileBasePath: `/assets/map-tiles/${key}`,
-    maxZoomLevel: 4,
+    maxZoomLevel: TACTICAL_MAP_MAX_ZOOM_LEVEL,
     bounds: { minX, minY, maxX, maxY },
     aliases: buildAliases(key, name),
   };

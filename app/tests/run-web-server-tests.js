@@ -559,6 +559,41 @@ async function testWebPagesEndpointFiltersByPermissions() {
   assert.equal(adminPages.length, registry.getAllPages().length);
 }
 
+async function testTacticalMapViewerPresenceTracksDistinctAccounts() {
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest(req) {
+          return req.headers.authorization ? { id: req.headers.authorization } : null;
+        },
+      },
+    },
+  });
+
+  async function request(method, authorization, sessionId) {
+    const recorder = createRecorder();
+    const request = Readable.from(method === "POST" ? [JSON.stringify({ sessionId })] : []);
+    request.method = method;
+    request.url = method === "DELETE"
+      ? `/api/tactical-map/viewers?sessionId=${encodeURIComponent(sessionId)}`
+      : "/api/tactical-map/viewers";
+    request.headers = { host: "localhost", authorization };
+    request.socket = {};
+    await server.handleRequest(request, recorder.res);
+    assert.equal(recorder.state.status, 200);
+    return JSON.parse(recorder.state.body).viewerCount;
+  }
+
+  assert.equal(await request("POST", "alpha", "alpha_first"), 1);
+  assert.equal(await request("POST", "alpha", "alpha_second"), 1);
+  assert.equal(await request("POST", "bravo", "bravo_first"), 2);
+  assert.equal(await request("DELETE", "alpha", "alpha_first"), 2);
+  assert.equal(await request("DELETE", "alpha", "alpha_second"), 1);
+
+  server.tacticalMapViewers.set("stale", new Map([["stale_session", Date.now() - 46 * 1000]]));
+  assert.equal(await request("POST", "bravo", "bravo_first"), 1);
+}
+
 async function testAdminUsersRouteReturnsOnceAndHidesPasswordHash() {
   const server = createServer({
     core: {
@@ -3706,6 +3741,7 @@ await testBzssCoreCreateVehicleAcceptsOptionalTeamId();
 await testHealthEndpointDoesNotRequireAuth();
 await testAuthSessionAndLoginIncludeSteamAvatar();
 await testWebPagesEndpointFiltersByPermissions();
+await testTacticalMapViewerPresenceTracksDistinctAccounts();
 await testAdminUsersRouteReturnsOnceAndHidesPasswordHash();
 await testAdminPermissionGroupsApiSupportsCrudAndInUseConflict();
 await testConsoleRecentEndpointUsesUnifiedConsoleBuffer();
@@ -3746,4 +3782,3 @@ await testMatchSnapshotRoutesExposeArtifacts();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");
-

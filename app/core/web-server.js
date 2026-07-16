@@ -38,6 +38,7 @@ const MAX_WS_FRAME_BYTES = 1024 * 1024; // WebSocket max frame size 1MB
 const MAX_WS_BUFFERED_BYTES = 1024 * 1024;
 const MAX_LOCAL_JOB_HISTORY = 200;
 const LOCAL_JOB_TTL_MS = 60 * 60 * 1000;
+const TACTICAL_MAP_VIEWER_TTL_MS = 45 * 1000;
 
 /**
  * Base security headers
@@ -83,6 +84,7 @@ export class WebServer {
     this.jobCounter = 0;
     this.consoleConnections = new Set();
     this.chatConnections = new Set();
+    this.tacticalMapViewers = new Map();
     this.consoleSubscription = null;
     this.chatSubscription = null;
 
@@ -269,6 +271,53 @@ export class WebServer {
     }
   }
 
+  getTacticalMapViewerId(user) {
+    const value = user?.id ?? user?.userId ?? user?.username ?? user?.name;
+    const viewerId = String(value ?? "").trim();
+    return viewerId || null;
+  }
+
+  normalizeTacticalMapViewerSessionId(value) {
+    const sessionId = String(value ?? "").trim();
+    return /^[A-Za-z0-9_-]{1,128}$/.test(sessionId) ? sessionId : null;
+  }
+
+  pruneTacticalMapViewers(now = Date.now()) {
+    for (const [viewerId, sessions] of this.tacticalMapViewers) {
+      for (const [sessionId, lastSeenAt] of sessions) {
+        if (now - lastSeenAt > TACTICAL_MAP_VIEWER_TTL_MS) {
+          sessions.delete(sessionId);
+        }
+      }
+      if (!sessions.size) this.tacticalMapViewers.delete(viewerId);
+    }
+  }
+
+  touchTacticalMapViewer(user, sessionId) {
+    const now = Date.now();
+    const viewerId = this.getTacticalMapViewerId(user);
+    const normalizedSessionId = this.normalizeTacticalMapViewerSessionId(sessionId);
+    if (viewerId && normalizedSessionId) {
+      const sessions = this.tacticalMapViewers.get(viewerId) ?? new Map();
+      sessions.set(normalizedSessionId, now);
+      this.tacticalMapViewers.set(viewerId, sessions);
+    }
+    this.pruneTacticalMapViewers(now);
+    return this.tacticalMapViewers.size;
+  }
+
+  removeTacticalMapViewer(user, sessionId) {
+    const viewerId = this.getTacticalMapViewerId(user);
+    const normalizedSessionId = this.normalizeTacticalMapViewerSessionId(sessionId);
+    const sessions = viewerId ? this.tacticalMapViewers.get(viewerId) : null;
+    if (sessions && normalizedSessionId) {
+      sessions.delete(normalizedSessionId);
+      if (!sessions.size) this.tacticalMapViewers.delete(viewerId);
+    }
+    this.pruneTacticalMapViewers();
+    return this.tacticalMapViewers.size;
+  }
+
   async runTimedPlayerDatabaseQuery(endpoint, playerId, handler) {
     const startedAt = Date.now();
     try {
@@ -409,6 +458,17 @@ export class WebServer {
         error: "Unauthorized",
         message: "Authentication required.",
       });
+    }
+
+    if (url.pathname === "/api/tactical-map/viewers") {
+      if (req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, { viewerCount: this.touchTacticalMapViewer(user, body?.sessionId) });
+      }
+      if (req.method === "DELETE") {
+        return this.json(res, 200, { viewerCount: this.removeTacticalMapViewer(user, url.searchParams.get("sessionId")) });
+      }
+      return this.json(res, 405, { error: "MethodNotAllowed", message: "Method not allowed." });
     }
 
     if (
