@@ -46,6 +46,18 @@ export function createCombatLogModule({ core, modules, config, logger }) {
     const mark = formatMark(record);
     const attacker = formatAttackerName(record);
     const victim = formatPlayerName(record.victim ?? record.victimName ?? record.victimDisplayName ?? record.victim?.displayName ?? record.victim?.name);
+    const attackerTeamId = formatTeamId(
+      record.attackerTeamID
+      ?? record.attackerTeamId
+      ?? record.attacker?.teamID
+      ?? record.attacker?.teamId,
+    );
+    const victimTeamId = formatTeamId(
+      record.victimTeamID
+      ?? record.victimTeamId
+      ?? record.victim?.teamID
+      ?? record.victim?.teamId,
+    );
     const damage = formatDamage(record.damage);
     const weapon = formatWeapon(record.weapon ?? record.weaponName ?? record.causedBy ?? record.rawCausedBy ?? record.weapon?.displayName);
 
@@ -56,6 +68,8 @@ export function createCombatLogModule({ core, modules, config, logger }) {
       mark,
       attacker,
       victim,
+      attackerTeamId,
+      victimTeamId,
       damage,
       weapon,
     };
@@ -135,6 +149,11 @@ export function createCombatLogModule({ core, modules, config, logger }) {
     const number = Number(value);
     if (!Number.isFinite(number)) return sanitizeLineValue(value);
     return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(6)));
+  }
+
+  function formatTeamId(value) {
+    const text = sanitizeLineValue(value);
+    return text || "-";
   }
 
   function formatWeapon(value) {
@@ -233,7 +252,7 @@ export function createCombatLogModule({ core, modules, config, logger }) {
   }
 
   function formatLogLine(entry) {
-    return [
+    const fields = [
       entry.timeKey,
       entry.type,
       entry.mark,
@@ -241,7 +260,11 @@ export function createCombatLogModule({ core, modules, config, logger }) {
       entry.victim,
       entry.damage,
       entry.weapon,
-    ].join("\t");
+    ];
+    if (entry.attackerTeamId !== "-" || entry.victimTeamId !== "-") {
+      fields.push(entry.attackerTeamId, entry.victimTeamId);
+    }
+    return fields.join("\t");
   }
 
   function pruneSeenKeys(now = Date.now()) {
@@ -321,6 +344,10 @@ export function createCombatLogModule({ core, modules, config, logger }) {
     return readCombatLog(baseDir, filter);
   }
 
+  async function searchLog(filter = {}) {
+    return searchCombatLogs(baseDir, filter);
+  }
+
   function getStatus() {
     const currentTarget = resolveTargetPath(new Date());
     return {
@@ -346,6 +373,7 @@ export function createCombatLogModule({ core, modules, config, logger }) {
     listMonths,
     listFiles,
     readLog,
+    searchLog,
     getCurrentFilePath() {
       return getStatus().currentFilePath;
     },
@@ -499,9 +527,164 @@ async function readCombatLog(baseDir, filter = {}) {
   };
 }
 
+async function searchCombatLogs(baseDir, filter = {}) {
+  const startAt = parseSearchDate(filter.from ?? filter.start);
+  const endAt = parseSearchDate(filter.to ?? filter.end);
+  if (startAt && endAt && startAt > endAt) {
+    throw createHttpError(400, "InvalidTimeRange", "from must be earlier than or equal to to.");
+  }
+
+  const attacker = normalizeSearchText(filter.attacker);
+  const eventType = normalizeEventType(filter.eventType ?? filter.type);
+  const victim = normalizeSearchText(filter.victim ?? filter.victimOrTeam);
+  const weapon = normalizeSearchText(filter.weapon);
+  const damage = normalizeDamageFilter(filter.damage);
+  const limit = clampNumber(filter.limit, 100, 1, 500);
+  const offset = clampNumber(filter.offset, 0, 0, 1_000_000);
+  const months = await listCombatMonths(baseDir);
+  const matches = [];
+  let filesScanned = 0;
+
+  for (const month of months) {
+    const files = await listCombatFiles(baseDir, month.month);
+    for (const file of files) {
+      if (!fileMayOverlapRange(file.date, startAt, endAt)) continue;
+      filesScanned += 1;
+      const text = await safeReadFile(file.filePath);
+      const lines = text ? text.split(/\r?\n/).filter((line) => String(line ?? "").trim()) : [];
+
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = parseCombatLogLine(lines[index], index + 1);
+        const timestamp = parseLogTimestamp(file.date, line.time);
+        if (startAt && (!timestamp || timestamp < startAt)) continue;
+        if (endAt && (!timestamp || timestamp > endAt)) continue;
+        if (!matchesSearchFilter(line, { attacker, eventType, victim, weapon, damage })) continue;
+        matches.push({
+          ...line,
+          date: file.date,
+          timestamp: timestamp ? timestamp.toISOString() : "",
+          relativePath: file.relativePath,
+        });
+      }
+    }
+  }
+
+  matches.sort((left, right) => {
+    const leftTime = Date.parse(left.timestamp);
+    const rightTime = Date.parse(right.timestamp);
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) {
+      return rightTime - leftTime;
+    }
+    return String(right.date ?? "").localeCompare(String(left.date ?? ""));
+  });
+
+  const lines = matches.slice(offset, offset + limit);
+  return {
+    ok: true,
+    total: matches.length,
+    offset,
+    limit,
+    hasMoreOlder: offset + limit < matches.length,
+    hasMoreNewer: offset > 0,
+    filesScanned,
+    filters: {
+      from: startAt?.toISOString() ?? "",
+      to: endAt?.toISOString() ?? "",
+      attacker,
+      eventType,
+      victim,
+      weapon,
+      damage: damage.raw,
+    },
+    lines,
+  };
+}
+
+function matchesSearchFilter(line, filters) {
+  if (filters.attacker && !normalizeSearchText(line.attacker).includes(filters.attacker)) return false;
+  if (filters.eventType && normalizeEventType(line.type) !== filters.eventType) return false;
+  if (filters.victim) {
+    const victimName = normalizeSearchText(line.victim);
+    const victimTeamId = normalizeSearchText(line.victimTeamId);
+    if (!victimName.includes(filters.victim) && victimTeamId !== filters.victim) return false;
+  }
+  if (filters.weapon && !normalizeSearchText(line.weapon).includes(filters.weapon)) return false;
+  if (filters.damage.enabled) {
+    const lineDamage = Number(line.damage);
+    if (filters.damage.numeric && Number.isFinite(lineDamage)) {
+      if (lineDamage !== filters.damage.value) return false;
+    } else if (normalizeSearchText(line.damage) !== filters.damage.raw) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeEventType(value) {
+  const type = normalizeSearchText(value);
+  if (type === "damaged") return "damage";
+  if (type === "wounded") return "wound";
+  if (type === "death" || type === "died") return "kill";
+  if (type === "revived") return "revive";
+  return type;
+}
+
+function normalizeDamageFilter(value) {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return { enabled: false, numeric: false, value: null, raw: "" };
+  const valueNumber = Number(raw);
+  return {
+    enabled: true,
+    numeric: Number.isFinite(valueNumber),
+    value: Number.isFinite(valueNumber) ? valueNumber : null,
+    raw,
+  };
+}
+
+function parseSearchDate(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    throw createHttpError(400, "InvalidSearchDate", `Invalid date: ${text}`);
+  }
+  return date;
+}
+
+function parseLogTimestamp(dateText, timeText) {
+  const date = String(dateText ?? "").trim();
+  const time = String(timeText ?? "").trim();
+  const parsed = new Date(`${date}T${time}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function fileMayOverlapRange(dateText, startAt, endAt) {
+  const dayStart = new Date(`${dateText}T00:00:00`);
+  const dayEnd = new Date(`${dateText}T23:59:59.999`);
+  if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) return false;
+  if (startAt && dayEnd < startAt) return false;
+  if (endAt && dayStart > endAt) return false;
+  return true;
+}
+
 function parseCombatLogLine(line, lineNumber = 0) {
   const parts = String(line ?? "").split("\t");
-  const [time = "", type = "", mark = "", attacker = "", victim = "", damage = "", weapon = "", ...rest] = parts;
+  const [
+    time = "",
+    type = "",
+    mark = "",
+    attacker = "",
+    victim = "",
+    damage = "",
+    weapon = "",
+    attackerTeamId = "-",
+    victimTeamId = "-",
+    ...rest
+  ] = parts;
   return {
     lineNumber,
     time,
@@ -511,6 +694,8 @@ function parseCombatLogLine(line, lineNumber = 0) {
     victim,
     damage,
     weapon,
+    attackerTeamId: attackerTeamId || "-",
+    victimTeamId: victimTeamId || "-",
     raw: String(line ?? ""),
     extra: rest.length ? rest.join("\t") : "",
   };
