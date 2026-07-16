@@ -1,6 +1,6 @@
 <template>
-  <button
-    type="button"
+  <AppButton
+    :variant="resolvedVariant"
     class="touch-icon-button"
     :class="[tone && `tone-${tone}`, { active, compact }]"
     :aria-label="ariaLabel || label"
@@ -11,11 +11,14 @@
     </span>
     <span v-if="label" class="touch-icon-button__label">{{ label }}</span>
     <slot />
-  </button>
+  </AppButton>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from "vue";
+import AppButton, { type ButtonVariant } from "../ui/AppButton.vue";
+
+const props = defineProps<{
   label?: string;
   ariaLabel?: string;
   title?: string;
@@ -23,6 +26,8 @@ defineProps<{
   compact?: boolean;
   tone?: "primary" | "danger" | "neutral";
 }>();
+
+const resolvedVariant = computed<ButtonVariant>(() => props.tone === "danger" ? "danger" : props.tone === "primary" ? "primary" : "default");
 </script>
 
 <style scoped>

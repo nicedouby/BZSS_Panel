@@ -19,17 +19,17 @@
             @keydown.enter.ctrl="submit"
           ></textarea>
           <div class="quick-hints">
-            <span v-for="hint in hints" :key="hint" class="hint-chip" @click="message = hint">
+            <StatusBadge v-for="hint in hints" :key="hint" tone="warning" interactive @click="message = hint">
               {{ hint }}
-            </span>
+            </StatusBadge>
           </div>
         </div>
 
         <footer class="dialog-actions">
-          <button type="button" class="cancel-btn" @click="cancel">取消</button>
-          <button type="button" class="submit-btn" :disabled="!message.trim()" @click="submit">
+          <AppButton variant="ghost" @click="cancel">取消</AppButton>
+          <AppButton variant="warning" :disabled="!message.trim()" @click="submit">
             {{ ui.warnPrompt.confirmText }}
-          </button>
+          </AppButton>
         </footer>
       </section>
     </div>
@@ -38,6 +38,8 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick } from "vue";
+import AppButton from "../ui/AppButton.vue";
+import StatusBadge from "../ui/StatusBadge.vue";
 import { useUiStore } from "../../stores/ui.store";
 
 const ui = useUiStore();
@@ -154,22 +156,6 @@ function cancel() {
   margin-top: 4px;
 }
 
-.hint-chip {
-  font-size: 12px;
-  padding: 4px 10px;
-  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
-  border: 1px solid var(--color-border-soft);
-  border-radius: var(--radius-full);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.hint-chip:hover {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.28);
-  color: #fbbf24;
-}
 
 .dialog-actions {
   display: flex;
@@ -178,32 +164,4 @@ function cancel() {
   margin-top: 4px;
 }
 
-.cancel-btn {
-  padding: 8px 16px;
-  background: color-mix(in srgb, var(--color-bg-elevated) 86%, transparent);
-  border: 1px solid var(--color-border-default);
-  color: var(--color-text-secondary);
-  border-radius: 12px;
-  cursor: pointer;
-}
-
-.submit-btn {
-  padding: 8px 24px;
-  background: linear-gradient(180deg, rgba(251, 191, 36, 0.96), rgba(251, 191, 36, 0.82));
-  border: 1px solid rgba(251, 191, 36, 0.28);
-  color: #000;
-  font-weight: 700;
-  border-radius: 12px;
-  cursor: pointer;
-  box-shadow: var(--shadow-sm);
-}
-
-.submit-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.submit-btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(252, 211, 77, 0.98), rgba(251, 191, 36, 0.88));
-}
 </style>

@@ -1,14 +1,14 @@
 <template>
   <Teleport to="body">
     <div v-if="open" class="mobile-bottom-sheet">
-      <button type="button" class="mobile-bottom-sheet__backdrop" aria-label="Close" @click="$emit('close')" />
+      <AppButton class="mobile-bottom-sheet__backdrop" variant="ghost" aria-label="Close" @click="$emit('close')" />
       <section class="mobile-bottom-sheet__panel" :aria-label="title || 'Bottom sheet'">
         <header class="mobile-bottom-sheet__header">
           <div>
             <h3 v-if="title">{{ title }}</h3>
             <p v-if="description">{{ description }}</p>
           </div>
-          <button type="button" class="mobile-bottom-sheet__close" @click="$emit('close')">Close</button>
+          <AppButton variant="ghost" class="mobile-bottom-sheet__close" @click="$emit('close')">Close</AppButton>
         </header>
         <div class="mobile-bottom-sheet__content">
           <slot />
@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import AppButton from "../ui/AppButton.vue";
 defineProps<{
   open: boolean;
   title?: string;

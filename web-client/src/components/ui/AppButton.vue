@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-export type ButtonVariant = "default" | "primary" | "danger" | "ghost" | "soft";
+export type ButtonVariant = "default" | "primary" | "danger" | "warning" | "ghost" | "soft";
 export type ButtonSize = "sm" | "md" | "lg";
 
 withDefaults(defineProps<{
@@ -107,6 +107,12 @@ withDefaults(defineProps<{
   border-color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 55%, transparent);
   background: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 24%, transparent);
   color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 26%, white 74%);
+}
+
+.app-button--warning {
+  border-color: color-mix(in srgb, var(--color-status-warning) 55%, transparent);
+  background: color-mix(in srgb, var(--color-status-warning) 24%, transparent);
+  color: color-mix(in srgb, var(--color-status-warning) 28%, white 72%);
 }
 
 .app-button--ghost {

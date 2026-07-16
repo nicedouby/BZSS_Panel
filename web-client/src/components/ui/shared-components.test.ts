@@ -7,6 +7,10 @@ import EmptyState from "./EmptyState.vue";
 import StatCard from "./StatCard.vue";
 import StatGrid from "./StatGrid.vue";
 import StatusBadge from "./StatusBadge.vue";
+import AppCard from "../common/AppCard.vue";
+import AppDangerButton from "../common/AppDangerButton.vue";
+import AppStatusBadge from "../common/AppStatusBadge.vue";
+import LegacyStatusBadge from "../common/StatusBadge.vue";
 import PageCard from "../common/PageCard.vue";
 import PageWorkspace from "../layout/PageWorkspace.vue";
 
@@ -39,6 +43,30 @@ describe("shared UI components", () => {
 
     expect(wrapper.classes()).toContain("status-badge--success");
     expect(wrapper.find(".status-badge__dot").exists()).toBe(true);
+  });
+
+  it("keeps legacy component wrappers on the shared base controls", () => {
+    const appStatus = mount(AppStatusBadge, {
+      props: { tone: "ok", interactive: true, active: true },
+      slots: { default: "正常" },
+    });
+    expect(appStatus.element.tagName).toBe("BUTTON");
+    expect(appStatus.classes()).toContain("status-badge--success");
+    expect(appStatus.classes()).toContain("status-badge--lg");
+
+    const legacyStatus = mount(LegacyStatusBadge, {
+      props: { tone: "warn" },
+      attrs: { class: "forwarded", "data-testid": "legacy-status" },
+    });
+    expect(legacyStatus.classes()).toContain("forwarded");
+    expect(legacyStatus.attributes("data-testid")).toBe("legacy-status");
+
+    const danger = mount(AppDangerButton, { props: { tone: "warn" }, slots: { default: "警告" } });
+    expect(danger.classes()).toContain("app-button--warning");
+
+    const card = mount(AppCard, { props: { tone: "danger" }, slots: { footer: "底部" } });
+    expect(card.classes()).toContain("page-card--tone-danger");
+    expect(card.text()).toContain("底部");
   });
 
   it("renders AlertBanner, EmptyState, StatCard and StatGrid slots/props", () => {

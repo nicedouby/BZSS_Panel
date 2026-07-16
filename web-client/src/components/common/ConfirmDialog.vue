@@ -10,10 +10,10 @@
         </header>
 
         <footer class="dialog-actions">
-          <button type="button" @click="ui.confirmCancel()">{{ ui.confirm.cancelText }}</button>
-          <button type="button" class="danger-button" :data-tone="ui.confirm.tone" @click="ui.confirmAccept()">
+          <AppButton variant="ghost" @click="ui.confirmCancel()">{{ ui.confirm.cancelText }}</AppButton>
+          <AppButton :variant="confirmVariant" @click="ui.confirmAccept()">
             {{ ui.confirm.confirmText }}
-          </button>
+          </AppButton>
         </footer>
       </section>
     </div>
@@ -21,9 +21,12 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import AppButton, { type ButtonVariant } from "../ui/AppButton.vue";
 import { useUiStore } from "../../stores/ui.store";
 
 const ui = useUiStore();
+const confirmVariant = computed<ButtonVariant>(() => ui.confirm.tone === "error" ? "danger" : ui.confirm.tone === "warn" ? "warning" : "primary");
 </script>
 
 <style scoped>
@@ -71,18 +74,8 @@ const ui = useUiStore();
   gap: 10px;
 }
 
-.dialog-actions button {
+.dialog-actions :deep(.app-button) {
   min-width: 92px;
 }
 
-.danger-button[data-tone="error"],
-.danger-button[data-tone="warn"] {
-  border-color: rgba(248, 113, 113, 0.3);
-  background: linear-gradient(180deg, rgba(248, 113, 113, 0.14), rgba(248, 113, 113, 0.08));
-  color: color-mix(in srgb, var(--color-status-error) 38%, white 62%);
-}
-
-.danger-button[data-tone="idle"] {
-  border-color: rgba(122, 162, 184, 0.24);
-}
 </style>

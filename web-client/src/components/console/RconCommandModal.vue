@@ -3,7 +3,7 @@
     <section class="modal-panel">
       <header class="modal-head">
         <h3>{{ t("console.rconExecute") }}</h3>
-        <button type="button" class="close-button" @click="emit('close')">✕</button>
+        <AppButton variant="ghost" size="sm" icon-only aria-label="关闭" @click="emit('close')">✕</AppButton>
       </header>
 
       <div class="modal-body">
@@ -25,17 +25,16 @@
       </div>
 
       <footer class="modal-actions">
-        <button type="button" :disabled="executing" @click="emit('close')">
+        <AppButton variant="ghost" :disabled="executing" @click="emit('close')">
           {{ t("common.close") }}
-        </button>
-        <button
-          type="button"
-          class="primary-button"
+        </AppButton>
+        <AppButton
+          variant="primary"
           :disabled="executing || !command.trim()"
           @click="execute"
         >
           {{ executing ? t("console.rconExecuting") : t("console.rconExecute") }}
-        </button>
+        </AppButton>
       </footer>
     </section>
   </div>
@@ -43,6 +42,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import AppButton from "../ui/AppButton.vue";
 import { apiPost } from "../../app/apiClient";
 import { useUiStore } from "../../stores/ui.store";
 import { t } from "../../i18n";
@@ -152,13 +152,6 @@ function historyDown() {
   color: #edf2f4;
 }
 
-.close-button {
-  background: transparent;
-  border: none;
-  color: #9aa7b2;
-  font-size: 18px;
-  cursor: pointer;
-}
 
 .modal-body {
   display: grid;
@@ -208,15 +201,6 @@ function historyDown() {
   gap: 12px;
 }
 
-.primary-button {
-  background: #238636;
-  color: #ffffff;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-}
 
 .primary-button:hover:not(:disabled) {
   background: #2ea043;

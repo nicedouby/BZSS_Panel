@@ -15,38 +15,42 @@
         :disabled="disabled"
         autocomplete="off"
       />
-      <button
+      <AppButton
         v-if="searchQuery"
-        type="button"
+        variant="ghost"
+        size="sm"
+        icon-only
         class="player-select-clear"
         @click="clearSelection"
         title="清除选择"
       >
         ×
-      </button>
-      <span class="player-select-indicator" @click="toggleDropdown">▾</span>
+      </AppButton>
+      <AppButton variant="ghost" size="sm" icon-only class="player-select-indicator" aria-label="展开玩家列表" @click="toggleDropdown">▾</AppButton>
     </div>
 
     <!-- Dropdown Panel -->
     <div v-if="isOpen && !disabled" class="player-select-dropdown">
       <!-- Tabs -->
       <div class="player-select-tabs">
-        <button
-          type="button"
+        <AppButton
+          variant="ghost"
+          size="sm"
           class="player-select-tab"
           :class="{ active: activeTab === 'online' }"
           @click="activeTab = 'online'"
         >
           在线玩家 ({{ playerStore.active.length }})
-        </button>
-        <button
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="ghost"
+          size="sm"
           class="player-select-tab"
           :class="{ active: activeTab === 'database' }"
           @click="activeTab = 'database'"
         >
           玩家数据库
-        </button>
+        </AppButton>
       </div>
 
       <!-- Content Area -->
@@ -60,10 +64,10 @@
             没有匹配的在线玩家
           </div>
           <div v-else>
-            <button
+            <AppButton
               v-for="(player, idx) in activeFiltered"
               :key="`online-${player.playerID || idx}`"
-              type="button"
+              variant="ghost"
               class="player-select-option"
               :class="{ highlighted: idx === highlightedIndex }"
               role="option"
@@ -81,7 +85,7 @@
               <div class="option-sub">
                 <span class="option-steam">Steam: {{ player.steamID || player.steamId || '--' }}</span>
               </div>
-            </button>
+            </AppButton>
           </div>
         </template>
 
@@ -100,10 +104,10 @@
             未在数据库中找到匹配的玩家
           </div>
           <div v-else>
-            <button
+            <AppButton
               v-for="(player, idx) in dbResults"
               :key="`db-${player.id || idx}`"
-              type="button"
+              variant="ghost"
               class="player-select-option"
               :class="{ highlighted: idx === highlightedIndex }"
               role="option"
@@ -116,7 +120,7 @@
               <div class="option-sub">
                 <span class="option-steam">Steam: {{ getSteamId(player) }}</span>
               </div>
-            </button>
+            </AppButton>
           </div>
         </template>
       </div>
@@ -126,6 +130,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import AppButton from "../ui/AppButton.vue";
 import { usePlayerStore } from "../../stores/player.store";
 import { apiGet } from "../../app/apiClient";
 
@@ -411,7 +416,6 @@ function scrollToHighlighted() {
   color: var(--color-text-muted, #94a3b8);
   font-size: 10px;
   cursor: pointer;
-  pointer-events: none;
   user-select: none;
 }
 

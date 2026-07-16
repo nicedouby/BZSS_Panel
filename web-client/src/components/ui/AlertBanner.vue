@@ -9,12 +9,13 @@
     </div>
     <div v-if="$slots.actions || dismissible" class="alert-banner__actions">
       <slot name="actions" />
-      <button v-if="dismissible" type="button" class="alert-banner__close" aria-label="关闭" @click="$emit('dismiss')">×</button>
+      <AppButton v-if="dismissible" variant="ghost" size="sm" icon-only class="alert-banner__close" aria-label="关闭" @click="$emit('dismiss')">×</AppButton>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
+import AppButton from "./AppButton.vue";
 export type AlertTone = "info" | "success" | "warning" | "danger";
 
 defineEmits<{
@@ -86,15 +87,5 @@ withDefaults(defineProps<{
   flex: 0 0 auto;
 }
 
-.alert-banner__close {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
-  padding: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: inherit;
-}
+.alert-banner__close { color: inherit; }
 </style>

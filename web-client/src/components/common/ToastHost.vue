@@ -6,7 +6,7 @@
           <strong v-if="toast.title">{{ toast.title }}</strong>
           <span>{{ toast.message }}</span>
         </div>
-        <button type="button" class="close-button" @click="ui.dismissToast(toast.id)">x</button>
+        <AppButton variant="ghost" size="sm" icon-only class="close-button" aria-label="关闭" @click="ui.dismissToast(toast.id)">x</AppButton>
       </article>
     </TransitionGroup>
   </div>
@@ -14,6 +14,7 @@
 
 <script setup lang="ts">
 import { useUiStore } from "../../stores/ui.store";
+import AppButton from "../ui/AppButton.vue";
 
 const ui = useUiStore();
 </script>
@@ -72,18 +73,9 @@ const ui = useUiStore();
   line-height: 1.4;
 }
 
-.close-button {
-  padding: 0;
-  min-width: 28px;
-  min-height: 28px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--color-text-muted);
-  box-shadow: none;
-}
+.close-button { color: var(--color-text-muted); box-shadow: none; }
 
-.close-button:hover {
+.close-button:hover:not(:disabled) {
   border-color: var(--color-border-default);
   background: var(--color-bg-hover);
   transform: none;

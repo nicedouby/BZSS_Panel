@@ -6,15 +6,15 @@
       <span class="status-pill" :data-tone="statusTone">{{ statusLabel }}</span>
 
       <template #actions>
-        <button type="button" class="ghost-btn" :disabled="loading" @click="refreshState">
+        <AppButton variant="ghost" :disabled="loading" @click="refreshState">
           {{ loading ? "刷新中.." : "刷新" }}
-        </button>
-        <button type="button" class="ghost-btn" :disabled="saving" @click="saveSettings">
+        </AppButton>
+        <AppButton variant="ghost" :disabled="saving" @click="saveSettings">
           {{ saving ? "保存中.." : "保存规则" }}
-        </button>
-        <button type="button" class="ghost-btn" :disabled="toggling" @click="toggleEnabled">
+        </AppButton>
+        <AppButton variant="ghost" :disabled="toggling" @click="toggleEnabled">
           {{ toggling ? "切换中.." : (state?.enabled ? "停用插件" : "启用插件") }}
-        </button>
+        </AppButton>
       </template>
     </WorkspaceToolbar><div v-if="error" class="banner error">{{ error }}</div>
     <div v-if="info" class="banner info">{{ info }}</div>
@@ -136,22 +136,24 @@
         >
           <template #actions>
             <div class="tabs-header">
-              <button
-                type="button"
+              <AppButton
+                variant="ghost"
+                size="sm"
                 class="tab-btn"
                 :class="{ active: workbenchTab === 'rules' }"
                 @click="workbenchTab = 'rules'"
               >
                 规则编辑
-              </button>
-              <button
-                type="button"
+              </AppButton>
+              <AppButton
+                variant="ghost"
+                size="sm"
                 class="tab-btn"
                 :class="{ active: workbenchTab === 'simulate' }"
                 @click="workbenchTab = 'simulate'"
               >
                 手动模拟
-              </button>
+              </AppButton>
             </div>
           </template>
 
@@ -163,9 +165,9 @@
                     <h3>步兵队</h3>
                     <p>常见命名如 INF、Squad、步兵。通常开局更严格，越往后逐步放开。</p>
                   </div>
-                  <button type="button" class="ghost-btn ghost-btn--compact" @click="addRule('infantry')">
+                  <AppButton variant="ghost" size="sm" @click="addRule('infantry')">
                     新增一行
-                  </button>
+                  </AppButton>
                 </div>
                 <div class="rule-list">
                   <article v-for="(rule, index) in draft.rules.infantry" :key="`inf-${index}`" class="rule-row">
@@ -181,9 +183,9 @@
                       <span>最小时长（h）</span>
                       <input v-model.number="rule.minHoursExclusive" type="number" min="0" step="1" />
                     </label>
-                    <button type="button" class="danger-btn danger-btn--compact" @click="removeRule('infantry', index)">
+                    <AppButton variant="danger" size="sm" @click="removeRule('infantry', index)">
                       删除
-                    </button>
+                    </AppButton>
                   </article>
                 </div>
               </section>
@@ -194,9 +196,9 @@
                     <h3>载具队</h3>
                     <p>常见命名如 Armor、Tank、IFV、CAS。通常在步兵开放后再进入载具窗口。</p>
                   </div>
-                  <button type="button" class="ghost-btn ghost-btn--compact" @click="addRule('vehicle')">
+                  <AppButton variant="ghost" size="sm" @click="addRule('vehicle')">
                     新增一行
-                  </button>
+                  </AppButton>
                 </div>
                 <div class="rule-list">
                   <article v-for="(rule, index) in draft.rules.vehicle" :key="`veh-${index}`" class="rule-row">
@@ -212,9 +214,9 @@
                       <span>最小时长（h）</span>
                       <input v-model.number="rule.minHoursExclusive" type="number" min="0" step="1" />
                     </label>
-                    <button type="button" class="danger-btn danger-btn--compact" @click="removeRule('vehicle', index)">
+                    <AppButton variant="danger" size="sm" @click="removeRule('vehicle', index)">
                       删除
-                    </button>
+                    </AppButton>
                   </article>
                 </div>
               </section>
@@ -262,12 +264,12 @@
             </div>
 
             <div class="action-row" style="margin-top: 12px;">
-              <button type="button" class="primary-btn" :disabled="simulating" @click="simulateCreation">
+              <AppButton variant="primary" :disabled="simulating" @click="simulateCreation">
                 {{ simulating ? "模拟中..." : "模拟建队" }}
-              </button>
-              <button type="button" class="ghost-btn" :disabled="simulating" @click="syncDraftFromState">
+              </AppButton>
+              <AppButton variant="ghost" :disabled="simulating" @click="syncDraftFromState">
                 恢复当前配置
-              </button>
+              </AppButton>
             </div>
           </div>
         </PageCard>
@@ -283,22 +285,24 @@
         >
           <template #actions>
             <div class="tabs-header">
-              <button
-                type="button"
+              <AppButton
+                variant="ghost"
+                size="sm"
                 class="tab-btn"
                 :class="{ active: dataTab === 'records' }"
                 @click="dataTab = 'records'"
               >
                 判定结果 ({{ records.length }})
-              </button>
-              <button
-                type="button"
+              </AppButton>
+              <AppButton
+                variant="ghost"
+                size="sm"
                 class="tab-btn"
                 :class="{ active: dataTab === 'logs' }"
                 @click="dataTab = 'logs'"
               >
                 建队日志 ({{ creationLogs.length }})
-              </button>
+              </AppButton>
             </div>
           </template>
 
@@ -408,6 +412,7 @@ import { apiGet, apiPost } from "../app/apiClient";
 import { setPluginEnabled, updatePluginConfig } from "../features/plugins/plugin.api";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import PageCard from "../components/common/PageCard.vue";
+import AppButton from "../components/ui/AppButton.vue";
 
 const PLUGIN_ID = "plugin.stepwiseSquadPlaytimeGuard";
 const STATE_API = "/api/plugins/stepwise-squad-playtime-guard/state";
@@ -1370,4 +1375,3 @@ function recordDecisionTone(record: StepwiseRecord) {
   }
 }
 </style>
-

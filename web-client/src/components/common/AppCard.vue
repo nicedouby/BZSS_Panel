@@ -5,6 +5,8 @@
     :compact="compact"
     :overflow="overflow"
     :body-mode="bodyMode"
+    :tone="tone"
+    :padding="padding"
     class="app-card"
   >
     <template v-if="$slots.header" #header>
@@ -14,6 +16,7 @@
     <template v-if="$slots.actions" #actions>
       <slot name="actions" />
     </template>
+    <template v-if="$slots.footer" #footer><slot name="footer" /></template>
 
     <slot />
   </PageCard>
@@ -28,12 +31,16 @@ withDefaults(defineProps<{
   compact?: boolean;
   overflow?: "visible" | "clip" | "auto";
   bodyMode?: "normal" | "fill" | "scroll";
+  tone?: "default" | "info" | "warning" | "danger";
+  padding?: "none" | "sm" | "md";
 }>(), {
   title: "",
   description: "",
   compact: false,
   overflow: "visible",
   bodyMode: "normal",
+  tone: "default",
+  padding: "md",
 });
 </script>
 

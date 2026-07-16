@@ -142,7 +142,7 @@
           </div>
           <div class="ticket-modal-header-meta">
             <span class="ticket-control-badge" :data-tone="ticketSourceTone">{{ ticketSourceText }}</span>
-            <button type="button" class="ticket-modal-close" @click="closeTicketEditor">×</button>
+            <AppButton variant="ghost" size="sm" icon-only class="ticket-modal-close" aria-label="关闭" @click="closeTicketEditor">×</AppButton>
           </div>
         </header>
 
@@ -172,20 +172,15 @@
             </label>
           </div>
           <div class="ticket-adjust-actions" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px;">
-            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(10)">+10</button>
-            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(50)">+50</button>
-            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(100)">+100</button>
-            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(-10)">-10</button>
-            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(-50)">-50</button>
-            <button type="button" class="ticket-control-badge" @click="setTicketAdjustDelta(-100)">-100</button>
+            <AppButton v-for="delta in [10, 50, 100, -10, -50, -100]" :key="delta" variant="soft" size="sm" @click="setTicketAdjustDelta(delta)">{{ delta > 0 ? `+${delta}` : delta }}</AppButton>
           </div>
           <div class="ticket-modal-actions">
-            <button type="button" class="ticket-editor-submit" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
+            <AppButton variant="warning" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(true)">
               {{ ticketAdjustLoading ? "处理中..." : "加票" }}
-            </button>
-            <button type="button" class="ticket-editor-reset" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
+            </AppButton>
+            <AppButton variant="ghost" :disabled="ticketAdjustLoading" @click="submitTicketAdjust(false)">
               {{ ticketAdjustLoading ? "处理中..." : "减票" }}
-            </button>
+            </AppButton>
           </div>
         </form>
 
@@ -204,12 +199,12 @@
           <div v-if="ticketWriteError" class="ticket-control-error" style="margin-top: 12px;">{{ ticketWriteError }}</div>
 
           <footer class="ticket-modal-actions" style="margin-top: 16px;">
-            <button type="button" class="ticket-editor-reset" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
+            <AppButton variant="ghost" :disabled="ticketWriteLoading" @click="resetTicketFormToCurrent">
               使用当前值
-            </button>
-            <button type="submit" class="ticket-editor-submit" :disabled="ticketWriteLoading">
+            </AppButton>
+            <AppButton type="submit" variant="primary" :disabled="ticketWriteLoading">
               {{ ticketWriteLoading ? "提交中..." : "写入覆盖" }}
-            </button>
+            </AppButton>
           </footer>
         </form>
       </div>
@@ -225,19 +220,19 @@
           </span>
         </div>
         <div class="batch-bar-actions">
-          <button type="button" class="batch-btn warn" @click="handleBatchWarn">
+          <AppButton variant="warning" @click="handleBatchWarn">
             批量警告
-          </button>
-          <button type="button" class="batch-btn danger" @click="handleBatchKick">
+          </AppButton>
+          <AppButton variant="danger" @click="handleBatchKick">
             批量 Kick
-          </button>
-          <button type="button" class="batch-btn primary" @click="handleBatchForceTeamChange">
+          </AppButton>
+          <AppButton variant="primary" @click="handleBatchForceTeamChange">
             批量跳边
-          </button>
+          </AppButton>
           <div class="batch-divider"></div>
-          <button type="button" class="batch-btn secondary" @click="clearBatchSelection">
+          <AppButton variant="ghost" @click="clearBatchSelection">
             取消选择
-          </button>
+          </AppButton>
         </div>
       </StickyActionBar>
     </transition>
@@ -278,6 +273,7 @@ import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
 import MobileSegmentTabs from "../components/mobile/MobileSegmentTabs.vue";
+import AppButton from "../components/ui/AppButton.vue";
 import StickyActionBar from "../components/mobile/StickyActionBar.vue";
 import { useIsMobile } from "../composables/useMediaQuery";
 import { t } from "../i18n";

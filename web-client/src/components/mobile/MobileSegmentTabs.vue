@@ -1,9 +1,10 @@
 <template>
   <div class="mobile-segment-tabs" role="tablist" :aria-label="ariaLabel">
-    <button
+    <AppButton
       v-for="item in items"
       :key="item.value"
-      type="button"
+      variant="ghost"
+      size="sm"
       class="mobile-segment-tabs__item"
       :class="{ active: item.value === modelValue }"
       role="tab"
@@ -12,11 +13,12 @@
     >
       <span class="mobile-segment-tabs__label">{{ item.label }}</span>
       <span v-if="item.badge" class="mobile-segment-tabs__badge">{{ item.badge }}</span>
-    </button>
+    </AppButton>
   </div>
 </template>
 
 <script setup lang="ts" generic="T extends string | number">
+import AppButton from "../ui/AppButton.vue";
 defineProps<{
   modelValue: T;
   ariaLabel: string;
@@ -49,12 +51,8 @@ defineEmits<{
   justify-content: center;
   gap: 6px;
   padding: 0 12px;
-  border: 0;
   border-radius: 12px;
-  background: transparent;
   color: var(--color-text-secondary);
-  font-size: 13px;
-  font-weight: 700;
 }
 
 .mobile-segment-tabs__item.active {

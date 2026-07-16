@@ -1,20 +1,23 @@
 <template>
-  <span
+  <component
+    :is="resolvedTag"
     class="status-badge"
     :class="[
       `status-badge--${normalizedTone}`,
       `status-badge--${size}`,
       `status-badge--${normalizedVariant}`,
-      { 'status-badge--dot': dot },
+      { 'status-badge--dot': dot, 'status-badge--interactive': resolvedInteractive, 'status-badge--active': active },
     ]"
+    :type="resolvedInteractive ? 'button' : undefined"
+    :aria-pressed="resolvedInteractive ? active : undefined"
   >
     <span v-if="dot" class="status-badge__dot" aria-hidden="true" />
     <slot />
-  </span>
+  </component>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useAttrs } from "vue";
 
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 export type LegacyStatusTone = "ok" | "warn" | "error" | "muted" | "idle";
@@ -22,15 +25,23 @@ export type StatusVariant = "soft" | "outline" | "solid";
 
 const props = withDefaults(defineProps<{
   tone?: StatusTone | LegacyStatusTone;
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   variant?: StatusVariant | "subtle";
   dot?: boolean;
+  interactive?: boolean;
+  active?: boolean;
 }>(), {
   tone: "neutral",
   size: "md",
   variant: "soft",
   dot: false,
+  interactive: false,
+  active: false,
 });
+
+const attrs = useAttrs();
+const resolvedInteractive = computed(() => props.interactive || Boolean(attrs.onClick));
+const resolvedTag = computed(() => resolvedInteractive.value ? "button" : "span");
 
 const normalizedTone = computed<StatusTone>(() => {
   if (props.tone === "ok") return "success";
@@ -71,6 +82,18 @@ const normalizedVariant = computed<StatusVariant>(() => props.variant === "subtl
   padding-inline: 8px;
   font-size: 11px;
 }
+
+.status-badge--lg {
+  min-height: 28px;
+  padding-inline: 12px;
+}
+
+.status-badge--interactive { cursor: pointer; }
+.status-badge--interactive:hover:not(:disabled), .status-badge--active {
+  border-color: color-mix(in srgb, var(--color-status-info) 48%, transparent);
+  background: color-mix(in srgb, var(--color-status-info) 14%, transparent);
+}
+.status-badge--interactive:disabled { cursor: not-allowed; opacity: .55; }
 
 .status-badge--info {
   --status-color: color-mix(in srgb, var(--color-status-info) 76%, white 24%);
