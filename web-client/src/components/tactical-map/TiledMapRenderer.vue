@@ -1,28 +1,40 @@
 <template>
-  <div class="tiled-map-renderer" :class="{ 'is-interacting': interactionActive }">
-    <!-- A stable, fully decoded image remains under the tiles at all times. -->
+  <div
+    class="tiled-map-renderer"
+    :class="{ 'is-interacting': interactionActive }"
+    :data-resource-state="resourceState"
+  >
+    <!-- The first paint is always a request-free blank canvas. -->
+    <div
+      v-if="!resourceActive || !hasMapResource"
+      class="map-resource-placeholder"
+      aria-hidden="true"
+    ></div>
+
+    <!-- The fallback image is activated only after the page has painted. -->
     <img
-      v-if="fallbackImage"
+      v-if="resourceActive && fallbackImage"
       :src="fallbackImage"
       alt="Tactical Map"
       class="map-image-fallback"
       draggable="false"
-      loading="eager"
+      loading="lazy"
       decoding="async"
-      fetchpriority="high"
+      fetchpriority="low"
       @load="onFallbackLoad"
+      @error="onFallbackError"
     />
 
-    <!-- Loaded tiles naturally paint over the stable full-map image. -->
+    <!-- Only viewport tiles are requested; full-map cache warming is forbidden. -->
     <img
-      v-for="tile in visibleTiles"
+      v-for="tile in renderedTiles"
       :key="tile.key"
       :src="tile.src"
       class="map-tile"
       :style="tileStyle(tile)"
       draggable="false"
       decoding="async"
-      loading="eager"
+      loading="lazy"
       @load="onTileLoad"
       @error="onTileError(tile.key, tile.src)"
     />
@@ -30,10 +42,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, toRef, watch } from "vue";
+import { computed, onBeforeUnmount, ref, toRef, watch } from "vue";
 import { useTileLoader, type TileInfo } from "../../composables/useTileLoader";
 import { useTacticalMapViewport } from "../../composables/tacticalMapViewport";
-import { warmTacticalMapTileCache } from "../../utils/map-tile-cache";
+
+const RESOURCE_ACTIVATION_DELAY_MS = 120;
+const RESOURCE_READY_SAFETY_MS = 2_000;
+
+type MapResourceState = "idle" | "scheduled" | "loading" | "ready" | "error";
 
 const props = defineProps<{
   /** Base path to tiles directory, e.g. "/assets/map-tiles/Sumari_RAAS_v1" */
@@ -52,7 +68,25 @@ const props = defineProps<{
   interactionActive?: boolean;
 }>();
 
+const emit = defineEmits<{
+  (e: "ready"): void;
+}>();
+
 const { zoom, panX, panY } = useTacticalMapViewport();
+const resourceState = ref<MapResourceState>("idle");
+const resourceActive = ref(false);
+const fallbackFailed = ref(false);
+
+const hasMapResource = computed(() => Boolean(
+  String(props.tileBasePath ?? "").trim()
+  || String(props.fallbackImage ?? "").trim(),
+));
+
+const tilesActive = computed(() => Boolean(
+  resourceActive.value
+  && props.tilesEnabled
+  && String(props.tileBasePath ?? "").trim(),
+));
 
 const { visibleTiles, currentTileZoom } = useTileLoader({
   tileBasePath: toRef(props, "tileBasePath"),
@@ -62,17 +96,29 @@ const { visibleTiles, currentTileZoom } = useTileLoader({
   panY,
   viewportWidth: toRef(props, "viewportWidth"),
   viewportHeight: toRef(props, "viewportHeight"),
-  enabled: toRef(props, "tilesEnabled"),
+  enabled: tilesActive,
   interactionActive: computed(() => props.interactionActive === true),
 });
 
-const emit = defineEmits<{
-  (e: "ready"): void;
-}>();
+const renderedTiles = computed(() => (
+  resourceActive.value ? visibleTiles.value : []
+));
 
 let readyEmitted = false;
-let warmupTimer: number | null = null;
-let warmupController: AbortController | null = null;
+let loadGeneration = 0;
+let activationTimer: number | null = null;
+let readySafetyTimer: number | null = null;
+
+function clearTimer(timer: number | null) {
+  if (timer !== null) window.clearTimeout(timer);
+}
+
+function cancelPendingResourceWork() {
+  clearTimer(activationTimer);
+  clearTimer(readySafetyTimer);
+  activationTimer = null;
+  readySafetyTimer = null;
+}
 
 function emitReadyOnce() {
   if (readyEmitted) return;
@@ -80,15 +126,66 @@ function emitReadyOnce() {
   emit("ready");
 }
 
-function onFallbackLoad() {
+function markResourceReady() {
+  resourceState.value = "ready";
+  clearTimer(readySafetyTimer);
+  readySafetyTimer = null;
   emitReadyOnce();
-  scheduleCacheWarmup();
+}
+
+function scheduleReadySafety(generation: number) {
+  clearTimer(readySafetyTimer);
+  readySafetyTimer = window.setTimeout(() => {
+    readySafetyTimer = null;
+    if (generation !== loadGeneration || resourceState.value !== "loading") return;
+
+    // A slow or broken map resource must never keep the page unusable.
+    resourceState.value = "error";
+    emitReadyOnce();
+  }, RESOURCE_READY_SAFETY_MS);
+}
+
+function scheduleResourceActivation() {
+  cancelPendingResourceWork();
+  const generation = ++loadGeneration;
+  readyEmitted = false;
+  fallbackFailed.value = false;
+  resourceActive.value = false;
+
+  if (!hasMapResource.value) {
+    resourceState.value = "idle";
+    queueMicrotask(() => {
+      if (generation === loadGeneration && !hasMapResource.value) emitReadyOnce();
+    });
+    return;
+  }
+
+  resourceState.value = "scheduled";
+  activationTimer = window.setTimeout(() => {
+    activationTimer = null;
+    if (generation !== loadGeneration || !hasMapResource.value) return;
+
+    resourceActive.value = true;
+    resourceState.value = "loading";
+    scheduleReadySafety(generation);
+  }, RESOURCE_ACTIVATION_DELAY_MS);
+}
+
+function onFallbackLoad() {
+  markResourceReady();
+}
+
+function onFallbackError() {
+  fallbackFailed.value = true;
+  if (!tilesActive.value) {
+    resourceState.value = "error";
+    emitReadyOnce();
+  }
 }
 
 function onTileLoad() {
-  // Tiles can still make the map ready when a legacy config has no base image.
-  if (!props.fallbackImage) emitReadyOnce();
-  scheduleCacheWarmup();
+  // Tiles can make the map ready when no base image exists or the base failed.
+  if (!props.fallbackImage || fallbackFailed.value) markResourceReady();
 }
 
 function onTileError(key: string, src: string) {
@@ -97,50 +194,10 @@ function onTileError(key: string, src: string) {
   }
 }
 
-function scheduleCacheWarmup() {
-  if (!props.tilesEnabled || warmupTimer !== null || warmupController !== null) return;
-  warmupTimer = window.setTimeout(() => {
-    warmupTimer = null;
-    if (!props.tilesEnabled) return;
-
-    const controller = new AbortController();
-    warmupController = controller;
-    void warmTacticalMapTileCache({
-      basePath: props.tileBasePath,
-      maxZoom: props.maxZoom,
-      preferredZoom: currentTileZoom.value,
-      concurrency: 6,
-      signal: controller.signal,
-    }).finally(() => {
-      if (warmupController === controller) warmupController = null;
-    });
-  }, 350);
-}
-
-function resetMapLoadingState() {
-  readyEmitted = false;
-  if (warmupTimer !== null) {
-    window.clearTimeout(warmupTimer);
-    warmupTimer = null;
-  }
-  warmupController?.abort();
-  warmupController = null;
-}
-
 watch(
-  () => [props.tileBasePath, props.maxZoom] as const,
-  () => {
-    resetMapLoadingState();
-    if (props.tilesEnabled && !props.fallbackImage) scheduleCacheWarmup();
-  },
-);
-
-watch(
-  () => props.tilesEnabled,
-  (enabled) => {
-    if (enabled) scheduleCacheWarmup();
-    else resetMapLoadingState();
-  },
+  () => [props.tileBasePath, props.fallbackImage, props.maxZoom, props.tilesEnabled] as const,
+  scheduleResourceActivation,
+  { immediate: true },
 );
 
 function tileStyle(tile: TileInfo) {
@@ -152,9 +209,12 @@ function tileStyle(tile: TileInfo) {
   };
 }
 
-onBeforeUnmount(resetMapLoadingState);
+onBeforeUnmount(() => {
+  loadGeneration += 1;
+  cancelPendingResourceWork();
+});
 
-defineExpose({ currentTileZoom });
+defineExpose({ currentTileZoom, resourceState });
 </script>
 
 <style scoped>
@@ -163,6 +223,14 @@ defineExpose({ currentTileZoom });
   inset: 0;
   overflow: hidden;
   contain: layout paint style;
+  background: #020205;
+}
+
+.map-resource-placeholder {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
   background: #020205;
 }
 
