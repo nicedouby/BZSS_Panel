@@ -3286,7 +3286,6 @@ onUnmounted(() => {
 .player-detail-floating {
   width: min(920px, calc(100vw - 32px)) !important;
   height: min(740px, calc(var(--app-viewport-height) - 32px)) !important;
-  max-height: calc(var(--app-viewport-height) - 32px) !important;
   border-radius: 16px !important;
 }
 
@@ -3611,8 +3610,6 @@ onUnmounted(() => {
 }
 
 .player-detail-floating {
-  width: min(1000px, calc(100vw - 32px)) !important;
-  height: min(780px, calc(var(--app-viewport-height) - 32px)) !important;
   max-height: calc(var(--app-viewport-height) - 32px) !important;
   min-height: 0;
   display: flex;
@@ -3743,9 +3740,6 @@ onUnmounted(() => {
   }
 
   .player-detail-floating {
-    width: calc(100vw - 16px) !important;
-    height: calc(var(--app-viewport-height) - 16px) !important;
-    max-height: calc(var(--app-viewport-height) - 16px) !important;
   }
 
   .drawer-header-hud {
