@@ -570,6 +570,13 @@
       "maxQueueSize": 100
     }
   },
+  "fileIO": {
+    "appendFlushIntervalMs": 50,
+    "appendBatchBytes": 131072,
+    "maxQueuedBytes": 33554432,
+    "statCacheMs": 250,
+    "readCacheMaxBytes": 33554432
+  },
   "core": {
     "logger": {
       "useColor": true
