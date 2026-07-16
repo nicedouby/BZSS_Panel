@@ -6,7 +6,10 @@
         <h1>战斗日志查询</h1>
         <p>按时间和关键字段检索战斗记录，无需选择月份或日志文件。</p>
       </div>
-      <AppStatusBadge tone="idle">后端统一检索</AppStatusBadge>
+      <div class="heading-actions">
+        <button type="button" class="button secondary" @click="backToCombatLog">返回战斗日志</button>
+        <AppStatusBadge tone="idle">后端统一检索</AppStatusBadge>
+      </div>
     </header>
 
     <AppCard title="查询条件" description="留空的字段不会参与筛选。受害者字段同时支持玩家名称或 Team ID。" compact class="filter-card">
@@ -130,6 +133,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRouter } from "vue-router";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 import AppCard from "../components/common/AppCard.vue";
@@ -160,6 +164,8 @@ interface CombatLogQueryResult {
   lines: CombatLogQueryLine[];
 }
 
+const router = useRouter();
+
 const filters = reactive({
   from: "",
   to: "",
@@ -181,6 +187,7 @@ let requestSerial = 0;
 
 onMounted(() => {
   setDefaultRange();
+  void runSearch();
 });
 
 async function runSearch() {
@@ -255,6 +262,11 @@ function resetFilters() {
   error.value = "";
   searched.value = false;
   offset.value = 0;
+  void runSearch();
+}
+
+function backToCombatLog() {
+  void router.push({ path: "/combat-log", query: { panel: "combat-log" } });
 }
 
 function setDefaultRange() {
@@ -291,6 +303,13 @@ function formatNumber(value: unknown) {
   background:
     radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--theme-brand-glow) 72%, transparent), transparent 30%),
     var(--theme-background-flat);
+}
+
+.heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .page-heading {
@@ -593,6 +612,10 @@ h1 {
 
   .page-heading {
     flex-direction: column;
+  }
+
+  .heading-actions {
+    width: 100%;
   }
 
   .filter-form {
