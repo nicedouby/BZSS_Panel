@@ -18,7 +18,7 @@
 
     <section class="summary-grid">
       <article class="summary-card" data-tone="warning"><span>等待道歉</span><strong>{{ status?.summary.pending ?? 0 }}</strong><em>当前处理单</em></article>
-      <article class="summary-card" data-tone="danger"><span>本局 PK</span><strong>{{ status?.summary.totalTeamKills ?? 0 }}</strong><em>仅远端 TK 事件</em></article>
+      <article class="summary-card" data-tone="danger"><span>本局 TK</span><strong>{{ status?.summary.totalTeamKills ?? 0 }}</strong><em>仅远端 TK 事件</em></article>
       <article class="summary-card" data-tone="ok"><span>已道歉</span><strong>{{ status?.summary.totalApologies ?? 0 }}</strong><em>收到聊天道歉</em></article>
       <article class="summary-card" data-tone="danger"><span>超时已处理</span><strong>{{ status?.summary.totalHandled ?? 0 }}</strong><em>本局累计</em></article>
     </section>
@@ -35,10 +35,10 @@
         </div>
       </PageCard>
 
-      <PageCard title="本局 PK 统计" description="切图和服务器重启都会自动清空。" class="players-card">
+      <PageCard title="本局 TK 统计" description="切图和服务器重启都会自动清空。" class="players-card">
         <div v-if="!status?.players.length" class="empty-state">尚未发生远端 TK。</div>
         <div v-else class="player-list">
-          <article v-for="player in status.players" :key="player.key" class="player-row"><strong>{{ player.attacker.name }}</strong><span>{{ player.count }} 次 PK</span></article>
+          <article v-for="player in status.players" :key="player.key" class="player-row"><strong>{{ player.attacker.name }}</strong><span>{{ player.count }} 次 TK</span></article>
         </div>
       </PageCard>
     </section>
