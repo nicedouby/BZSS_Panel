@@ -25,6 +25,9 @@ function createHarness() {
         getPlayerBySteamID(_serverId, steamId) {
           return steamId === "steam-attacker" ? { name: "Attacker", steamId, eosId: "eos-attacker", playerId: "42" } : null;
         },
+        getPlayerByEOSID(_serverId, eosId) {
+          return eosId === "eos-attacker" ? { name: "Attacker", steamId: "steam-attacker", eosId, playerId: "42" } : null;
+        },
       },
       adminWarn: {
         async sendAdminWarn(request) { warnings.push(request); return { success: true }; },
@@ -63,7 +66,7 @@ assert.equal(harness.plugin.api.getState().summary.pending, 1);
 assert.equal(harness.plugin.api.getState().summary.totalTeamKills, 1);
 assert.equal(harness.warnings.length, 1);
 assert.equal(harness.broadcasts.length, 1);
-assert.match(harness.broadcasts[0].message, /本局已 PK 1 名队友/);
+assert.match(harness.broadcasts[0].message, /本局已 TK 1 名队友/);
 
 await harness.plugin.api.handleChat({
   playerName: "Attacker",
@@ -72,6 +75,22 @@ await harness.plugin.api.handleChat({
 });
 assert.equal(harness.plugin.api.getState().summary.pending, 0);
 assert.equal(harness.plugin.api.getState().summary.totalApologies, 1);
+
+// The chat feed may only expose EOSID and a changed display name. It must
+// still resolve to the pending TEAM_KILL player, including full-width Sorry.
+await harness.plugin.api.handleTeamKill({
+  eventName: "TEAM_KILL",
+  eventId: "remote-tk-identity-fallback",
+  serverId: "BZSS_Main",
+  attackerName: "Attacker",
+  attackerSteam64ID: "steam-attacker",
+  victimName: "Victim EOS",
+});
+await harness.plugin.api.handleChat({
+  payload: { playerName: "Attacker Renamed", eosId: "eos-attacker", message: "ＳＯＲＲＹ" },
+});
+assert.equal(harness.plugin.api.getState().summary.pending, 0);
+assert.equal(harness.plugin.api.getState().summary.totalApologies, 2);
 
 await harness.plugin.api.handleTeamKill({
   eventName: "TEAM_KILL",
