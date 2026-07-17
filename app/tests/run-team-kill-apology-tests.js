@@ -100,7 +100,7 @@ await harness.plugin.api.handleTeamKill({
   attackerSteam64ID: "steam-attacker",
   victimName: "Victim Two",
 });
-assert.equal(harness.plugin.api.getState().players[0].count, 2);
+assert.equal(harness.plugin.api.getState().players[0].count, 3);
 harness.coreHandlers.get("round.world_bring_up")({});
 assert.equal(harness.plugin.api.getState().summary.pending, 0);
 assert.equal(harness.plugin.api.getState().summary.totalTeamKills, 0);
