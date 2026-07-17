@@ -60,7 +60,9 @@ export function createPlugin(context = {}) {
   }
 
   function normalizeText(value, fallback = "") {
-    const text = String(value ?? "").trim();
+    // NFKC accepts full-width Latin input such as ＳＯＲＲＹ while retaining
+    // normal player names and identifiers for matching.
+    const text = String(value ?? "").normalize("NFKC").trim();
     return text || fallback;
   }
 
@@ -177,7 +179,15 @@ export function createPlugin(context = {}) {
   }
 
   function makeBroadcast(caseItem, tkCount) {
-    return `[TK] ${caseItem.attacker.name || "未知玩家"} 攻击了队友 ${caseItem.victim.name || "未知玩家"}，本局已 PK ${tkCount} 名队友。`;
+    return `[TK] ${caseItem.attacker.name || "未知玩家"} 攻击了队友 ${caseItem.victim.name || "未知玩家"}，本局已 TK ${tkCount} 名队友。`;
+  }
+
+  function makeFinalWarning() {
+    return "[TK处理] 你未在规定时间内完成道歉，现已开始执行处理。";
+  }
+
+  function makeTimeoutBroadcast(caseItem) {
+    return `[TK] ${caseItem.attacker.name || "未知玩家"} 未在规定时间内完成道歉，现已执行处理。`;
   }
 
   async function handleTeamKill(event = {}) {
@@ -244,11 +254,41 @@ export function createPlugin(context = {}) {
   function resolveChatIdentity(event = {}) {
     const record = event?.record ?? event?.payload ?? event?.data ?? event;
     return {
-      name: normalizeText(record?.playerName ?? record?.name),
-      steamId: normalizeIdentity(record?.steamId ?? record?.steamID),
-      eosId: normalizeIdentity(record?.eosId ?? record?.eosID),
-      playerId: normalizeIdentity(record?.playerId ?? record?.playerID),
+      name: normalizeText(record?.playerName ?? record?.name ?? record?.player_name),
+      steamId: normalizeIdentity(record?.steamId ?? record?.steamID ?? record?.steamid ?? record?.steam64Id ?? record?.steam64ID),
+      eosId: normalizeIdentity(record?.eosId ?? record?.eosID ?? record?.eosid),
+      playerId: normalizeIdentity(record?.playerId ?? record?.playerID ?? record?.controllerId ?? record?.controllerID),
     };
+  }
+
+  function sameIdentity(left = {}, right = {}) {
+    const same = (a, b) => {
+      const leftValue = normalizeIdentity(a).toLocaleLowerCase();
+      const rightValue = normalizeIdentity(b).toLocaleLowerCase();
+      return Boolean(leftValue && rightValue && leftValue === rightValue);
+    };
+    return same(left.steamId, right.steamId)
+      || same(left.eosId, right.eosId)
+      || same(left.playerId, right.playerId)
+      || same(left.playerKey, right.playerKey)
+      || (normalizeName(left.name) && normalizeName(left.name) === normalizeName(right.name));
+  }
+
+  function findPendingCase(identity, serverId) {
+    // Chat can arrive with only an EOSID while TEAM_KILL used SteamID, or
+    // with a renamed display name. Resolve against live player state first.
+    const liveIdentity = resolveLivePlayer(serverId, identity);
+    for (const candidate of [liveIdentity, identity]) {
+      const directKey = identityKey(candidate);
+      const directCase = directKey ? pendingByPlayer.get(directKey) : null;
+      if (directCase) return { playerKey: directKey, caseItem: directCase };
+    }
+    for (const [key, item] of pendingByPlayer) {
+      if (sameIdentity(item.attacker, liveIdentity) || sameIdentity(item.attacker, identity)) {
+        return { playerKey: key, caseItem: item };
+      }
+    }
+    return { playerKey: "", caseItem: null };
   }
 
   async function handleChat(event = {}) {
@@ -256,17 +296,8 @@ export function createPlugin(context = {}) {
     const message = normalizeText(record?.message);
     if (!isActive() || !isApology(message)) return null;
     const identity = resolveChatIdentity(event);
-    let playerKey = identityKey(identity);
-    let caseItem = playerKey ? pendingByPlayer.get(playerKey) : null;
-    if (!caseItem && identity.name) {
-      for (const [key, item] of pendingByPlayer) {
-        if (normalizeName(item.attacker.name) === normalizeName(identity.name)) {
-          playerKey = key;
-          caseItem = item;
-          break;
-        }
-      }
-    }
+    const serverId = normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId);
+    const { playerKey, caseItem } = findPendingCase(identity, serverId);
     if (!caseItem || !playerKey) return null;
     if (remainingSeconds(caseItem) <= 0) return null;
 
@@ -335,9 +366,24 @@ export function createPlugin(context = {}) {
         pendingByPlayer.delete(playerKey);
         await enqueue(async () => {
           try {
+            // Warn first without revealing the configured action. Notification
+            // failures must not prevent the timeout action from being applied.
+            const notifications = await Promise.allSettled([
+              warnPlayer(caseItem.attacker, makeFinalWarning(), "tk_apology_timeout_warning", caseItem.id),
+              broadcast(makeTimeoutBroadcast(caseItem), "tk_apology_timeout_broadcast", caseItem.id),
+            ]);
             const result = await executeHandling(caseItem);
             state.totalHandled += 1;
-            pushHistory({ kind: "timeout_handled", success: Boolean(result?.ok ?? result?.success), eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, action: runtimeConfig.timeoutAction, result });
+            pushHistory({
+              kind: "timeout_handled",
+              success: Boolean(result?.ok ?? result?.success),
+              eventId: caseItem.id,
+              attacker: caseItem.attacker,
+              victim: caseItem.victim,
+              action: runtimeConfig.timeoutAction,
+              notifications: notifications.map((entry) => entry.status),
+              result,
+            });
           } catch (error) {
             state.lastError = error instanceof Error ? error.message : String(error);
             pushHistory({ kind: "timeout_handled", success: false, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, action: runtimeConfig.timeoutAction, error: state.lastError });
