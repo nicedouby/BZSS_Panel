@@ -3565,6 +3565,88 @@ async function testFairSquadGuardRoutesReturnPluginStateAndActions() {
   assert.deepEqual(resetCalls, ["test_reset"]);
 }
 
+async function testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots() {
+  const calls = [];
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() {
+          return { username: "admin", isSuperAdmin: true };
+        },
+        hasEverything() {
+          return true;
+        },
+      },
+      pluginManager: {
+        instances: [
+          {
+            manifest: { id: "match-end-snapshot" },
+            api: {
+              async listSnapshots() {
+                return [{ id: "End-Test", map: "Tallil", nextMap: "Fallujah", playerCount: 12, queueCount: 3 }];
+              },
+              async takeManualSnapshot(options) {
+                calls.push("capture:" + JSON.stringify(options ?? {}));
+                return { id: "End-Test" };
+              },
+              async readSnapshot(id) {
+                calls.push("read:" + id);
+                return { snapshotType: "match-end-data", players: [{ name: "Alpha" }] };
+              },
+              async deleteSnapshot(id) {
+                calls.push("delete:" + id);
+                return { id, removed: true };
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  const listRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-end-snapshot/list",
+    headers: { host: "localhost" },
+    socket: {},
+  }, listRecorder.res);
+  assert.equal(listRecorder.state.status, 200);
+  assert.equal(JSON.parse(listRecorder.state.body)[0].id, "End-Test");
+
+  const viewRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-end-snapshot/view?id=End-Test",
+    headers: { host: "localhost" },
+    socket: {},
+  }, viewRecorder.res);
+  assert.equal(viewRecorder.state.status, 200);
+  assert.equal(JSON.parse(viewRecorder.state.body).snapshotType, "match-end-data");
+  assert.ok(calls.includes("read:End-Test"));
+
+  const captureRecorder = createRecorder();
+  const captureReq = Readable.from([JSON.stringify({ overview: { serverId: "server-1" } })]);
+  captureReq.method = "POST";
+  captureReq.url = "/api/match-end-snapshot/capture";
+  captureReq.headers = { host: "localhost", "content-type": "application/json" };
+  captureReq.socket = {};
+  await server.handleRequest(captureReq, captureRecorder.res);
+  assert.equal(captureRecorder.state.status, 200);
+  assert.equal(JSON.parse(captureRecorder.state.body).snapshot.id, "End-Test");
+  assert.ok(calls.some((item) => item.startsWith("capture:")));
+
+  const deleteRecorder = createRecorder();
+  await server.handleRequest({
+    method: "DELETE",
+    url: "/api/match-end-snapshot/delete?id=End-Test",
+    headers: { host: "localhost" },
+    socket: {},
+  }, deleteRecorder.res);
+  assert.equal(deleteRecorder.state.status, 200);
+  assert.ok(calls.includes("delete:End-Test"));
+}
+
 async function testVueRouteFallsBackToIndexHtml() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-web-"));
   await fs.writeFile(path.join(tempDir, "index.html"), "<html><body>vue-app</body></html>", "utf8");
@@ -3779,6 +3861,7 @@ await testStepwiseSquadPlaytimeGuardRoutesReturnPluginStateAndSimulate();
 await testFairSquadGuardRoutesReturnPluginStateAndActions();
 await testPjscAverageDurationRouteReturnsPluginState();
 await testMatchSnapshotRoutesExposeArtifacts();
+await testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots();
 await testVueRouteFallsBackToIndexHtml();
 
 console.log("web server tests passed");
