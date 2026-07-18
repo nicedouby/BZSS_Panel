@@ -425,6 +425,17 @@ export const pageRegistry: PageDefinition[] = [
     ...documentPage,
   },
   {
+    name: "match-end-snapshots",
+    path: "/match-end-snapshots",
+    component: () => import("../pages/MatchEndSnapshotsPage.vue"),
+    title: "对局结束快照",
+    category: "core",
+    refreshPolicy: "manual",
+    nav: { section: "analytics", label: "对局结束快照", icon: "📚", order: 21 },
+    requiredPermission: "debug.match_snapshots.view",
+    ...workspacePage,
+  },
+  {
     name: "pjsc-average-duration",
     path: "/debug/pjsc-average-duration",
     component: () => import("../pages/PjscAverageDurationPage.vue"),
