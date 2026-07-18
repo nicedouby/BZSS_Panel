@@ -47,6 +47,12 @@ async function testPerformanceMonitor() {
   assert.ok(snapshot.latest.memory.rss > 0, "RSS should be positive");
   assert.ok(snapshot.latest.eventLoop, "Should have eventLoop latency stats");
 
+  monitor.recordOperation("eventBus:On_BzssCorePlayerChunk", 18.5);
+  monitor.recordOperation("eventBus:On_BzssCorePlayerChunk", 6.5);
+  const operation = monitor.getSnapshot().operations.find((item) => item.name === "eventBus:On_BzssCorePlayerChunk");
+  assert.equal(operation?.count, 2, "Should aggregate slow operation samples");
+  assert.equal(operation?.maxDurationMs, 18.5, "Should retain the operation peak duration");
+
   await fs.rm(tempDir, { recursive: true, force: true });
   console.log("  - PerformanceMonitor tests passed");
 }

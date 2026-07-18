@@ -539,6 +539,10 @@
       "matchChangingGraceMs": 10000,
       "debug": true
     },
+    "squadRuleChain": {
+      "directory": "./data/squad-rule-chain",
+      "enforcementPlayerThreshold": 50
+    },
     "squadManagement": {
       "enabled": true,
       "disbandPermission": "squad.disband",

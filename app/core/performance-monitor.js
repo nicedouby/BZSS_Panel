@@ -21,7 +21,7 @@ export class PerformanceMonitor {
     this.networkEnabled = this.config?.get?.("performance.network.enabled", false) ?? false;
     this.networkSampleIntervalMs = Number(this.config?.get?.("performance.network.sampleIntervalMs", 60000) ?? 60000);
     this.networkCommandTimeoutMs = Number(this.config?.get?.("performance.network.commandTimeoutMs", 5000) ?? 5000);
-    this.sampleIntervalMs = Number(this.config?.get?.("performance.sampleIntervalMs", 10000) ?? 10000);
+    this.sampleIntervalMs = Math.max(1000, Number(this.config?.get?.("performance.sampleIntervalMs", 1000) ?? 1000));
     this.logIntervalMs = Number(this.config?.get?.("performance.logIntervalMs", 60000) ?? 60000);
     this.maxHistoryPoints = Number(this.config?.get?.("performance.maxHistoryPoints", 120) ?? 120);
 
@@ -34,6 +34,9 @@ export class PerformanceMonitor {
     this.lastNetworkMetrics = null;
     this.isNetworkSampling = false;
     this.networkErrorLogged = false;
+    this.operationStats = new Map();
+    this.operationMinDurationMs = Math.max(1, Number(this.config?.get?.("performance.operationMinDurationMs", 2) ?? 2));
+    this.maxOperationStats = Math.max(10, Number(this.config?.get?.("performance.maxOperationStats", 60) ?? 60));
 
     if (this.enabled) {
       try {
@@ -160,7 +163,37 @@ export class PerformanceMonitor {
     return {
       history: this.history,
       latest: this.history[this.history.length - 1] ?? null,
+      operations: [...this.operationStats.values()]
+        .sort((left, right) => right.maxDurationMs - left.maxDurationMs || right.totalDurationMs - left.totalDurationMs)
+        .slice(0, 20),
     };
+  }
+
+  recordOperation(name, durationMs) {
+    const duration = Number(durationMs);
+    if (!name || !Number.isFinite(duration) || duration < this.operationMinDurationMs) return;
+    const key = String(name).slice(0, 160);
+    const now = Date.now();
+    const previous = this.operationStats.get(key) ?? {
+      name: key,
+      count: 0,
+      totalDurationMs: 0,
+      maxDurationMs: 0,
+      lastDurationMs: 0,
+      lastAt: "",
+    };
+    previous.count += 1;
+    previous.totalDurationMs += duration;
+    previous.maxDurationMs = Math.max(previous.maxDurationMs, duration);
+    previous.lastDurationMs = duration;
+    previous.lastAt = new Date(now).toISOString();
+    previous.averageDurationMs = previous.totalDurationMs / previous.count;
+    this.operationStats.set(key, previous);
+    if (this.operationStats.size > this.maxOperationStats) {
+      const oldest = [...this.operationStats.values()]
+        .sort((left, right) => left.lastAt.localeCompare(right.lastAt))[0];
+      if (oldest) this.operationStats.delete(oldest.name);
+    }
   }
 
   #triggerNetworkSampling() {

@@ -6,6 +6,8 @@ import { performance } from "node:perf_hooks";
 
 const MAX_READ_CHUNK_BYTES = 256 * 1024;
 const MAX_PARTIAL_LINE_CHARS = 1024 * 1024;
+const DEFAULT_MAX_PROCESS_SLICE_MS = 8;
+const YIELD_CHECK_EVERY_LINES = 24;
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RECENT_REPLAY_LINES = 120;
@@ -14,7 +16,7 @@ const ALL_EVENTS_FILE_NAME = "all.jsonl";
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
 
 export class LogPostFileBridge {
-  constructor({ config, logger, eventBus, eventPipeline, webStatus, logPostMonitor = null, fileIO = null }) {
+  constructor({ config, logger, eventBus, eventPipeline, webStatus, logPostMonitor = null, fileIO = null, performanceMonitor = null }) {
     this.config = config ?? {};
     this.logger = logger;
     this.eventBus = eventBus;
@@ -22,6 +24,7 @@ export class LogPostFileBridge {
     this.webStatus = webStatus;
     this.logPostMonitor = logPostMonitor;
     this.fileIO = fileIO ?? new FileIOManager({ config: {} });
+    this.performanceMonitor = performanceMonitor;
 
     this.enabled = Boolean(this.config.enabled);
     this.workingDirectory = path.resolve(process.cwd(), String(this.config.workingDirectory ?? "./LogPost").trim());
@@ -29,6 +32,7 @@ export class LogPostFileBridge {
     this.pollIntervalMs = Math.max(100, Number(this.config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS) || DEFAULT_POLL_INTERVAL_MS);
     this.replayRecentLines = Math.max(0, Number(this.config.replayRecentLines ?? DEFAULT_RECENT_REPLAY_LINES) || 0);
     this.fromEnd = this.config.fromEnd !== false;
+    this.maxProcessSliceMs = Math.max(2, Math.min(25, Number(this.config.maxProcessSliceMs ?? DEFAULT_MAX_PROCESS_SLICE_MS) || DEFAULT_MAX_PROCESS_SLICE_MS));
 
     this.timer = null;
     this.currentFilePath = "";
@@ -57,6 +61,7 @@ export class LogPostFileBridge {
       maxTickDurationMs: 0,
       lastChunkBytes: 0,
       lastChunkLines: 0,
+      eventLoopYields: 0,
     };
   }
 
@@ -146,6 +151,7 @@ export class LogPostFileBridge {
       const duration = performance.now() - startedAt;
       this.metrics.lastTickDurationMs = duration;
       this.metrics.maxTickDurationMs = Math.max(this.metrics.maxTickDurationMs, duration);
+      this.performanceMonitor?.recordOperation?.("logpostFileBridge.tick", duration);
       this.isTicking = false;
       this.publishDiagnostics();
     }
@@ -211,10 +217,16 @@ export class LogPostFileBridge {
       this.partialLine = "";
     }
     let lineCount = 0;
+    let sliceStartedAt = performance.now();
     for (const line of lines) {
       if (!line) continue;
       lineCount += 1;
       this.ingestJsonLine(line, { replay: false, filePath });
+      if (lineCount % YIELD_CHECK_EVERY_LINES === 0 && performance.now() - sliceStartedAt >= this.maxProcessSliceMs) {
+        this.metrics.eventLoopYields += 1;
+        await yieldToEventLoop();
+        sliceStartedAt = performance.now();
+      }
     }
     this.metrics.linesRead += lineCount;
     this.metrics.lastChunkLines = lineCount;
@@ -263,6 +275,7 @@ export class LogPostFileBridge {
       partialLineChars: this.partialLine.length,
       pollIntervalMs: this.pollIntervalMs,
       maxReadChunkBytes: MAX_READ_CHUNK_BYTES,
+      maxProcessSliceMs: this.maxProcessSliceMs,
       theoreticalMaxBytesPerSec: Math.floor((1000 / this.pollIntervalMs) * MAX_READ_CHUNK_BYTES),
       isTicking: this.isTicking,
     };
@@ -271,6 +284,10 @@ export class LogPostFileBridge {
   publishDiagnostics() {
     this.webStatus?.set?.("logPostFileBridgeDiagnostics", this.getDiagnostics());
   }
+}
+
+function yieldToEventLoop() {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 function getDateKey(now) {

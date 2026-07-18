@@ -18,6 +18,7 @@ const API_NAME = "squadRuleChain";
 const DEFAULT_RECENT_LIMIT = 200;
 const DEFAULT_FINAL_PASS_FALLBACK_DELAY_MS = 1500;
 const DEFAULT_DATA_DIR = "./data/squad-rule-chain";
+const DEFAULT_ENFORCEMENT_PLAYER_THRESHOLD = 50;
 const FINAL_PASS_CACHE_FILE = "final-pass-cache.json";
 
 export function createSquadRuleChainModule({ core, modules, config, logger }) {
@@ -45,12 +46,14 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     disbanded: 0,
     removed: 0,
     broadcasts: 0,
+    populationSkipped: 0,
     errors: 0,
   };
 
   const api = {
     getState() {
       maybeRestoreFinalPassCacheForCurrentMatch();
+      const enforcement = resolveEnforcementState();
       return {
         recent: recent.slice().reverse(),
         finalPassRecords: finalPassRecords.slice().reverse(),
@@ -60,6 +63,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
           loaded: Boolean(activeFinalPassCacheKey),
           filePath: finalPassCachePath(),
         },
+        enforcement,
         stats: { ...stats },
       };
     },
@@ -150,6 +154,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       return;
     }
     cancelFinalPassFallback(event);
+    const enforcement = resolveEnforcementState();
     const record = {
       id: `${SQUAD_RULE_CHAIN_MODULE_ID}:${Date.now()}:${Math.random().toString(16).slice(2)}`,
       createdAt: nowIso(),
@@ -157,6 +162,20 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       event,
       actions: [],
     };
+
+    if (!enforcement.active) {
+      stats.populationSkipped += 1;
+      record.status = "population_skipped";
+      record.updatedAt = nowIso();
+      record.enforcement = enforcement;
+      record.actions.push({
+        type: "population_threshold_skipped",
+        playerCount: enforcement.playerCount,
+        threshold: enforcement.threshold,
+      });
+      remember(recent, record, recentLimit());
+      return;
+    }
 
     try {
       record.status = "handling";
@@ -330,8 +349,29 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   function readRuntimeConfig() {
     const raw = config?.get?.("modules.squadRuleChain", {}) ?? {};
+    const threshold = Number(raw.enforcementPlayerThreshold);
     return {
       directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
+      enforcementPlayerThreshold: Number.isFinite(threshold) && threshold >= 0
+        ? Math.floor(threshold)
+        : DEFAULT_ENFORCEMENT_PLAYER_THRESHOLD,
+    };
+  }
+
+  function resolveEnforcementState() {
+    const runtime = readRuntimeConfig();
+    const squadState = modules?.squadManagement?.getState?.(core?.webStatus?.serverId) ?? null;
+    const players = Array.isArray(squadState?.players) ? squadState.players : [];
+    const snapshot = core?.webStatus?.getSnapshot?.() ?? {};
+    const playerCount = players.length > 0
+      ? players.length
+      : Math.max(0, Math.floor(Number(snapshot.playerCount ?? 0) || 0));
+    return {
+      active: playerCount > runtime.enforcementPlayerThreshold,
+      playerCount,
+      threshold: runtime.enforcementPlayerThreshold,
+      comparison: "greater_than",
+      source: players.length > 0 ? "squadManagement.players" : "webStatus.playerCount",
     };
   }
 
@@ -560,9 +600,9 @@ function buildFinalPassBroadcastMessageV2(record) {
   const playtimeText = resolvePlaytimeText(event.playtime);
   return [
     `${creator} 建立了${squadName}`,
-    `性质：${squadNatureLabel}`,
-    `类型：${squadTypeLabel}`,
-    `时长：${playtimeText}`,
+    `队伍性质：${squadNatureLabel}`,
+    `队伍类型：${squadTypeLabel}`,
+    `游戏时长：${playtimeText}`,
     `建队码：${record.creationOrderCode ?? "?"}`,
   ].join("，");
 }
@@ -743,7 +783,8 @@ function parseBzssMatchIdTimes(value) {
   const second = Number(time.slice(4, 6));
   const localTime = new Date(year, month - 1, day, hour, minute, second).getTime();
   const utcTime = Date.UTC(year, month - 1, day, hour, minute, second);
-  return [localTime, utcTime].filter(Number.isFinite);
+  const utc8ServerTime = utcTime - (8 * 60 * 60 * 1000);
+  return [localTime, utcTime, utc8ServerTime].filter(Number.isFinite);
 }
 
 function extractTimestampFromSessionId(value) {

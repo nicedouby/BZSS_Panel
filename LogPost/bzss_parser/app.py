@@ -157,6 +157,9 @@ class BzssLogParserApp:
             from_end=bool(tail_config.get("from_end", True)),
             reopen_on_truncate=bool(tail_config.get("reopen_on_truncate", True)),
             state_store=state_store,
+            read_chunk_bytes=int(tail_config.get("read_chunk_bytes", 1024 * 1024) or 1024 * 1024),
+            max_recovery_bytes=int(tail_config.get("max_recovery_bytes", 8 * 1024 * 1024) or 0),
+            max_line_bytes=int(tail_config.get("max_line_bytes", 1024 * 1024) or 1024 * 1024),
         )
 
         self.poll_interval = max(
@@ -193,6 +196,7 @@ class BzssLogParserApp:
             "lines_blacklisted": 0,
             "lines_unknown": 0,
             "parse_errors": 0,
+            "lines_truncated": 0,
         }
         self.source_seq = int(self.tail_reader.state.get("seq", 0) or 0)
 
@@ -242,8 +246,8 @@ class BzssLogParserApp:
             self.report_stats()
             self._last_stats_report = now
 
-        self.flush_pending_checkpoint()
         self.flush_storage(force=False)
+        self.flush_pending_checkpoint()
 
     def flush_storage(self, force: bool = False) -> None:
         if self.transport_only:
@@ -269,6 +273,8 @@ class BzssLogParserApp:
         source_mode = str(record.get("sourceMode", "live") or "live")
         self.source_seq += 1
         self.stats["lines_read"] += 1
+        if bool(record.get("lineTruncated", False)):
+            self.stats["lines_truncated"] += 1
 
         raw_archive = self.build_raw_meta_only(record, line, source_mode)
         source_meta = self.build_source_meta(raw_archive)
@@ -284,9 +290,14 @@ class BzssLogParserApp:
             if chunk_event:
                 self.udp_sender.send(chunk_event)
                 self.stats["events_matched"] += 1
-                if self.checkpoint_force_on_event:
-                    self.persist_checkpoint(record, source_mode, force=True)
                 self.console.event(chunk_event)
+                self.persist_checkpoint(
+                    record,
+                    source_mode,
+                    last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+                    last_log_time=str(raw_archive.get("logTime", "")),
+                    force=self.checkpoint_force_on_event,
+                )
                 return True
 
             early_preserved_rule = ""
@@ -295,7 +306,12 @@ class BzssLogParserApp:
 
             if self.blacklist.is_blacklisted(line) and not early_preserved_rule:
                 self.stats["lines_blacklisted"] += 1
-                self.persist_checkpoint_only(record, source_mode)
+                self.persist_checkpoint(
+                    record,
+                    source_mode,
+                    last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+                    last_log_time=str(raw_archive.get("logTime", "")),
+                )
                 return True
 
             if not self.transport_only:
@@ -311,14 +327,6 @@ class BzssLogParserApp:
                     self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
                     self.console.warn(f"Raw archive write failed; rewinding: {e}")
                     return False
-
-            self.persist_checkpoint(
-                record,
-                source_mode,
-                last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
-                last_log_time=str(raw_archive.get("logTime", "")),
-                force=False,
-            )
 
             if not self.transport_only:
                 try:
@@ -347,6 +355,12 @@ class BzssLogParserApp:
                     self.writer.write_preserved(line, preserved_rule)
                 self.stats["lines_preserved"] += 1
                 self.forward_raw_log_line(line, source_meta, preserved_rule=preserved_rule)
+                self.persist_checkpoint(
+                    record,
+                    source_mode,
+                    last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+                    last_log_time=str(raw_archive.get("logTime", "")),
+                )
                 return True
 
             self.forward_raw_log_line(line, source_meta, preserved_rule="")
@@ -360,6 +374,12 @@ class BzssLogParserApp:
                 self.writer.write_parse_error(line, str(e), meta_for_files)
             self.console.warn(f"Parse error: {e}")
             self.stats["parse_errors"] += 1
+        self.persist_checkpoint(
+            record,
+            source_mode,
+            last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+            last_log_time=str(raw_archive.get("logTime", "")),
+        )
         return True
 
     def build_raw_meta_only(self, record: Dict[str, Any], line: str, source_mode: str) -> Dict[str, Any]:
@@ -487,9 +507,15 @@ class BzssLogParserApp:
         self.stats["events_matched"] += 1
         if event_name in {"On_PlayerDamaged", "On_PlayerWounded", "On_PlayerDied", "On_PlayerRevived"}:
             self.stats["combat_events"] = int(self.stats.get("combat_events", 0)) + 1
-        if self.checkpoint_force_on_event:
-            self.persist_checkpoint(record, source_mode, force=True)
         self.console.event(event)
+        raw_archive = self.build_raw_meta_only(record, line, source_mode)
+        self.persist_checkpoint(
+            record,
+            source_mode,
+            last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+            last_log_time=str(raw_archive.get("logTime", "")),
+            force=self.checkpoint_force_on_event,
+        )
 
     def should_forward_raw_log_line(self, line: str, preserved_rule: str = "") -> bool:
         if not self.raw_log_output_enabled:
@@ -555,9 +581,6 @@ class BzssLogParserApp:
                 self.writer.write_outbox("send_failed", {"EventId": "", "Event": "On_RawLogLine", "SourceSeq": str(source_meta.get("source_seq", "")), "SourceMode": str(source_meta.get("source_mode", "live"))}, str(e))
             self.console.warn(f"Raw log output failed: {e}")
 
-    def persist_checkpoint_only(self, record: Dict[str, Any], source_mode: str) -> None:
-        self.persist_checkpoint(record, source_mode, force=False)
-
     def persist_checkpoint(
         self,
         record: Dict[str, Any],
@@ -615,6 +638,9 @@ class BzssLogParserApp:
         except Exception:
             pass
 
+        # A checkpoint is a durable promise that everything before its offset
+        # can be skipped after restart. Flush buffered outputs before making it.
+        self.flush_storage(force=True)
         self.tail_reader.persist_state(
             self.source_seq,
             int(commit_offset or 0),
@@ -639,7 +665,11 @@ class BzssLogParserApp:
         try:
             event = self.builder.build(
                 "LOGPOST_SOURCE_ROTATED",
-                [("Reason", reason), ("SourcePath", str(self.tail_reader.log_path))],
+                [
+                    ("Reason", reason),
+                    ("SourcePath", str(self.tail_reader.log_path)),
+                    ("RecoverySkippedBytes", str(self.tail_reader.last_recovery_skipped_bytes)),
+                ],
                 "",
                 source_meta={
                     "source_seq": self.source_seq,
@@ -656,6 +686,7 @@ class BzssLogParserApp:
                     "reason": reason,
                     "sourceMode": self.tail_reader.current_mode,
                     "sourcePath": str(self.tail_reader.log_path),
+                    "recoverySkippedBytes": self.tail_reader.last_recovery_skipped_bytes,
                 })
         except Exception as e:
             self.console.warn(f"Rotate event write failed: {e}")
@@ -669,7 +700,8 @@ class BzssLogParserApp:
                 f"preserved={self.stats['lines_preserved']} "
                 f"blacklisted={self.stats['lines_blacklisted']} "
                 f"unknown={self.stats['lines_unknown']} "
-                f"errors={self.stats['parse_errors']}"
+                f"errors={self.stats['parse_errors']} "
+                f"truncated={self.stats['lines_truncated']}"
             )
         except Exception:
             pass
@@ -681,5 +713,3 @@ def looks_like_combat_line(line: str) -> bool:
         or ("KillingDamage=" in line and "Player:" in line and "caused by" in line)
         or ("has revived" in line and "Online IDs:" in line)
     )
-
-

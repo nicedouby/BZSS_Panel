@@ -698,6 +698,10 @@
     "playtime": {
       "enabled": true
     },
+    "squadRuleChain": {
+      "directory": "./data/squad-rule-chain",
+      "enforcementPlayerThreshold": 50
+    },
     "squadManagement": {
       "enabled": true,
       "enforcementEnabled": false,

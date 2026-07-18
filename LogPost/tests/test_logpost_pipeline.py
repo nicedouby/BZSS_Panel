@@ -387,6 +387,27 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual([record["line"] for record in resumed_records], [second_line])
         restarted.tail_reader.close()
 
+    def test_checkpoint_is_committed_after_event_write(self) -> None:
+        app = self.make_app()
+        app.matchers = [StubMatcher("important", "On_Important")]
+        state_path = pathlib.Path(app.writer.output_dir) / ".state" / "tailer-state.json"
+        original_write_event = app.writer.write_event
+
+        def checked_write_event(event):
+            self.assertFalse(state_path.exists())
+            original_write_event(event)
+
+        app.writer.write_event = checked_write_event
+        app.process_line({
+            "line": "important event",
+            "offset": 0,
+            "next_offset": 16,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        self.assertEqual(json.loads(state_path.read_text(encoding="utf-8"))["offset"], 16)
+
     def test_transport_only_sends_udp_without_disk_writes(self) -> None:
         app = self.make_app(
             transport_only=True,

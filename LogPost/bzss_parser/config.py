@@ -18,6 +18,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "tail": {
         "from_end": True,
         "reopen_on_truncate": True,
+        "read_chunk_bytes": 1048576,
+        "max_recovery_bytes": 8388608,
+        "max_line_bytes": 1048576,
     },
 
     "udp": {

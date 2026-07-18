@@ -92,6 +92,7 @@ async function main() {
     config: configManager,
     logger: logger.child({ moduleId: "core.performanceMonitor", source: "core.performanceMonitor" }),
   });
+  eventBus.setPerformanceMonitor(performanceMonitor);
 
   const fileIOManager = new FileIOManager({
     config: configManager.get("fileIO", {}),
@@ -155,6 +156,7 @@ async function main() {
     webStatus,
     logPostMonitor,
     fileIO: fileIOManager,
+    performanceMonitor,
   });
 
   const coreContext = {

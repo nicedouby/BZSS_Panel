@@ -128,7 +128,7 @@ async function createHarness(options = {}) {
           logClockSeconds: options.logClockSeconds ?? 10,
           logClockHasAnchor: true,
           logClockAnchorLogTime: "2026-06-20T00:00:00.000Z",
-          playerCount: 60,
+          playerCount: options.playerCount ?? 60,
           logClockManual: false,
         };
       },
@@ -172,7 +172,12 @@ async function createHarness(options = {}) {
         return { ok: true };
       },
       getState() {
-        return { players: Array.from({ length: 60 }, (_, index) => ({ name: `P${index}` })) };
+        return {
+          players: Array.from(
+            { length: options.playerCount ?? 60 },
+            (_, index) => ({ name: `P${index}` }),
+          ),
+        };
       },
     },
     playtime: {
@@ -217,6 +222,7 @@ async function createHarness(options = {}) {
         return {
           directory: path.join(tempDir, "rule-chain"),
           finalPassFallbackDelayMs: options.finalPassFallbackDelayMs,
+          enforcementPlayerThreshold: 50,
         };
       }
       if (key === "plugins.stepwiseSquadPlaytimeGuard") {
@@ -291,6 +297,45 @@ async function testNameViolationShortCircuits() {
     assert.equal(harness.warnings.length >= 1, true);
     const stepwiseState = harness.stepwise.api.getStatus();
     assert.equal(stepwiseState.recentRecords.length, 0);
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testPopulationThresholdSkipsHistoryWithoutPausingClock() {
+  const options = { playerCount: 40, logClockSeconds: 10 };
+  const harness = await createHarness(options);
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "BMP违规队", squadId: 111 }),
+    );
+    await waitFor(() => harness.ruleChain.api.getState().stats.populationSkipped === 1);
+    assert.equal(harness.disbands.length, 0);
+    assert.equal(harness.removes.length, 0);
+    assert.equal(harness.warnings.length, 0);
+    let state = harness.ruleChain.api.getState();
+    assert.equal(state.enforcement.active, false);
+    assert.equal(state.enforcement.playerCount, 40);
+    assert.equal(state.recent[0].status, "population_skipped");
+
+    options.playerCount = 51;
+    options.logClockSeconds = 25;
+    await waitFor(() => harness.ruleChain.api.getState().enforcement.active === true);
+    assert.equal(harness.disbands.length, 0, "low-population violations must never be replayed");
+
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "BMP违规队", squadId: 112 }),
+    );
+    await waitFor(() => harness.disbands.length === 1);
+    state = harness.ruleChain.api.getState();
+    assert.equal(state.enforcement.playerCount, 51);
+    assert.equal(state.stats.populationSkipped, 1);
+    assert.equal(harness.disbands[0].squadId, 112);
+    assert.equal(options.logClockSeconds, 25, "population gating must not reset the shared log clock");
   } finally {
     await harness.stop();
   }
@@ -797,6 +842,7 @@ async function testWorldBringUpClearsPreviousFinalPassRecords() {
 
 testClassificationFieldsNormalizeWithoutLoss();
 await testNameViolationShortCircuits();
+await testPopulationThresholdSkipsHistoryWithoutPausingClock();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
 await testTrackingDoesNotTreatFairViolationAsAllowedCreation();

@@ -1,5 +1,7 @@
 // -*- coding: utf-8 -*-
 
+import { performance } from "node:perf_hooks";
+
 /**
  * Core: EventBus
  *
@@ -9,10 +11,15 @@
  * - Web 可以订阅状态变化，但一般通过 API/SSE 获取
  */
 export class EventBus {
-  constructor({ logger }) {
+  constructor({ logger, performanceMonitor = null }) {
     this.logger = logger;
+    this.performanceMonitor = performanceMonitor;
     this.coreListeners = new Map();
     this.moduleListeners = new Map();
+  }
+
+  setPerformanceMonitor(performanceMonitor) {
+    this.performanceMonitor = performanceMonitor ?? null;
   }
 
   onCoreEvent(eventName, handler) {
@@ -73,6 +80,7 @@ export class EventBus {
     if (!handlers) return;
 
     for (const handler of handlers) {
+      const startedAt = performance.now();
       try {
         const result = handler(event);
         if (result && typeof result.then === "function") {
@@ -92,6 +100,8 @@ export class EventBus {
             key,
           },
         });
+      } finally {
+        this.performanceMonitor?.recordOperation?.(`eventBus:${key}`, performance.now() - startedAt);
       }
     }
   }
