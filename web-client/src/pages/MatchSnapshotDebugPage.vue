@@ -1,8 +1,8 @@
 <template>
   <AppPage full-bleed>
     <AppPageHeader
-      title="对局快照浏览"
-      subtitle="按时间浏览每一局结束快照，查看地图、人数、队列、玩家状态与 BZSS Core 计分板数据。"
+      title="快照录制"
+      subtitle="查看对局结束后自动生成的快照文件，并预览图片、JSON、CSV、Markdown 和捕获点信息。"
       :status-items="headerStatusItems"
     >
       <template #actions>
@@ -14,7 +14,7 @@
 
     <AppSplitLayout class="snapshot-split">
       <template #left>
-        <AppCard compact title="历史快照记录" description="每次对局结束都会生成一个独立版本，并按录制时间倒序保存。">
+        <AppCard compact title="历史快照记录" description="查看自动生成的对局快照，并下载对应工件。">
           <div v-if="loading" class="empty-state">正在加载快照列表...</div>
           <div v-else-if="snapshots.length === 0" class="empty-state">暂无录制记录</div>
           <div v-else class="snapshot-list">
@@ -75,9 +75,6 @@
             <button type="button" class="action-btn sm" :class="{ active: previewMode === 'image' }" @click="previewMode = 'image'">
               图片
             </button>
-            <button type="button" class="action-btn sm" :class="{ active: previewMode === 'details' }" @click="previewMode = 'details'">
-              快照数据
-            </button>
             <button
               type="button"
               class="action-btn sm"
@@ -99,7 +96,7 @@
               type="button"
               class="action-btn sm"
               :disabled="!selectedSnapshot"
-              @click="selectedSnapshot && openArtifact(selectedSnapshot.id, previewMode === 'image' ? 'image' : 'json')"
+              @click="selectedSnapshot && openArtifact(selectedSnapshot.id, previewMode === 'map' ? 'json' : 'image')"
             >
               新标签打开
             </button>
@@ -113,93 +110,7 @@
             </button>
           </div>
 
-          <div v-if="previewMode === 'details'" class="snapshot-detail-shell">
-            <div v-if="selectedSnapshotJsonLoading" class="empty-state">正在加载快照数据...</div>
-            <template v-else-if="selectedSnapshotJson">
-              <div class="snapshot-overview-grid">
-                <div class="snapshot-overview-item">
-                  <span>快照时间</span>
-                  <strong>{{ formatDate(selectedSnapshotJson.capturedAt || selectedSnapshot?.createdAt || "") }}</strong>
-                </div>
-                <div class="snapshot-overview-item">
-                  <span>当前地图</span>
-                  <strong>{{ selectedSnapshotJson.match?.map || "-" }}</strong>
-                  <small>{{ selectedSnapshotJson.match?.layer || "-" }}</small>
-                </div>
-                <div class="snapshot-overview-item">
-                  <span>下一地图</span>
-                  <strong>{{ selectedSnapshotJson.match?.nextMap || "-" }}</strong>
-                  <small>{{ selectedSnapshotJson.match?.nextLayer || "-" }}</small>
-                </div>
-                <div class="snapshot-overview-item">
-                  <span>在线 / 队列</span>
-                  <strong>{{ selectedSnapshotPlayerCount }} / {{ selectedSnapshotJson.server?.queueCount ?? 0 }}</strong>
-                  <small>玩家 / 排队</small>
-                </div>
-              </div>
-
-              <div class="snapshot-player-header">
-                <div>
-                  <strong>玩家列表</strong>
-                  <span>{{ selectedSnapshotPlayers.length }} 人</span>
-                </div>
-                <span class="snapshot-player-hint">生命值与计分来自该局结束时冻结的 BZSS Core 数据</span>
-              </div>
-
-              <div v-if="selectedSnapshotPlayers.length" class="snapshot-player-table-wrap">
-                <AppTable compact>
-                  <thead>
-                    <tr>
-                      <th>玩家</th>
-                      <th>队伍 / 小队</th>
-                      <th>Role</th>
-                      <th>生命值</th>
-                      <th>K</th>
-                      <th>W</th>
-                      <th>D</th>
-                      <th>TK</th>
-                      <th>载具</th>
-                      <th>复苏</th>
-                      <th>治疗</th>
-                      <th>战斗</th>
-                      <th>目标</th>
-                      <th>团队</th>
-                      <th>延迟</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="player in selectedSnapshotPlayers" :key="snapshotPlayerKey(player)">
-                      <td class="snapshot-player-name">
-                        <strong>{{ player.name || "Unknown" }}</strong>
-                        <small>{{ player.steamID || player.eosID || "-" }}</small>
-                      </td>
-                      <td>
-                        <strong>T{{ player.teamID ?? "-" }}</strong>
-                        <small>{{ player.squadInfo?.name || formatSquad(player.squadID) }}</small>
-                      </td>
-                      <td>{{ player.role || player.bzssCore?.soldierClass || "-" }}</td>
-                      <td>{{ formatHealth(player.health ?? player.bzssCore?.health) }}</td>
-                      <td>{{ statValue(player.bzssCore?.kills) }}</td>
-                      <td>{{ statValue(player.bzssCore?.downs) }}</td>
-                      <td>{{ statValue(player.bzssCore?.deaths) }}</td>
-                      <td>{{ statValue(player.bzssCore?.teamKills) }}</td>
-                      <td>{{ statValue(player.bzssCore?.vehicleKills) }}</td>
-                      <td>{{ statValue(player.bzssCore?.revives) }}</td>
-                      <td>{{ statValue(player.bzssCore?.healPoints) }}</td>
-                      <td>{{ statValue(player.bzssCore?.combatScore) }}</td>
-                      <td>{{ statValue(player.bzssCore?.objectiveScore) }}</td>
-                      <td>{{ statValue(player.bzssCore?.teamworkScore) }}</td>
-                      <td>{{ formatPing(player.bzssCore?.ping) }}</td>
-                    </tr>
-                  </tbody>
-                </AppTable>
-              </div>
-              <div v-else class="empty-state">该快照没有玩家记录。</div>
-            </template>
-            <div v-else class="empty-state">快照数据不可用。</div>
-          </div>
-
-          <div v-else-if="previewMode === 'map'" class="map-preview-shell">
+          <div v-if="previewMode === 'map'" class="map-preview-shell">
             <div v-if="selectedSnapshotCaptureZones.length" class="map-preview-meta">
               <span>{{ selectedSnapshotMapTitle }}</span>
               <span>{{ selectedSnapshotCaptureZones.length }} 个 Capture Point</span>
@@ -283,52 +194,11 @@ interface MatchSnapshotItem {
   artifacts?: MatchSnapshotArtifact[];
 }
 
-interface MatchSnapshotPlayer {
-  playerID?: number | null;
-  name?: string;
-  teamID?: number | null;
-  squadID?: number | null;
-  role?: string;
-  steamID?: string;
-  eosID?: string;
-  health?: number | null;
-  squadInfo?: {
-    name?: string;
-  } | null;
-  bzssCore?: {
-    health?: number | null;
-    soldierClass?: string;
-    kills?: number | null;
-    downs?: number | null;
-    deaths?: number | null;
-    teamKills?: number | null;
-    vehicleKills?: number | null;
-    revives?: number | null;
-    healPoints?: number | null;
-    combatScore?: number | null;
-    objectiveScore?: number | null;
-    teamworkScore?: number | null;
-    ping?: number | null;
-  } | null;
-}
-
 interface MatchSnapshotJsonPayload {
-  capturedAt?: string;
-  server?: {
-    playerCount?: number;
-    queueCount?: number;
-  };
   match?: {
     map?: string;
     layer?: string;
-    nextMap?: string;
-    nextLayer?: string;
-    playerCount?: number;
   };
-  summary?: {
-    playerCount?: number;
-  };
-  players?: MatchSnapshotPlayer[];
   captureZones?: BzssCoreCaptureZoneInfo[];
 }
 
@@ -340,7 +210,7 @@ const errorMessage = ref("");
 const lastLoadedAt = ref("");
 const selectedId = ref("");
 const zoomMode = ref<"fit" | "raw">("fit");
-const previewMode = ref<"image" | "details" | "map">("image");
+const previewMode = ref<"image" | "map">("image");
 const selectedSnapshotJson = ref<MatchSnapshotJsonPayload | null>(null);
 const selectedSnapshotJsonLoading = ref(false);
 const selectedIds = ref<string[]>([]);
@@ -351,17 +221,6 @@ const latestSnapshot = computed(() => snapshotsView.value[0] ?? null);
 const selectedSnapshot = computed(() => snapshotsView.value.find((item) => item.id === selectedId.value) ?? latestSnapshot.value ?? null);
 const selectedImageUrl = computed(() => selectedSnapshot.value ? artifactUrl(selectedSnapshot.value.id, "image") : "");
 const selectedSnapshotCaptureZones = computed(() => Array.isArray(selectedSnapshotJson.value?.captureZones) ? selectedSnapshotJson.value?.captureZones : []);
-const selectedSnapshotPlayers = computed<MatchSnapshotPlayer[]>(() =>
-  Array.isArray(selectedSnapshotJson.value?.players) ? selectedSnapshotJson.value?.players ?? [] : [],
-);
-const selectedSnapshotPlayerCount = computed(() =>
-  Number(
-    selectedSnapshotJson.value?.server?.playerCount
-    ?? selectedSnapshotJson.value?.match?.playerCount
-    ?? selectedSnapshotJson.value?.summary?.playerCount
-    ?? selectedSnapshotPlayers.value.length,
-  ) || 0,
-);
 const selectedSnapshotMapKey = computed(() => {
   const payload = selectedSnapshotJson.value;
   return resolveTacticalMapKey(payload?.match?.layer ?? payload?.match?.map ?? "");
@@ -561,36 +420,6 @@ function formatSize(value: number) {
   return `${(size / 1024).toFixed(1)} KB`;
 }
 
-function snapshotPlayerKey(player: MatchSnapshotPlayer) {
-  return [
-    player.steamID,
-    player.eosID,
-    player.playerID,
-    player.teamID,
-    player.squadID,
-    player.name,
-  ].map((value) => String(value ?? "")).join("|");
-}
-
-function formatSquad(value: number | null | undefined) {
-  return value == null ? "无小队" : `Squad ${value}`;
-}
-
-function statValue(value: number | null | undefined) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? Math.trunc(numeric) : "-";
-}
-
-function formatHealth(value: number | null | undefined) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toFixed(1) : "-";
-}
-
-function formatPing(value: number | null | undefined) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? `${Math.round(numeric)} ms` : "-";
-}
-
 function formatCoord(value: number | null | undefined) {
   const num = Number(value);
   if (!Number.isFinite(num)) return "-";
@@ -619,99 +448,6 @@ onMounted(loadList);
 </script>
 
 <style scoped>
-.snapshot-detail-shell {
-  min-height: 360px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.snapshot-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.snapshot-overview-item {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--color-surface-raised) 88%, transparent);
-}
-
-.snapshot-overview-item span,
-.snapshot-overview-item small,
-.snapshot-player-name small,
-.snapshot-player-table-wrap td small {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.snapshot-overview-item strong {
-  overflow: hidden;
-  color: var(--color-text-primary);
-  font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.snapshot-player-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.snapshot-player-header > div {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.snapshot-player-header span,
-.snapshot-player-hint {
-  color: var(--color-text-muted);
-  font-size: 11px;
-}
-
-.snapshot-player-table-wrap {
-  max-height: 520px;
-  overflow: auto;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
-}
-
-.snapshot-player-table-wrap table {
-  min-width: 1180px;
-}
-
-.snapshot-player-table-wrap th,
-.snapshot-player-table-wrap td {
-  white-space: nowrap;
-}
-
-.snapshot-player-name strong,
-.snapshot-player-name small,
-.snapshot-player-table-wrap td strong,
-.snapshot-player-table-wrap td small {
-  display: block;
-}
-
-@media (max-width: 900px) {
-  .snapshot-overview-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .snapshot-player-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-
 .snapshot-split {
   grid-template-columns: minmax(0, 1.25fr) minmax(400px, 1fr) !important;
 }
