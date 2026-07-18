@@ -33,6 +33,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/weapon-collector", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },
   { route: "/debug/udp-forwarder", requiredPermission: "debug.udp_forwarder.view" },
   { route: "/debug/match-snapshots", requiredPermission: "debug.match_snapshots.view" },
+  { route: "/match-end-snapshots", requiredPermission: "debug.match_snapshots.view" },
   { route: "/debug/pjsc-average-duration", requiredPermission: "debug.pjsc_average_duration.view" },
   { route: "/debug/draw-vote-guard", requiredPermission: "debug.draw_vote_guard.view" },
   { route: "/debug/welcome-join-warning", requiredPermission: "debug.welcome_join_warning.view" },
