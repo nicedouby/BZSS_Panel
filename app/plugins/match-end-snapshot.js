@@ -470,8 +470,7 @@ async function ensureSnapshotDir() {
 
 async function writeJsonAtomic(filePath, payload) {
   const tempPath = filePath + "." + process.pid + ".tmp";
-  await fs.writeFile(tempPath, JSON.stringify(payload, null, 2) + "
-", "utf8");
+  await fs.writeFile(tempPath, JSON.stringify(payload, null, 2) + "\\n", "utf8");
   try {
     await fs.rename(tempPath, filePath);
   } catch (error) {
