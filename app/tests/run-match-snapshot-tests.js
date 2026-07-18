@@ -56,6 +56,9 @@ function createHarness() {
                 layer: "Tallil_RAAS_v1",
                 gameMode: "raas",
                 maxPlayers: 100,
+                playerCount: 3,
+                queueCount: 4,
+                nextLayer: "Fallujah_RAAS_v2",
                 tps: 29.8,
               },
               matchState: {
@@ -93,6 +96,38 @@ function createHarness() {
       },
       bzssCoreMonitor: {
         api: {
+          getPlayers() {
+            return [
+              {
+                playerId: 1,
+                playerIndex: 1,
+                playerName: "Alpha",
+                steamID: "76561198000000001",
+                eosID: "eos-alpha",
+                observedAt: "2026-06-22T00:00:00.000Z",
+                stale: false,
+                ping: 42,
+                soldierInfo: {
+                  soldierClass: "Rifleman",
+                  health: 76.5,
+                },
+                playerScoreboard: {
+                  stats: {
+                    numKills: 8,
+                    vehicleKills: 2,
+                    numDeaths: 3,
+                    numWoundeds: 11,
+                    numTeamKills: 1,
+                    healPoints: 450,
+                    revivedPoints: 6,
+                    teamworkScore: 900,
+                    objectiveScore: 320,
+                    combatScore: 1250,
+                  },
+                },
+              },
+            ];
+          },
           getRawSnapshot() {
             return {
               updatedAt: "2026-06-22T00:00:00.000Z",
@@ -171,8 +206,12 @@ async function testCaptureWritesImageAndFiles() {
     const json = JSON.parse((await plugin.api.readSnapshotArtifact(item.id, "json")).content.toString("utf8"));
     assert.equal(json.summary.playerCount, 3);
     assert.equal(json.summary.squadCount, 2);
-    assert.equal(json.server.queueCount, 0);
+    assert.equal(json.schemaVersion, 6);
+    assert.equal(json.server.playerCount, 3);
+    assert.equal(json.server.queueCount, 4);
     assert.equal(json.match.playerCount, 3);
+    assert.equal(json.match.nextMap, "Fallujah");
+    assert.equal(json.match.nextLayer, "Fallujah_RAAS_v2");
     assert.equal(json.match.maxPlayers, 100);
     assert.equal(json.match.rconTime, null);
     assert.equal(json.teams[0].unassignedPlayers[0].name, "Bravo");
@@ -189,6 +228,33 @@ async function testCaptureWritesImageAndFiles() {
     assert.equal(json.teams[0].squads[0].members[0].combatStats.wounds, 1);
     assert.equal(json.teams[0].squads[0].members[0].combatStats.deaths, 1);
     assert.equal(json.teams[0].squads[0].members[0].gameSeconds, 7200);
+    assert.deepEqual(json.teams[0].squads[0].members[0].squadInfo, {
+      teamID: 1,
+      squadID: 2,
+      name: "Command Squad",
+      size: 1,
+      locked: false,
+    });
+    assert.equal(json.teams[0].squads[0].members[0].health, 76.5);
+    assert.deepEqual(json.teams[0].squads[0].members[0].bzssCore, {
+      available: true,
+      observedAt: "2026-06-22T00:00:00.000Z",
+      stale: false,
+      health: 76.5,
+      soldierClass: "Rifleman",
+      kills: 8,
+      downs: 11,
+      deaths: 3,
+      teamKills: 1,
+      vehicleKills: 2,
+      revives: 6,
+      healPoints: 450,
+      combatScore: 1250,
+      objectiveScore: 320,
+      teamworkScore: 900,
+      ping: 42,
+    });
+    assert.equal(json.teams[0].unassignedPlayers[0].bzssCore, null);
     assert.equal(json.captureZones.length, 1);
     assert.equal(json.captureZones[0].name, "CP1");
     assert.equal(json.fobs.length, 1);
