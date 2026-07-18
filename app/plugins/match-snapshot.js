@@ -398,12 +398,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       if (enableDebug) {
         core?.webRegistry?.registerPage?.({
           id: `web.${PLUGIN_ID}.debug`,
-          title: "快照录制",
+          title: "对局快照浏览",
           group: "调试",
-          route: "/debug/match-snapshots",
+          route: "/match-snapshots",
           pageModule: "/pages/match-snapshot-debug.js",
           source: PLUGIN_ID,
-          description: "View and manage recorded match-state player snapshot records.",
+          description: "Browse and manage versioned match-end snapshot records.",
           required: false,
           enabled: true,
           order: 999,
