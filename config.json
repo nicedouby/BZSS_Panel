@@ -761,6 +761,15 @@
   },
   "plugins": {
     "enabled": true,
+    "squad-join-playtime-warning": {
+      "enabled": false
+    },
+    "plugin.team-kill-duration-warning": {
+      "enabled": false
+    },
+    "commander-authorized-playtime-warning": {
+      "enabled": false
+    },
     "fairSquadGuard": {
       "enabled": true,
       "directory": "./data/fair-squad-guard",
