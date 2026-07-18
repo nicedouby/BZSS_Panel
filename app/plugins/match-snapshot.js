@@ -209,6 +209,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }) ??
     core?.logger ??
     console;
+  let automaticCaptureInFlight = null;
+  let lastAutomaticCaptureAt = 0;
 
   async function takeSnapshot(triggerEvent = {}, inputOptions = {}) {
     const triggerName = String(triggerEvent?.eventName ?? triggerEvent?.type ?? "event");
@@ -251,6 +253,26 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const item = await describeSnapshot(baseName);
     pluginLogger.info?.(`[MatchSnapshot] saved ${baseName}.`);
     return item;
+  }
+
+  function takeAutomaticSnapshot(triggerEvent = {}) {
+    const now = Date.now();
+    if (automaticCaptureInFlight) return automaticCaptureInFlight;
+    if (now - lastAutomaticCaptureAt < 15_000) {
+      pluginLogger.info?.("[MatchSnapshot] skipped duplicate automatic match-end capture.");
+      return Promise.resolve(null);
+    }
+
+    const overview = getCurrentOverview();
+    automaticCaptureInFlight = takeSnapshot(triggerEvent, { overview })
+      .then((item) => {
+        if (item) lastAutomaticCaptureAt = Date.now();
+        return item;
+      })
+      .finally(() => {
+        automaticCaptureInFlight = null;
+      });
+    return automaticCaptureInFlight;
   }
 
   async function listSnapshots() {
@@ -356,7 +378,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "对局快照",
       kind: "plugin",
-      version: "1.4.0",
+      version: "1.5.0",
       description: "Capture match-state player snapshots as PNG, JSON, CSV, and Markdown files.",
     },
     apiName: "matchSnapshot",
@@ -364,10 +386,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async start() {
       if (core?.eventBus?.onCoreEvent) {
-        core.eventBus.onCoreEvent("round.match_winner", (event) => takeSnapshot(event).catch((error) => {
+        core.eventBus.onCoreEvent("round.match_winner", (event) => takeAutomaticSnapshot(event).catch((error) => {
           pluginLogger.error?.(`[MatchSnapshot] round.match_winner capture failed: ${error?.stack || error}`);
         }));
-        core.eventBus.onCoreEvent("MATCH_END", (event) => takeSnapshot(event).catch((error) => {
+        core.eventBus.onCoreEvent("MATCH_END", (event) => takeAutomaticSnapshot(event).catch((error) => {
           pluginLogger.error?.(`[MatchSnapshot] MATCH_END capture failed: ${error?.stack || error}`);
         }));
       }
@@ -516,8 +538,16 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
     modules,
     serverId: stringifyValue(matchState.serverId ?? overview?.serverId ?? status.serverId ?? ""),
   });
+  players = attachSquadInfo(players, squads);
   const teams = buildTeams(players, squads);
   const serverId = stringifyValue(matchState.serverId ?? overview?.serverId ?? status.serverId ?? "");
+  const nextLayer = firstText(match.nextLayer, status.nextLayer, serverStatus.nextLayer);
+  const nextMap = firstText(
+    match.nextMap,
+    status.nextMap,
+    serverStatus.nextMap,
+    deriveMapNameFromLayer(nextLayer),
+  );
   const enrichedTeams = teams.map((team) => {
     const factionCode = resolveFactionCodeFromTeamName(team.teamName);
     const commanderPlayer = resolveTeamCommander({ team, players, squads, modules, serverId });
@@ -531,7 +561,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
   });
 
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     capturedAt,
     generatedBy: PLUGIN_ID,
     trigger: {
@@ -543,6 +573,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
       serverId: stringifyValue(matchState.serverId ?? overview?.serverId ?? status.serverId ?? ""),
       serverName: firstText(status.serverName, status.name, serverStatus.serverName, serverStatus.name),
       rcon: firstText(matchState.rconStatus?.status, status.rcon, serverStatus.rcon),
+      playerCount: players.length,
       queueCount: firstFiniteNumber(status.queueCount, serverStatus.queueCount, matchState.serverStatus?.queueCount) ?? 0,
       capturedFrom: "match-state",
     },
@@ -550,7 +581,8 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
       map: firstText(match.map, status.map, serverStatus.map, status.currentLayer, serverStatus.layer),
       layer: firstText(match.layer, status.layer, status.currentLayer, serverStatus.layer),
       mode: firstText(match.mode, match.gameMode, status.gameMode, status.mode, serverStatus.gameMode, serverStatus.mode),
-      nextLayer: firstText(match.nextLayer, status.nextLayer, serverStatus.nextLayer),
+      nextMap,
+      nextLayer,
       playtime: firstFiniteNumber(match.playtime, status.playtime, serverStatus.playtime, status.matchTimeSeconds, serverStatus.matchTimeSeconds),
       tps: firstFiniteNumber(status.tps, serverStatus.tps),
       playerCount: players.length,
@@ -589,6 +621,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, render
 async function enrichPlayers(players, { modules, serverId }) {
   const byIdentity = new Map(players.map((player) => [buildIdentityKey(player), { ...player }]));
   await enrichPlayersWithPlaytime(byIdentity, modules);
+  enrichPlayersWithBzssCore(byIdentity, modules);
   enrichPlayersWithCombat(byIdentity, modules, serverId);
   return [...byIdentity.values()].sort((left, right) =>
     compareNumbers(left.teamID, right.teamID)
@@ -618,6 +651,117 @@ async function enrichPlayersWithPlaytime(byIdentity, modules) {
       ),
     });
   }
+}
+
+function enrichPlayersWithBzssCore(byIdentity, modules) {
+  const api = modules?.bzssCoreMonitor?.api ?? modules?.bzssCoreMonitor ?? null;
+  const corePlayers = typeof api?.getPlayers === "function"
+    ? api.getPlayers()
+    : [];
+  if (!Array.isArray(corePlayers) || corePlayers.length === 0) {
+    for (const [key, player] of byIdentity) {
+      byIdentity.set(key, {
+        ...player,
+        health: nullableNumber(player?.health),
+        bzssCore: null,
+      });
+    }
+    return;
+  }
+
+  const byPlayerId = new Map();
+  const byTextIdentity = new Map();
+  for (const corePlayer of corePlayers) {
+    for (const value of [corePlayer?.playerId, corePlayer?.playerIndex]) {
+      const playerId = nullableNumber(value);
+      if (playerId != null) byPlayerId.set(playerId, corePlayer);
+    }
+    for (const value of [
+      corePlayer?.steamID,
+      corePlayer?.steamId,
+      corePlayer?.eosID,
+      corePlayer?.eosId,
+      corePlayer?.playerGuid,
+      corePlayer?.playerName,
+      corePlayer?.name,
+    ]) {
+      const identity = normalizeIdentityText(value);
+      if (identity) byTextIdentity.set(identity, corePlayer);
+    }
+  }
+
+  for (const [key, player] of byIdentity) {
+    const playerId = nullableNumber(player?.playerID);
+    let corePlayer = playerId != null ? byPlayerId.get(playerId) : null;
+    if (!corePlayer) {
+      for (const value of [player?.steamID, player?.eosID, player?.name]) {
+        const identity = normalizeIdentityText(value);
+        if (identity && byTextIdentity.has(identity)) {
+          corePlayer = byTextIdentity.get(identity);
+          break;
+        }
+      }
+    }
+
+    if (!corePlayer) {
+      byIdentity.set(key, {
+        ...player,
+        health: nullableNumber(player?.health),
+        bzssCore: null,
+      });
+      continue;
+    }
+
+    const stats = corePlayer?.playerScoreboard?.stats ?? {};
+    const health = firstFiniteNumber(
+      corePlayer?.soldierInfo?.health,
+      corePlayer?.health,
+      player?.health,
+    );
+    const soldierClass = firstText(
+      corePlayer?.soldierInfo?.soldierClass,
+      corePlayer?.soldierClass,
+    );
+    const ping = firstFiniteNumber(
+      corePlayer?.ping,
+      corePlayer?.playerScoreboard?.ping,
+      stats?.ping,
+    );
+    const bzssCore = {
+      available: true,
+      observedAt: firstText(
+        corePlayer?.observedAt,
+        corePlayer?.lastSeenAt,
+        corePlayer?.runtimeObservedAt,
+        corePlayer?.scoreboardObservedAt,
+      ),
+      stale: Boolean(corePlayer?.stale),
+      health,
+      soldierClass,
+      kills: firstFiniteNumber(stats?.numKills, corePlayer?.kills) ?? 0,
+      downs: firstFiniteNumber(stats?.numWoundeds, corePlayer?.woundeds) ?? 0,
+      deaths: firstFiniteNumber(stats?.numDeaths, corePlayer?.deaths) ?? 0,
+      teamKills: firstFiniteNumber(stats?.numTeamKills, corePlayer?.teamKills) ?? 0,
+      vehicleKills: firstFiniteNumber(stats?.vehicleKills, corePlayer?.vehicleKills) ?? 0,
+      revives: firstFiniteNumber(stats?.revivedPoints, corePlayer?.revivedPoints) ?? 0,
+      healPoints: firstFiniteNumber(stats?.healPoints, corePlayer?.healPoints) ?? 0,
+      combatScore: firstFiniteNumber(stats?.combatScore, corePlayer?.combatScore) ?? 0,
+      objectiveScore: firstFiniteNumber(stats?.objectiveScore, corePlayer?.objectiveScore) ?? 0,
+      teamworkScore: firstFiniteNumber(stats?.teamworkScore, corePlayer?.teamworkScore) ?? 0,
+      ping,
+    };
+
+    byIdentity.set(key, {
+      ...player,
+      role: firstText(player?.role, soldierClass),
+      health,
+      bzssCore,
+    });
+  }
+}
+
+function normalizeIdentityText(value) {
+  return String(value ?? "").trim().toLowerCase();
 }
 
 function enrichPlayersWithCombat(byIdentity, modules, serverId) {
@@ -701,6 +845,35 @@ function normalizePlayers(players) {
     combatStats: cloneJsonSafe(player?.combatStats ?? emptyCombatStats()),
     raw: cloneJsonSafe(player ?? {}),
   }));
+}
+
+function attachSquadInfo(players, squads) {
+  const squadsByKey = new Map(
+    squads.map((squad) => [buildSquadKey(squad.teamID, squad.squadID), squad]),
+  );
+  return players.map((player) => {
+    const squad = player?.squadID == null
+      ? null
+      : squadsByKey.get(buildSquadKey(player.teamID, player.squadID)) ?? null;
+    return {
+      ...player,
+      squadInfo: squad
+        ? {
+            teamID: squad.teamID,
+            squadID: squad.squadID,
+            name: squad.squadName,
+            size: squad.size,
+            locked: squad.locked,
+          }
+        : null,
+    };
+  });
+}
+
+function deriveMapNameFromLayer(layer) {
+  const value = String(layer ?? "").trim();
+  if (!value) return "";
+  return value.replace(/_(?:RAAS|AAS|Invasion|TC|Seed|Skirmish|Destruction|Insurgency|Jensen(?:sRange)?)(?:_v\d+)?$/i, "");
 }
 
 function normalizeSquads(squads) {
