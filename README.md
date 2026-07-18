@@ -30,7 +30,7 @@ npm run release:portable
 
 ## Notes
 
-- Production static hosting serves `web-client/dist`.
+- Production static hosting serves `web-client/dist`. After pulling frontend source changes, run `npm run client:build` before restarting the backend; `dist` is intentionally not committed.
 - `config.web.useVueClient` should stay enabled for the Vue client.
 - The legacy shell now lives at `app/web/` and should not receive new features.
 - `npm run release:portable` creates `release/portable/`, with runtime data at the root and backend source/dependencies grouped under `app/`.
