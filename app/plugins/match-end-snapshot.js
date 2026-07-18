@@ -399,7 +399,7 @@ function buildSnapshotId(payload) {
 }
 
 function sanitizeId(value) {
-  const safe = path.basename(String(value ?? "").trim()).replace(/.json$/i, "");
+  const safe = path.basename(String(value ?? "").trim()).replace(/\.json$/i, "");
   if (!safe || !/^[a-zA-Z0-9_.-]+$/.test(safe)) {
     const error = new Error("Invalid snapshot id.");
     error.code = "InvalidSnapshotId";
@@ -420,7 +420,7 @@ function sanitizeSegment(value) {
 function deriveMapNameFromLayer(layer) {
   const value = String(layer ?? "").trim();
   if (!value) return "";
-  return value.replace(/_(?:RAAS|AAS|Invasion|TC|Seed|Skirmish|Destruction|Insurgency|Jensen(?:sRange)?)(?:_vd+)?$/i, "");
+  return value.replace(/_(?:RAAS|AAS|Invasion|TC|Seed|Skirmish|Destruction|Insurgency|Jensen(?:sRange)?)(?:_v\d+)?$/i, "");
 }
 
 function normalizeIdentity(value) {
