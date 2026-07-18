@@ -562,7 +562,14 @@ function formatSize(value: number) {
 }
 
 function snapshotPlayerKey(player: MatchSnapshotPlayer) {
-  return String(player.steamID || player.eosID || player.playerID || player.name || Math.random());
+  return [
+    player.steamID,
+    player.eosID,
+    player.playerID,
+    player.teamID,
+    player.squadID,
+    player.name,
+  ].map((value) => String(value ?? "")).join("|");
 }
 
 function formatSquad(value: number | null | undefined) {
