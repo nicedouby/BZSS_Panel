@@ -1989,7 +1989,7 @@ export function parseBzssCorePlayerBlocks(text) {
 
 export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
-  if (text.includes("VRI{")) return parseBzssCoreVehicleLine(text);
+  if (text.includes("VRI{") || text.includes("VehicleInfo{")) return parseBzssCoreVehicleLine(text);
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
   if (/\{?\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:/i.test(text)) return parseBzssCorePieRuntimeLine(text);
@@ -2034,42 +2034,32 @@ export function parseBzssCoreLogLine(line) {
 
 export function parseBzssCoreVehicleLine(line) {
   const text = String(line ?? "");
-  const frame = extractLineBlock(text, "VRI");
+  const frameName = text.includes("VRI{") ? "VRI" : "VehicleInfo";
+  const frame = extractLineBlock(text, frameName);
   if (!frame) return null;
 
   const observedAt = new Date().toISOString();
-  const vehicles = extractBraceItems(frame.content).map((raw, frameIndex) => {
-    const driverMatch = raw.match(/(?:^|,)\s*ID\s*:\s*(-?\d+)/i);
-    const typeMatch = raw.match(/(?:^|,)\s*VT\s*:\s*([^,}]*)/i);
-    const healthMatch = raw.match(/(?:^|,)\s*HP\s*:\s*([^,}]*)/i);
-    const positionMatch = raw.match(/(?:^|,)\s*Pos\s*:?\s*(.*?)\s*,\s*Speed\s*:/i);
-    const speedMatch = raw.match(/(?:^|,)\s*Speed\s*:\s*([^,}]*)/i);
-    const teamMatch = raw.match(/(?:^|,)\s*TID\s*:\s*(-?\d+)/i);
-    const positionText = String(positionMatch?.[1] ?? "").trim();
-    let position = parseVectorBlock(positionText);
-    if (!position) {
-      const vectorMatch = positionText.match(/X\s*=\s*(-?[0-9.]+)[,\s]+Y\s*=\s*(-?[0-9.]+)[,\s]+Z\s*=\s*(-?[0-9.]+)/i);
-      if (vectorMatch) {
-        position = { x: toFiniteNumber(vectorMatch[1]), y: toFiniteNumber(vectorMatch[2]), z: toFiniteNumber(vectorMatch[3]) };
-      }
-    }
-    if (!position) {
-      const values = positionText.split(",").map(toFiniteNumber);
-      if (values.length >= 3 && values.slice(0, 3).every((value) => value != null)) {
-        position = { x: values[0], y: values[1], z: values[2] };
-      }
-    }
-
-    const driverPlayerId = toFiniteNumber(driverMatch?.[1]);
+  const nestedItems = extractBraceItems(frame.content);
+  // Some Blueprint versions append one vehicle directly after `VRI{`, while
+  // others append a list of `{...}` records. Support both wire formats.
+  const rawVehicles = nestedItems.length > 0
+    ? nestedItems
+    : (looksLikeVehicleRuntimeRecord(frame.content) ? [frame.content] : []);
+  const vehicles = rawVehicles.map((raw, frameIndex) => {
+    const driverPlayerId = toFiniteNumber(extractVehicleRuntimeField(raw, ["ID", "DriverID", "DriverPlayerID", "PlayerID"]));
+    const type = extractVehicleRuntimeField(raw, ["VT", "VehicleType", "Type"]);
+    const health = parseVehicleHealth(extractVehicleRuntimeField(raw, ["HP", "Health", "HealthPercent"]));
+    const speed = extractVehicleRuntimeField(raw, ["Speed", "Velocity", "Vel"]);
+    const team = extractVehicleRuntimeField(raw, ["TID", "TeamID", "Team"]);
     return {
       frameIndex,
       driverPlayerId: driverPlayerId != null && driverPlayerId >= 0 ? driverPlayerId : null,
       occupied: driverPlayerId != null && driverPlayerId >= 0,
-      vehicleType: String(typeMatch?.[1] ?? "").trim(),
-      healthPercent: toFiniteNumber(healthMatch?.[1]),
-      position,
-      speed: toFiniteNumber(speedMatch?.[1]),
-      teamId: toFiniteNumber(teamMatch?.[1]),
+      vehicleType: String(type ?? "").trim(),
+      healthPercent: health,
+      position: parseVehicleRuntimePosition(raw),
+      speed: toFiniteNumber(speed),
+      teamId: toFiniteNumber(team),
       observedAt,
       raw: `{${raw}}`,
     };
@@ -2079,8 +2069,49 @@ export function parseBzssCoreVehicleLine(line) {
     type: "vehicles",
     vehicles,
     observedAt,
-    rawFields: ["VRI", "ID", "VT", "HP", "Pos", "Speed", "TID"],
+    rawFields: [frameName, "ID", "DriverID", "VT", "VehicleType", "HP", "Health", "Pos", "Position", "Speed", "TID", "TeamID"],
   };
+}
+
+function looksLikeVehicleRuntimeRecord(text) {
+  return /(?:^|[,;{\s])(?:ID|DriverID|DriverPlayerID|VehicleType|VT|Type)\s*[:=]/i.test(String(text ?? ""));
+}
+
+function escapeRegex(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractVehicleRuntimeField(text, names) {
+  const aliases = names.map(escapeRegex).join("|");
+  const match = String(text ?? "").match(new RegExp(`(?:^|[,;{])\\s*(?:${aliases})\\s*[:=]\\s*([^,;}]+)`, "i"));
+  return String(match?.[1] ?? "").trim();
+}
+
+function parseVehicleHealth(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const ratio = text.match(/^(-?[0-9.]+)\s*\/\s*(-?[0-9.]+)$/);
+  if (ratio) {
+    const current = toFiniteNumber(ratio[1]);
+    const maximum = toFiniteNumber(ratio[2]);
+    return current != null && maximum != null && maximum > 0 ? (current / maximum) * 100 : null;
+  }
+  return toFiniteNumber(text.replace(/%$/, ""));
+}
+
+function parseVehicleRuntimePosition(text) {
+  const source = String(text ?? "");
+  const named = source.match(/(?:^|[,;{])\s*(?:Pos|Position|Location)\s*[:=]\s*(.*?)(?=[,;]\s*(?:Speed|Velocity|Vel|TID|TeamID|Team|ID|DriverID|DriverPlayerID|VT|VehicleType|Type|HP|Health)\s*[:=]|$)/i);
+  const positionText = String(named?.[1] ?? source).trim();
+  const vectorMatch = positionText.match(/(?:Pos(?:ition)?\s*)?X\s*[=:]\s*(-?[0-9.]+)[,\s]+Y\s*[=:]\s*(-?[0-9.]+)[,\s]+Z\s*[=:]\s*(-?[0-9.]+)/i);
+  if (vectorMatch) {
+    return { x: toFiniteNumber(vectorMatch[1]), y: toFiniteNumber(vectorMatch[2]), z: toFiniteNumber(vectorMatch[3]) };
+  }
+  const values = positionText.match(/(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)/);
+  if (values) {
+    return { x: toFiniteNumber(values[1]), y: toFiniteNumber(values[2]), z: toFiniteNumber(values[3]) };
+  }
+  return parseVectorBlock(positionText);
 }
 
 function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
@@ -3395,6 +3426,4 @@ function toNumberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
-
-
 
