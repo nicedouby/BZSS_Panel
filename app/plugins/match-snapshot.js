@@ -2246,12 +2246,17 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
   const mapKey = resolveMapSceneKey(snapshot.match.map, snapshot.match.layer);
   const template = MAP_SCENE_TEMPLATE_BY_KEY[mapKey] ?? MAP_SCENE_TEMPLATE_BY_KEY.Sumari;
   const minimap = resolveMatchMinimap(snapshot.match.map, snapshot.match.layer, template);
+  const roleIconCache = await loadRoleIconCache();
   const columns = [
-    await buildCompactTeamColumn(snapshot, team1, 40, "#2dd4bf", options),
-    await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options),
+    await buildCompactTeamColumn(snapshot, team1, 40, "#2dd4bf", options, roleIconCache),
+    await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options, roleIconCache),
   ];
   const maxContentHeight = Math.max(34, ...columns.map((column) => column.contentHeight));
-  const height = 178 + maxContentHeight + 38;
+  const requiredHeight = 178 + maxContentHeight + 38;
+  // Never crop the final Loading Screen. The report grows in complete 1600×900
+  // template units so every export has a full scene background behind its data.
+  const loadingScreenHeight = 900;
+  const height = Math.max(loadingScreenHeight, Math.ceil(requiredHeight / loadingScreenHeight) * loadingScreenHeight);
   return {
     width: 1600,
     height,
@@ -2271,15 +2276,22 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
   };
 }
 
-async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}) {
+async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}, roleIconCache = new Map()) {
   const commanderName = resolveCommanderName(team) || findTeamCommanderName(snapshot.players, team.teamID) || "未记录";
   const flagPath = team.flagAssetPath || resolveFactionFlagAssetPath(team.teamName);
   const groups = team.squads.map((squad) => {
-    const players = [...squad.members].sort(compareCompactPlayers);
+    const players = [...squad.members]
+      .sort(compareCompactPlayers)
+      .map((player) => ({
+        ...player,
+        roleIconData: roleIconCache.get(resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass)).iconPath) ?? "",
+        roleTone: resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass)).tone,
+      }));
     const label = buildSquadDisplayName(squad) || "小队 " + String(squad.squadID ?? "-");
     return {
       squadID: squad.squadID,
       label,
+      creatorName: firstText(squad.creatorName, squad.raw?.creatorName),
       players,
       isCommandSquad: players.some((player) => player.isCommander) || /command|指挥/i.test(label),
     };
@@ -2288,7 +2300,14 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}) {
     groups.push({
       squadID: null,
       label: "未加入小队",
-      players: [...team.unassignedPlayers].sort(compareCompactPlayers),
+      creatorName: "",
+      players: [...team.unassignedPlayers]
+        .sort(compareCompactPlayers)
+        .map((player) => ({
+          ...player,
+          roleIconData: roleIconCache.get(resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass)).iconPath) ?? "",
+          roleTone: resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass)).tone,
+        })),
       isCommandSquad: false,
     });
   }
@@ -2349,13 +2368,7 @@ async function buildCompactMatchEndBackground(sharp, layout) {
     template: layout.template,
   });
   const composites = [];
-  for (let top = 0; top < layout.height; top += tileHeight) {
-    const remainingHeight = layout.height - top;
-    const input = remainingHeight < tileHeight
-      ? await sharp(tile).extract({ left: 0, top: 0, width: layout.width, height: remainingHeight }).png().toBuffer()
-      : tile;
-    composites.push({ input, left: 0, top });
-  }
+  for (let top = 0; top < layout.height; top += tileHeight) composites.push({ input: tile, left: 0, top });
   return sharp({
     create: {
       width: layout.width,
@@ -2451,7 +2464,7 @@ function renderCompactCommanderBar(team) {
       ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 10) + '" width="78" height="44" preserveAspectRatio="xMidYMid meet"/>'
       : '<rect x="' + flagX + '" y="' + (y + 10) + '" width="78" height="44" fill="' + team.accent + '" opacity=".24"/>',
     '<text x="' + (x + 108) + '" y="' + (y + 24) + '" class="team-name">TEAM ' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 31)) + '</text>',
-    '<text x="' + (x + 108) + '" y="' + (y + 43) + '" class="team-meta mono">' + xmlEscape(team.factionCode) + ' · ' + team.playerCount + ' PAX · ' + team.squadCount + ' SQUADS</text>',
+    '<text x="' + (x + 108) + '" y="' + (y + 43) + '" class="team-meta mono">' + xmlEscape(team.factionCode) + ' · ' + team.playerCount + ' PLAYERS · ' + team.squadCount + ' SQUADS</text>',
     '<text x="' + (x + 476) + '" y="' + (y + 22) + '" class="commander-label">COMMANDER</text>',
     '<text x="' + (x + 476) + '" y="' + (y + 45) + '" class="commander">' + xmlEscape(truncateText(team.commanderName, 25)) + '</text>',
   ].join("");
@@ -2461,7 +2474,7 @@ function renderCompactStatHeader(team) {
   const x = team.x;
   const y = 154;
   const labels = [
-    [14, "PLAYER"], [188, "FT"], [220, "ROLE"], [330, "HP"], [370, "PING"],
+    [14, "ROLE / PLAYER"], [188, "FT"], [330, "HP"], [370, "PING"],
     [414, "K"], [446, "W"], [478, "D"], [512, "TK"], [548, "VK"],
     [584, "REV"], [626, "HEAL"], [668, "C"], [704, "O"], [736, "T"],
   ];
@@ -2473,10 +2486,11 @@ function renderCompactStatHeader(team) {
 
 function renderCompactSquadHeader(team, group, y) {
   const command = group.isCommandSquad ? " · COMMAND" : "";
+  const creator = firstText(group.creatorName, "-");
   return [
     '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="25" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
     '<text x="' + (team.x + 12) + '" y="' + (y + 17) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
-    '<text x="' + (team.x + team.width - 12) + '" y="' + (y + 17) + '" text-anchor="end" class="team-meta mono">' + group.players.length + ' PAX</text>',
+    '<text x="' + (team.x + team.width - 12) + '" y="' + (y + 17) + '" text-anchor="end" class="team-meta mono">SCR ' + xmlEscape(truncateText(creator, 24)) + '</text>',
   ].join("");
 }
 
@@ -2495,9 +2509,11 @@ function renderCompactPlayerRow(team, player, index, y) {
   return [
     '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="33" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
     '<rect x="' + x + '" y="' + y + '" width="3" height="33" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
-    '<text x="' + (x + 12) + '" y="' + (y + 21) + '" class="name">' + xmlEscape(truncateText(player.name, 22)) + '</text>',
+    player.roleIconData
+      ? '<image href="' + player.roleIconData + '" x="' + (x + 9) + '" y="' + (y + 5) + '" width="22" height="22" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + (x + 11) + '" y="' + (y + 8) + '" width="18" height="18" rx="3" fill="' + (player.roleTone || "#64748b") + '" fill-opacity=".85"/>',
+    '<text x="' + (x + 38) + '" y="' + (y + 21) + '" class="name">' + xmlEscape(truncateText(player.name, 20)) + '</text>',
     '<text x="' + (x + 188) + '" y="' + (y + 21) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
-    '<text x="' + (x + 220) + '" y="' + (y + 21) + '" class="row-meta">' + xmlEscape(truncateText(firstText(player.role, core.soldierClass, "-"), 13)) + '</text>',
     values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 21) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
   ].join("");
 }
