@@ -432,7 +432,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "manual",
     nav: { section: "analytics", label: "对局结束快照", icon: "📚", order: 21 },
-    requiredPermission: "debug.match_snapshots.view",
+    superAdminOnly: true,
     ...workspacePage,
   },
   {

@@ -689,6 +689,7 @@
       "./plugins/player_duration_slow_refresh.js",
       "./plugins/udp_event_forwarder.js",
       "./plugins/match-snapshot.js",
+      "./app/plugins/match-end-snapshot.js",
       "./plugins/fair-squad-guard.js",
       "./plugins/stepwise-squad-playtime-guard.js",
       "./plugins/squad-creation-broadcast.js",
