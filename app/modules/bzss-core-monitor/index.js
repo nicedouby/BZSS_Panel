@@ -291,6 +291,8 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       draft.captureZones = [];
       draft.fobs = [];
       draft.mainZones = [];
+      draft.vehicles = [];
+      draft.vehicleFrameUpdatedAt = "";
       draft.explosions = [];
       draft.rawLineHash = "";
       draft.rawFields = [];
@@ -407,6 +409,12 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
             if (parsed.mainZones.length > 0) {
               draft.mainZones = mergeMainZones(draft.mainZones, parsed.mainZones);
             }
+            continue;
+          }
+
+          if (parsed.type === "vehicles") {
+            draft.vehicles = parsed.vehicles;
+            draft.vehicleFrameUpdatedAt = parsed.observedAt;
             continue;
           }
 
@@ -589,6 +597,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
+      vehicles: state.vehicles.map(clonePlainObject),
       explosions: (state.explosions ?? []).map(clonePlainObject),
     };
   }
@@ -623,6 +632,8 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       scoreboardCoverage: coverage.scoreboardCoverage,
       playerCount: players.length,
       mainZoneCount: state.mainZones.length,
+      vehicleCount: state.vehicles.length,
+      vehicleFrameUpdatedAt: state.vehicleFrameUpdatedAt,
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
@@ -648,6 +659,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       captureZones: state.captureZones.map(clonePlainObject),
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
+      vehicles: state.vehicles.map(clonePlainObject),
       runtimePlayers: [...state.runtimePlayersByKey.values()].map(clonePlainObject),
       scoreboardPlayers: [...state.scoreboardPlayersByKey.values()].map(clonePlainObject),
       explosions: (state.explosions ?? []).map(clonePlainObject),
@@ -667,6 +679,10 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   function getScoreboardPlayers() {
     pruneExpiredPlayers(state, { core, modules });
     return [...state.scoreboardPlayersByKey.values()].map(clonePlainObject);
+  }
+
+  function getVehicles() {
+    return state.vehicles.map(clonePlainObject);
   }
 
   /**
@@ -976,6 +992,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       getState,
       getRuntimePlayers,
       getScoreboardPlayers,
+      getVehicles,
       getPlayers,
       getTelemetryPlayers,
       getRawSnapshot,
@@ -1002,6 +1019,8 @@ function createInitialState() {
     captureZones: [],
     fobs: [],
     mainZones: [],
+    vehicles: [],
+    vehicleFrameUpdatedAt: "",
     explosions: [],
     rawLineHash: "",
     rawFields: [],
@@ -1349,6 +1368,8 @@ function resetPlayerCaches(draft, { keepStatus = "ready" } = {}) {
   draft.captureZones = [];
   draft.fobs = [];
   draft.mainZones = [];
+  draft.vehicles = [];
+  draft.vehicleFrameUpdatedAt = "";
   draft.explosions = [];
   draft.rawLineHash = "";
   draft.rawFields = [];
@@ -1968,6 +1989,7 @@ export function parseBzssCorePlayerBlocks(text) {
 
 export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
+  if (text.includes("VRI{")) return parseBzssCoreVehicleLine(text);
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
   if (/\{?\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:/i.test(text)) return parseBzssCorePieRuntimeLine(text);
@@ -2008,6 +2030,57 @@ export function parseBzssCoreLogLine(line) {
     return parseExplosiveDamageLine(text);
   }
   return null;
+}
+
+export function parseBzssCoreVehicleLine(line) {
+  const text = String(line ?? "");
+  const frame = extractLineBlock(text, "VRI");
+  if (!frame) return null;
+
+  const observedAt = new Date().toISOString();
+  const vehicles = extractBraceItems(frame.content).map((raw, frameIndex) => {
+    const driverMatch = raw.match(/(?:^|,)\s*ID\s*:\s*(-?\d+)/i);
+    const typeMatch = raw.match(/(?:^|,)\s*VT\s*:\s*([^,}]*)/i);
+    const healthMatch = raw.match(/(?:^|,)\s*HP\s*:\s*([^,}]*)/i);
+    const positionMatch = raw.match(/(?:^|,)\s*Pos\s*:?\s*(.*?)\s*,\s*Speed\s*:/i);
+    const speedMatch = raw.match(/(?:^|,)\s*Speed\s*:\s*([^,}]*)/i);
+    const teamMatch = raw.match(/(?:^|,)\s*TID\s*:\s*(-?\d+)/i);
+    const positionText = String(positionMatch?.[1] ?? "").trim();
+    let position = parseVectorBlock(positionText);
+    if (!position) {
+      const vectorMatch = positionText.match(/X\s*=\s*(-?[0-9.]+)[,\s]+Y\s*=\s*(-?[0-9.]+)[,\s]+Z\s*=\s*(-?[0-9.]+)/i);
+      if (vectorMatch) {
+        position = { x: toFiniteNumber(vectorMatch[1]), y: toFiniteNumber(vectorMatch[2]), z: toFiniteNumber(vectorMatch[3]) };
+      }
+    }
+    if (!position) {
+      const values = positionText.split(",").map(toFiniteNumber);
+      if (values.length >= 3 && values.slice(0, 3).every((value) => value != null)) {
+        position = { x: values[0], y: values[1], z: values[2] };
+      }
+    }
+
+    const driverPlayerId = toFiniteNumber(driverMatch?.[1]);
+    return {
+      frameIndex,
+      driverPlayerId: driverPlayerId != null && driverPlayerId >= 0 ? driverPlayerId : null,
+      occupied: driverPlayerId != null && driverPlayerId >= 0,
+      vehicleType: String(typeMatch?.[1] ?? "").trim(),
+      healthPercent: toFiniteNumber(healthMatch?.[1]),
+      position,
+      speed: toFiniteNumber(speedMatch?.[1]),
+      teamId: toFiniteNumber(teamMatch?.[1]),
+      observedAt,
+      raw: `{${raw}}`,
+    };
+  });
+
+  return {
+    type: "vehicles",
+    vehicles,
+    observedAt,
+    rawFields: ["VRI", "ID", "VT", "HP", "Pos", "Speed", "TID"],
+  };
 }
 
 function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
@@ -3322,7 +3395,6 @@ function toNumberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
-
 
 
 
