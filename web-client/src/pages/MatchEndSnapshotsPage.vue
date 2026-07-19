@@ -33,6 +33,7 @@
                 <span>玩家 {{ item.playerCount }}</span>
                 <span>队列 {{ item.queueCount }}</span>
                 <span v-if="item.winner">胜方 {{ item.winner }}</span>
+                <span :class="{ ready: item.imageAvailable }">{{ item.imageAvailable ? "战绩图已生成" : "可生成战绩图" }}</span>
               </div>
             </button>
           </div>
@@ -42,6 +43,22 @@
       <template #right>
         <AppCard compact title="快照详情" :description="selectedSnapshot?.id || '请选择一条记录'">
           <div class="detail-toolbar">
+            <button
+              type="button"
+              class="action-btn sm"
+              :disabled="!selectedSnapshot"
+              @click="imagePreviewOpen = !imagePreviewOpen"
+            >
+              {{ imagePreviewOpen ? "收起战绩图" : "预览 / 生成战绩图" }}
+            </button>
+            <button
+              type="button"
+              class="action-btn sm"
+              :disabled="!selectedSnapshot"
+              @click="downloadImage"
+            >
+              下载 PNG
+            </button>
             <button
               type="button"
               class="action-btn sm"
@@ -82,6 +99,16 @@
                 <span>玩家 / 队列</span>
                 <strong>{{ detail.server?.playerCount ?? detail.players?.length ?? 0 }} / {{ detail.server?.queueCount ?? 0 }}</strong>
                 <small>在线玩家 / 排队玩家</small>
+              </div>
+            </section>
+
+            <section v-if="imagePreviewOpen" class="report-preview">
+              <header>
+                <strong>全员战绩长图</strong>
+                <span>旧记录会在首次打开时自动补生成。</span>
+              </header>
+              <div class="report-preview-frame">
+                <img :src="reportImageUrl" alt="对局结束全员战绩长图">
               </div>
             </section>
 
@@ -171,6 +198,7 @@ interface SnapshotListItem {
   playerCount: number;
   queueCount: number;
   winner?: string;
+  imageAvailable?: boolean;
 }
 
 interface SnapshotPlayer {
@@ -225,11 +253,18 @@ const detail = ref<SnapshotDetail | null>(null);
 const loading = ref(true);
 const detailLoading = ref(false);
 const busy = ref(false);
+const imagePreviewOpen = ref(false);
 const errorMessage = ref("");
 const loadedAt = ref("");
 
 const selectedSnapshot = computed(() =>
   snapshots.value.find((item) => item.id === selectedId.value) ?? null,
+);
+
+const reportImageUrl = computed(() =>
+  selectedId.value
+    ? "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value)
+    : "",
 );
 
 const headerStatusItems = computed(() => {
@@ -279,6 +314,15 @@ async function loadDetail(id: string) {
   } finally {
     detailLoading.value = false;
   }
+}
+
+function downloadImage() {
+  if (!selectedId.value) return;
+  window.open(
+    "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value) + "&download=1",
+    "_blank",
+    "noopener,noreferrer",
+  );
 }
 
 function downloadSelected() {
@@ -358,6 +402,7 @@ function pingLabel(value: number | null | undefined) {
 }
 
 watch(selectedId, (id) => {
+  imagePreviewOpen.value = false;
   void loadDetail(id);
 });
 
@@ -457,6 +502,41 @@ onMounted(loadSnapshots);
   color: var(--color-text-primary);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.report-preview {
+  margin-top: 14px;
+}
+
+.report-preview > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.report-preview > header span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.report-preview-frame {
+  max-height: 680px;
+  overflow: auto;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: #020611;
+}
+
+.report-preview-frame img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.record-metrics .ready {
+  color: var(--color-success, #22c55e);
 }
 
 .player-section {
