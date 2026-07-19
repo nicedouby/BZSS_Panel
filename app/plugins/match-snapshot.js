@@ -2361,7 +2361,7 @@ async function loadSharp() {
     const bundlePnpmNodeModules = `${SHARP_BUNDLE_ROOT}/.pnpm/node_modules`;
     process.env.NODE_PATH = [SHARP_BUNDLE_ROOT, bundlePnpmNodeModules, process.env.NODE_PATH || ""]
       .filter(Boolean)
-      .join(";");
+      .join(path.delimiter);
     sharpRequire("module")._initPaths();
     sharpLoaderPromise = Promise.resolve().then(() => sharpRequire("sharp"));
   }
