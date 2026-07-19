@@ -15,7 +15,6 @@ function createHarness() {
       eosID: "eos-alpha",
       teamID: 1,
       squadID: 2,
-      fireTeam: "B",
       role: "Medic",
       isLeader: false,
     },
@@ -76,6 +75,7 @@ function createHarness() {
                 soldierInfo: {
                   soldierClass: "USA_Medic",
                   health: 64.5,
+                  fireTeam: "B",
                 },
                 playerScoreboard: {
                   stats: {
