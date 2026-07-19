@@ -307,6 +307,11 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         captureZones: cloneArray(bzssRaw?.captureZones),
         fobs: cloneArray(bzssRaw?.fobs),
         mainZones: cloneArray(bzssRaw?.mainZones),
+        // Vehicle runtime records are independent from player telemetry.  Keep
+        // them in the unified tactical snapshot so every map consumer receives
+        // the same complete vehicle frame through the existing SSE channel.
+        vehicles: cloneArray(bzssRaw?.vehicles),
+        vehicleTypes: cloneArray(bzssRaw?.vehicleTypes),
         explosions: cloneArray(bzssRaw?.explosions),
       },
       diagnostics: {
@@ -1107,7 +1112,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       match: {},
       teams: [],
       players: [],
-      assets: { captureZones: [], fobs: [], mainZones: [], explosions: [] },
+      assets: { captureZones: [], fobs: [], mainZones: [], vehicles: [], vehicleTypes: [], explosions: [] },
       diagnostics: {
         unlinkedRconPlayers: [],
         unlinkedBzssPlayers: [],
