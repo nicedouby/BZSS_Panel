@@ -2150,7 +2150,7 @@ export function parseBzssCoreVehicleLine(line) {
       occupied: driverPlayerId != null && driverPlayerId >= 0,
       vehicleType: String(type ?? "").trim(),
       healthPercent: health,
-      position: parseVehicleRuntimePosition(raw),
+      position: scalePosition(parseVehicleRuntimePosition(raw)),
       yaw: parseVehicleRuntimeYaw(raw),
       speed: toFiniteNumber(speed),
       teamId: toFiniteNumber(team),
@@ -3230,10 +3230,15 @@ function parseKeyValueFields(fields) {
 function scalePosition(pos) {
   if (!pos) return null;
   return {
-    x: pos.x * 100,
-    y: pos.y * 100,
-    z: pos.z * 100,
+    x: scaleCoordinate(pos.x),
+    y: scaleCoordinate(pos.y),
+    z: scaleCoordinate(pos.z),
   };
+}
+
+function scaleCoordinate(value) {
+  const scaled = Number(value) * 100;
+  return Number.isFinite(scaled) ? Number(scaled.toFixed(6)) : null;
 }
 
 function parseVectorBlock(text) {
