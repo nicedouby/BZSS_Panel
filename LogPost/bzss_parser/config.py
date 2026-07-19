@@ -27,7 +27,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "enabled": True,
         "host": "127.0.0.1",
         "port": 7788,
-        "max_payload_bytes": 16384,
+        "max_payload_bytes": 60000,
     },
 
     "unknown": {
@@ -54,7 +54,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
 
     "raw": {
-        "max_raw_chars": 4096,
+        "max_raw_chars": 48000,
     },
 
     "raw_input_log": {
