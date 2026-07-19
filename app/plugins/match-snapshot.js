@@ -2252,12 +2252,12 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
     await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options, roleIconCache),
   ];
   const maxContentHeight = Math.max(28, ...columns.map((column) => column.contentHeight));
-  const contentTop = 102;
-  const requiredHeight = contentTop + maxContentHeight + 246;
+  const contentTop = 92;
+  const requiredHeight = contentTop + maxContentHeight + 74;
   // Keep one unscaled Loading Screen in the centre. Extra vertical space is a
   // deliberately dark, blurred extension so the report can grow without
   // stretching, tiling, or cutting the map artwork.
-  const height = Math.max(3000, requiredHeight);
+  const height = Math.max(1800, requiredHeight);
   return {
     width: 1600,
     height,
@@ -2318,7 +2318,7 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}, r
     || compactSquadSortValue(left.squadID) - compactSquadSortValue(right.squadID)
     || String(left.label).localeCompare(String(right.label), "zh-CN", { numeric: true }));
   const players = groups.flatMap((group) => group.players);
-  const contentHeight = groups.reduce((height, group) => height + 18 + group.players.length * 28, 0);
+  const contentHeight = groups.reduce((height, group) => height + 16 + group.players.length * 27, 0);
 
   return {
     x,
@@ -2371,12 +2371,12 @@ async function buildCompactMatchEndBackground(sharp, layout) {
   });
   const blurredExtension = await sharp(tile)
     .resize(layout.width, layout.height, { fit: "cover", position: "centre" })
-    .blur(28)
-    .modulate({ brightness: 0.34, saturation: 0.52 })
+    .blur(36)
+    .modulate({ brightness: 0.22, saturation: 0.48 })
     .png()
     .toBuffer();
   const edgeShade = Buffer.from(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.width + '" height="' + layout.height + '"><defs><linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#000000" stop-opacity=".94"/><stop offset="22%" stop-color="#000000" stop-opacity=".70"/><stop offset="44%" stop-color="#000000" stop-opacity=".12"/><stop offset="56%" stop-color="#000000" stop-opacity=".12"/><stop offset="78%" stop-color="#000000" stop-opacity=".70"/><stop offset="100%" stop-color="#000000" stop-opacity=".94"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#edge)"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.width + '" height="' + layout.height + '"><defs><radialGradient id="aura" cx="50%" cy="38%" r="72%"><stop offset="0%" stop-color="#000000" stop-opacity=".03"/><stop offset="52%" stop-color="#000000" stop-opacity=".13"/><stop offset="66%" stop-color="#8ba9c1" stop-opacity=".14"/><stop offset="80%" stop-color="#000000" stop-opacity=".68"/><stop offset="100%" stop-color="#000000" stop-opacity=".96"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#aura)"/></svg>',
     "utf8",
   );
   return sharp({
@@ -2389,7 +2389,7 @@ async function buildCompactMatchEndBackground(sharp, layout) {
   })
     .composite([
       { input: blurredExtension, left: 0, top: 0 },
-      { input: tile, left: 0, top: Math.floor((layout.height - tileHeight) / 2) },
+      { input: tile, left: 0, top: Math.min(120, Math.floor((layout.height - tileHeight) / 2)) },
       { input: edgeShade, left: 0, top: 0 },
     ])
     .png()
@@ -2448,10 +2448,10 @@ function renderCompactMatchEndSvg(layout) {
     let rowY = layout.contentTop;
     for (const group of column.groups) {
       svg.push(renderCompactSquadHeader(column, group, rowY));
-      rowY += 18;
+      rowY += 16;
       group.players.forEach((player, index) => {
         svg.push(renderCompactPlayerRow(column, player, index, rowY));
-        rowY += 28;
+        rowY += 27;
       });
     }
     if (!column.groups.length) {
@@ -2459,7 +2459,7 @@ function renderCompactMatchEndSvg(layout) {
     }
   }
 
-  svg.push('<path d="M800 48 V' + (layout.height - 28) + '" stroke="#d8e6f5" stroke-opacity=".16"/>');
+  svg.push('<path d="M800 44 V' + (layout.height - 28) + '" stroke="#d8e6f5" stroke-opacity=".16"/>');
   svg.push('<text x="800" y="' + (layout.height - 12) + '" text-anchor="middle" class="foot">BZSS PANEL · MATCH END SNAPSHOT · LOADING SCREEN / TACTICAL MAP / PLAYER DATA</text>');
   svg.push('</svg>');
   return svg.join("\n");
@@ -2467,31 +2467,31 @@ function renderCompactMatchEndSvg(layout) {
 
 function renderCompactCommanderBar(team) {
   const x = team.x;
-  const y = 52;
+  const y = 46;
   const width = team.width;
   const flagX = x + 16;
   return [
-    '<path d="M' + x + ' ' + y + ' H' + (x + width - 10) + ' L' + (x + width) + ' ' + (y + 10) + ' V' + (y + 30) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
-    '<rect x="' + x + '" y="' + y + '" width="5" height="30" fill="' + team.accent + '"/>',
+    '<path d="M' + x + ' ' + y + ' H' + (x + width - 9) + ' L' + (x + width) + ' ' + (y + 9) + ' V' + (y + 28) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
+    '<rect x="' + x + '" y="' + y + '" width="5" height="28" fill="' + team.accent + '"/>',
     team.flagDataUri
-      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 6) + '" width="38" height="18" preserveAspectRatio="xMidYMid meet"/>'
-      : '<rect x="' + flagX + '" y="' + (y + 6) + '" width="38" height="18" fill="' + team.accent + '" opacity=".24"/>',
-    '<text x="' + (x + 62) + '" y="' + (y + 20) + '" class="team-name">T' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 28)) + '</text>',
-    '<text x="' + (x + 494) + '" y="' + (y + 20) + '" class="commander">CO · ' + xmlEscape(truncateText(team.commanderName, 24)) + '</text>',
+      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 5) + '" width="36" height="17" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + flagX + '" y="' + (y + 5) + '" width="36" height="17" fill="' + team.accent + '" opacity=".24"/>',
+    '<text x="' + (x + 58) + '" y="' + (y + 19) + '" class="team-name">T' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 28)) + '</text>',
+    '<text x="' + (x + 494) + '" y="' + (y + 19) + '" class="commander">CO · ' + xmlEscape(truncateText(team.commanderName, 24)) + '</text>',
   ].join("");
 }
 
 function renderCompactStatHeader(team) {
   const x = team.x;
-  const y = 84;
+  const y = 75;
   const labels = [
     [14, "ROLE / PLAYER"], [188, "FT"], [330, "HP"], [370, "PING"],
     [414, "K"], [446, "W"], [478, "D"], [512, "TK"], [548, "VK"],
     [584, "REV"], [626, "HEAL"], [668, "C"], [704, "O"], [736, "T"],
   ];
-  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="18" fill="#020611" fill-opacity=".78"/>' +
+  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="17" fill="#020611" fill-opacity=".78"/>' +
     labels.map(([offset, label], index) =>
-      '<text x="' + (x + offset) + '" y="' + (y + 13) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
+      '<text x="' + (x + offset) + '" y="' + (y + 12) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
     ).join("");
 }
 
@@ -2499,9 +2499,9 @@ function renderCompactSquadHeader(team, group, y) {
   const command = group.isCommandSquad ? " · COMMAND" : "";
   const creator = firstText(group.creatorName, "-");
   return [
-    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="17" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
-    '<text x="' + (team.x + 10) + '" y="' + (y + 12) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
-    '<text x="' + (team.x + team.width - 10) + '" y="' + (y + 12) + '" text-anchor="end" class="team-meta mono">SCR ' + xmlEscape(truncateText(creator, 20)) + '</text>',
+    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="15" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
+    '<text x="' + (team.x + 10) + '" y="' + (y + 11) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
+    '<text x="' + (team.x + team.width - 10) + '" y="' + (y + 11) + '" text-anchor="end" class="team-meta mono">SCR ' + xmlEscape(truncateText(creator, 20)) + '</text>',
   ].join("");
 }
 
@@ -2518,14 +2518,14 @@ function renderCompactPlayerRow(team, player, index, y) {
     [704, compactStat(core.objectiveScore)], [736, compactStat(core.teamworkScore)],
   ];
   return [
-    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="27" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
-    '<rect x="' + x + '" y="' + y + '" width="3" height="27" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
+    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="26" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
+    '<rect x="' + x + '" y="' + y + '" width="3" height="26" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
     player.roleIconData
-      ? '<image href="' + player.roleIconData + '" x="' + (x + 8) + '" y="' + (y + 5) + '" width="17" height="17" preserveAspectRatio="xMidYMid meet"/>'
+      ? '<image href="' + player.roleIconData + '" x="' + (x + 8) + '" y="' + (y + 4) + '" width="17" height="17" preserveAspectRatio="xMidYMid meet"/>'
       : '<rect x="' + (x + 9) + '" y="' + (y + 6) + '" width="15" height="15" rx="3" fill="' + (player.roleTone || "#64748b") + '" fill-opacity=".85"/>',
-    '<text x="' + (x + 30) + '" y="' + (y + 18) + '" class="name">' + xmlEscape(truncateText(player.name, 21)) + '</text>',
-    '<text x="' + (x + 188) + '" y="' + (y + 18) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
-    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 18) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
+    '<text x="' + (x + 30) + '" y="' + (y + 17) + '" class="name">' + xmlEscape(truncateText(player.name, 21)) + '</text>',
+    '<text x="' + (x + 188) + '" y="' + (y + 17) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
+    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 17) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
   ].join("");
 }
 
