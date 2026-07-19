@@ -67,6 +67,20 @@ export interface BzssCoreVehiclesResponse {
   updatedAt: string;
   count: number;
   vehicles: BzssCoreVehicleInfo[];
+  diagnostics?: BzssCoreVehicleDiagnostics | null;
+}
+
+export interface BzssCoreVehicleDiagnostics {
+  rawLogEventCount: number;
+  lastRawLogEventAt: string;
+  vriCandidateLines: number;
+  vriFramesParsed: number;
+  vehicleRecordsParsed: number;
+  emptyVehicleFrames: number;
+  lastVriReceivedAt: string;
+  lastVriParsedAt: string;
+  lastVriReason: string;
+  lastVriPreview: string;
 }
 
 export interface BzssCoreRuntimePlayerInfo {
