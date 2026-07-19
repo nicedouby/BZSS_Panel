@@ -42,6 +42,8 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
   let processSample = null;
   let processSampleAt = 0;
   let processSamplePrevious = null;
+  let externalParserProcess = null;
+  let externalParserProcessAt = 0;
 
   const api = {
     getState() {
@@ -115,8 +117,21 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
       await refreshPaths(false);
       const now = Date.now();
       const parserManager = core.pythonLogParserManager;
-      const parserPid = Number(parserManager?.child?.pid ?? 0) || null;
-      const parserStatus = String(core.webStatus?.state?.pythonLogParser ?? "unknown");
+      const managedParserPid = Number(parserManager?.child?.pid ?? 0) || null;
+      if (!managedParserPid && (now - externalParserProcessAt >= PROCESS_REFRESH_INTERVAL_MS || !externalParserProcess)) {
+        externalParserProcess = await findExternalParserProcess(paths).catch((error) => {
+          moduleLogger.debug?.(`[LogPostDiagnostics] external parser discovery failed: ${error.message}`);
+          return null;
+        });
+        externalParserProcessAt = now;
+      }
+      const parserPid = managedParserPid || Number(externalParserProcess?.pid ?? 0) || null;
+      const configuredParserStatus = String(core.webStatus?.state?.pythonLogParser ?? "unknown");
+      const parserStatus = managedParserPid
+        ? configuredParserStatus
+        : parserPid
+          ? "running"
+          : configuredParserStatus;
 
       if (parserPid && (now - processSampleAt >= PROCESS_REFRESH_INTERVAL_MS || !processSample)) {
         processSample = await readProcessMetrics(parserPid, processSamplePrevious, now).catch((error) => ({
@@ -187,6 +202,7 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
         parser: {
           status: parserStatus,
           pid: parserPid,
+          processSource: managedParserPid ? "node-child" : parserPid ? "external-process" : "none",
           committedOffset: parserOffset,
           sourceSeq: finiteNumber(parserState?.seq, 0),
           mode: String(parserState?.mode ?? ""),
@@ -291,6 +307,7 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
     paths = {
       workingDirectory,
       parserConfigPath,
+      managerScriptPath: String(managerConfig.scriptPath ?? "./main.py").trim(),
       sourceLogPath,
       outputDirectory,
       statePath,
@@ -493,6 +510,88 @@ async function readProcessMetrics(pid, previousRaw, now) {
   }
 
   return { pid, available: false, error: `Process metrics unsupported on ${process.platform}` };
+}
+
+/**
+ * LogPost may intentionally run as a separately managed process. In that mode
+ * PythonLogParserManager is disabled, so its WebStatus value cannot be used as
+ * the health signal for the diagnostics page. Identify the external process by
+ * its script/config arguments instead.
+ */
+async function findExternalParserProcess(paths) {
+  if (!paths?.workingDirectory || !paths?.parserConfigPath) return null;
+
+  const expectedScript = path.resolve(paths.workingDirectory, String(paths.managerScriptPath ?? "./main.py"));
+  const expectedConfig = path.resolve(paths.parserConfigPath);
+  const scriptName = path.basename(expectedScript).toLowerCase();
+  const configName = path.basename(expectedConfig).toLowerCase();
+  const workingDirectory = normalizeProcessPath(paths.workingDirectory);
+  const scriptPath = normalizeProcessPath(expectedScript);
+  const configPath = normalizeProcessPath(expectedConfig);
+
+  const candidates = process.platform === "win32"
+    ? await listWindowsPythonProcesses()
+    : await listUnixPythonProcesses();
+
+  for (const candidate of candidates) {
+    const commandLine = normalizeProcessPath(candidate.commandLine);
+    if (!commandLine) continue;
+    const isPython = /(?:^|[\\/\s])python(?:\.exe)?(?:\s|$)/i.test(candidate.name || "")
+      || /(?:^|[\\/\s])python(?:\d+(?:\.\d+)*)?(?:\.exe)?(?:\s|$)/i.test(commandLine);
+    if (!isPython) continue;
+
+    const scriptMatches = commandLine.includes(scriptPath)
+      || commandLine.includes(`${path.sep}${scriptName}`)
+      || commandLine.includes(`/${scriptName}`)
+      || commandLine.includes(` ${scriptName}`);
+    const configMatches = commandLine.includes(configPath)
+      || commandLine.includes(`${path.sep}${configName}`)
+      || commandLine.includes(`/${configName}`)
+      || commandLine.includes(` ${configName}`);
+    const cwdMatches = !candidate.cwd || normalizeProcessPath(candidate.cwd) === workingDirectory;
+    if (scriptMatches && (configMatches || cwdMatches)) {
+      return { pid: Number(candidate.pid), commandLine: candidate.commandLine, source: "external-process" };
+    }
+  }
+  return null;
+}
+
+async function listWindowsPythonProcesses() {
+  const script = "Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'python' } | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress";
+  const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8",
+    timeout: 3000,
+    maxBuffer: 4 * 1024 * 1024,
+    windowsHide: true,
+  });
+  const parsed = JSON.parse(stdout.trim() || "[]");
+  return (Array.isArray(parsed) ? parsed : [parsed]).map((item) => ({
+    pid: Number(item.ProcessId),
+    name: String(item.Name ?? ""),
+    commandLine: String(item.CommandLine ?? ""),
+  })).filter((item) => item.pid > 0);
+}
+
+async function listUnixPythonProcesses() {
+  const entries = await fs.readdir("/proc", { withFileTypes: true });
+  const processes = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
+    const pid = Number(entry.name);
+    try {
+      const commandLine = (await fs.readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " ").trim();
+      const name = await fs.readFile(`/proc/${pid}/comm`, "utf8").catch(() => "");
+      const cwd = await fs.realpath(`/proc/${pid}/cwd`).catch(() => "");
+      processes.push({ pid, name: name.trim(), commandLine, cwd });
+    } catch {
+      // Processes can disappear between readdir() and the /proc reads.
+    }
+  }
+  return processes;
+}
+
+function normalizeProcessPath(value) {
+  return String(value ?? "").trim().replaceAll("\\", "/").replaceAll(/\/+/g, "/").toLowerCase();
 }
 
 function deriveProcessRates(raw, previous) {
