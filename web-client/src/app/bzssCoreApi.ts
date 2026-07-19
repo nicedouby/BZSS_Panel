@@ -48,6 +48,27 @@ export interface BzssCoreMainZoneInfo {
   raw?: string;
 }
 
+export interface BzssCoreVehicleInfo {
+  frameIndex: number;
+  driverPlayerId: number | null;
+  occupied: boolean;
+  vehicleType: string;
+  healthPercent: number | null;
+  position: BzssCoreTrackedVector | null;
+  speed: number | null;
+  teamId: number | null;
+  observedAt: string;
+  raw?: string;
+}
+
+export interface BzssCoreVehiclesResponse {
+  ok: boolean;
+  status: string;
+  updatedAt: string;
+  count: number;
+  vehicles: BzssCoreVehicleInfo[];
+}
+
 export interface BzssCoreRuntimePlayerInfo {
   playerId: number | null;
   playerIndex: number | null;
@@ -213,6 +234,7 @@ export interface BzssCorePlayerInfoResponse {
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
+  vehicles?: BzssCoreVehicleInfo[];
   explosions?: BzssCoreExplosionInfo[];
 }
 
@@ -232,6 +254,7 @@ export interface BzssCoreRawDataResponse {
   captureZones?: BzssCoreCaptureZoneInfo[];
   fobs?: BzssCoreFobInfo[];
   mainZones?: BzssCoreMainZoneInfo[];
+  vehicles?: BzssCoreVehicleInfo[];
   explosions?: BzssCoreExplosionInfo[];
   lastError: string;
 }
@@ -261,6 +284,10 @@ export async function fetchBzssCoreRawData() {
   return apiGet<BzssCoreRawDataResponse>("/api/bzss-core/player-info/raw");
 }
 
+export async function fetchBzssCoreVehicles() {
+  return apiGet<BzssCoreVehiclesResponse>("/api/bzss-core/vehicles");
+}
+
 export function streamBzssCorePlayerInfoList(
   onMessage: (data: BzssCorePlayerInfoResponse) => void,
   onError?: (error: any, source: EventSource) => void
@@ -285,4 +312,3 @@ export function streamBzssCorePlayerInfoList(
     eventSource.close();
   };
 }
-
