@@ -424,6 +424,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
           if (parsed.type === "vehicles") {
             draft.vehicles = parsed.vehicles;
             draft.vehicleFrameUpdatedAt = parsed.observedAt;
+            recordObservedVehicleTypes(draft, parsed.vehicles, parsed.observedAt);
             continue;
           }
 
@@ -607,6 +608,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
       vehicles: state.vehicles.map(clonePlainObject),
+      vehicleTypes: getObservedVehicleTypes(state),
       explosions: (state.explosions ?? []).map(clonePlainObject),
     };
   }
@@ -642,6 +644,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       playerCount: players.length,
       mainZoneCount: state.mainZones.length,
       vehicleCount: state.vehicles.length,
+      vehicleTypeCount: state.vehicleTypes.size,
       vehicleFrameUpdatedAt: state.vehicleFrameUpdatedAt,
       vehicleDebug: clonePlainObject(state.vehicleDebug),
       rawLineHash: state.rawLineHash,
@@ -670,6 +673,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
       vehicles: state.vehicles.map(clonePlainObject),
+      vehicleTypes: getObservedVehicleTypes(state),
       vehicleDebug: clonePlainObject(state.vehicleDebug),
       runtimePlayers: [...state.runtimePlayersByKey.values()].map(clonePlainObject),
       scoreboardPlayers: [...state.scoreboardPlayersByKey.values()].map(clonePlainObject),
@@ -1040,6 +1044,9 @@ function createInitialState() {
     fobs: [],
     mainZones: [],
     vehicles: [],
+    // Runtime-discovered type catalogue. It intentionally survives individual
+    // VRI frames so new SDK enum values are visible for later icon mapping.
+    vehicleTypes: new Map(),
     vehicleFrameUpdatedAt: "",
     vehicleDebug: createEmptyVehicleDebugState(),
     explosions: [],
@@ -1052,6 +1059,28 @@ function createInitialState() {
     priFrame: createEmptyPriFrameState(),
     diagnostics: [],
   };
+}
+
+function recordObservedVehicleTypes(draft, vehicles, observedAt) {
+  const catalogue = draft.vehicleTypes ??= new Map();
+  for (const vehicle of Array.isArray(vehicles) ? vehicles : []) {
+    const vehicleType = String(vehicle?.vehicleType ?? "").trim();
+    if (!vehicleType) continue;
+    const key = vehicleType.toLowerCase();
+    const known = catalogue.get(key);
+    catalogue.set(key, {
+      vehicleType,
+      firstSeenAt: known?.firstSeenAt ?? observedAt,
+      lastSeenAt: observedAt,
+      framesSeen: Number(known?.framesSeen ?? 0) + 1,
+    });
+  }
+}
+
+function getObservedVehicleTypes(state) {
+  return [...(state.vehicleTypes?.values?.() ?? [])]
+    .map(clonePlainObject)
+    .sort((left, right) => String(left.vehicleType).localeCompare(String(right.vehicleType)));
 }
 
 function createEmptyVehicleDebugState() {
@@ -2122,6 +2151,7 @@ export function parseBzssCoreVehicleLine(line) {
       vehicleType: String(type ?? "").trim(),
       healthPercent: health,
       position: parseVehicleRuntimePosition(raw),
+      yaw: parseVehicleRuntimeYaw(raw),
       speed: toFiniteNumber(speed),
       teamId: toFiniteNumber(team),
       observedAt,
@@ -2191,6 +2221,15 @@ function parseVehicleRuntimePosition(text) {
     return { x: toFiniteNumber(values[1]), y: toFiniteNumber(values[2]), z: toFiniteNumber(values[3]) };
   }
   return parseVectorBlock(positionText);
+}
+
+function parseVehicleRuntimeYaw(text) {
+  // Blueprint VRI writes yaw immediately after the fixed three-decimal Z value:
+  // `Z=-134.74960.261795,Speed...` or `Z=-134.696-25.861773,Speed...`.
+  const match = String(text ?? "").match(
+    /Z\s*[=:]\s*-?\d+\.\d{3}\s*(-?\d+(?:\.\d+)?)\s*,\s*(?:Speed|Velocity|Vel)\s*[:=]/i,
+  );
+  return toFiniteNumber(match?.[1]);
 }
 
 function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
