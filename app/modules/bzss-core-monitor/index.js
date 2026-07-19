@@ -66,6 +66,8 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   let droppedRawCaptureLines = 0;
   let lastRawCaptureWarningAt = 0;
   const rawCapturePath = path.resolve(process.cwd(), RAW_CAPTURE_RELATIVE_PATH);
+  let rawLogEventCount = 0;
+  let lastRawLogEventAt = "";
   let broadcastTimer = null;
   let broadcastPending = false;
 
@@ -293,6 +295,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       draft.mainZones = [];
       draft.vehicles = [];
       draft.vehicleFrameUpdatedAt = "";
+      draft.vehicleDebug = createEmptyVehicleDebugState();
       draft.explosions = [];
       draft.rawLineHash = "";
       draft.rawFields = [];
@@ -308,11 +311,16 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
   function ingestLogLine(input = {}) {
     const line = extractRawLogLine(input);
     if (!line) return { ok: false, ignored: true, reason: "empty" };
+    rawLogEventCount += 1;
+    lastRawLogEventAt = new Date().toISOString();
     const segments = splitConcatenatedRawLogSegments(line);
     const parsedSegments = segments
       .map((segment) => ({ segment, parsed: parseBzssCoreLogLine(segment) }))
       .filter(({ parsed }) => Boolean(parsed));
-    if (parsedSegments.length === 0) return { ok: true, ignored: true, reason: "not_bzss_core" };
+    if (parsedSegments.length === 0) {
+      recordVehicleDebugCandidate(state, line, [], lastRawLogEventAt);
+      return { ok: true, ignored: true, reason: "not_bzss_core" };
+    }
     appendRawCapture(line);
 
     try {
@@ -321,6 +329,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
         draft.markerSeen = true;
         draft.rawLineHash = hashText(line);
         draft.lastError = "";
+        recordVehicleDebugCandidate(draft, line, parsedSegments, lastRawLogEventAt);
 
         for (const { segment, parsed } of parsedSegments) {
           if (parsed.rawFields && parsed.rawFields.length > 0) {
@@ -634,6 +643,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       mainZoneCount: state.mainZones.length,
       vehicleCount: state.vehicles.length,
       vehicleFrameUpdatedAt: state.vehicleFrameUpdatedAt,
+      vehicleDebug: clonePlainObject(state.vehicleDebug),
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
@@ -660,6 +670,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       fobs: state.fobs.map(clonePlainObject),
       mainZones: state.mainZones.map(clonePlainObject),
       vehicles: state.vehicles.map(clonePlainObject),
+      vehicleDebug: clonePlainObject(state.vehicleDebug),
       runtimePlayers: [...state.runtimePlayersByKey.values()].map(clonePlainObject),
       scoreboardPlayers: [...state.scoreboardPlayersByKey.values()].map(clonePlainObject),
       explosions: (state.explosions ?? []).map(clonePlainObject),
@@ -683,6 +694,14 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
 
   function getVehicles() {
     return state.vehicles.map(clonePlainObject);
+  }
+
+  function getVehicleDiagnostics() {
+    return {
+      ...clonePlainObject(state.vehicleDebug),
+      rawLogEventCount,
+      lastRawLogEventAt,
+    };
   }
 
   /**
@@ -993,6 +1012,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       getRuntimePlayers,
       getScoreboardPlayers,
       getVehicles,
+      getVehicleDiagnostics,
       getPlayers,
       getTelemetryPlayers,
       getRawSnapshot,
@@ -1021,6 +1041,7 @@ function createInitialState() {
     mainZones: [],
     vehicles: [],
     vehicleFrameUpdatedAt: "",
+    vehicleDebug: createEmptyVehicleDebugState(),
     explosions: [],
     rawLineHash: "",
     rawFields: [],
@@ -1031,6 +1052,48 @@ function createInitialState() {
     priFrame: createEmptyPriFrameState(),
     diagnostics: [],
   };
+}
+
+function createEmptyVehicleDebugState() {
+  return {
+    vriCandidateLines: 0,
+    vriFramesParsed: 0,
+    vehicleRecordsParsed: 0,
+    emptyVehicleFrames: 0,
+    lastVriReceivedAt: "",
+    lastVriParsedAt: "",
+    lastVriReason: "尚未收到 VRI / VehicleInfo 原始日志。",
+    lastVriPreview: "",
+  };
+}
+
+function recordVehicleDebugCandidate(draft, rawLine, parsedSegments, observedAt = new Date().toISOString()) {
+  const line = String(rawLine ?? "");
+  if (!/(?:\bVRI\b|VehicleInfo\s*\{)/i.test(line)) return;
+
+  const debug = draft.vehicleDebug ??= createEmptyVehicleDebugState();
+  debug.vriCandidateLines += 1;
+  debug.lastVriReceivedAt = observedAt;
+  debug.lastVriPreview = line.replace(/\s+/g, " ").slice(0, 700);
+
+  const frames = (parsedSegments ?? [])
+    .map((item) => item?.parsed)
+    .filter((parsed) => parsed?.type === "vehicles");
+  if (frames.length === 0) {
+    debug.lastVriReason = "检测到 VRI / VehicleInfo 文本，但没有识别出完整的可解析帧。";
+    return;
+  }
+
+  const records = frames.reduce((count, frame) => count + (frame.vehicles?.length ?? 0), 0);
+  debug.vriFramesParsed += frames.length;
+  debug.vehicleRecordsParsed += records;
+  debug.lastVriParsedAt = observedAt;
+  if (records === 0) {
+    debug.emptyVehicleFrames += frames.length;
+    debug.lastVriReason = "已解析 VRI 帧，但该帧内没有识别到任何载具记录。";
+  } else {
+    debug.lastVriReason = `已解析 ${records} 条载具记录。`;
+  }
 }
 
 function createEmptyPriFrameState() {
@@ -1370,6 +1433,7 @@ function resetPlayerCaches(draft, { keepStatus = "ready" } = {}) {
   draft.mainZones = [];
   draft.vehicles = [];
   draft.vehicleFrameUpdatedAt = "";
+  draft.vehicleDebug = createEmptyVehicleDebugState();
   draft.explosions = [];
   draft.rawLineHash = "";
   draft.rawFields = [];
