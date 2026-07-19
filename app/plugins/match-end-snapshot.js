@@ -120,11 +120,11 @@ export function createPlugin({ core, modules, logger } = {}) {
     return JSON.parse(content);
   }
 
-  async function readSnapshotImage(id) {
+  async function readSnapshotImage(id, options = {}) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
     const imagePath = path.join(resolveSnapshotDir(), safeId + ".png");
-    if (!(await fileExists(imagePath))) {
+    if (options?.force || !(await fileExists(imagePath))) {
       const payload = await readSnapshot(safeId);
       const image = await generateMatchEndReportPng(payload);
       await writeBufferAtomic(imagePath, image);
