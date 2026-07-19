@@ -248,7 +248,7 @@ function normalizeVehicleType(vehicleType: unknown): string {
     .replace(/^bp_/i, "")
     .replace(/_c_\d+$/i, "")
     .replace(/_c$/i, "")
-    .replace(/[_\-]+/g, "_")
+    .replace(/[\s_\-]+/g, "_")
     .trim();
 }
 
