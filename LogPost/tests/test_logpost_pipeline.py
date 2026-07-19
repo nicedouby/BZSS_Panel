@@ -487,5 +487,26 @@ class LogPostPipelineTests(unittest.TestCase):
         raw_log_path = pathlib.Path(app.writer.output_dir) / today / "On_RawLogLine.jsonl"
         self.assertFalse(raw_log_path.exists())
 
+    def test_bzss_core_vehicle_frame_bypasses_raw_token_filter(self) -> None:
+        app = self.make_app(raw_log_output={
+            "enabled": True,
+            "source": "Squad.log",
+            "contains": ["CPZ:"],
+            "max_per_second": 20,
+        })
+        line = "PIE: Warning: VRI{{ID:-1,VT:Tank,HP:(3000.0/3000.0),,PosX=625.555 Y=1393.131 Z=12.490-146.583527,Speed:0.0,TID:2,}}"
+
+        app.process_line({
+            "line": line,
+            "offset": 0,
+            "next_offset": len(line) + 1,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_RawLogLine"])
+        self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
+        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+
 if __name__ == "__main__":
     unittest.main()
