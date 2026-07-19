@@ -263,7 +263,7 @@ const selectedSnapshot = computed(() =>
 
 const reportImageUrl = computed(() =>
   selectedId.value
-    ? "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value)
+    ? "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value) + "&refresh=1&layout=compact-v2"
     : "",
 );
 
