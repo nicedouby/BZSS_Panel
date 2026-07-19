@@ -3495,7 +3495,9 @@ export class WebServer {
       if (!pluginApi?.readSnapshotImage) return this.json(res, 404, { error: "PluginNotLoaded" });
 
       try {
-        const artifact = await pluginApi.readSnapshotImage(id);
+        const artifact = await pluginApi.readSnapshotImage(id, {
+          force: url.searchParams.get("refresh") === "1",
+        });
         const headers = {
           "Content-Type": artifact.contentType,
           "Cache-Control": "private, max-age=300",
