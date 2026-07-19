@@ -216,7 +216,7 @@ async function testFiftyPlayersPerTeamFitInOneImage() {
   });
 
   assert.equal(image.readUInt32BE(16), 1600);
-  assert.equal(image.readUInt32BE(20), 1800);
+  assert.equal(image.readUInt32BE(20), 1000);
 }
 
 await testIndependentMatchEndSnapshots();

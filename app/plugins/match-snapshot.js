@@ -2252,12 +2252,12 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
     await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options, roleIconCache),
   ];
   const maxContentHeight = Math.max(28, ...columns.map((column) => column.contentHeight));
-  const contentTop = 92;
-  const requiredHeight = contentTop + maxContentHeight + 74;
+  const contentTop = 74;
+  const requiredHeight = contentTop + maxContentHeight + 45;
   // Keep one unscaled Loading Screen in the centre. Extra vertical space is a
   // deliberately dark, blurred extension so the report can grow without
   // stretching, tiling, or cutting the map artwork.
-  const height = Math.max(1800, requiredHeight);
+  const height = Math.max(1000, requiredHeight);
   return {
     width: 1600,
     height,
@@ -2318,7 +2318,7 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}, r
     || compactSquadSortValue(left.squadID) - compactSquadSortValue(right.squadID)
     || String(left.label).localeCompare(String(right.label), "zh-CN", { numeric: true }));
   const players = groups.flatMap((group) => group.players);
-  const contentHeight = groups.reduce((height, group) => height + 16 + group.players.length * 27, 0);
+  const contentHeight = groups.reduce((height, group) => height + 12 + group.players.length * 13, 0);
 
   return {
     x,
@@ -2433,7 +2433,7 @@ function renderCompactMatchEndSvg(layout) {
   svg.push('<linearGradient id="topBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#071426" stop-opacity=".88"/><stop offset="50%" stop-color="#10243c" stop-opacity=".76"/><stop offset="100%" stop-color="#07101f" stop-opacity=".88"/></linearGradient>');
   svg.push('<filter id="softMap"><feGaussianBlur stdDeviation="1.6"/></filter>');
   svg.push('<style><![CDATA[');
-  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:20px;font-weight:900}.sub{font-size:9px;fill:#b6c6d7}.chip{font-size:9px;font-weight:900}.team-name{font-size:14px;font-weight:900}.team-meta{font-size:9px;fill:#c5d2e0}.commander{font-size:11px;font-weight:900}.head{font-size:8px;font-weight:900;fill:#a5b8ca}.squad{font-size:10px;font-weight:900}.name{font-size:10px;font-weight:900}.row-meta{font-size:8px;fill:#b5c5d5}.stat{font-size:9px;font-weight:800;fill:#edf5ff}.foot{font-size:9px;fill:#8396aa}]]></style>");
+  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:20px;font-weight:900}.sub{font-size:9px;fill:#b6c6d7}.chip{font-size:9px;font-weight:900}.team-name{font-size:11px;font-weight:900}.team-meta{font-size:7.5px;fill:#c5d2e0}.commander{font-size:9px;font-weight:900}.head{font-size:7.5px;font-weight:900;fill:#a5b8ca}.squad{font-size:8px;font-weight:900}.name{font-size:8px;font-weight:900}.row-meta{font-size:7.5px;fill:#b5c5d5}.stat{font-size:8px;font-weight:800;fill:#edf5ff}.foot{font-size:9px;fill:#8396aa}]]></style>");
   svg.push('</defs>');
   svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#pageShade)"/>');
 
@@ -2448,14 +2448,14 @@ function renderCompactMatchEndSvg(layout) {
     let rowY = layout.contentTop;
     for (const group of column.groups) {
       svg.push(renderCompactSquadHeader(column, group, rowY));
-      rowY += 16;
+      rowY += 12;
       group.players.forEach((player, index) => {
         svg.push(renderCompactPlayerRow(column, player, index, rowY));
-        rowY += 27;
+        rowY += 13;
       });
     }
     if (!column.groups.length) {
-      svg.push('<text x="' + (column.x + 18) + '" y="' + (layout.contentTop + 16) + '" class="row-meta">该阵营没有保存到玩家战绩</text>');
+      svg.push('<text x="' + (column.x + 18) + '" y="' + (layout.contentTop + 12) + '" class="row-meta">该阵营没有保存到玩家战绩</text>');
     }
   }
 
@@ -2467,31 +2467,31 @@ function renderCompactMatchEndSvg(layout) {
 
 function renderCompactCommanderBar(team) {
   const x = team.x;
-  const y = 46;
+  const y = 38;
   const width = team.width;
-  const flagX = x + 16;
+  const flagX = x + 12;
   return [
-    '<path d="M' + x + ' ' + y + ' H' + (x + width - 9) + ' L' + (x + width) + ' ' + (y + 9) + ' V' + (y + 28) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
-    '<rect x="' + x + '" y="' + y + '" width="5" height="28" fill="' + team.accent + '"/>',
+    '<path d="M' + x + ' ' + y + ' H' + (x + width - 7) + ' L' + (x + width) + ' ' + (y + 7) + ' V' + (y + 22) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
+    '<rect x="' + x + '" y="' + y + '" width="4" height="22" fill="' + team.accent + '"/>',
     team.flagDataUri
-      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 5) + '" width="36" height="17" preserveAspectRatio="xMidYMid meet"/>'
-      : '<rect x="' + flagX + '" y="' + (y + 5) + '" width="36" height="17" fill="' + team.accent + '" opacity=".24"/>',
-    '<text x="' + (x + 58) + '" y="' + (y + 19) + '" class="team-name">T' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 28)) + '</text>',
-    '<text x="' + (x + 494) + '" y="' + (y + 19) + '" class="commander">CO · ' + xmlEscape(truncateText(team.commanderName, 24)) + '</text>',
+      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 4) + '" width="24" height="12" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + flagX + '" y="' + (y + 4) + '" width="24" height="12" fill="' + team.accent + '" opacity=".24"/>',
+    '<text x="' + (x + 44) + '" y="' + (y + 15) + '" class="team-name">T' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 28)) + '</text>',
+    '<text x="' + (x + 494) + '" y="' + (y + 15) + '" class="commander">CO · ' + xmlEscape(truncateText(team.commanderName, 24)) + '</text>',
   ].join("");
 }
 
 function renderCompactStatHeader(team) {
   const x = team.x;
-  const y = 75;
+  const y = 61;
   const labels = [
-    [14, "ROLE / PLAYER"], [188, "FT"], [330, "HP"], [370, "PING"],
+    [12, "ROLE / PLAYER"], [188, "FT"], [330, "HP"], [370, "PING"],
     [414, "K"], [446, "W"], [478, "D"], [512, "TK"], [548, "VK"],
     [584, "REV"], [626, "HEAL"], [668, "C"], [704, "O"], [736, "T"],
   ];
-  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="17" fill="#020611" fill-opacity=".78"/>' +
+  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="12" fill="#020611" fill-opacity=".78"/>' +
     labels.map(([offset, label], index) =>
-      '<text x="' + (x + offset) + '" y="' + (y + 12) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
+      '<text x="' + (x + offset) + '" y="' + (y + 9) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
     ).join("");
 }
 
@@ -2499,9 +2499,9 @@ function renderCompactSquadHeader(team, group, y) {
   const command = group.isCommandSquad ? " · COMMAND" : "";
   const creator = firstText(group.creatorName, "-");
   return [
-    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="15" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
-    '<text x="' + (team.x + 10) + '" y="' + (y + 11) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
-    '<text x="' + (team.x + team.width - 10) + '" y="' + (y + 11) + '" text-anchor="end" class="team-meta mono">SCR ' + xmlEscape(truncateText(creator, 20)) + '</text>',
+    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="11" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
+    '<text x="' + (team.x + 10) + '" y="' + (y + 8.5) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
+    '<text x="' + (team.x + team.width - 10) + '" y="' + (y + 8.5) + '" text-anchor="end" class="team-meta mono">SCR ' + xmlEscape(truncateText(creator, 20)) + '</text>',
   ].join("");
 }
 
@@ -2518,14 +2518,14 @@ function renderCompactPlayerRow(team, player, index, y) {
     [704, compactStat(core.objectiveScore)], [736, compactStat(core.teamworkScore)],
   ];
   return [
-    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="26" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
-    '<rect x="' + x + '" y="' + y + '" width="3" height="26" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
+    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="12" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
+    '<rect x="' + x + '" y="' + y + '" width="2.5" height="12" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
     player.roleIconData
-      ? '<image href="' + player.roleIconData + '" x="' + (x + 8) + '" y="' + (y + 4) + '" width="17" height="17" preserveAspectRatio="xMidYMid meet"/>'
-      : '<rect x="' + (x + 9) + '" y="' + (y + 6) + '" width="15" height="15" rx="3" fill="' + (player.roleTone || "#64748b") + '" fill-opacity=".85"/>',
-    '<text x="' + (x + 30) + '" y="' + (y + 17) + '" class="name">' + xmlEscape(truncateText(player.name, 21)) + '</text>',
-    '<text x="' + (x + 188) + '" y="' + (y + 17) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
-    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 17) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
+      ? '<image href="' + player.roleIconData + '" x="' + (x + 8) + '" y="' + (y + 1) + '" width="10" height="10" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + (x + 8) + '" y="' + (y + 1.5) + '" width="8" height="8" rx="1.5" fill="' + (player.roleTone || "#64748b") + '" fill-opacity=".85"/>',
+    '<text x="' + (x + 22) + '" y="' + (y + 9) + '" class="name">' + xmlEscape(truncateText(player.name, 21)) + '</text>',
+    '<text x="' + (x + 188) + '" y="' + (y + 9) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
+    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 9) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
   ].join("");
 }
 
