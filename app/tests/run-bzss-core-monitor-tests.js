@@ -7,6 +7,7 @@ import {
   createBzssCoreMonitorModule,
   parseBzssCorePlayerBlocks,
   parseBzssCoreLogLine,
+  parseBzssCoreVehicleLine,
 } from "../modules/bzss-core-monitor/index.js";
 
 function withMockedDate(iso, fn) {
@@ -81,6 +82,16 @@ function testParsePlayerBlocks() {
 }
 
 function testParseLogLine() {
+  const vehicleFrame = parseBzssCoreVehicleLine("LogSquad: Warning: VRI{{ID:42,VT:Tank,HP:87.5,PosX=10.5 Y=-20 Z=3,Speed:1.25,TID:1}{ID:-1,VT:APC,HP:100,PosX=1,Y=2,Z=3,Speed:0,TID:2}}");
+  assert.equal(vehicleFrame.type, "vehicles");
+  assert.equal(vehicleFrame.vehicles.length, 2);
+  assert.equal(vehicleFrame.vehicles[0].driverPlayerId, 42);
+  assert.equal(vehicleFrame.vehicles[0].healthPercent, 87.5);
+  assert.deepEqual(vehicleFrame.vehicles[0].position, { x: 10.5, y: -20, z: 3 });
+  assert.equal(vehicleFrame.vehicles[1].driverPlayerId, null);
+  assert.equal(vehicleFrame.vehicles[1].occupied, false);
+  assert.deepEqual(vehicleFrame.vehicles[1].position, { x: 1, y: 2, z: 3 });
+
   const runtime = parseBzssCoreLogLine("PIE: Error: PlayerBaseInfo{}");
   assert.equal(runtime.type, "playerRuntime");
   assert.equal(runtime.runtimePlayers.length, 0);
@@ -319,6 +330,11 @@ function testMonitorState() {
   assert.equal(module.api.ingestLogLine("PIE: Error: PlayerBaseInfo{}").ok, true);
   assert.equal(module.api.getRuntimePlayers().length, 0);
   assert.equal(typeof module.api.getTelemetryPlayers, "function");
+  assert.equal(module.api.ingestLogLine("PIE: VRI{{ID:7,VT:Tank,HP:75,PosX=1 Y=2 Z=3,Speed:0.5,TID:1}}").ok, true);
+  assert.equal(module.api.getVehicles().length, 1);
+  assert.equal(module.api.getState().vehicleCount, 1);
+  assert.equal(module.api.ingestLogLine("PIE: VRI{}").ok, true);
+  assert.equal(module.api.getVehicles().length, 0);
 
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{7,100,200,300,45}").ok, true);
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{21,400,500,600,90}").ok, true);
