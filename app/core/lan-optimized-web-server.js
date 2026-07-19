@@ -93,7 +93,10 @@ export class LanOptimizedWebServer extends WebServer {
 
     let stat;
     try {
-      stat = await (this.core.fileIO?.stat?.(abs) ?? fs.stat(abs));
+      // A client-side Vue route (for example `/bzss-core-vehicles`) is not a
+      // file. Using FileIO here made every normal SPA fallback look like a
+      // FileIO failure before `serveIndex()` could handle it.
+      stat = await fs.stat(abs);
     } catch (error) {
       if (error?.code === "ENOENT" && !path.extname(requestPath)) return this.serveIndex(res);
       res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
