@@ -1865,6 +1865,13 @@ export class WebServer {
       return this.json(res, 200, this.getBzssCorePlayerInfoRaw());
     }
 
+    if (url.pathname === "/api/bzss-core/vehicles" && req.method === "GET") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, { error: "Forbidden", message: "bzss_core.use permission is required." });
+      }
+      return this.json(res, 200, this.getBzssCoreVehicles());
+    }
+
     if (url.pathname === "/api/server-info/snapshot-state" && req.method === "GET") {
       return this.json(res, 200, {
         ok: true,
@@ -5051,6 +5058,7 @@ export class WebServer {
       captureZones: includeAll ? (snapshot?.captureZones ?? []) : undefined,
       fobs: includeAll ? (snapshot?.fobs ?? []) : undefined,
       mainZones: includeAll ? (snapshot?.mainZones ?? []) : undefined,
+      vehicles: includeAll ? (snapshot?.vehicles ?? []) : undefined,
       explosions: includeAll ? (snapshot?.explosions ?? []) : undefined,
     };
   }
@@ -5078,6 +5086,18 @@ export class WebServer {
       rawLineHash: "",
       rawFields: [],
       lastError: "",
+    };
+  }
+
+  getBzssCoreVehicles() {
+    const monitor = this.modules.bzssCoreMonitor;
+    const state = monitor?.getState?.() ?? {};
+    return {
+      ok: true,
+      status: state.status ?? "unavailable",
+      updatedAt: state.vehicleFrameUpdatedAt ?? "",
+      count: state.vehicleCount ?? 0,
+      vehicles: monitor?.getVehicles?.() ?? monitor?.getRawSnapshot?.()?.vehicles ?? [],
     };
   }
 
