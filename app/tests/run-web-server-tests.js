@@ -3593,6 +3593,15 @@ async function testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots() {
                 calls.push("read:" + id);
                 return { snapshotType: "match-end-data", players: [{ name: "Alpha" }] };
               },
+              async readSnapshotImage(id) {
+                calls.push("image:" + id);
+                return {
+                  id,
+                  fileName: id + ".png",
+                  contentType: "image/png",
+                  content: Buffer.from([137, 80, 78, 71]),
+                };
+              },
               async deleteSnapshot(id) {
                 calls.push("delete:" + id);
                 return { id, removed: true };
@@ -3624,6 +3633,17 @@ async function testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots() {
   assert.equal(viewRecorder.state.status, 200);
   assert.equal(JSON.parse(viewRecorder.state.body).snapshotType, "match-end-data");
   assert.ok(calls.includes("read:End-Test"));
+
+  const imageRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-end-snapshot/image?id=End-Test",
+    headers: { host: "localhost" },
+    socket: {},
+  }, imageRecorder.res);
+  assert.equal(imageRecorder.state.status, 200);
+  assert.equal(imageRecorder.state.headers["Content-Type"], "image/png");
+  assert.ok(calls.includes("image:End-Test"));
 
   const captureRecorder = createRecorder();
   const captureReq = Readable.from([JSON.stringify({ overview: { serverId: "server-1" } })]);
