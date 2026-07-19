@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createPlugin } from "../plugins/match-end-snapshot.js";
+import { generateMatchEndReportPng } from "../plugins/match-snapshot.js";
 
 function createHarness() {
   const players = [
@@ -14,6 +15,7 @@ function createHarness() {
       eosID: "eos-alpha",
       teamID: 1,
       squadID: 2,
+      fireTeam: "B",
       role: "Medic",
       isLeader: false,
     },
@@ -132,6 +134,7 @@ async function testIndependentMatchEndSnapshots() {
     assert.equal(snapshot.match.map, "Tallil_Outskirts");
     assert.equal(snapshot.match.nextMap, "Fallujah");
     assert.equal(snapshot.players[0].squadInfo.name, "INF 2");
+    assert.equal(snapshot.players[0].fireTeam, "B");
     assert.equal(snapshot.players[0].role, "Medic");
     assert.equal(snapshot.players[0].health, 64.5);
     assert.deepEqual(snapshot.players[0].bzssCore, {
@@ -172,5 +175,50 @@ async function testIndependentMatchEndSnapshots() {
   }
 }
 
+async function testFiftyPlayersPerTeamFitInOneImage() {
+  const makeTeam = (teamID) => Array.from({ length: 50 }, (_, index) => ({
+    playerID: teamID * 100 + index,
+    name: `T${teamID}-P${String(index).padStart(2, "0")}`,
+    teamID,
+    squadID: Math.floor(index / 5) + 1,
+    fireTeam: ["C", "B", "A"][index % 3],
+    isCommander: index === 15,
+    isLeader: index % 5 === 0,
+    role: index % 5 === 0 ? "SquadLeader" : "Rifleman",
+    health: 100,
+    bzssCore: {
+      kills: index,
+      downs: index,
+      deaths: 1,
+      teamKills: 0,
+      vehicleKills: 0,
+      revives: 0,
+      healPoints: 0,
+      combatScore: index * 10,
+      objectiveScore: index,
+      teamworkScore: index,
+      ping: 40,
+    },
+  }));
+  const players = [...makeTeam(1), ...makeTeam(2)];
+  const squads = [1, 2].flatMap((teamID) => Array.from({ length: 10 }, (_, index) => ({
+    teamID,
+    squadID: index + 1,
+    squadName: index === 3 ? "Command Squad" : `Squad ${index + 1}`,
+    teamName: teamID === 1 ? "USA" : "RGF",
+  })));
+  const image = await generateMatchEndReportPng({
+    capturedAt: "2026-07-18T00:00:00.000Z",
+    server: { playerCount: 100, queueCount: 0, serverName: "50v50 Test" },
+    match: { map: "Tallil", layer: "Tallil_RAAS_v1", mode: "RAAS", nextMap: "Fallujah" },
+    players,
+    squads,
+  });
+
+  assert.equal(image.readUInt32BE(16), 1600);
+  assert.equal(image.readUInt32BE(20), 2176);
+}
+
 await testIndependentMatchEndSnapshots();
+await testFiftyPlayersPerTeamFitInOneImage();
 console.log("match end snapshot tests passed");
