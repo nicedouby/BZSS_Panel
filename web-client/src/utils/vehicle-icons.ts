@@ -35,7 +35,7 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- Attack Helicopters ---
   {
-    patterns: ["attackhelo", "attackhelicopter", "attack_helo", "ah64", "ah-64", "mi24", "mi-24", "z10"],
+    patterns: ["attackhelo", "attackhelicopter", "attack_helo", "helicopter_attack", "ah64", "ah-64", "mi24", "mi-24", "z10"],
     icon: `${ICO_BASE}/map_attackhelo.PNG`,
     label: "攻击直升机",
   },
@@ -54,7 +54,7 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- Transport Helicopters ---
   {
-    patterns: ["transporthelo", "transport_helo", "transporthelicopter", "uh60", "mi8", "mi17", "blackhawk", "ch146"],
+    patterns: ["transporthelo", "transport_helo", "transporthelicopter", "helicopter_transport", "uh60", "mi8", "mi17", "blackhawk", "ch146"],
     icon: `${ICO_BASE}/map_transporthelo.PNG`,
     label: "运输直升机",
   },
@@ -166,7 +166,7 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
 
   // --- Jeep Anti-Tank ---
   {
-    patterns: ["jeep_antitank", "jeepat", "at_jeep", "antitank_jeep", "technical_atgm", "technical_at", "technical_bgm", "kornet", "jeepantitank"],
+    patterns: ["jeep_antitank", "jeep_anti_tank", "jeepat", "at_jeep", "antitank_jeep", "technical_atgm", "technical_at", "technical_bgm", "kornet", "jeepantitank"],
     icon: `${ICO_BASE}/map_jeep_antitank.PNG`,
     label: "反坦克吉普",
   },
