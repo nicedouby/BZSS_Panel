@@ -26,6 +26,8 @@ function createServer() {
             runtimePlayerCount: 1,
             scoreboardPlayerCount: 1,
             mainZoneCount: 1,
+            vehicleCount: 1,
+            vehicleFrameUpdatedAt: "2026-06-19T00:00:01.000Z",
             rawLineHash: "abc123",
             rawFields: ["PlayerBaseInfo", "PlayerScoreboard"],
             lastError: "",
@@ -48,6 +50,9 @@ function createServer() {
             playerScoreboard: { stats: { combatScore: 1 }, numericValues: [] },
           }];
         },
+        getVehicles() {
+          return [{ frameIndex: 0, driverPlayerId: 0, vehicleType: "Tank", teamId: 1 }];
+        },
         getRawSnapshot() {
           return {
             status: "ready",
@@ -66,6 +71,7 @@ function createServer() {
             captureZones: [{ name: "CP1", position: { x: 100, y: 200, z: 0 } }],
             fobs: [],
             mainZones: [],
+            vehicles: [{ frameIndex: 0, driverPlayerId: 0, vehicleType: "Tank", teamId: 1 }],
           };
         },
       },
@@ -89,6 +95,7 @@ function main() {
   assert.equal(Array.isArray(all.captureZones), true);
   assert.equal(all.captureZones.length, 1);
   assert.equal(all.captureZones[0].name, "CP1");
+  assert.equal(all.vehicles.length, 1);
   assert.equal(all.status, "ready");
   assert.equal(all.state.runtimePlayerCount, 1);
   assert.equal(all.state.scoreboardPlayerCount, 1);
@@ -99,6 +106,11 @@ function main() {
   assert.equal(raw.players.length, 1);
   assert.equal(raw.status, "ready");
   assert.equal(raw.rawLineHash, "abc123");
+
+  const vehicles = server.getBzssCoreVehicles();
+  assert.equal(vehicles.status, "ready");
+  assert.equal(vehicles.count, 1);
+  assert.equal(vehicles.vehicles[0].vehicleType, "Tank");
 
   console.log("run-bzss-core-monitor-route-tests: ok");
 }
