@@ -2166,6 +2166,20 @@ function parseVehicleHealth(value) {
 
 function parseVehicleRuntimePosition(text) {
   const source = String(text ?? "");
+  // The Blueprint VRI output writes the yaw directly after Z, without a
+  // separator: `Z=-134.74960.261795,Speed...`.  Z is emitted with three
+  // decimal places, so read that fixed-width portion before the trailing yaw.
+  // This also handles a negative yaw (`Z=-134.696-25.861773`).
+  const packedBlueprintPosition = source.match(
+    /(?:Pos(?:ition)?\s*)?X\s*[=:]\s*(-?\d+(?:\.\d+)?)[,\s]+Y\s*[=:]\s*(-?\d+(?:\.\d+)?)[,\s]+Z\s*[=:]\s*(-?\d+\.\d{3})(?:-?\d+(?:\.\d+)?)?(?=\s*,\s*(?:Speed|Velocity|Vel)\s*[:=])/i,
+  );
+  if (packedBlueprintPosition) {
+    return {
+      x: toFiniteNumber(packedBlueprintPosition[1]),
+      y: toFiniteNumber(packedBlueprintPosition[2]),
+      z: toFiniteNumber(packedBlueprintPosition[3]),
+    };
+  }
   const named = source.match(/(?:^|[,;{])\s*(?:Pos|Position|Location)\s*[:=]\s*(.*?)(?=[,;]\s*(?:Speed|Velocity|Vel|TID|TeamID|Team|ID|DriverID|DriverPlayerID|VT|VehicleType|Type|HP|Health)\s*[:=]|$)/i);
   const positionText = String(named?.[1] ?? source).trim();
   const vectorMatch = positionText.match(/(?:Pos(?:ition)?\s*)?X\s*[=:]\s*(-?[0-9.]+)[,\s]+Y\s*[=:]\s*(-?[0-9.]+)[,\s]+Z\s*[=:]\s*(-?[0-9.]+)/i);
