@@ -117,10 +117,12 @@ async function testIndependentMatchEndSnapshots() {
     assert.equal(item.nextMap, "Fallujah");
     assert.equal(item.playerCount, 1);
     assert.equal(item.queueCount, 5);
+    assert.equal(item.imageAvailable, true);
 
     const list = await plugin.api.listSnapshots();
     assert.equal(list.length, 1);
     assert.equal(list[0].id, item.id);
+    assert.equal(list[0].imageAvailable, true);
 
     const snapshot = await plugin.api.readSnapshot(item.id);
     assert.equal(snapshot.snapshotType, "match-end-data");
@@ -155,6 +157,11 @@ async function testIndependentMatchEndSnapshots() {
     const endSnapshotDir = path.join(tempDir, "data", "match-end-snapshots");
     assert.equal(await fs.stat(endSnapshotDir).then((stat) => stat.isDirectory()), true);
     await assert.rejects(fs.stat(imageSnapshotDir), { code: "ENOENT" });
+
+    const report = await plugin.api.readSnapshotImage(item.id);
+    assert.equal(report.contentType, "image/png");
+    assert.equal(report.fileName, item.id + ".png");
+    assert.deepEqual([...report.content.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 
     const deleted = await plugin.api.deleteSnapshot(item.id);
     assert.equal(deleted.removed, true);
