@@ -106,6 +106,11 @@ function testParseLogLine() {
   assert.equal(namedVehicleFrame.vehicles[0].vehicleType, "Tank");
   assert.equal(namedVehicleFrame.vehicles[0].healthPercent, 55);
 
+  const blueprintVehicleFrame = parseBzssCoreVehicleLine("PIE: Warning: VRI{{ID:-1,VT:Tank,HP:(3000.0/3000.0),,PosX=625.555 Y=1393.131 Z=12.490-146.583527,Speed:0.0,TID:2,}}");
+  assert.equal(blueprintVehicleFrame.vehicles.length, 1);
+  assert.equal(blueprintVehicleFrame.vehicles[0].healthPercent, 100);
+  assert.deepEqual(blueprintVehicleFrame.vehicles[0].position, { x: 625.555, y: 1393.131, z: 12.49 });
+
   const runtime = parseBzssCoreLogLine("PIE: Error: PlayerBaseInfo{}");
   assert.equal(runtime.type, "playerRuntime");
   assert.equal(runtime.runtimePlayers.length, 0);
