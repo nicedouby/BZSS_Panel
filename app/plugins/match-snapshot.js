@@ -2260,9 +2260,9 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
   return {
     width: 1600,
     height: 900,
-    framePadding: 100,
-    outputWidth: 1800,
-    outputHeight: 1100,
+    framePadding: 0,
+    outputWidth: 1600,
+    outputHeight: 900,
     template,
     minimapAssetPath: minimap?.assetPath ?? "",
     capturedAt: snapshot.capturedAt,
