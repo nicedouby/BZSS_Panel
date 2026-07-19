@@ -5098,6 +5098,7 @@ export class WebServer {
       updatedAt: state.vehicleFrameUpdatedAt ?? "",
       count: state.vehicleCount ?? 0,
       vehicles: monitor?.getVehicles?.() ?? monitor?.getRawSnapshot?.()?.vehicles ?? [],
+      diagnostics: monitor?.getVehicleDiagnostics?.() ?? state.vehicleDebug ?? null,
     };
   }
 
