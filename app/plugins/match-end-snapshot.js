@@ -1,10 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { generateMatchEndReportPng } from "./match-snapshot.js";
+
+import { generateMatchEndSnapshotBundle } from "./match-end-snapshot-pages.js";
 
 const PLUGIN_ID = "match-end-snapshot";
 const SNAPSHOT_DIR = path.join("data", "match-end-snapshots");
-const AUTO_DEDUPE_MS = 15_000;
+const AUTO_DEDUPE_MS = 30_000;
+const AUTO_SETTLE_MS = 1_800;
 
 export function createPlugin({ core, modules, logger } = {}) {
   const pluginLogger = logger ?? core?.logger ?? console;
@@ -47,17 +49,57 @@ export function createPlugin({ core, modules, logger } = {}) {
     });
     const id = buildSnapshotId(payload);
     await ensureSnapshotDir();
-    await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
+
+    let bundle = null;
     let imageAvailable = false;
     try {
-      const image = await generateMatchEndReportPng(payload);
-      await writeBufferAtomic(path.join(resolveSnapshotDir(), id + ".png"), image);
-      imageAvailable = true;
+      bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: id });
+      await persistBundle(id, bundle);
+      imageAvailable = bundle.pages.length > 0;
+      payload.artifacts = {
+        format: "paged-scoreboard",
+        pageCount: bundle.pages.length,
+        primaryImage: id + ".png",
+        combinedImage: id + "-combined.png",
+        manifest: id + "-manifest.json",
+        pages: bundle.manifest.pages,
+      };
     } catch (error) {
-      pluginLogger.error?.("[MatchEndSnapshot] report image failed for " + id + ": " + (error?.stack || error));
+      pluginLogger.error?.("[MatchEndSnapshot] paged report failed for " + id + ": " + (error?.stack || error));
+      payload.artifacts = {
+        format: "paged-scoreboard",
+        pageCount: 0,
+        primaryImage: "",
+        combinedImage: "",
+        manifest: "",
+        pages: [],
+        error: String(error?.message ?? error),
+      };
     }
-    pluginLogger.info?.("[MatchEndSnapshot] saved " + id + (imageAvailable ? " with report image." : " without report image."));
-    return { ...describePayload(id, payload), imageAvailable };
+
+    await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
+
+    const item = {
+      ...describePayload(id, payload),
+      imageAvailable,
+      pageCount: bundle?.pages?.length ?? 0,
+      pages: bundle?.manifest?.pages ?? [],
+    };
+    pluginLogger.info?.(
+      "[MatchEndSnapshot] saved " + id +
+      (imageAvailable ? " with " + item.pageCount + " pages." : " without report image."),
+    );
+
+    core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
+      snapshotId: id,
+      roundKey: buildRoundKey(payload),
+      pageCount: item.pageCount,
+      pages: item.pages,
+      primaryImage: payload?.artifacts?.primaryImage ?? "",
+      combinedImage: payload?.artifacts?.combinedImage ?? "",
+    });
+
+    return item;
   }
 
   function captureAutomatic(triggerEvent = {}) {
@@ -68,15 +110,17 @@ export function createPlugin({ core, modules, logger } = {}) {
       return Promise.resolve(null);
     }
 
-    const overview = getCurrentOverview();
-    automaticCaptureInFlight = captureSnapshot(triggerEvent, { overview })
-      .then((item) => {
-        if (item) lastAutomaticCaptureAt = Date.now();
-        return item;
-      })
-      .finally(() => {
-        automaticCaptureInFlight = null;
-      });
+    const initialOverview = getCurrentOverview();
+    automaticCaptureInFlight = (async () => {
+      await delay(AUTO_SETTLE_MS);
+      const settledOverview = getCurrentOverview();
+      const overview = chooseOverview(initialOverview, settledOverview);
+      const item = await captureSnapshot(triggerEvent, { overview });
+      if (item) lastAutomaticCaptureAt = Date.now();
+      return item;
+    })().finally(() => {
+      automaticCaptureInFlight = null;
+    });
     return automaticCaptureInFlight;
   }
 
@@ -85,21 +129,24 @@ export function createPlugin({ core, modules, logger } = {}) {
     const names = await fs.readdir(resolveSnapshotDir());
     const items = await Promise.all(
       names
-        .filter((name) => name.endsWith(".json") && !name.endsWith(".tmp.json"))
+        .filter((name) => name.endsWith(".json") && !name.endsWith("-manifest.json") && !name.endsWith(".tmp.json"))
         .map(async (name) => {
           try {
             const id = name.slice(0, -5);
             const filePath = path.join(resolveSnapshotDir(), name);
-            const [text, stat, imageAvailable] = await Promise.all([
+            const [text, stat, imageAvailable, manifest] = await Promise.all([
               fs.readFile(filePath, "utf8"),
               fs.stat(filePath),
               fileExists(path.join(resolveSnapshotDir(), id + ".png")),
+              readManifestIfExists(id),
             ]);
             const payload = JSON.parse(text);
             return {
               ...describePayload(id, payload),
               size: stat.size,
               imageAvailable,
+              pageCount: Number(manifest?.pageCount ?? payload?.artifacts?.pageCount ?? 0),
+              pages: Array.isArray(manifest?.pages) ? manifest.pages : payload?.artifacts?.pages ?? [],
               createdAt: payload?.capturedAt || stat.mtime.toISOString(),
             };
           } catch (error) {
@@ -120,31 +167,88 @@ export function createPlugin({ core, modules, logger } = {}) {
     return JSON.parse(content);
   }
 
-  async function readSnapshotImage(id, options = {}) {
+  async function readSnapshotManifest(id, options = {}) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
-    const imagePath = path.join(resolveSnapshotDir(), safeId + ".png");
+    if (options?.force || !(await fileExists(path.join(resolveSnapshotDir(), safeId + "-manifest.json")))) {
+      await regenerateBundle(safeId);
+    }
+    const content = await fs.readFile(path.join(resolveSnapshotDir(), safeId + "-manifest.json"), "utf8");
+    return JSON.parse(content);
+  }
+
+  async function readSnapshotPage(id, page = 0, options = {}) {
+    const safeId = sanitizeId(id);
+    const manifest = await readSnapshotManifest(safeId, options);
+    const pageIndex = normalizePageIndex(page, manifest.pages);
+    const pageMeta = manifest.pages[pageIndex];
+    if (!pageMeta?.fileName) {
+      const error = new Error("Snapshot page was not found.");
+      error.code = "SnapshotPageNotFound";
+      error.statusCode = 404;
+      throw error;
+    }
+    const content = await fs.readFile(path.join(resolveSnapshotDir(), path.basename(pageMeta.fileName)));
+    return {
+      ...pageMeta,
+      id: safeId,
+      contentType: "image/png",
+      content,
+    };
+  }
+
+  async function readSnapshotImage(id, options = {}) {
+    const safeId = sanitizeId(id);
+    if (options?.page != null) {
+      return readSnapshotPage(safeId, options.page, options);
+    }
+    const combined = Boolean(options?.combined);
+    const fileName = combined ? safeId + "-combined.png" : safeId + ".png";
+    const imagePath = path.join(resolveSnapshotDir(), fileName);
     if (options?.force || !(await fileExists(imagePath))) {
-      const payload = await readSnapshot(safeId);
-      const image = await generateMatchEndReportPng(payload);
-      await writeBufferAtomic(imagePath, image);
+      await regenerateBundle(safeId);
     }
     return {
       id: safeId,
-      fileName: safeId + ".png",
+      fileName,
       contentType: "image/png",
       content: await fs.readFile(imagePath),
     };
   }
 
+  async function regenerateBundle(id) {
+    const safeId = sanitizeId(id);
+    const payload = await readSnapshot(safeId);
+    const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: safeId });
+    await persistBundle(safeId, bundle);
+    payload.artifacts = {
+      format: "paged-scoreboard",
+      pageCount: bundle.pages.length,
+      primaryImage: safeId + ".png",
+      combinedImage: safeId + "-combined.png",
+      manifest: safeId + "-manifest.json",
+      pages: bundle.manifest.pages,
+    };
+    await writeJsonAtomic(path.join(resolveSnapshotDir(), safeId + ".json"), payload);
+    return bundle;
+  }
+
   async function deleteSnapshot(id) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
+    const names = await fs.readdir(resolveSnapshotDir());
+    const targets = names.filter((name) =>
+      name === safeId + ".json"
+      || name === safeId + ".png"
+      || name === safeId + "-combined.png"
+      || name === safeId + "-manifest.json"
+      || /^\d{2}-/.test(name.slice(safeId.length + 1)) && name.startsWith(safeId + "-"),
+    );
     const removedFiles = [];
-    for (const extension of [".json", ".png"]) {
+    for (const name of targets) {
       try {
-        await fs.unlink(path.join(resolveSnapshotDir(), safeId + extension));
-        removedFiles.push(safeId + extension);
+        await fs.unlink(path.join(resolveSnapshotDir(), name));
+        removedFiles.push(name);
       } catch (error) {
         if (error?.code !== "ENOENT") throw error;
       }
@@ -157,8 +261,8 @@ export function createPlugin({ core, modules, logger } = {}) {
       id: PLUGIN_ID,
       name: "对局结束数据快照",
       kind: "plugin",
-      version: "1.1.0",
-      description: "Persist versioned match-end data and generate a shareable full-player PNG report.",
+      version: "1.2.0",
+      description: "Persist versioned match-end data and generate fixed 1600x900 cover and paged team scoreboard images.",
     },
     apiName: "matchEndSnapshot",
     api: {
@@ -166,6 +270,8 @@ export function createPlugin({ core, modules, logger } = {}) {
       takeManualSnapshot: (options = {}) => captureSnapshot({ eventName: "MANUAL_TRIGGER" }, options),
       listSnapshots,
       readSnapshot,
+      readSnapshotManifest,
+      readSnapshotPage,
       readSnapshotImage,
       deleteSnapshot,
     },
@@ -242,12 +348,13 @@ function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
   ) ?? players.length;
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     snapshotType: "match-end-data",
     capturedAt,
     trigger: {
       eventName: firstText(triggerEvent?.eventName, triggerEvent?.type, "MATCH_END"),
       winner: firstText(triggerEvent?.winner, triggerEvent?.winningTeam, triggerEvent?.team),
+      raw: cloneJsonSafe(triggerEvent ?? {}),
     },
     server: {
       serverId: firstText(matchState?.serverId, overview?.serverId, status.serverId),
@@ -268,6 +375,10 @@ function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
       recordedPlayerCount: players.length,
       squadCount: squads.length,
       bzssCorePlayerCount: players.filter((player) => player.bzssCore?.available).length,
+      teamCounts: Object.fromEntries(
+        [...new Set(players.map((player) => player.teamID).filter((value) => value != null))]
+          .map((teamID) => [String(teamID), players.filter((player) => player.teamID === teamID).length]),
+      ),
     },
     players,
     squads,
@@ -284,8 +395,9 @@ function normalizePlayers(players) {
   return players.map((player) => ({
     playerID: nullableNumber(player?.playerID ?? player?.playerId ?? player?.id),
     name: firstText(player?.name, player?.playerName, "Unknown"),
-    steamID: firstText(player?.steamID, player?.steamId, player?.steam64ID),
+    steamID: firstText(player?.steamID, player?.steamId, player?.steam64ID, player?.steam64),
     eosID: firstText(player?.eosID, player?.eosId, player?.EOSID),
+    controllerID: firstText(player?.controllerID, player?.controllerId),
     teamID: nullableNumber(player?.teamID ?? player?.teamId),
     squadID: nullableNumber(player?.squadID ?? player?.squadId),
     fireTeam: normalizeFireTeam(
@@ -299,6 +411,7 @@ function normalizePlayers(players) {
     role: firstText(player?.role, player?.roleName),
     isLeader: Boolean(player?.isLeader ?? player?.leader),
     isCommander: Boolean(player?.isCommander ?? player?.commander),
+    online: player?.online !== false,
     health: nullableNumber(player?.health),
     bzssCore: null,
   }));
@@ -331,7 +444,10 @@ function enrichPlayersWithBzssCore(players, modules) {
   if (!Array.isArray(corePlayers) || corePlayers.length === 0) return players;
 
   const byId = new Map();
-  const byIdentity = new Map();
+  const byStrongIdentity = new Map();
+  const byTeamName = new Map();
+  const byName = new Map();
+
   for (const corePlayer of corePlayers) {
     for (const value of [corePlayer?.playerId, corePlayer?.playerIndex]) {
       const id = nullableNumber(value);
@@ -343,24 +459,36 @@ function enrichPlayersWithBzssCore(players, modules) {
       corePlayer?.eosID,
       corePlayer?.eosId,
       corePlayer?.playerGuid,
-      corePlayer?.playerName,
-      corePlayer?.name,
+      corePlayer?.controllerID,
+      corePlayer?.controllerId,
     ]) {
       const key = normalizeIdentity(value);
-      if (key) byIdentity.set(key, corePlayer);
+      if (key) byStrongIdentity.set(key, corePlayer);
+    }
+    const name = normalizeIdentity(firstText(corePlayer?.playerName, corePlayer?.name));
+    const teamID = nullableNumber(corePlayer?.teamId ?? corePlayer?.teamID);
+    if (name && teamID != null) byTeamName.set(teamID + ":" + name, corePlayer);
+    if (name) {
+      if (!byName.has(name)) byName.set(name, corePlayer);
+      else byName.set(name, null);
     }
   }
 
   return players.map((player) => {
-    let corePlayer = player.playerID != null ? byId.get(player.playerID) : null;
-    if (!corePlayer) {
-      for (const value of [player.steamID, player.eosID, player.name]) {
-        const key = normalizeIdentity(value);
-        if (key && byIdentity.has(key)) {
-          corePlayer = byIdentity.get(key);
-          break;
-        }
+    let corePlayer = null;
+    for (const value of [player.steamID, player.eosID, player.controllerID]) {
+      const key = normalizeIdentity(value);
+      if (key && byStrongIdentity.has(key)) {
+        corePlayer = byStrongIdentity.get(key);
+        break;
       }
+    }
+    if (!corePlayer && player.playerID != null) corePlayer = byId.get(player.playerID) ?? null;
+    if (!corePlayer) {
+      const name = normalizeIdentity(player.name);
+      const teamNameKey = player.teamID != null && name ? player.teamID + ":" + name : "";
+      if (teamNameKey && byTeamName.has(teamNameKey)) corePlayer = byTeamName.get(teamNameKey);
+      else if (name && byName.get(name)) corePlayer = byName.get(name);
     }
     if (!corePlayer) return player;
 
@@ -389,11 +517,13 @@ function enrichPlayersWithBzssCore(players, modules) {
         stale: Boolean(corePlayer?.stale),
         health,
         soldierClass,
+        dataLives: firstNumber(stats.dataLives, corePlayer?.dataLives),
         kills: firstNumber(stats.numKills, corePlayer?.kills) ?? 0,
-        downs: firstNumber(stats.numWoundeds, corePlayer?.woundeds) ?? 0,
-        deaths: firstNumber(stats.numDeaths, corePlayer?.deaths) ?? 0,
-        teamKills: firstNumber(stats.numTeamKills, corePlayer?.teamKills) ?? 0,
         vehicleKills: firstNumber(stats.vehicleKills, corePlayer?.vehicleKills) ?? 0,
+        deaths: firstNumber(stats.numDeaths, corePlayer?.deaths) ?? 0,
+        downs: firstNumber(stats.numWoundeds, corePlayer?.woundeds) ?? 0,
+        wounds: firstNumber(stats.numWounds, corePlayer?.wounds) ?? 0,
+        teamKills: firstNumber(stats.numTeamKills, corePlayer?.teamKills) ?? 0,
         revives: firstNumber(stats.revivedPoints, corePlayer?.revivedPoints) ?? 0,
         healPoints: firstNumber(stats.healPoints, corePlayer?.healPoints) ?? 0,
         combatScore: firstNumber(stats.combatScore, corePlayer?.combatScore) ?? 0,
@@ -420,12 +550,64 @@ function attachSquadInfo(players, squads) {
             teamID: squad.teamID,
             squadID: squad.squadID,
             name: squad.squadName,
+            teamName: squad.teamName,
             size: squad.size,
             locked: squad.locked,
+            creatorName: squad.creatorName,
           }
         : null,
     };
   });
+}
+
+async function persistBundle(id, bundle) {
+  const dir = resolveSnapshotDir();
+  for (const page of bundle.pages) {
+    await writeBufferAtomic(path.join(dir, page.fileName), page.buffer);
+  }
+  const cover = bundle.pages.find((page) => page.type === "cover") ?? bundle.pages[0];
+  if (cover?.buffer) await writeBufferAtomic(path.join(dir, id + ".png"), cover.buffer);
+  await writeBufferAtomic(path.join(dir, id + "-combined.png"), bundle.combinedBuffer);
+  await writeJsonAtomic(path.join(dir, id + "-manifest.json"), bundle.manifest);
+}
+
+async function readManifestIfExists(id) {
+  try {
+    const text = await fs.readFile(path.join(resolveSnapshotDir(), id + "-manifest.json"), "utf8");
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function normalizePageIndex(page, pages) {
+  const numeric = Number(page);
+  if (Number.isInteger(numeric) && numeric >= 0 && numeric < pages.length) return numeric;
+  const text = String(page ?? "").trim().toLowerCase();
+  const index = pages.findIndex((item) =>
+    String(item?.fileName ?? "").toLowerCase() === text
+    || String(item?.type ?? "").toLowerCase() === text
+    || (item?.teamId != null && `team${item.teamId}` === text),
+  );
+  if (index >= 0) return index;
+  const error = new Error("Invalid snapshot page.");
+  error.code = "InvalidSnapshotPage";
+  error.statusCode = 400;
+  throw error;
+}
+
+function chooseOverview(initialOverview, settledOverview) {
+  if (!initialOverview) return settledOverview;
+  if (!settledOverview) return initialOverview;
+  const initialCount = overviewPlayerCount(initialOverview);
+  const settledCount = overviewPlayerCount(settledOverview);
+  return settledCount >= initialCount ? settledOverview : initialOverview;
+}
+
+function overviewPlayerCount(overview) {
+  if (Array.isArray(overview?.players)) return overview.players.length;
+  if (Array.isArray(overview?.matchState?.players?.list)) return overview.matchState.players.list.length;
+  return 0;
 }
 
 function describePayload(id, payload) {
@@ -439,8 +621,16 @@ function describePayload(id, payload) {
     playerCount: firstNumber(payload?.server?.playerCount, payload?.summary?.playerCount) ?? 0,
     queueCount: firstNumber(payload?.server?.queueCount) ?? 0,
     winner: firstText(payload?.trigger?.winner),
-    schemaVersion: firstNumber(payload?.schemaVersion) ?? 1,
+    schemaVersion: firstNumber(payload?.schemaVersion) ?? 2,
   };
+}
+
+function buildRoundKey(payload) {
+  return [
+    firstText(payload?.server?.serverId, "server"),
+    firstText(payload?.match?.layer, payload?.match?.map, "unknown"),
+    firstText(payload?.capturedAt).slice(0, 16),
+  ].join(":");
 }
 
 function buildSnapshotId(payload) {
@@ -453,7 +643,7 @@ function buildSnapshotId(payload) {
 }
 
 function sanitizeId(value) {
-  const safe = path.basename(String(value ?? "").trim()).replace(/\.json$/i, "");
+  const safe = path.basename(String(value ?? "").trim()).replace(/\.(json|png)$/i, "");
   if (!safe || !/^[a-zA-Z0-9_.-]+$/.test(safe)) {
     const error = new Error("Invalid snapshot id.");
     error.code = "InvalidSnapshotId";
@@ -514,6 +704,11 @@ function objectValue(value) {
   return value && typeof value === "object" ? value : {};
 }
 
+function cloneJsonSafe(value) {
+  if (value === undefined) return undefined;
+  return JSON.parse(JSON.stringify(value));
+}
+
 function resolveSnapshotDir() {
   return path.resolve(process.cwd(), SNAPSHOT_DIR);
 }
@@ -526,7 +721,7 @@ async function writeJsonAtomic(filePath, payload) {
   const tempPath = filePath + "." + process.pid + ".tmp";
   await fs.writeFile(tempPath, JSON.stringify(payload, null, 2) + "\n", "utf8");
   try {
-    await fs.rename(tempPath, filePath);
+    await replaceFile(tempPath, filePath);
   } catch (error) {
     await fs.unlink(tempPath).catch(() => {});
     throw error;
@@ -537,11 +732,16 @@ async function writeBufferAtomic(filePath, content) {
   const tempPath = filePath + "." + process.pid + ".tmp";
   await fs.writeFile(tempPath, content);
   try {
-    await fs.rename(tempPath, filePath);
+    await replaceFile(tempPath, filePath);
   } catch (error) {
     await fs.unlink(tempPath).catch(() => {});
     throw error;
   }
+}
+
+async function replaceFile(tempPath, filePath) {
+  await fs.rm(filePath, { force: true });
+  await fs.rename(tempPath, filePath);
 }
 
 async function fileExists(filePath) {
@@ -551,4 +751,11 @@ async function fileExists(filePath) {
   } catch {
     return false;
   }
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, milliseconds);
+    if (typeof timer.unref === "function") timer.unref();
+  });
 }
