@@ -127,6 +127,20 @@ export class WebRegistry {
     });
 
     this.registerPage({
+      id: "web.bzssCoreVehicles",
+      title: "BZSS-Core 载具信息",
+      group: "基础",
+      route: "/bzss-core-vehicles",
+      source: "module.bzssCoreMonitor",
+      description: "实时查看载具类型、阵营、生命值、速度、位置及驾驶员 Player ID。",
+      required: false,
+      enabled: true,
+      order: 106,
+      icon: "🚙",
+      requiredPermission: "bzss_core.use",
+    });
+
+    this.registerPage({
       id: "web.udpForwarder",
       title: "UDP 转发日志",
       group: "调试",
