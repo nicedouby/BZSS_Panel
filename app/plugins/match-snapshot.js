@@ -2177,27 +2177,13 @@ function normalizeFactionLookupName(value) {
 
 export async function generateMatchEndReportPng(payload, options = {}) {
   const snapshot = buildMatchEndRenderSnapshot(payload);
+  const layout = await buildCompactMatchEndLayout(snapshot, options);
   const sharp = await loadSharp();
-  const hero = await renderMatchScenePng(sharp, snapshot, {
-    ...options,
-    includeSteamID: false,
-  });
-  const scoreboard = buildMatchEndScoreboardLayout(snapshot);
-  const scoreboardSvg = Buffer.from(renderMatchEndScoreboardSvg(scoreboard), "utf8");
-  const totalHeight = 900 + scoreboard.height;
+  const background = await buildCompactMatchEndBackground(sharp, layout);
+  const overlay = Buffer.from(renderCompactMatchEndSvg(layout), "utf8");
 
-  return sharp({
-    create: {
-      width: 1600,
-      height: totalHeight,
-      channels: 4,
-      background: { r: 2, g: 6, b: 18, alpha: 1 },
-    },
-  })
-    .composite([
-      { input: hero, left: 0, top: 0 },
-      { input: scoreboardSvg, left: 0, top: 900 },
-    ])
+  return sharp(background)
+    .composite([{ input: overlay, left: 0, top: 0 }])
     .png()
     .toBuffer();
 }
@@ -2247,111 +2233,201 @@ function buildMatchEndRenderSnapshot(payload) {
   };
 }
 
-function buildMatchEndScoreboardLayout(snapshot) {
-  const teams = [...(snapshot.teams ?? [])].sort((left, right) => compareNumbers(left.teamID, right.teamID));
-  const sections = [];
-  let y = 104;
-  for (const team of teams) {
-    const players = [
-      ...team.squads.flatMap((squad) => squad.members.map((player) => ({
-        ...player,
-        squadName: buildSquadDisplayName(squad, player),
-      }))),
-      ...team.unassignedPlayers.map((player) => ({ ...player, squadName: "未加入小队" })),
-    ];
-    players.sort((left, right) =>
-      compareNumbers(left.squadID, right.squadID)
-      || Number(right.isCommander) - Number(left.isCommander)
-      || Number(right.isLeader) - Number(left.isLeader)
-      || compareNumbers(right?.bzssCore?.combatScore, left?.bzssCore?.combatScore)
-      || String(left.name).localeCompare(String(right.name), "zh-CN"));
-    const height = 82 + Math.max(1, players.length) * 38;
-    sections.push({
-      teamID: team.teamID,
-      teamName: team.teamName || "Team " + team.teamID,
-      playerCount: players.length,
-      commander: findTeamCommanderName(snapshot.players, team.teamID) || "未记录",
-      accent: Number(team.teamID) === 2 ? "#f59e0b" : "#2dd4bf",
-      players,
-      y,
-      height,
-    });
-    y += height + 22;
-  }
+async function buildCompactMatchEndLayout(snapshot, options = {}) {
+  const sortedTeams = [...(snapshot.teams ?? [])].sort((left, right) => compareNumbers(left.teamID, right.teamID));
+  const team1 = sortedTeams.find((team) => Number(team.teamID) === 1) ?? sortedTeams[0] ?? emptyTeam(1);
+  const team2 = sortedTeams.find((team) => Number(team.teamID) === 2) ?? sortedTeams[1] ?? emptyTeam(2);
+  const mapKey = resolveMapSceneKey(snapshot.match.map, snapshot.match.layer);
+  const template = MAP_SCENE_TEMPLATE_BY_KEY[mapKey] ?? MAP_SCENE_TEMPLATE_BY_KEY.Sumari;
+  const minimap = resolveMatchMinimap(snapshot.match.map, snapshot.match.layer, template);
+  const columns = [
+    await buildCompactTeamColumn(snapshot, team1, 40, "#2dd4bf", options),
+    await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options),
+  ];
+  const maxRows = Math.max(1, ...columns.map((column) => column.players.length));
+  const height = 282 + maxRows * 54 + 46;
+  const minimapDataUri = minimap?.assetPath ? await readAssetDataUri(minimap.assetPath) : "";
+
   return {
     width: 1600,
-    height: Math.max(280, y + 42),
+    height,
+    template,
+    minimapDataUri,
     capturedAt: snapshot.capturedAt,
     map: firstText(snapshot?.match?.map, snapshot?.match?.layer, "Unknown Map"),
+    layer: firstText(snapshot?.match?.layer, "-"),
+    mode: firstText(snapshot?.match?.mode, "-"),
     nextMap: firstText(snapshot?.match?.nextMap, snapshot?.match?.nextLayer, "未知"),
+    serverName: firstText(snapshot?.server?.serverName, snapshot?.server?.serverId, "BZSS Panel"),
+    playerCount: Number(snapshot?.server?.playerCount ?? snapshot?.summary?.playerCount ?? 0) || 0,
+    queueCount: Number(snapshot?.server?.queueCount ?? 0) || 0,
+    playtime: Number(snapshot?.match?.playtime ?? 0) || 0,
     winner: firstText(snapshot?.trigger?.winner, ""),
-    sections,
+    columns,
   };
 }
 
-function renderMatchEndScoreboardSvg(layout) {
+async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}) {
+  const commanderName = resolveCommanderName(team) || findTeamCommanderName(snapshot.players, team.teamID) || "未记录";
+  const flagPath = team.flagAssetPath || resolveFactionFlagAssetPath(team.teamName);
+  const players = [
+    ...team.squads.flatMap((squad) => squad.members.map((player) => ({
+      ...player,
+      squadName: buildSquadDisplayName(squad, player),
+    }))),
+    ...team.unassignedPlayers.map((player) => ({ ...player, squadName: "未加入小队" })),
+  ];
+  players.sort((left, right) =>
+    compareNumbers(left.squadID, right.squadID)
+    || Number(right.isCommander) - Number(left.isCommander)
+    || Number(right.isLeader) - Number(left.isLeader)
+    || compareNumbers(right?.bzssCore?.combatScore, left?.bzssCore?.combatScore)
+    || String(left.name).localeCompare(String(right.name), "zh-CN"));
+
+  return {
+    x,
+    width: 748,
+    accent,
+    teamID: team.teamID,
+    teamName: team.teamName || "Team " + team.teamID,
+    factionCode: team.factionCode || resolveFactionCodeFromTeamName(team.teamName) || "UNKNOWN",
+    commanderName,
+    playerCount: players.length,
+    squadCount: team.squads.length,
+    flagDataUri: flagPath ? await readAssetDataUri(flagPath) : "",
+    players,
+    includeSteamID: Boolean(options.includeSteamID),
+  };
+}
+
+async function buildCompactMatchEndBackground(sharp, layout) {
+  const tileHeight = 900;
+  const tile = await buildMatchSceneBackground(sharp, {
+    width: layout.width,
+    height: tileHeight,
+    template: layout.template,
+  });
+  const composites = [];
+  for (let top = 0; top < layout.height; top += tileHeight) {
+    composites.push({ input: tile, left: 0, top });
+  }
+  return sharp({
+    create: {
+      width: layout.width,
+      height: layout.height,
+      channels: 4,
+      background: { r: 2, g: 6, b: 18, alpha: 1 },
+    },
+  })
+    .composite(composites)
+    .png()
+    .toBuffer();
+}
+
+function renderCompactMatchEndSvg(layout) {
   const svg = [];
   svg.push('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="' + layout.height + '" viewBox="0 0 1600 ' + layout.height + '">');
   svg.push('<defs>');
-  svg.push('<linearGradient id="reportBg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#071426"/><stop offset="100%" stop-color="#020611"/></linearGradient>');
-  svg.push('<linearGradient id="reportTitle" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#0f2944"/><stop offset="50%" stop-color="#13243c"/><stop offset="100%" stop-color="#0a1629"/></linearGradient>');
+  svg.push('<linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#020611" stop-opacity=".38"/><stop offset="45%" stop-color="#020611" stop-opacity=".68"/><stop offset="100%" stop-color="#020611" stop-opacity=".78"/></linearGradient>');
+  svg.push('<linearGradient id="topBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#071426" stop-opacity=".88"/><stop offset="50%" stop-color="#10243c" stop-opacity=".76"/><stop offset="100%" stop-color="#07101f" stop-opacity=".88"/></linearGradient>');
+  svg.push('<filter id="softMap"><feGaussianBlur stdDeviation="1.6"/></filter>');
   svg.push('<style><![CDATA[');
-  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.report-title{font-size:28px;font-weight:900}.report-sub{font-size:13px;fill:#9fb1c5}.team-title{font-size:23px;font-weight:900}.team-meta{font-size:13px;fill:#c5d2e0}.head{font-size:11px;font-weight:900;fill:#8fa4ba}.cell{font-size:13px;fill:#e8f0fa}.name{font-size:14px;font-weight:800;fill:#ffffff}.muted{font-size:11px;fill:#8498ae}]]></style>");
+  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:34px;font-weight:900}.sub{font-size:13px;fill:#b6c6d7}.chip{font-size:12px;font-weight:900}.team-name{font-size:21px;font-weight:900}.team-meta{font-size:12px;fill:#c5d2e0}.commander-label{font-size:10px;font-weight:900;fill:#91a6bc;letter-spacing:1px}.commander{font-size:18px;font-weight:900}.head{font-size:10px;font-weight:900;fill:#a5b8ca}.name{font-size:14px;font-weight:900}.row-meta{font-size:11px;fill:#b5c5d5}.stat{font-size:11px;font-weight:800;fill:#edf5ff}.foot{font-size:10px;fill:#8396aa}]]></style>");
   svg.push('</defs>');
-  svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#reportBg)"/>');
-  svg.push('<path d="M38 24 H1518 L1562 68 V88 H38 Z" fill="url(#reportTitle)" stroke="#5e7997" stroke-opacity=".38"/>');
-  svg.push('<text x="64" y="58" class="report-title">MATCH END / 全员战绩报告</text>');
-  svg.push('<text x="64" y="80" class="report-sub">' + xmlEscape(layout.map) + ' → ' + xmlEscape(layout.nextMap) + ' · ' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + (layout.winner ? ' · WINNER ' + xmlEscape(layout.winner) : '') + '</text>');
+  svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#pageShade)"/>');
 
-  for (const section of layout.sections) {
-    const x = 38;
-    const width = 1524;
-    const headerY = section.y;
-    svg.push('<path d="M' + x + ' ' + headerY + ' H' + (x + width - 24) + ' L' + (x + width) + ' ' + (headerY + 24) + ' V' + (headerY + section.height) + ' H' + x + ' Z" fill="#07101f" stroke="' + section.accent + '" stroke-opacity=".5"/>');
-    svg.push('<rect x="' + x + '" y="' + headerY + '" width="8" height="' + section.height + '" fill="' + section.accent + '" opacity=".9"/>');
-    svg.push('<text x="64" y="' + (headerY + 31) + '" class="team-title">TEAM ' + xmlEscape(String(section.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(section.teamName, 58)) + '</text>');
-    svg.push('<text x="64" y="' + (headerY + 54) + '" class="team-meta">人数 ' + section.playerCount + ' · 指挥官 ' + xmlEscape(section.commander) + '</text>');
-    svg.push(renderMatchEndColumnHeaders(headerY + 76));
-    if (!section.players.length) {
-      svg.push('<text x="64" y="' + (headerY + 108) + '" class="muted">该队伍没有保存到玩家记录</text>');
-      continue;
-    }
-    section.players.forEach((player, index) => {
-      const rowY = headerY + 82 + index * 38;
-      const core = player?.bzssCore ?? {};
-      if (index % 2 === 0) svg.push('<rect x="48" y="' + rowY + '" width="1502" height="38" fill="#ffffff" opacity=".025"/>');
-      svg.push('<text x="64" y="' + (rowY + 24) + '" class="name">' + xmlEscape(truncateText(player.name, 26)) + '</text>');
-      svg.push('<text x="330" y="' + (rowY + 24) + '" class="cell">' + xmlEscape(truncateText(player.squadName, 16)) + '</text>');
-      svg.push('<text x="480" y="' + (rowY + 24) + '" class="cell">' + xmlEscape(truncateText(firstText(player.role, core.soldierClass, "-"), 17)) + '</text>');
-      const values = [
-        core.kills, core.downs, core.deaths, core.teamKills, core.vehicleKills,
-        core.revives, core.healPoints, core.combatScore, core.objectiveScore,
-        core.teamworkScore, core.ping,
-      ];
-      const xs = [672, 724, 776, 832, 892, 954, 1022, 1102, 1192, 1282, 1374];
-      values.forEach((value, valueIndex) => {
-        const label = value == null || value === "" ? "-" : String(Math.round(Number(value) || 0));
-        svg.push('<text x="' + xs[valueIndex] + '" y="' + (rowY + 24) + '" text-anchor="middle" class="cell mono">' + xmlEscape(label) + '</text>');
-      });
-      const health = firstFiniteNumber(player?.health, core.health);
-      svg.push('<text x="1468" y="' + (rowY + 24) + '" text-anchor="middle" class="cell mono">' + (health == null ? "-" : xmlEscape(String(Math.round(health)))) + '</text>');
-    });
+  if (layout.minimapDataUri) {
+    const mapSize = Math.min(1340, layout.height - 180);
+    const mapY = Math.max(150, Math.floor((layout.height - mapSize) / 2));
+    svg.push('<image href="' + layout.minimapDataUri + '" x="' + ((1600 - mapSize) / 2) + '" y="' + mapY + '" width="' + mapSize + '" height="' + mapSize + '" opacity=".13" filter="url(#softMap)" preserveAspectRatio="xMidYMid meet"/>');
   }
 
-  svg.push('<text x="800" y="' + (layout.height - 18) + '" text-anchor="middle" class="muted">BZSS PANEL · MATCH END SNAPSHOT · DATA FROZEN AT MATCH END</text>');
+  svg.push('<path d="M32 24 H1532 L1568 60 V96 H32 Z" fill="url(#topBar)" stroke="#7890a8" stroke-opacity=".38"/>');
+  svg.push('<text x="56" y="60" class="title">' + xmlEscape(layout.map) + '</text>');
+  svg.push('<text x="58" y="82" class="sub">' + xmlEscape(layout.layer) + ' · ' + xmlEscape(layout.mode) + ' · NEXT ' + xmlEscape(layout.nextMap) + ' · ' + xmlEscape(layout.serverName) + '</text>');
+  svg.push('<text x="1168" y="53" class="chip mono">PLAYERS ' + layout.playerCount + '   QUEUE ' + layout.queueCount + '   TIME ' + xmlEscape(formatDurationClock(layout.playtime)) + '</text>');
+  svg.push('<text x="1168" y="77" class="sub mono">' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + (layout.winner ? ' · WINNER ' + xmlEscape(layout.winner) : '') + '</text>');
+
+  for (const column of layout.columns) {
+    svg.push(renderCompactCommanderBar(column));
+    svg.push(renderCompactStatHeader(column));
+    column.players.forEach((player, index) => {
+      svg.push(renderCompactPlayerRow(column, player, index));
+    });
+    if (!column.players.length) {
+      svg.push('<text x="' + (column.x + 18) + '" y="286" class="row-meta">该阵营没有保存到玩家战绩</text>');
+    }
+  }
+
+  svg.push('<path d="M800 112 V' + (layout.height - 34) + '" stroke="#d8e6f5" stroke-opacity=".16"/>');
+  svg.push('<text x="800" y="' + (layout.height - 16) + '" text-anchor="middle" class="foot">BZSS PANEL · MATCH END SNAPSHOT · LOADING SCREEN / TACTICAL MAP / PLAYER DATA</text>');
   svg.push('</svg>');
   return svg.join("\n");
 }
 
-function renderMatchEndColumnHeaders(y) {
-  const columns = [
-    [64, "玩家"], [330, "小队"], [480, "ROLE"], [672, "K"], [724, "W"],
-    [776, "D"], [832, "TK"], [892, "载具"], [954, "复苏"], [1022, "治疗"],
-    [1102, "战斗"], [1192, "目标"], [1282, "团队"], [1374, "延迟"], [1468, "生命"],
+function renderCompactCommanderBar(team) {
+  const x = team.x;
+  const y = 112;
+  const width = team.width;
+  const flagX = x + 16;
+  return [
+    '<path d="M' + x + ' ' + y + ' H' + (x + width - 18) + ' L' + (x + width) + ' ' + (y + 18) + ' V' + (y + 100) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
+    '<rect x="' + x + '" y="' + y + '" width="7" height="100" fill="' + team.accent + '"/>',
+    team.flagDataUri
+      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 13) + '" width="74" height="74" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + flagX + '" y="' + (y + 13) + '" width="74" height="74" fill="' + team.accent + '" opacity=".24"/>',
+    '<text x="' + (x + 108) + '" y="' + (y + 30) + '" class="team-name">TEAM ' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 35)) + '</text>',
+    '<text x="' + (x + 108) + '" y="' + (y + 50) + '" class="team-meta mono">' + xmlEscape(team.factionCode) + ' · ' + team.playerCount + ' PAX · ' + team.squadCount + ' SQUADS</text>',
+    '<text x="' + (x + 108) + '" y="' + (y + 69) + '" class="commander-label">COMMANDER</text>',
+    '<text x="' + (x + 108) + '" y="' + (y + 90) + '" class="commander">' + xmlEscape(truncateText(team.commanderName, 30)) + '</text>',
+  ].join("");
+}
+
+function renderCompactStatHeader(team) {
+  const x = team.x;
+  const y = 224;
+  const labels = [
+    [18, "PLAYER / SQUAD / ROLE"], [410, "K"], [448, "W"], [486, "D"], [526, "TK"],
+    [570, "VK"], [612, "REV"], [660, "HEAL"], [714, "SCORE"],
   ];
-  return columns.map(([x, label], index) =>
-    '<text x="' + x + '" y="' + y + '"' + (index >= 3 ? ' text-anchor="middle"' : '') + ' class="head">' + xmlEscape(label) + '</text>'
-  ).join("");
+  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="28" fill="#020611" fill-opacity=".78"/>' +
+    labels.map(([offset, label], index) =>
+      '<text x="' + (x + offset) + '" y="' + (y + 19) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
+    ).join("");
+}
+
+function renderCompactPlayerRow(team, player, index) {
+  const x = team.x;
+  const y = 252 + index * 54;
+  const core = player?.bzssCore ?? {};
+  const health = firstFiniteNumber(player?.health, core.health);
+  const backgroundOpacity = index % 2 === 0 ? ".70" : ".56";
+  const statLine = [
+    "K " + compactStat(core.kills),
+    "W " + compactStat(core.downs),
+    "D " + compactStat(core.deaths),
+    "TK " + compactStat(core.teamKills),
+    "VK " + compactStat(core.vehicleKills),
+    "REV " + compactStat(core.revives),
+    "HEAL " + compactStat(core.healPoints),
+    "C " + compactStat(core.combatScore),
+    "O " + compactStat(core.objectiveScore),
+    "T " + compactStat(core.teamworkScore),
+  ].join("   ");
+  return [
+    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="52" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
+    '<rect x="' + x + '" y="' + y + '" width="4" height="52" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".22") + '"/>',
+    '<text x="' + (x + 14) + '" y="' + (y + 20) + '" class="name">' + xmlEscape(truncateText(player.name, 25)) + '</text>',
+    '<text x="' + (x + 275) + '" y="' + (y + 20) + '" class="row-meta">' + xmlEscape(truncateText(player.squadName, 18)) + '</text>',
+    '<text x="' + (x + 465) + '" y="' + (y + 20) + '" class="row-meta">' + xmlEscape(truncateText(firstText(player.role, core.soldierClass, "-"), 18)) + '</text>',
+    '<text x="' + (x + 730) + '" y="' + (y + 20) + '" text-anchor="end" class="row-meta mono">HP ' + (health == null ? "-" : Math.round(health)) + ' · ' + compactStat(core.ping) + 'ms</text>',
+    '<text x="' + (x + 14) + '" y="' + (y + 42) + '" class="stat mono">' + xmlEscape(statLine) + '</text>',
+  ].join("");
+}
+
+function compactStat(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(Math.round(number)) : "-";
 }
 
 let sharpLoaderPromise = null;
