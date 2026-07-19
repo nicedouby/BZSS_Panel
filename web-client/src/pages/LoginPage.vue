@@ -49,7 +49,7 @@
 
           <label class="remember-row">
             <input v-model="rememberMe" type="checkbox" />
-            <span>记住我</span>
+            <span>记住密码</span>
           </label>
 
           <button class="submit-btn" type="submit" :disabled="loading">
@@ -90,9 +90,17 @@ const errorText = computed(() => localError.value || auth.error || "");
 
 onMounted(() => {
   const savedUsername = localStorage.getItem("remembered_username");
+  const savedPassword = localStorage.getItem("remembered_password");
   if (savedUsername) {
     username.value = savedUsername;
     rememberMe.value = true;
+  }
+  if (savedPassword) {
+    try {
+      password.value = decodeURIComponent(escape(window.atob(savedPassword)));
+    } catch {
+      password.value = savedPassword;
+    }
   }
 });
 
@@ -108,8 +116,16 @@ async function submit() {
 
     if (rememberMe.value) {
       localStorage.setItem("remembered_username", username.value);
+      let encodedPassword = "";
+      try {
+        encodedPassword = window.btoa(unescape(encodeURIComponent(password.value)));
+      } catch {
+        encodedPassword = password.value;
+      }
+      localStorage.setItem("remembered_password", encodedPassword);
     } else {
       localStorage.removeItem("remembered_username");
+      localStorage.removeItem("remembered_password");
     }
 
     const target = getPostLoginTarget();
