@@ -2088,7 +2088,8 @@ function extractVehicleRuntimeField(text, names) {
 }
 
 function parseVehicleHealth(value) {
-  const text = String(value ?? "").trim();
+  // Blueprint emits health as either `750/750`, `75%`, or `(750/750)`.
+  const text = String(value ?? "").trim().replace(/^\(+|\)+$/g, "");
   if (!text) return null;
   const ratio = text.match(/^(-?[0-9.]+)\s*\/\s*(-?[0-9.]+)$/);
   if (ratio) {
@@ -3426,4 +3427,3 @@ function toNumberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
-
