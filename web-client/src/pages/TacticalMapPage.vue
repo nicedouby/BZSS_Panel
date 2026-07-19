@@ -258,6 +258,29 @@
           />
         </div>
 
+        <!-- BZSS-Core Vehicle Runtime Layer -->
+        <div class="vehicle-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto' }">
+          <div
+            v-for="vehicle in vehicleMarkers"
+            :key="vehicle.id"
+            class="vehicle-marker"
+            :class="`team-${vehicle.teamId ?? 0}`"
+            :style="{
+              left: `${vehicle.mapX}%`,
+              top: `${vehicle.mapY}%`,
+              '--vehicle-marker-scale': dynamicMarkerScale,
+              '--vehicle-yaw': `${vehicle.yaw ?? 0}deg`,
+            }"
+            :title="vehicle.tooltip"
+          >
+            <span class="vehicle-marker__frame">
+              <img v-if="vehicle.iconPath" class="vehicle-marker__icon" :src="vehicle.iconPath" :alt="vehicle.iconLabel" />
+              <span v-else class="vehicle-marker__fallback" aria-hidden="true">🚙</span>
+            </span>
+            <span v-if="vehicle.occupied" class="vehicle-marker__driver">●</span>
+          </div>
+        </div>
+
         <!-- Explosion Overlay -->
         <div class="explosion-layer">
           <div
@@ -873,6 +896,19 @@ interface FobMarker {
   raw?: string;
 }
 
+interface VehicleMarker {
+  id: string;
+  teamId: number | null;
+  vehicleType: string;
+  mapX: number;
+  mapY: number;
+  yaw: number | null;
+  occupied: boolean;
+  iconPath: string | null;
+  iconLabel: string;
+  tooltip: string;
+}
+
 interface CombatLog {
   time: string;
   text: string;
@@ -892,6 +928,7 @@ const storeSnapshot = computed(() => tacticalStateStore.snapshot ?? null);
 const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets?.captureZones) ? tacticalStateStore.assets.captureZones : []);
 const storeFobs = computed(() => Array.isArray(tacticalStateStore.assets?.fobs) ? tacticalStateStore.assets.fobs : []);
 const storeMainZones = computed(() => Array.isArray(tacticalStateStore.assets?.mainZones) ? tacticalStateStore.assets.mainZones : []);
+const storeVehicles = computed(() => Array.isArray(tacticalStateStore.assets?.vehicles) ? tacticalStateStore.assets.vehicles : []);
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
@@ -1126,6 +1163,13 @@ const mainZones = computed(() => {
   const propZones = Array.isArray(props.mainZones) ? props.mainZones : [];
   if (propZones.length > 0 || !isStandaloneMapRoute.value) return propZones;
   return storeMainZones.value;
+});
+const runtimeVehicles = computed(() => {
+  const direct = Array.isArray((snapshot.value as any)?.vehicles) ? (snapshot.value as any).vehicles : [];
+  if (direct.length > 0) return direct;
+  const assetsVehicles = Array.isArray((snapshot.value as any)?.assets?.vehicles) ? (snapshot.value as any).assets.vehicles : [];
+  if (assetsVehicles.length > 0) return assetsVehicles;
+  return storeVehicles.value;
 });
 const emptyMapConfig: TacticalMapConfig = {
   key: "",
@@ -2026,6 +2070,43 @@ const markers = computed<MapMarker[]>(() => {
       rconDetail,
     } as any as MapMarker;
   });
+});
+
+const vehicleMarkers = computed<VehicleMarker[]>(() => {
+  const bounds = activeMapConfig.value.bounds;
+  const markers: VehicleMarker[] = [];
+  for (const [index, vehicle] of runtimeVehicles.value.entries()) {
+    const x = Number(vehicle?.position?.x);
+    const y = Number(vehicle?.position?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const vehicleType = String(vehicle?.vehicleType ?? "").trim() || "Unknown Vehicle";
+    const teamId = Number(vehicle?.teamId);
+    const normalizedTeamId = teamId === 1 || teamId === 2 ? teamId : null;
+    const icon = resolveVehicleIcon(vehicleType);
+    const health = Number(vehicle?.healthPercent);
+    const speed = Number(vehicle?.speed);
+    const driverPlayerId = Number(vehicle?.driverPlayerId);
+    const occupied = Boolean(vehicle?.occupied) || (Number.isFinite(driverPlayerId) && driverPlayerId >= 0);
+    const tooltipParts = [
+      `T${normalizedTeamId ?? "--"} · ${vehicleType}`,
+      Number.isFinite(health) ? `HP ${Math.round(health)}%` : "HP --",
+      Number.isFinite(speed) ? `Speed ${speed.toFixed(1)}` : "Speed --",
+      occupied ? `Driver ${driverPlayerId >= 0 ? driverPlayerId : "occupied"}` : "无人驾驶",
+    ];
+    markers.push({
+      id: `runtime-vehicle:${normalizedTeamId ?? 0}:${vehicleType}:${index}`,
+      teamId: normalizedTeamId,
+      vehicleType,
+      mapX: project(x, bounds.minX, bounds.maxX),
+      mapY: project(y, bounds.minY, bounds.maxY),
+      yaw: Number.isFinite(Number(vehicle?.yaw)) ? Number(vehicle.yaw) : null,
+      occupied,
+      iconPath: icon.icon.startsWith("/") ? icon.icon : null,
+      iconLabel: icon.label,
+      tooltip: tooltipParts.join(" · "),
+    });
+  }
+  return markers;
 });
 
 const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
@@ -3375,5 +3456,65 @@ onBeforeUnmount(deactivateMapPage);
   border-radius: 50%;
   background: #41f5b5;
   box-shadow: 0 0 0 3px rgba(65, 245, 181, 0.14), 0 0 10px rgba(65, 245, 181, 0.82);
+}
+.vehicle-markers-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+}
+
+.vehicle-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  --vehicle-accent: #94a3b8;
+  --vehicle-glow: rgba(148, 163, 184, .5);
+}
+
+.vehicle-marker.team-1 { --vehicle-accent: #60a5fa; --vehicle-glow: rgba(59, 130, 246, .64); }
+.vehicle-marker.team-2 { --vehicle-accent: #f87171; --vehicle-glow: rgba(248, 113, 113, .64); }
+
+.vehicle-marker__frame {
+  position: absolute;
+  left: -13px;
+  top: -13px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  transform: scale(var(--vehicle-marker-scale, 1)) rotate(var(--vehicle-yaw));
+  transform-origin: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92)) drop-shadow(0 0 5px var(--vehicle-glow));
+  will-change: transform;
+}
+
+.vehicle-marker__icon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.vehicle-marker__fallback {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--vehicle-accent);
+  border-radius: 50%;
+  background: rgba(2, 6, 23, .88);
+  color: var(--vehicle-accent);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.vehicle-marker__driver {
+  position: absolute;
+  left: 9px;
+  top: -12px;
+  color: #f8fafc;
+  font-size: 11px;
+  line-height: 1;
+  text-shadow: 0 0 5px var(--vehicle-glow), 0 1px 2px rgba(0, 0, 0, .9);
 }
 </style>
