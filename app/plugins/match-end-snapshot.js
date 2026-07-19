@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { generateMatchEndReportPng } from "./match-snapshot.js";
 
 const PLUGIN_ID = "match-end-snapshot";
 const SNAPSHOT_DIR = path.join("data", "match-end-snapshots");
@@ -47,8 +48,16 @@ export function createPlugin({ core, modules, logger } = {}) {
     const id = buildSnapshotId(payload);
     await ensureSnapshotDir();
     await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
-    pluginLogger.info?.("[MatchEndSnapshot] saved " + id + ".");
-    return describePayload(id, payload);
+    let imageAvailable = false;
+    try {
+      const image = await generateMatchEndReportPng(payload);
+      await writeBufferAtomic(path.join(resolveSnapshotDir(), id + ".png"), image);
+      imageAvailable = true;
+    } catch (error) {
+      pluginLogger.error?.("[MatchEndSnapshot] report image failed for " + id + ": " + (error?.stack || error));
+    }
+    pluginLogger.info?.("[MatchEndSnapshot] saved " + id + (imageAvailable ? " with report image." : " without report image."));
+    return { ...describePayload(id, payload), imageAvailable };
   }
 
   function captureAutomatic(triggerEvent = {}) {
@@ -81,14 +90,16 @@ export function createPlugin({ core, modules, logger } = {}) {
           try {
             const id = name.slice(0, -5);
             const filePath = path.join(resolveSnapshotDir(), name);
-            const [text, stat] = await Promise.all([
+            const [text, stat, imageAvailable] = await Promise.all([
               fs.readFile(filePath, "utf8"),
               fs.stat(filePath),
+              fileExists(path.join(resolveSnapshotDir(), id + ".png")),
             ]);
             const payload = JSON.parse(text);
             return {
               ...describePayload(id, payload),
               size: stat.size,
+              imageAvailable,
               createdAt: payload?.capturedAt || stat.mtime.toISOString(),
             };
           } catch (error) {
@@ -109,16 +120,36 @@ export function createPlugin({ core, modules, logger } = {}) {
     return JSON.parse(content);
   }
 
+  async function readSnapshotImage(id) {
+    await ensureSnapshotDir();
+    const safeId = sanitizeId(id);
+    const imagePath = path.join(resolveSnapshotDir(), safeId + ".png");
+    if (!(await fileExists(imagePath))) {
+      const payload = await readSnapshot(safeId);
+      const image = await generateMatchEndReportPng(payload);
+      await writeBufferAtomic(imagePath, image);
+    }
+    return {
+      id: safeId,
+      fileName: safeId + ".png",
+      contentType: "image/png",
+      content: await fs.readFile(imagePath),
+    };
+  }
+
   async function deleteSnapshot(id) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
-    try {
-      await fs.unlink(path.join(resolveSnapshotDir(), safeId + ".json"));
-      return { id: safeId, removed: true };
-    } catch (error) {
-      if (error?.code === "ENOENT") return { id: safeId, removed: false };
-      throw error;
+    const removedFiles = [];
+    for (const extension of [".json", ".png"]) {
+      try {
+        await fs.unlink(path.join(resolveSnapshotDir(), safeId + extension));
+        removedFiles.push(safeId + extension);
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
     }
+    return { id: safeId, removed: removedFiles.length > 0, removedFiles };
   }
 
   return {
@@ -126,8 +157,8 @@ export function createPlugin({ core, modules, logger } = {}) {
       id: PLUGIN_ID,
       name: "对局结束数据快照",
       kind: "plugin",
-      version: "1.0.0",
-      description: "Persist versioned JSON records when a match ends.",
+      version: "1.1.0",
+      description: "Persist versioned match-end data and generate a shareable full-player PNG report.",
     },
     apiName: "matchEndSnapshot",
     api: {
@@ -135,6 +166,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       takeManualSnapshot: (options = {}) => captureSnapshot({ eventName: "MANUAL_TRIGGER" }, options),
       listSnapshots,
       readSnapshot,
+      readSnapshotImage,
       deleteSnapshot,
     },
 
@@ -476,5 +508,25 @@ async function writeJsonAtomic(filePath, payload) {
   } catch (error) {
     await fs.unlink(tempPath).catch(() => {});
     throw error;
+  }
+}
+
+async function writeBufferAtomic(filePath, content) {
+  const tempPath = filePath + "." + process.pid + ".tmp";
+  await fs.writeFile(tempPath, content);
+  try {
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.unlink(tempPath).catch(() => {});
+    throw error;
+  }
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
   }
 }
