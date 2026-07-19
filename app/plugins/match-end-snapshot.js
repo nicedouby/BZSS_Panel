@@ -369,6 +369,13 @@ function enrichPlayersWithBzssCore(players, modules) {
     const soldierClass = firstText(corePlayer?.soldierInfo?.soldierClass, corePlayer?.soldierClass);
     return {
       ...player,
+      fireTeam: normalizeFireTeam(firstText(
+        player.fireTeam,
+        corePlayer?.fireTeam,
+        corePlayer?.fireteam,
+        corePlayer?.soldierInfo?.fireTeam,
+        corePlayer?.soldierInfo?.fireteam,
+      )),
       role: firstText(player.role, soldierClass),
       health,
       bzssCore: {
