@@ -3487,6 +3487,35 @@ export class WebServer {
       return this.json(res, 200, { ok: true, snapshot: result });
     }
 
+    if (url.pathname === "/api/match-end-snapshot/image" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const id = url.searchParams.get("id");
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.readSnapshotImage) return this.json(res, 404, { error: "PluginNotLoaded" });
+
+      try {
+        const artifact = await pluginApi.readSnapshotImage(id);
+        const headers = {
+          "Content-Type": artifact.contentType,
+          "Cache-Control": "private, max-age=300",
+        };
+        if (url.searchParams.get("download") === "1") {
+          headers["Content-Disposition"] = `attachment; filename="${safeHeaderFileName(artifact.fileName)}"`;
+        }
+        res.writeHead(200, headers);
+        return res.end(artifact.content);
+      } catch (error) {
+        if (error?.statusCode === 400) {
+          return this.json(res, 400, {
+            error: error.code ?? "InvalidSnapshotId",
+            message: error.message,
+          });
+        }
+        return this.json(res, 404, { error: "SnapshotImageNotFound" });
+      }
+    }
+
     if (url.pathname === "/api/match-end-snapshot/view" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
       const id = url.searchParams.get("id");
