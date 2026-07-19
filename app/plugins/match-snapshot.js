@@ -2185,8 +2185,14 @@ export async function generateMatchEndReportPng(payload, options = {}) {
   const tacticalMapLayer = await buildCompactTacticalMapLayer(sharp, layout);
   const overlay = Buffer.from(renderCompactMatchEndSvg(layout), "utf8");
   const composites = [];
-  if (tacticalMapLayer) composites.push(tacticalMapLayer);
-  composites.push({ input: overlay, left: 0, top: 0 });
+  if (tacticalMapLayer) {
+    composites.push({
+      ...tacticalMapLayer,
+      left: tacticalMapLayer.left + layout.framePadding,
+      top: tacticalMapLayer.top + layout.framePadding,
+    });
+  }
+  composites.push({ input: overlay, left: layout.framePadding, top: layout.framePadding });
 
   return sharp(background)
     .composite(composites)
@@ -2251,16 +2257,12 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
     await buildCompactTeamColumn(snapshot, team1, 40, "#2dd4bf", options, roleIconCache),
     await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options, roleIconCache),
   ];
-  const maxContentHeight = Math.max(28, ...columns.map((column) => column.contentHeight));
-  const contentTop = 92;
-  const requiredHeight = contentTop + maxContentHeight + 74;
-  // Keep one unscaled Loading Screen in the centre. Extra vertical space is a
-  // deliberately dark, blurred extension so the report can grow without
-  // stretching, tiling, or cutting the map artwork.
-  const height = Math.max(1800, requiredHeight);
   return {
     width: 1600,
-    height,
+    height: 900,
+    framePadding: 100,
+    outputWidth: 1800,
+    outputHeight: 1100,
     template,
     minimapAssetPath: minimap?.assetPath ?? "",
     capturedAt: snapshot.capturedAt,
@@ -2273,7 +2275,6 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
     queueCount: Number(snapshot?.server?.queueCount ?? 0) || 0,
     playtime: Number(snapshot?.match?.playtime ?? 0) || 0,
     winner: firstText(snapshot?.trigger?.winner, ""),
-    contentTop,
     columns,
   };
 }
@@ -2319,6 +2320,14 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}, r
     || String(left.label).localeCompare(String(right.label), "zh-CN", { numeric: true }));
   const players = groups.flatMap((group) => group.players);
   const contentHeight = groups.reduce((height, group) => height + 16 + group.players.length * 27, 0);
+  const stats = players.reduce((total, player) => {
+    const core = player?.bzssCore ?? {};
+    total.kills += Number(core.kills) || 0;
+    total.deaths += Number(core.deaths) || 0;
+    total.combat += Number(core.combatScore) || 0;
+    total.objective += Number(core.objectiveScore) || 0;
+    return total;
+  }, { kills: 0, deaths: 0, combat: 0, objective: 0 });
 
   return {
     x,
@@ -2334,6 +2343,7 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}, r
     groups,
     contentHeight,
     players,
+    stats,
     includeSteamID: Boolean(options.includeSteamID),
   };
 }
@@ -2370,26 +2380,26 @@ async function buildCompactMatchEndBackground(sharp, layout) {
     template: layout.template,
   });
   const blurredExtension = await sharp(tile)
-    .resize(layout.width, layout.height, { fit: "cover", position: "centre" })
-    .blur(36)
-    .modulate({ brightness: 0.22, saturation: 0.48 })
+    .resize(layout.outputWidth, layout.outputHeight, { fit: "cover", position: "centre" })
+    .blur(26)
+    .modulate({ brightness: 0.5, saturation: 0.65 })
     .png()
     .toBuffer();
   const edgeShade = Buffer.from(
-    '<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.width + '" height="' + layout.height + '"><defs><radialGradient id="aura" cx="50%" cy="38%" r="72%"><stop offset="0%" stop-color="#000000" stop-opacity=".03"/><stop offset="52%" stop-color="#000000" stop-opacity=".13"/><stop offset="66%" stop-color="#8ba9c1" stop-opacity=".14"/><stop offset="80%" stop-color="#000000" stop-opacity=".68"/><stop offset="100%" stop-color="#000000" stop-opacity=".96"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#aura)"/></svg>',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.outputWidth + '" height="' + layout.outputHeight + '"><defs><radialGradient id="aura" cx="50%" cy="50%" r="70%"><stop offset="0%" stop-color="#9ec5df" stop-opacity=".03"/><stop offset="65%" stop-color="#8ba9c1" stop-opacity=".10"/><stop offset="100%" stop-color="#020611" stop-opacity=".38"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#aura)"/></svg>',
     "utf8",
   );
   return sharp({
     create: {
-      width: layout.width,
-      height: layout.height,
+      width: layout.outputWidth,
+      height: layout.outputHeight,
       channels: 4,
       background: { r: 2, g: 6, b: 18, alpha: 1 },
     },
   })
     .composite([
       { input: blurredExtension, left: 0, top: 0 },
-      { input: tile, left: 0, top: Math.min(120, Math.floor((layout.height - tileHeight) / 2)) },
+      { input: tile, left: layout.framePadding, top: layout.framePadding },
       { input: edgeShade, left: 0, top: 0 },
     ])
     .png()
@@ -2427,42 +2437,47 @@ async function buildCompactTacticalMapLayer(sharp, layout) {
 
 function renderCompactMatchEndSvg(layout) {
   const svg = [];
-  svg.push('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="' + layout.height + '" viewBox="0 0 1600 ' + layout.height + '">');
+  svg.push('<svg xmlns="http://www.w3.org/2000/svg" width="' + layout.width + '" height="' + layout.height + '" viewBox="0 0 ' + layout.width + ' ' + layout.height + '">');
   svg.push('<defs>');
   svg.push('<linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#020611" stop-opacity=".38"/><stop offset="45%" stop-color="#020611" stop-opacity=".68"/><stop offset="100%" stop-color="#020611" stop-opacity=".78"/></linearGradient>');
   svg.push('<linearGradient id="topBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#071426" stop-opacity=".88"/><stop offset="50%" stop-color="#10243c" stop-opacity=".76"/><stop offset="100%" stop-color="#07101f" stop-opacity=".88"/></linearGradient>');
   svg.push('<filter id="softMap"><feGaussianBlur stdDeviation="1.6"/></filter>');
   svg.push('<style><![CDATA[');
-  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:20px;font-weight:900}.sub{font-size:9px;fill:#b6c6d7}.chip{font-size:9px;font-weight:900}.team-name{font-size:14px;font-weight:900}.team-meta{font-size:9px;fill:#c5d2e0}.commander{font-size:11px;font-weight:900}.head{font-size:8px;font-weight:900;fill:#a5b8ca}.squad{font-size:10px;font-weight:900}.name{font-size:10px;font-weight:900}.row-meta{font-size:8px;fill:#b5c5d5}.stat{font-size:9px;font-weight:800;fill:#edf5ff}.foot{font-size:9px;fill:#8396aa}]]></style>");
+  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:34px;font-weight:900}.sub{font-size:14px;fill:#b6c6d7}.chip{font-size:13px;font-weight:900}.team-name{font-size:24px;font-weight:900}.team-meta{font-size:13px;fill:#c5d2e0}.commander{font-size:18px;font-weight:900}.metric-label{font-size:11px;font-weight:900;fill:#91a6bc;letter-spacing:1px}.metric{font-size:20px;font-weight:900}.foot{font-size:10px;fill:#8396aa}]]></style>");
   svg.push('</defs>');
-  svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#pageShade)"/>');
+  svg.push('<rect width="' + layout.width + '" height="' + layout.height + '" fill="url(#pageShade)"/>');
 
-  svg.push('<path d="M32 8 H1546 L1568 30 V40 H32 Z" fill="url(#topBar)" stroke="#7890a8" stroke-opacity=".38"/>');
-  svg.push('<text x="50" y="30" class="title">' + xmlEscape(layout.map) + '</text>');
-  svg.push('<text x="250" y="29" class="sub">' + xmlEscape(layout.layer) + ' · ' + xmlEscape(layout.mode) + ' · NEXT ' + xmlEscape(layout.nextMap) + ' · ' + xmlEscape(layout.serverName) + '</text>');
-  svg.push('<text x="1160" y="29" class="chip mono">PLAYERS ' + layout.playerCount + ' · QUEUE ' + layout.queueCount + ' · TIME ' + xmlEscape(formatDurationClock(layout.playtime)) + (layout.winner ? ' · WIN ' + xmlEscape(layout.winner) : '') + '</text>');
-
-  for (const column of layout.columns) {
-    svg.push(renderCompactCommanderBar(column));
-    svg.push(renderCompactStatHeader(column));
-    let rowY = layout.contentTop;
-    for (const group of column.groups) {
-      svg.push(renderCompactSquadHeader(column, group, rowY));
-      rowY += 16;
-      group.players.forEach((player, index) => {
-        svg.push(renderCompactPlayerRow(column, player, index, rowY));
-        rowY += 27;
-      });
-    }
-    if (!column.groups.length) {
-      svg.push('<text x="' + (column.x + 18) + '" y="' + (layout.contentTop + 16) + '" class="row-meta">该阵营没有保存到玩家战绩</text>');
-    }
-  }
-
-  svg.push('<path d="M800 44 V' + (layout.height - 28) + '" stroke="#d8e6f5" stroke-opacity=".16"/>');
-  svg.push('<text x="800" y="' + (layout.height - 12) + '" text-anchor="middle" class="foot">BZSS PANEL · MATCH END SNAPSHOT · LOADING SCREEN / TACTICAL MAP / PLAYER DATA</text>');
+  svg.push('<path d="M32 24 H1534 L1568 58 V112 H32 Z" fill="url(#topBar)" stroke="#7890a8" stroke-opacity=".42"/>');
+  svg.push('<text x="60" y="68" class="title">' + xmlEscape(layout.map) + '</text>');
+  svg.push('<text x="62" y="94" class="sub">' + xmlEscape(layout.layer) + ' · ' + xmlEscape(layout.mode) + ' · NEXT ' + xmlEscape(layout.nextMap) + ' · ' + xmlEscape(layout.serverName) + '</text>');
+  svg.push('<text x="1130" y="64" class="chip mono">PLAYERS ' + layout.playerCount + ' · QUEUE ' + layout.queueCount + ' · TIME ' + xmlEscape(formatDurationClock(layout.playtime)) + '</text>');
+  svg.push('<text x="1130" y="89" class="sub mono">' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + (layout.winner ? ' · WINNER ' + xmlEscape(layout.winner) : '') + '</text>');
+  svg.push('<text x="800" y="212" text-anchor="middle" class="chip" fill="#dcecff">MATCH END SUMMARY</text>');
+  svg.push(renderMatchEndSummaryCard(layout.columns[0], 52, 608));
+  svg.push(renderMatchEndSummaryCard(layout.columns[1], 824, 608));
+  svg.push('<text x="800" y="876" text-anchor="middle" class="foot">BZSS PANEL · FULL PLAYER DATA IS SAVED IN THE MATCH-END SNAPSHOT JSON</text>');
   svg.push('</svg>');
   return svg.join("\n");
+}
+
+function renderMatchEndSummaryCard(team, x, y) {
+  const stats = team?.stats ?? {};
+  const flag = team?.flagDataUri
+    ? '<image href="' + team.flagDataUri + '" x="' + (x + 26) + '" y="' + (y + 28) + '" width="94" height="52" preserveAspectRatio="xMidYMid meet"/>'
+    : '<rect x="' + (x + 26) + '" y="' + (y + 28) + '" width="94" height="52" fill="' + team.accent + '" fill-opacity=".26"/>';
+  return [
+    '<path d="M' + x + ' ' + y + ' H' + (x + 706) + ' L' + (x + 720) + ' ' + (y + 14) + ' V' + (y + 184) + ' H' + x + ' Z" fill="#061020" fill-opacity=".84" stroke="' + team.accent + '" stroke-opacity=".72"/>',
+    '<rect x="' + x + '" y="' + y + '" width="7" height="184" fill="' + team.accent + '"/>',
+    flag,
+    '<text x="' + (x + 142) + '" y="' + (y + 50) + '" class="team-name">TEAM ' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 31)) + '</text>',
+    '<text x="' + (x + 142) + '" y="' + (y + 75) + '" class="team-meta mono">' + xmlEscape(team.factionCode) + ' · ' + team.playerCount + ' PLAYERS · ' + team.squadCount + ' SQUADS</text>',
+    '<text x="' + (x + 26) + '" y="' + (y + 116) + '" class="metric-label">COMMANDER</text>',
+    '<text x="' + (x + 26) + '" y="' + (y + 142) + '" class="commander">' + xmlEscape(truncateText(team.commanderName, 32)) + '</text>',
+    '<text x="' + (x + 338) + '" y="' + (y + 116) + '" class="metric-label">KILLS</text><text x="' + (x + 338) + '" y="' + (y + 145) + '" class="metric mono">' + compactStat(stats.kills) + '</text>',
+    '<text x="' + (x + 430) + '" y="' + (y + 116) + '" class="metric-label">DEATHS</text><text x="' + (x + 430) + '" y="' + (y + 145) + '" class="metric mono">' + compactStat(stats.deaths) + '</text>',
+    '<text x="' + (x + 526) + '" y="' + (y + 116) + '" class="metric-label">COMBAT</text><text x="' + (x + 526) + '" y="' + (y + 145) + '" class="metric mono">' + compactStat(stats.combat) + '</text>',
+    '<text x="' + (x + 626) + '" y="' + (y + 116) + '" class="metric-label">OBJECTIVE</text><text x="' + (x + 626) + '" y="' + (y + 145) + '" class="metric mono">' + compactStat(stats.objective) + '</text>',
+  ].join("");
 }
 
 function renderCompactCommanderBar(team) {
