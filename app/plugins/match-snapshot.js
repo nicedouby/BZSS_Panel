@@ -2250,8 +2250,8 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
     await buildCompactTeamColumn(snapshot, team1, 40, "#2dd4bf", options),
     await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options),
   ];
-  const maxRows = Math.max(1, ...columns.map((column) => column.players.length));
-  const height = 282 + maxRows * 54 + 46;
+  const maxContentHeight = Math.max(34, ...columns.map((column) => column.contentHeight));
+  const height = 178 + maxContentHeight + 38;
   return {
     width: 1600,
     height,
@@ -2274,19 +2274,30 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
 async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}) {
   const commanderName = resolveCommanderName(team) || findTeamCommanderName(snapshot.players, team.teamID) || "未记录";
   const flagPath = team.flagAssetPath || resolveFactionFlagAssetPath(team.teamName);
-  const players = [
-    ...team.squads.flatMap((squad) => squad.members.map((player) => ({
-      ...player,
-      squadName: buildSquadDisplayName(squad, player),
-    }))),
-    ...team.unassignedPlayers.map((player) => ({ ...player, squadName: "未加入小队" })),
-  ];
-  players.sort((left, right) =>
-    compareNumbers(left.squadID, right.squadID)
-    || Number(right.isCommander) - Number(left.isCommander)
-    || Number(right.isLeader) - Number(left.isLeader)
-    || compareNumbers(right?.bzssCore?.combatScore, left?.bzssCore?.combatScore)
-    || String(left.name).localeCompare(String(right.name), "zh-CN"));
+  const groups = team.squads.map((squad) => {
+    const players = [...squad.members].sort(compareCompactPlayers);
+    const label = buildSquadDisplayName(squad) || "小队 " + String(squad.squadID ?? "-");
+    return {
+      squadID: squad.squadID,
+      label,
+      players,
+      isCommandSquad: players.some((player) => player.isCommander) || /command|指挥/i.test(label),
+    };
+  });
+  if (team.unassignedPlayers.length) {
+    groups.push({
+      squadID: null,
+      label: "未加入小队",
+      players: [...team.unassignedPlayers].sort(compareCompactPlayers),
+      isCommandSquad: false,
+    });
+  }
+  groups.sort((left, right) =>
+    Number(right.isCommandSquad) - Number(left.isCommandSquad)
+    || compactSquadSortValue(left.squadID) - compactSquadSortValue(right.squadID)
+    || String(left.label).localeCompare(String(right.label), "zh-CN", { numeric: true }));
+  const players = groups.flatMap((group) => group.players);
+  const contentHeight = groups.reduce((height, group) => height + 26 + group.players.length * 34, 0);
 
   return {
     x,
@@ -2299,9 +2310,35 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}) {
     playerCount: players.length,
     squadCount: team.squads.length,
     flagDataUri: flagPath ? await readAssetDataUri(flagPath) : "",
+    groups,
+    contentHeight,
     players,
     includeSteamID: Boolean(options.includeSteamID),
   };
+}
+
+function compactSquadSortValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : Number.MAX_SAFE_INTEGER;
+}
+
+function compareCompactPlayers(left, right) {
+  return Number(right?.isCommander) - Number(left?.isCommander)
+    || Number(right?.isLeader) - Number(left?.isLeader)
+    || compactFireTeamRank(left?.fireTeam) - compactFireTeamRank(right?.fireTeam)
+    || String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "zh-CN", { numeric: true })
+    || compactSquadSortValue(left?.playerID) - compactSquadSortValue(right?.playerID);
+}
+
+function compactFireTeam(value) {
+  const text = String(value ?? "").trim().toUpperCase();
+  const match = text.match(/(?:FIRE\s*TEAM\s*)?([ABC])(?:\s*TEAM)?/);
+  return match?.[1] ?? (text || "-");
+}
+
+function compactFireTeamRank(value) {
+  const fireTeam = compactFireTeam(value);
+  return fireTeam === "A" ? 0 : fireTeam === "B" ? 1 : fireTeam === "C" ? 2 : 3;
 }
 
 async function buildCompactMatchEndBackground(sharp, layout) {
@@ -2369,90 +2406,99 @@ function renderCompactMatchEndSvg(layout) {
   svg.push('<linearGradient id="topBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#071426" stop-opacity=".88"/><stop offset="50%" stop-color="#10243c" stop-opacity=".76"/><stop offset="100%" stop-color="#07101f" stop-opacity=".88"/></linearGradient>');
   svg.push('<filter id="softMap"><feGaussianBlur stdDeviation="1.6"/></filter>');
   svg.push('<style><![CDATA[');
-  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:34px;font-weight:900}.sub{font-size:13px;fill:#b6c6d7}.chip{font-size:12px;font-weight:900}.team-name{font-size:21px;font-weight:900}.team-meta{font-size:12px;fill:#c5d2e0}.commander-label{font-size:10px;font-weight:900;fill:#91a6bc;letter-spacing:1px}.commander{font-size:18px;font-weight:900}.head{font-size:10px;font-weight:900;fill:#a5b8ca}.name{font-size:14px;font-weight:900}.row-meta{font-size:11px;fill:#b5c5d5}.stat{font-size:11px;font-weight:800;fill:#edf5ff}.foot{font-size:10px;fill:#8396aa}]]></style>");
+  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:28px;font-weight:900}.sub{font-size:11px;fill:#b6c6d7}.chip{font-size:11px;font-weight:900}.team-name{font-size:17px;font-weight:900}.team-meta{font-size:10px;fill:#c5d2e0}.commander-label{font-size:9px;font-weight:900;fill:#91a6bc;letter-spacing:1px}.commander{font-size:14px;font-weight:900}.head{font-size:9px;font-weight:900;fill:#a5b8ca}.squad{font-size:12px;font-weight:900}.name{font-size:12px;font-weight:900}.row-meta{font-size:9px;fill:#b5c5d5}.stat{font-size:10px;font-weight:800;fill:#edf5ff}.foot{font-size:9px;fill:#8396aa}]]></style>");
   svg.push('</defs>');
   svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#pageShade)"/>');
 
-  svg.push('<path d="M32 24 H1532 L1568 60 V96 H32 Z" fill="url(#topBar)" stroke="#7890a8" stroke-opacity=".38"/>');
-  svg.push('<text x="56" y="60" class="title">' + xmlEscape(layout.map) + '</text>');
-  svg.push('<text x="58" y="82" class="sub">' + xmlEscape(layout.layer) + ' · ' + xmlEscape(layout.mode) + ' · NEXT ' + xmlEscape(layout.nextMap) + ' · ' + xmlEscape(layout.serverName) + '</text>');
-  svg.push('<text x="1168" y="53" class="chip mono">PLAYERS ' + layout.playerCount + '   QUEUE ' + layout.queueCount + '   TIME ' + xmlEscape(formatDurationClock(layout.playtime)) + '</text>');
-  svg.push('<text x="1168" y="77" class="sub mono">' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + (layout.winner ? ' · WINNER ' + xmlEscape(layout.winner) : '') + '</text>');
+  svg.push('<path d="M32 16 H1538 L1568 46 V72 H32 Z" fill="url(#topBar)" stroke="#7890a8" stroke-opacity=".38"/>');
+  svg.push('<text x="52" y="44" class="title">' + xmlEscape(layout.map) + '</text>');
+  svg.push('<text x="54" y="62" class="sub">' + xmlEscape(layout.layer) + ' · ' + xmlEscape(layout.mode) + ' · NEXT ' + xmlEscape(layout.nextMap) + ' · ' + xmlEscape(layout.serverName) + '</text>');
+  svg.push('<text x="1160" y="39" class="chip mono">PLAYERS ' + layout.playerCount + '   QUEUE ' + layout.queueCount + '   TIME ' + xmlEscape(formatDurationClock(layout.playtime)) + '</text>');
+  svg.push('<text x="1160" y="59" class="sub mono">' + xmlEscape(formatDateTimeLocal(layout.capturedAt)) + (layout.winner ? ' · WINNER ' + xmlEscape(layout.winner) : '') + '</text>');
 
   for (const column of layout.columns) {
     svg.push(renderCompactCommanderBar(column));
     svg.push(renderCompactStatHeader(column));
-    column.players.forEach((player, index) => {
-      svg.push(renderCompactPlayerRow(column, player, index));
-    });
-    if (!column.players.length) {
-      svg.push('<text x="' + (column.x + 18) + '" y="286" class="row-meta">该阵营没有保存到玩家战绩</text>');
+    let rowY = 178;
+    for (const group of column.groups) {
+      svg.push(renderCompactSquadHeader(column, group, rowY));
+      rowY += 26;
+      group.players.forEach((player, index) => {
+        svg.push(renderCompactPlayerRow(column, player, index, rowY));
+        rowY += 34;
+      });
+    }
+    if (!column.groups.length) {
+      svg.push('<text x="' + (column.x + 18) + '" y="202" class="row-meta">该阵营没有保存到玩家战绩</text>');
     }
   }
 
-  svg.push('<path d="M800 112 V' + (layout.height - 34) + '" stroke="#d8e6f5" stroke-opacity=".16"/>');
-  svg.push('<text x="800" y="' + (layout.height - 16) + '" text-anchor="middle" class="foot">BZSS PANEL · MATCH END SNAPSHOT · LOADING SCREEN / TACTICAL MAP / PLAYER DATA</text>');
+  svg.push('<path d="M800 82 V' + (layout.height - 28) + '" stroke="#d8e6f5" stroke-opacity=".16"/>');
+  svg.push('<text x="800" y="' + (layout.height - 12) + '" text-anchor="middle" class="foot">BZSS PANEL · MATCH END SNAPSHOT · LOADING SCREEN / TACTICAL MAP / PLAYER DATA</text>');
   svg.push('</svg>');
   return svg.join("\n");
 }
 
 function renderCompactCommanderBar(team) {
   const x = team.x;
-  const y = 112;
+  const y = 82;
   const width = team.width;
   const flagX = x + 16;
   return [
-    '<path d="M' + x + ' ' + y + ' H' + (x + width - 18) + ' L' + (x + width) + ' ' + (y + 18) + ' V' + (y + 100) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
-    '<rect x="' + x + '" y="' + y + '" width="7" height="100" fill="' + team.accent + '"/>',
+    '<path d="M' + x + ' ' + y + ' H' + (x + width - 14) + ' L' + (x + width) + ' ' + (y + 14) + ' V' + (y + 64) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
+    '<rect x="' + x + '" y="' + y + '" width="6" height="64" fill="' + team.accent + '"/>',
     team.flagDataUri
-      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 13) + '" width="74" height="74" preserveAspectRatio="xMidYMid meet"/>'
-      : '<rect x="' + flagX + '" y="' + (y + 13) + '" width="74" height="74" fill="' + team.accent + '" opacity=".24"/>',
-    '<text x="' + (x + 108) + '" y="' + (y + 30) + '" class="team-name">TEAM ' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 35)) + '</text>',
-    '<text x="' + (x + 108) + '" y="' + (y + 50) + '" class="team-meta mono">' + xmlEscape(team.factionCode) + ' · ' + team.playerCount + ' PAX · ' + team.squadCount + ' SQUADS</text>',
-    '<text x="' + (x + 108) + '" y="' + (y + 69) + '" class="commander-label">COMMANDER</text>',
-    '<text x="' + (x + 108) + '" y="' + (y + 90) + '" class="commander">' + xmlEscape(truncateText(team.commanderName, 30)) + '</text>',
+      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 10) + '" width="78" height="44" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + flagX + '" y="' + (y + 10) + '" width="78" height="44" fill="' + team.accent + '" opacity=".24"/>',
+    '<text x="' + (x + 108) + '" y="' + (y + 24) + '" class="team-name">TEAM ' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 31)) + '</text>',
+    '<text x="' + (x + 108) + '" y="' + (y + 43) + '" class="team-meta mono">' + xmlEscape(team.factionCode) + ' · ' + team.playerCount + ' PAX · ' + team.squadCount + ' SQUADS</text>',
+    '<text x="' + (x + 476) + '" y="' + (y + 22) + '" class="commander-label">COMMANDER</text>',
+    '<text x="' + (x + 476) + '" y="' + (y + 45) + '" class="commander">' + xmlEscape(truncateText(team.commanderName, 25)) + '</text>',
   ].join("");
 }
 
 function renderCompactStatHeader(team) {
   const x = team.x;
-  const y = 224;
+  const y = 154;
   const labels = [
-    [18, "PLAYER / SQUAD / ROLE"], [410, "K"], [448, "W"], [486, "D"], [526, "TK"],
-    [570, "VK"], [612, "REV"], [660, "HEAL"], [714, "SCORE"],
+    [14, "PLAYER"], [188, "FT"], [220, "ROLE"], [330, "HP"], [370, "PING"],
+    [414, "K"], [446, "W"], [478, "D"], [512, "TK"], [548, "VK"],
+    [584, "REV"], [626, "HEAL"], [668, "C"], [704, "O"], [736, "T"],
   ];
-  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="28" fill="#020611" fill-opacity=".78"/>' +
+  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="24" fill="#020611" fill-opacity=".78"/>' +
     labels.map(([offset, label], index) =>
-      '<text x="' + (x + offset) + '" y="' + (y + 19) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
+      '<text x="' + (x + offset) + '" y="' + (y + 16) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
     ).join("");
 }
 
-function renderCompactPlayerRow(team, player, index) {
+function renderCompactSquadHeader(team, group, y) {
+  const command = group.isCommandSquad ? " · COMMAND" : "";
+  return [
+    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="25" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
+    '<text x="' + (team.x + 12) + '" y="' + (y + 17) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
+    '<text x="' + (team.x + team.width - 12) + '" y="' + (y + 17) + '" text-anchor="end" class="team-meta mono">' + group.players.length + ' PAX</text>',
+  ].join("");
+}
+
+function renderCompactPlayerRow(team, player, index, y) {
   const x = team.x;
-  const y = 252 + index * 54;
   const core = player?.bzssCore ?? {};
   const health = firstFiniteNumber(player?.health, core.health);
   const backgroundOpacity = index % 2 === 0 ? ".70" : ".56";
-  const statLine = [
-    "K " + compactStat(core.kills),
-    "W " + compactStat(core.downs),
-    "D " + compactStat(core.deaths),
-    "TK " + compactStat(core.teamKills),
-    "VK " + compactStat(core.vehicleKills),
-    "REV " + compactStat(core.revives),
-    "HEAL " + compactStat(core.healPoints),
-    "C " + compactStat(core.combatScore),
-    "O " + compactStat(core.objectiveScore),
-    "T " + compactStat(core.teamworkScore),
-  ].join("   ");
+  const values = [
+    [330, health == null ? "-" : Math.round(health)], [370, compactStat(core.ping)],
+    [414, compactStat(core.kills)], [446, compactStat(core.downs)], [478, compactStat(core.deaths)],
+    [512, compactStat(core.teamKills)], [548, compactStat(core.vehicleKills)], [584, compactStat(core.revives)],
+    [626, compactStat(core.healPoints)], [668, compactStat(core.combatScore)],
+    [704, compactStat(core.objectiveScore)], [736, compactStat(core.teamworkScore)],
+  ];
   return [
-    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="52" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
-    '<rect x="' + x + '" y="' + y + '" width="4" height="52" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".22") + '"/>',
-    '<text x="' + (x + 14) + '" y="' + (y + 20) + '" class="name">' + xmlEscape(truncateText(player.name, 25)) + '</text>',
-    '<text x="' + (x + 275) + '" y="' + (y + 20) + '" class="row-meta">' + xmlEscape(truncateText(player.squadName, 18)) + '</text>',
-    '<text x="' + (x + 465) + '" y="' + (y + 20) + '" class="row-meta">' + xmlEscape(truncateText(firstText(player.role, core.soldierClass, "-"), 18)) + '</text>',
-    '<text x="' + (x + 730) + '" y="' + (y + 20) + '" text-anchor="end" class="row-meta mono">HP ' + (health == null ? "-" : Math.round(health)) + ' · ' + compactStat(core.ping) + 'ms</text>',
-    '<text x="' + (x + 14) + '" y="' + (y + 42) + '" class="stat mono">' + xmlEscape(statLine) + '</text>',
+    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="33" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
+    '<rect x="' + x + '" y="' + y + '" width="3" height="33" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
+    '<text x="' + (x + 12) + '" y="' + (y + 21) + '" class="name">' + xmlEscape(truncateText(player.name, 22)) + '</text>',
+    '<text x="' + (x + 188) + '" y="' + (y + 21) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
+    '<text x="' + (x + 220) + '" y="' + (y + 21) + '" class="row-meta">' + xmlEscape(truncateText(firstText(player.role, core.soldierClass, "-"), 13)) + '</text>',
+    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 21) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
   ].join("");
 }
 
