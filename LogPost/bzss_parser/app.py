@@ -35,12 +35,17 @@ MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
 BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:", re.IGNORECASE)
 BZSS_CORE_SCOREBOARD_LINE_RE = re.compile(r"\bPlayerScoreboard\s*\{", re.IGNORECASE)
+BZSS_CORE_VEHICLE_LINE_RE = re.compile(r"\b(?:VRI|VehicleInfo)\s*\{", re.IGNORECASE)
 
 def is_bzss_core_runtime_line(line: str) -> bool:
     return bool(BZSS_CORE_RUNTIME_LINE_RE.search(str(line or "")))
 
 def is_bzss_core_scoreboard_line(line: str) -> bool:
     return bool(BZSS_CORE_SCOREBOARD_LINE_RE.search(str(line or "")))
+
+
+def is_bzss_core_vehicle_line(line: str) -> bool:
+    return bool(BZSS_CORE_VEHICLE_LINE_RE.search(str(line or "")))
 
 
 class BzssLogParserApp:
@@ -524,10 +529,15 @@ class BzssLogParserApp:
         if self.raw_log_output_drop_blacklisted and self.blacklist.is_blacklisted(line):
             return False
 
-        # BZSS-Core runtime frames are required by the panel position monitor.
+        # BZSS-Core runtime, scoreboard, and vehicle frames are required by
+        # the panel state monitor. They bypass the generic sampled token list.
         # They are not part of the generic raw output token list because they
         # are emitted as PIE/Error lines, so keep them even when contains is set.
-        if is_bzss_core_runtime_line(line) or is_bzss_core_scoreboard_line(line):
+        if (
+            is_bzss_core_runtime_line(line)
+            or is_bzss_core_scoreboard_line(line)
+            or is_bzss_core_vehicle_line(line)
+        ):
             return self.raw_log_rate_limiter_allow()
 
         if self.raw_log_output_only_preserved:
