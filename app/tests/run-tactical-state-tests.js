@@ -145,6 +145,7 @@ function makeModule() {
             captureZones: [{ name: "A", position: { x: 10, y: 20, z: 0 } }],
             fobs: [],
             mainZones: [],
+            vehicles: [{ vehicleType: "TruckTransport", teamId: 1, position: { x: 30, y: 40, z: 0 } }],
             explosions: [],
           };
         },
@@ -212,6 +213,8 @@ async function main() {
   assert.equal(ghost.match.teamId, 1);
 
   assert.equal(snapshot.assets.captureZones.length, 1);
+  assert.equal(snapshot.assets.vehicles.length, 1);
+  assert.equal(snapshot.assets.vehicles[0].vehicleType, "TruckTransport");
   assert.equal(snapshot.teams.find((team) => team.teamId === 1)?.factionName, "United States Army");
   assert.equal(snapshot.teams.find((team) => team.teamId === 2)?.factionName, "Russian Ground Forces");
   assert.equal(snapshot.diagnostics.unlinkedBzssPlayers.length, 1);
