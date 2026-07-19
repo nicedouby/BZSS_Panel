@@ -2309,7 +2309,11 @@ async function buildCompactMatchEndBackground(sharp, layout) {
   });
   const composites = [];
   for (let top = 0; top < layout.height; top += tileHeight) {
-    composites.push({ input: tile, left: 0, top });
+    const remainingHeight = layout.height - top;
+    const input = remainingHeight < tileHeight
+      ? await sharp(tile).extract({ left: 0, top: 0, width: layout.width, height: remainingHeight }).png().toBuffer()
+      : tile;
+    composites.push({ input, left: 0, top });
   }
   return sharp({
     create: {
