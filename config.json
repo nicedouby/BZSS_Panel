@@ -999,14 +999,14 @@
       ]
     },
     "teamKillApology": {
-      "enabled": true,
+      "enabled": false,
       "deadlineSeconds": 600,
       "reminderSeconds": 60,
       "timeoutAction": "remove_from_squad"
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
