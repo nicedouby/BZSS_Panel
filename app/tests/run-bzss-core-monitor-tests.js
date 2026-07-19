@@ -92,6 +92,20 @@ function testParseLogLine() {
   assert.equal(vehicleFrame.vehicles[1].occupied, false);
   assert.deepEqual(vehicleFrame.vehicles[1].position, { x: 1, y: 2, z: 3 });
 
+  const directVehicleFrame = parseBzssCoreVehicleLine("PIE: VRI{DriverID=8,VehicleType=M1126 Stryker,Health=450/600,Position=100.5,-25,8,Velocity=4.25,TeamID=2}");
+  assert.equal(directVehicleFrame.vehicles.length, 1);
+  assert.equal(directVehicleFrame.vehicles[0].driverPlayerId, 8);
+  assert.equal(directVehicleFrame.vehicles[0].vehicleType, "M1126 Stryker");
+  assert.equal(directVehicleFrame.vehicles[0].healthPercent, 75);
+  assert.deepEqual(directVehicleFrame.vehicles[0].position, { x: 100.5, y: -25, z: 8 });
+  assert.equal(directVehicleFrame.vehicles[0].teamId, 2);
+
+  const namedVehicleFrame = parseBzssCoreLogLine("PIE: VehicleInfo{{ID:-1,Type:Tank,HP:55%,PosX=1 Y=2 Z=3,Speed:0,Team:1}}");
+  assert.equal(namedVehicleFrame.type, "vehicles");
+  assert.equal(namedVehicleFrame.vehicles.length, 1);
+  assert.equal(namedVehicleFrame.vehicles[0].vehicleType, "Tank");
+  assert.equal(namedVehicleFrame.vehicles[0].healthPercent, 55);
+
   const runtime = parseBzssCoreLogLine("PIE: Error: PlayerBaseInfo{}");
   assert.equal(runtime.type, "playerRuntime");
   assert.equal(runtime.runtimePlayers.length, 0);
