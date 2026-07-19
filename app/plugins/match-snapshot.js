@@ -2182,10 +2182,14 @@ export async function generateMatchEndReportPng(payload, options = {}) {
   const layout = await buildCompactMatchEndLayout(snapshot, options);
   const sharp = await loadSharp();
   const background = await buildCompactMatchEndBackground(sharp, layout);
+  const tacticalMapLayer = await buildCompactTacticalMapLayer(sharp, layout);
   const overlay = Buffer.from(renderCompactMatchEndSvg(layout), "utf8");
+  const composites = [];
+  if (tacticalMapLayer) composites.push(tacticalMapLayer);
+  composites.push({ input: overlay, left: 0, top: 0 });
 
   return sharp(background)
-    .composite([{ input: overlay, left: 0, top: 0 }])
+    .composite(composites)
     .png()
     .toBuffer();
 }
@@ -2248,13 +2252,11 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
   ];
   const maxRows = Math.max(1, ...columns.map((column) => column.players.length));
   const height = 282 + maxRows * 54 + 46;
-  const minimapDataUri = minimap?.assetPath ? await readAssetDataUri(minimap.assetPath) : "";
-
   return {
     width: 1600,
     height,
     template,
-    minimapDataUri,
+    minimapAssetPath: minimap?.assetPath ?? "",
     capturedAt: snapshot.capturedAt,
     map: firstText(snapshot?.match?.map, snapshot?.match?.layer, "Unknown Map"),
     layer: firstText(snapshot?.match?.layer, "-"),
@@ -2330,6 +2332,35 @@ async function buildCompactMatchEndBackground(sharp, layout) {
     .toBuffer();
 }
 
+async function buildCompactTacticalMapLayer(sharp, layout) {
+  if (!layout.minimapAssetPath) return null;
+  try {
+    const size = Math.max(320, Math.min(1340, layout.height - 180));
+    const top = Math.max(130, Math.floor((layout.height - size) / 2));
+    const map = await sharp(layout.minimapAssetPath)
+      .resize(size, size, { fit: "contain", position: "centre" })
+      .modulate({ brightness: 0.68, saturation: 0.62 })
+      .ensureAlpha()
+      .png()
+      .toBuffer();
+    const alphaMask = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size + '"><defs><radialGradient id="fade"><stop offset="0%" stop-color="white" stop-opacity=".18"/><stop offset="72%" stop-color="white" stop-opacity=".12"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#fade)"/></svg>',
+      "utf8",
+    );
+    const fadedMap = await sharp(map)
+      .composite([{ input: alphaMask, blend: "dest-in" }])
+      .png()
+      .toBuffer();
+    return {
+      input: fadedMap,
+      left: Math.floor((layout.width - size) / 2),
+      top,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function renderCompactMatchEndSvg(layout) {
   const svg = [];
   svg.push('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="' + layout.height + '" viewBox="0 0 1600 ' + layout.height + '">');
@@ -2341,12 +2372,6 @@ function renderCompactMatchEndSvg(layout) {
   svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:34px;font-weight:900}.sub{font-size:13px;fill:#b6c6d7}.chip{font-size:12px;font-weight:900}.team-name{font-size:21px;font-weight:900}.team-meta{font-size:12px;fill:#c5d2e0}.commander-label{font-size:10px;font-weight:900;fill:#91a6bc;letter-spacing:1px}.commander{font-size:18px;font-weight:900}.head{font-size:10px;font-weight:900;fill:#a5b8ca}.name{font-size:14px;font-weight:900}.row-meta{font-size:11px;fill:#b5c5d5}.stat{font-size:11px;font-weight:800;fill:#edf5ff}.foot{font-size:10px;fill:#8396aa}]]></style>");
   svg.push('</defs>');
   svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#pageShade)"/>');
-
-  if (layout.minimapDataUri) {
-    const mapSize = Math.min(1340, layout.height - 180);
-    const mapY = Math.max(150, Math.floor((layout.height - mapSize) / 2));
-    svg.push('<image href="' + layout.minimapDataUri + '" x="' + ((1600 - mapSize) / 2) + '" y="' + mapY + '" width="' + mapSize + '" height="' + mapSize + '" opacity=".13" filter="url(#softMap)" preserveAspectRatio="xMidYMid meet"/>');
-  }
 
   svg.push('<path d="M32 24 H1532 L1568 60 V96 H32 Z" fill="url(#topBar)" stroke="#7890a8" stroke-opacity=".38"/>');
   svg.push('<text x="56" y="60" class="title">' + xmlEscape(layout.map) + '</text>');
