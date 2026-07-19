@@ -288,12 +288,27 @@ function normalizePlayers(players) {
     eosID: firstText(player?.eosID, player?.eosId, player?.EOSID),
     teamID: nullableNumber(player?.teamID ?? player?.teamId),
     squadID: nullableNumber(player?.squadID ?? player?.squadId),
+    fireTeam: normalizeFireTeam(
+      player?.fireTeam
+      ?? player?.fireteam
+      ?? player?.fireTeamName
+      ?? player?.fireteamName
+      ?? player?.fireTeamID
+      ?? player?.fireteamID,
+    ),
     role: firstText(player?.role, player?.roleName),
     isLeader: Boolean(player?.isLeader ?? player?.leader),
     isCommander: Boolean(player?.isCommander ?? player?.commander),
     health: nullableNumber(player?.health),
     bzssCore: null,
   }));
+}
+
+function normalizeFireTeam(value) {
+  const text = String(value ?? "").trim().toUpperCase();
+  if (!text) return "";
+  const match = text.match(/(?:FIRE\s*TEAM\s*)?([ABC])(?:\s*TEAM)?/);
+  return match?.[1] ?? text;
 }
 
 function normalizeSquads(squads) {
