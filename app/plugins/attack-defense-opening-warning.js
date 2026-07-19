@@ -5,7 +5,7 @@ const PLUGIN_CONFIG_KEY = "attack-defense-opening-warning";
 
 const DEFAULT_TRIGGER_MINUTES = [2, 3, 4];
 const DEFAULT_CHECK_INTERVAL_MS = 1000;
-const DEFAULT_TRIGGER_GRACE_SECONDS = 20;
+const DEFAULT_TRIGGER_GRACE_SECONDS = 15;
 const DEFAULT_MESSAGE = [
   "【开局规则】AAS/RAAS 开局阶段，禁止截获或攻击敌方在前两点范围内执行拉点任务的队伍。",
   "【处罚说明】违规截获若造成敌方人员、载具或资源损失，将根据实际影响扣除违规方相应票数。",
@@ -38,6 +38,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   let lastClockSeconds = null;
   let currentRoundKey = "";
   const firedTriggers = new Set();
+  const expiredTriggers = new Set();
   const unsubscribers = [];
 
   const state = {
@@ -48,6 +49,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     currentRoundKey: "",
     currentClockSeconds: null,
     firedTriggerSeconds: [],
+    expiredTriggerSeconds: [],
+    warningWindowEndSecond: runtimeConfig.warningWindowEndSecond,
+    warningWindowExpired: false,
     dispatchCount: 0,
     warnSuccessCount: 0,
     warnFailedCount: 0,
@@ -143,13 +147,22 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return parts.join("|");
   }
 
+  function syncTriggerState() {
+    state.firedTriggerSeconds = [...firedTriggers].sort((a, b) => a - b);
+    state.expiredTriggerSeconds = [...expiredTriggers].sort((a, b) => a - b);
+  }
+
   function resetRound(reason = "round_reset", roundKey = "") {
     firedTriggers.clear();
+    expiredTriggers.clear();
     lastClockSeconds = null;
     currentRoundKey = normalizeText(roundKey);
     state.currentRoundKey = currentRoundKey;
     state.currentClockSeconds = null;
     state.firedTriggerSeconds = [];
+    state.expiredTriggerSeconds = [];
+    state.warningWindowEndSecond = runtimeConfig.warningWindowEndSecond;
+    state.warningWindowExpired = false;
     state.lastTriggerSecond = null;
     state.lastResetAt = new Date().toISOString();
     state.lastResetReason = reason;
@@ -272,7 +285,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     if (successCount > 0) {
       firedTriggers.add(triggerSecond);
-      state.firedTriggerSeconds = [...firedTriggers].sort((a, b) => a - b);
+      expiredTriggers.delete(triggerSecond);
+      syncTriggerState();
       state.dispatchCount += 1;
       state.lastTriggerSecond = triggerSecond;
       state.lastDispatchAt = new Date().toISOString();
@@ -315,6 +329,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const clockSeconds = getClockSeconds();
       state.currentClockSeconds = clockSeconds;
       state.currentMode = getCurrentMode(snapshot);
+      state.warningWindowEndSecond = runtimeConfig.warningWindowEndSecond;
 
       if (clockSeconds == null) {
         state.lastError = "log_clock_unavailable";
@@ -329,13 +344,29 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       lastClockSeconds = clockSeconds;
 
       for (const triggerSecond of runtimeConfig.triggerSeconds) {
-        if (firedTriggers.has(triggerSecond)) continue;
-        if (clockSeconds < triggerSecond) continue;
-        if (clockSeconds > triggerSecond + runtimeConfig.triggerGraceSeconds) continue;
-
-        const result = await dispatchWarning(triggerSecond, "scheduled");
-        if (result?.success || result?.successCount > 0) break;
+        if (firedTriggers.has(triggerSecond) || expiredTriggers.has(triggerSecond)) continue;
+        if (clockSeconds > triggerSecond + runtimeConfig.triggerGraceSeconds) {
+          expiredTriggers.add(triggerSecond);
+        }
       }
+      syncTriggerState();
+
+      state.warningWindowExpired = clockSeconds > runtimeConfig.warningWindowEndSecond;
+      if (state.warningWindowExpired) {
+        state.lastError = "";
+        return;
+      }
+
+      const eligibleTrigger = runtimeConfig.triggerSeconds
+        .filter((triggerSecond) => !firedTriggers.has(triggerSecond))
+        .filter((triggerSecond) => !expiredTriggers.has(triggerSecond))
+        .filter((triggerSecond) => clockSeconds >= triggerSecond)
+        .filter((triggerSecond) => clockSeconds <= triggerSecond + runtimeConfig.triggerGraceSeconds)
+        .at(-1);
+
+      if (eligibleTrigger == null) return;
+
+      await dispatchWarning(eligibleTrigger, "scheduled");
     } catch (error) {
       state.lastError = error instanceof Error ? error.message : String(error ?? "check_failed");
       pluginLogger?.warn?.(`[AttackDefenseOpeningWarning] check failed: ${state.lastError}`);
@@ -359,12 +390,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "攻守模式开局禁止截获拉点队警告",
       kind: "plugin",
-      version: "1.0.0",
+      version: "1.1.0",
       category: "规则警告",
-      description: "仅在 AAS/RAAS 中，于开局第 2、3、4 分钟通过 AdminWarn 向全部在线玩家发送前两点拉点队保护规则。",
+      description: "仅在 AAS/RAAS 中，于开局第 2、3、4 分钟的允许延迟窗口内，通过 AdminWarn 向全部在线玩家发送前两点拉点队保护规则；过期不追发。",
       configSchema: [
         { key: "enabled", type: "boolean", default: true, label: "启用插件" },
         { key: "triggerMinutes", type: "number[]", default: DEFAULT_TRIGGER_MINUTES, label: "警告分钟" },
+        { key: "triggerGraceSeconds", type: "number", default: DEFAULT_TRIGGER_GRACE_SECONDS, label: "允许延迟秒数" },
         { key: "message", type: "string", default: DEFAULT_MESSAGE, label: "警告文案" },
       ],
     },
@@ -390,6 +422,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       reloadConfig() {
         runtimeConfig = readRuntimeConfig(config);
+        state.warningWindowEndSecond = runtimeConfig.warningWindowEndSecond;
         startTimer();
         return this.getState();
       },
@@ -397,6 +430,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async start() {
       runtimeConfig = readRuntimeConfig(config);
+      state.warningWindowEndSecond = runtimeConfig.warningWindowEndSecond;
 
       if (core?.eventBus?.onCoreEvent) {
         for (const eventName of ROUND_START_EVENTS) {
@@ -409,7 +443,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       startTimer();
       pluginLogger?.info?.(
-        `[AttackDefenseOpeningWarning] started. AdminWarn only; modes=AAS,RAAS; triggers=${runtimeConfig.triggerSeconds.join(",")}s.`,
+        `[AttackDefenseOpeningWarning] started. AdminWarn only; modes=AAS,RAAS; triggers=${runtimeConfig.triggerSeconds.join(",")}s; grace=${runtimeConfig.triggerGraceSeconds}s; end=${runtimeConfig.warningWindowEndSecond}s.`,
       );
     },
 
@@ -434,18 +468,21 @@ function readRuntimeConfig(config) {
 
   const triggerMinutes = normalizeTriggerMinutes(pluginConfig.triggerMinutes);
   const triggerSeconds = triggerMinutes.map((minute) => Math.round(minute * 60));
+  const triggerGraceSeconds = clampNumber(
+    pluginConfig.triggerGraceSeconds,
+    DEFAULT_TRIGGER_GRACE_SECONDS,
+    1,
+    60,
+  );
+  const warningWindowEndSecond = Math.max(...triggerSeconds) + triggerGraceSeconds;
 
   return {
     enabled: pluginConfig.enabled !== false,
     triggerMinutes,
     triggerSeconds,
     checkIntervalMs: clampNumber(pluginConfig.checkIntervalMs, DEFAULT_CHECK_INTERVAL_MS, 250, 10_000),
-    triggerGraceSeconds: clampNumber(
-      pluginConfig.triggerGraceSeconds,
-      DEFAULT_TRIGGER_GRACE_SECONDS,
-      1,
-      60,
-    ),
+    triggerGraceSeconds,
+    warningWindowEndSecond,
     message: normalizeText(pluginConfig.message, DEFAULT_MESSAGE),
   };
 }
