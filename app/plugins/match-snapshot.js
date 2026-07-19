@@ -1285,8 +1285,10 @@ function estimateDisplayWidth(text, charWidth = 12) {
   return [...String(text ?? "")].reduce((total, char) => total + (/[\u4e00-\u9fff]/.test(char) ? charWidth * 1.35 : charWidth), 0);
 }
 async function readAssetDataUri(assetPath) {
-  const cleanPath = String(assetPath ?? "").replace(/^\//, "");
+  const sourcePath = String(assetPath ?? "").trim();
+  const cleanPath = sourcePath.replace(/^\//, "");
   const candidates = [
+    ...(path.isAbsolute(sourcePath) ? [sourcePath] : []),
     path.join(ICON_BASE_DIR, cleanPath.replace(/\//g, path.sep)),
     path.resolve(process.cwd(), cleanPath.replace(/\//g, path.sep)),
     path.resolve(process.cwd(), "MapScene", path.basename(cleanPath)),
