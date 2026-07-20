@@ -134,7 +134,7 @@ async function generateMatchEndDetailPng(payload, pageModel) {
   return sharp(background).composite([{ input: overlay }]).png().toBuffer();
 }
 
-function buildDetailPageModels(payload) {
+export function buildDetailPageModels(payload) {
   const overview = buildMatchEndOverviewModel(payload);
   return overview.teams.flatMap((team) => paginateTeamDetail(team));
 }
