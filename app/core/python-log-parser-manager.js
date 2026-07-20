@@ -128,7 +128,7 @@ export class PythonLogParserManager {
       const matchesConfig = commandLine.includes(expectedConfig) || commandLine.includes(configName);
       if (!matchesScript || !matchesConfig) continue;
 
-      this.logger.warn(\`Stopping duplicate LogPost process pid=\${pid}: \${processInfo.commandLine || executableName}\`);
+      this.logger.warn(`Stopping duplicate LogPost process pid=${pid}: ${processInfo.commandLine || executableName}`);
       await this.terminateProcess(pid);
     }
   }
@@ -147,7 +147,7 @@ export class PythonLogParserManager {
         const parsed = JSON.parse(String(stdout || "null"));
         return Array.isArray(parsed) ? parsed.map(normalizeProcessInfo) : parsed ? [normalizeProcessInfo(parsed)] : [];
       } catch (error) {
-        this.logger.warn(\`Unable to inspect existing Python processes: \${error.message}\`);
+        this.logger.warn(`Unable to inspect existing Python processes: ${error.message}`);
         return [];
       }
     }
@@ -159,7 +159,7 @@ export class PythonLogParserManager {
         return match ? normalizeProcessInfo({ pid: match[1], name: match[2], commandLine: match[3] }) : null;
       }).filter(Boolean);
     } catch (error) {
-      this.logger.warn(\`Unable to inspect existing Python processes: \${error.message}\`);
+      this.logger.warn(`Unable to inspect existing Python processes: ${error.message}`);
       return [];
     }
   }
@@ -172,7 +172,7 @@ export class PythonLogParserManager {
         process.kill(pid, "SIGTERM");
       }
     } catch (error) {
-      this.logger.warn(\`Unable to stop duplicate LogPost process pid=\${pid}: \${error.message}\`);
+      this.logger.warn(`Unable to stop duplicate LogPost process pid=${pid}: ${error.message}`);
     }
   }
 
