@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 
 import { createPlugin } from "../plugins/match-end-snapshot.js";
 import { FIRETEAM_COLORS, resolvePlayerFireTeam } from "../plugins/match-end-snapshot-fireteam.js";
@@ -261,6 +262,61 @@ async function testGlobalOverviewDoesNotRenderCombatStatistics() {
   assert.equal(source.includes("TEAM 1 / FULL SCOREBOARD"), false);
 }
 
+function readPngPixel(buffer, x, y) {
+  assert.equal(buffer.subarray(1, 4).toString("ascii"), "PNG");
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  assert.ok(x >= 0 && x < width && y >= 0 && y < height);
+  let offset = 8;
+  const parts = [];
+  while (offset < buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.subarray(offset + 4, offset + 8).toString("ascii");
+    if (type === "IDAT") parts.push(buffer.subarray(offset + 8, offset + 8 + length));
+    offset += 12 + length;
+    if (type === "IEND") break;
+  }
+  const data = zlib.inflateSync(Buffer.concat(parts));
+  const stride = width * 4;
+  const rows = Buffer.alloc(stride * height);
+  let cursor = 0;
+  for (let row = 0; row < height; row += 1) {
+    const filter = data[cursor++];
+    const source = data.subarray(cursor, cursor + stride);
+    const target = rows.subarray(row * stride, (row + 1) * stride);
+    for (let index = 0; index < stride; index += 1) {
+      const left = index >= 4 ? target[index - 4] : 0;
+      const up = row > 0 ? rows[(row - 1) * stride + index] : 0;
+      const upperLeft = row > 0 && index >= 4 ? rows[(row - 1) * stride + index - 4] : 0;
+      if (filter === 0) target[index] = source[index];
+      else if (filter === 1) target[index] = (source[index] + left) & 255;
+      else if (filter === 2) target[index] = (source[index] + up) & 255;
+      else if (filter === 3) target[index] = (source[index] + Math.floor((left + up) / 2)) & 255;
+      else if (filter === 4) {
+        const p = left + up - upperLeft;
+        const pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - upperLeft);
+        target[index] = (source[index] + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upperLeft)) & 255;
+      } else throw new Error("Unsupported PNG filter " + filter);
+    }
+    cursor += stride;
+  }
+  const index = (y * width + x) * 4;
+  return [rows[index], rows[index + 1], rows[index + 2], rows[index + 3]];
+}
+
+async function testFireteamAccentPixels() {
+  const bundle = await generateMatchEndSnapshotBundle(makePayload(3, 0), { snapshotId: "fireteam-pixels" });
+  // Team 1, first squad, rows A/B/C: base coordinates are scaled 2× in the 3200×1800 PNG.
+  const samples = [[74, 482], [74, 522], [74, 562]];
+  const expected = [[53, 208, 127], [167, 139, 250], [34, 211, 238]];
+  samples.forEach(([x, y], index) => {
+    const [red, green, blue] = readPngPixel(bundle.combinedBuffer, x, y);
+    const [wantRed, wantGreen, wantBlue] = expected[index];
+    assert.ok(Math.abs(red - wantRed) <= 8 && Math.abs(green - wantGreen) <= 8 && Math.abs(blue - wantBlue) <= 8,
+      "fireteam accent pixel " + index + " was " + [red, green, blue].join(","));
+  });
+}
+
 function testSourceAwareFireteamResolution() {
   assert.equal(resolvePlayerFireTeam({ fireTeam: "A" }).fireTeam, "A");
   assert.equal(resolvePlayerFireTeam({ fireTeam: "BRAVO" }).fireTeam, "B");
@@ -279,6 +335,7 @@ function testSourceAwareFireteamResolution() {
 }
 
 testSourceAwareFireteamResolution();
+await testFireteamAccentPixels();
 await testSingleOverviewSnapshot();
 await testHundredPlayersStayInOneOverview();
 await testGlobalOverviewDoesNotRenderCombatStatistics();
