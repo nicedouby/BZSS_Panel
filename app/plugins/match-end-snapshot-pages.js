@@ -110,6 +110,7 @@ export async function generateMatchEndSnapshotBundle(payload, options = {}) {
 export async function generateMatchEndOverviewPng(payload) {
   const sharp = await loadSharp();
   const model = buildMatchEndOverviewModel(payload);
+  await attachRoleIconData(model);
   const background = await buildBackground(sharp, payload);
   const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
   return sharp(background)
@@ -280,6 +281,41 @@ function buildTeamColumnModel(team, x) {
   };
 }
 
+async function attachRoleIconData(model) {
+  const players = [];
+  for (const team of model.teams ?? []) {
+    for (const lane of team.lanes ?? []) {
+      for (const group of lane) players.push(...(group.players ?? []));
+    }
+  }
+  await Promise.all(players.map(async (player) => {
+    const role = resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass));
+    const fileName = roleIconFileName(role.label);
+    if (!fileName) return;
+    const candidates = [
+      path.resolve(process.cwd(), "web-client", "public", "assets", "icons", fileName),
+      path.resolve(process.cwd(), "web-client", "public", "Icon", fileName),
+    ];
+    const candidate = candidates.find((item) => existsSync(item));
+    if (!candidate) return;
+    try {
+      player.roleIconData = `data:image/png;base64,${(await fs.readFile(candidate)).toString("base64")}`;
+    } catch {}
+  }));
+}
+
+function roleIconFileName(label) {
+  const key = normalizeToken(label);
+  const files = {
+    sl: "T_role_squadleader.PNG", "squadleader": "T_role_squadleader.PNG",
+    med: "T_role_medic.PNG", "hat": "T_role_heavyantitank.PNG", "lat": "T_role_lightantitank.PNG",
+    mg: "T_role_machinegunner.PNG", "ar": "T_role_automaticrifleman.PNG", "eng": "T_role_engineer.PNG",
+    dmr: "T_role_designatedmarksman.PNG", "snp": "T_role_sniper.PNG", "grn": "T_role_grenadier.PNG",
+    crw: "T_role_crewman.PNG", "plt": "T_role_pilot.PNG", "rfl:": "T_role_rifleman.PNG", "rfl": "T_role_rifleman.PNG",
+  };
+  return files[key] ?? "T_role_rifleman.PNG";
+}
+
 function renderOverviewSvg(model) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`);
@@ -369,22 +405,20 @@ function renderPlayerRow(team, player, x, y, index) {
   const fireTeam = normalizeFireTeam(player?.fireTeam);
   const leaderLabel = player?.isCommander ? "CO" : player?.isLeader ? "SL" : "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
-  const healthWidth = health == null ? 0 : Math.round(52 * Math.max(0, Math.min(100, health)) / 100);
-  const healthTone = health == null ? "#64748b" : health > 70 ? "#34d399" : health > 35 ? "#fbbf24" : "#fb7185";
-
+  const core = player?.bzssCore ?? {};
+  const stat = (...keys) => compactMetric(core, ...keys);
+  const statsText = `K ${stat("kills", "kill", "numKills")} W ${stat("downs", "wounds", "wound")} D ${stat("deaths", "death")} TK ${stat("teamKills", "tk")} VK ${stat("vehicleKills", "vehicleKill")} R ${stat("revives", "revive")} H ${stat("healPoints", "healing")} C ${stat("combatScore", "combat")} O ${stat("objectiveScore", "objective")} T ${stat("teamworkScore", "teamwork")}`;
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
-    `<rect x="${x + 7}" y="${y + 3}" width="31" height="${Math.max(12, rowHeight - 6)}" rx="4" fill="${role.tone}" fill-opacity=".16" stroke="${role.tone}" stroke-opacity=".52"/>`,
-    `<text x="${x + 22.5}" y="${y + rowHeight - 6}" text-anchor="middle" class="role-badge">${escapeXml(role.label)}</text>`,
-    `<text x="${x + 44}" y="${y + rowHeight - 6}" class="player-name">${leaderLabel ? `${leaderLabel} ` : ""}${escapeXml(clip(player?.name, 19))}</text>`,
+    player.roleIconData
+      ? `<image href="${player.roleIconData}" x="${x + 9}" y="${y + 2}" width="20" height="16" preserveAspectRatio="xMidYMid meet"/>`
+      : `<rect x="${x + 9}" y="${y + 4}" width="18" height="12" rx="3" fill="${role.tone}" fill-opacity=".35"/>`,
+    `<text x="${x + 44}" y="${y + rowHeight - 6}" class="player-name">${leaderLabel ? `${leaderLabel} ` : ""}${escapeXml(clip(player?.name, 17))}</text>`,
     fireTeam
-      ? `<text x="${x + team.laneWidth - 126}" y="${y + rowHeight - 6}" text-anchor="middle" class="ft-badge">${escapeXml(fireTeam)}</text>`
+      ? `<text x="${x + 148}" y="${y + rowHeight - 6}" text-anchor="middle" class="ft-badge">${escapeXml(fireTeam)}</text>`
       : "",
-    `<rect x="${x + team.laneWidth - 104}" y="${y + Math.floor((rowHeight - 7) / 2)}" width="52" height="7" rx="3.5" fill="#0b1626"/>`,
-    healthWidth > 0
-      ? `<rect x="${x + team.laneWidth - 104}" y="${y + Math.floor((rowHeight - 7) / 2)}" width="${healthWidth}" height="7" rx="3.5" fill="${healthTone}" opacity=".88"/>`
-      : "",
-    `<text x="${x + team.laneWidth - 46}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-meta mono">${health == null ? "--" : Math.round(health)}HP</text>`,
+    `<text x="${x + 168}" y="${y + rowHeight - 6}" class="combat-stats mono">${escapeXml(statsText)}</text>`,
+    `<text x="${x + team.laneWidth - 52}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-meta mono">${health == null ? "--" : "HP " + Math.round(health)}</text>`,
     `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono">${ping == null ? "--" : `${ping}ms`}</text>`,
   ].join("");
 }
@@ -411,8 +445,16 @@ function readHealth(player) {
   return Math.max(0, Math.min(100, value));
 }
 
+function compactMetric(core, ...keys) {
+  for (const key of keys) {
+    const value = Number(core?.[key]);
+    if (Number.isFinite(value)) return Math.round(value);
+  }
+  return "-";
+}
+
 function readPing(player) {
-  const value = firstFiniteNumber(player?.bzssCore?.ping, player?.ping, player?.playerScoreboard?.ping);
+  const value = firstFiniteNumber(player?.bzssCore?.ping, player?.bzssCore?.latency, player?.ping, player?.playerScoreboard?.ping);
   if (value == null || value < 0) return null;
   return Math.round(value);
 }
@@ -496,6 +538,7 @@ function renderDefs() {
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}
+      .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}
       .footer{font-size:10px;fill:#91a4b7}
     ]]></style>
   </defs>`;
