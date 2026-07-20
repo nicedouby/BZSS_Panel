@@ -407,6 +407,8 @@ function normalizePlayers(players) {
       ?? player?.fireteamName
       ?? player?.fireTeamID
       ?? player?.fireteamID
+      ?? player?.ftIndex
+      ?? player?.fireTeamIndex
       ?? player?.fireTeamId
       ?? player?.fireteamId
       ?? player?.fireTeamIndex,
@@ -423,9 +425,9 @@ function normalizePlayers(players) {
 function normalizeFireTeam(value) {
   const text = String(value ?? "").trim().toUpperCase();
   if (!text) return "";
-  if (/^(?:0|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
-  if (/^(?:1|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
-  if (/^(?:2|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
+  if (/^(?:1|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
+  if (/^(?:2|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
+  if (/^(?:3|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
   const match = text.match(/(?:FIRE\s*TEAM\s*|火力[组組]\s*)?([ABC])(?:\s*TEAM|[组組])?/);
   return match?.[1] ?? "";
 }
@@ -509,6 +511,8 @@ function enrichPlayersWithBzssCore(players, modules) {
         corePlayer?.fireteam,
         corePlayer?.soldierInfo?.fireTeam,
         corePlayer?.soldierInfo?.fireteam,
+        corePlayer?.ftIndex,
+        corePlayer?.fireTeamIndex,
       )),
       role: firstText(player.role, soldierClass),
       health,
@@ -523,6 +527,8 @@ function enrichPlayersWithBzssCore(players, modules) {
         stale: Boolean(corePlayer?.stale),
         health,
         soldierClass,
+        fireTeamIndex: firstNumber(corePlayer?.ftIndex, corePlayer?.fireTeamIndex),
+        fireTeamPosition: firstNumber(corePlayer?.ftPosition, corePlayer?.fireTeamPosition),
         dataLives: firstNumber(stats.dataLives, corePlayer?.dataLives),
         kills: firstNumber(stats.numKills, corePlayer?.kills) ?? 0,
         vehicleKills: firstNumber(stats.vehicleKills, corePlayer?.vehicleKills) ?? 0,
