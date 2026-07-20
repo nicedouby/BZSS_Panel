@@ -3521,7 +3521,14 @@ export class WebServer {
             message: error.message,
           });
         }
-        return this.json(res, 404, { error: "SnapshotImageNotFound" });
+        if (error?.code === "ENOENT") {
+          return this.json(res, 404, { error: "SnapshotImageNotFound" });
+        }
+        this.core?.logger?.error?.("[MatchEndSnapshot] image request failed: " + (error?.stack || error));
+        return this.json(res, 500, {
+          error: "SnapshotImageGenerationFailed",
+          message: "The snapshot image could not be generated. Check the server log for details.",
+        });
       }
     }
 
