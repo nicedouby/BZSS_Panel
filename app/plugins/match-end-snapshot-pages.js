@@ -334,6 +334,8 @@ async function attachRoleIconData(model) {
     const candidates = [
       path.resolve(process.cwd(), "web-client", "public", "assets", "icons", fileName),
       path.resolve(process.cwd(), "web-client", "public", "Icon", fileName),
+      path.resolve(process.cwd(), "web-client", "src", "assets", "icons", fileName),
+      path.resolve(process.cwd(), "assets", "icons", fileName),
     ];
     const candidate = candidates.find((item) => existsSync(item));
     if (!candidate) return;
@@ -460,7 +462,21 @@ function renderTeamColumn(team) {
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
   svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
   svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
-  const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
+  const commanderAvatar = firstText(
+    team.commanderAvatarData,
+    team.commanderPlayer?.steamAvatar,
+    team.commanderPlayer?.steam_avatar,
+    team.commanderPlayer?.avatarUrl,
+    team.commanderPlayer?.steamAvatarUrl,
+    team.commanderPlayer?.avatar,
+    team.commanderPlayer?.avatar_full,
+    team.commanderPlayer?.avatar_medium,
+    team.commanderPlayer?.steamProfile?.avatarFull,
+    team.commanderPlayer?.steamProfile?.avatar_full,
+    team.commanderPlayer?.steamProfile?.avatar,
+    team.commanderPlayer?.steam?.avatar,
+    team.commanderPlayer?.profile?.avatar,
+  );
   svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
   svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
   if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
@@ -534,8 +550,10 @@ function renderPlayerRow(team, player, x, y, index) {
   const parts = [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".07"/>`,
     `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".7"}"/>`,
-    `<text x="${x + 11}" y="${y + rowHeight - 4}" class="compact-role">[${escapeXml(fireTeam || "?")}][${escapeXml(role.label)}]</text>`,
-    `<text x="${x + 45}" y="${y + rowHeight - 4}" class="compact-player-name">${escapeXml(clip(player?.name, 13))}</text>`,
+    player.roleIconData
+      ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + Math.max(1, Math.floor((rowHeight - 12) / 2))}" width="12" height="12" preserveAspectRatio="xMidYMid meet"/>`
+      : `<rect x="${x + 10}" y="${y + Math.max(2, Math.floor((rowHeight - 10) / 2))}" width="10" height="10" fill="${role.tone}" fill-opacity=".86" stroke="#e6f4ff" stroke-opacity=".55"/>`,
+    `<text x="${x + 25}" y="${y + rowHeight - 4}" class="compact-player-name">${escapeXml(clip(player?.name, 16))}</text>`,
   ];
   columns.forEach(([label, width], columnIndex) => {
     const value = values[columnIndex];
