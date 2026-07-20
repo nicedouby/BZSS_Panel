@@ -42,7 +42,7 @@ export function createPlugin({ core, modules, logger } = {}) {
     }
 
     const capturedAt = new Date().toISOString();
-    const payload = buildSnapshotPayload({
+    const payload = await buildSnapshotPayload({
       overview,
       triggerEvent,
       capturedAt,
@@ -309,7 +309,7 @@ export function createPlugin({ core, modules, logger } = {}) {
   };
 }
 
-function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
+async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
   const matchState = objectValue(overview?.matchState);
   const status = objectValue(overview?.status);
   const serverStatus = {
@@ -335,6 +335,7 @@ function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
         : [],
   );
   players = enrichPlayersWithBzssCore(players, modules);
+  players = await enrichPlayersWithDatabaseAvatar(players, modules);
   players = attachSquadInfo(players, squads);
 
   const nextLayer = firstText(match.nextLayer, status.nextLayer, serverStatus.nextLayer);
@@ -425,6 +426,17 @@ function normalizePlayers(players) {
       isCommander: Boolean(player?.isCommander ?? player?.commander),
       online: player?.online !== false,
       health: nullableNumber(player?.health),
+      steamAvatar: firstText(
+        player?.steamAvatar,
+        player?.steam_avatar,
+        player?.avatarUrl,
+        player?.avatar,
+        player?.steamAvatarUrl,
+        player?.steamProfile?.avatarFull,
+        player?.steamProfile?.avatar_full,
+        player?.steam?.avatar,
+        player?.profile?.avatar,
+      ),
       bzssCore: null,
     };
   });
@@ -536,6 +548,46 @@ function enrichPlayersWithBzssCore(players, modules) {
       },
     };
   });
+}
+
+async function enrichPlayersWithDatabaseAvatar(players, modules) {
+  const api = modules?.playerDatabase?.api ?? modules?.playerDatabase;
+  if (typeof api?.listPlayersByIdentities !== "function" || !players.length) return players;
+
+  const steamIDs = players.map((player) => firstText(player?.steamID)).filter(Boolean);
+  const eosIDs = players.map((player) => firstText(player?.eosID)).filter(Boolean);
+  if (!steamIDs.length && !eosIDs.length) return players;
+
+  try {
+    const rows = await api.listPlayersByIdentities({ steamIDs, eosIDs });
+    const bySteam = new Map();
+    const byEos = new Map();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const steamID = firstText(row?.steam_id, row?.steamID);
+      const eosID = firstText(row?.eos_id, row?.eosID);
+      if (steamID) bySteam.set(steamID, row);
+      if (eosID) byEos.set(eosID, row);
+    }
+    return players.map((player) => {
+      const databasePlayer = bySteam.get(firstText(player?.steamID)) ?? byEos.get(firstText(player?.eosID)) ?? null;
+      const databaseAvatar = firstText(
+        databasePlayer?.steam_avatar,
+        databasePlayer?.steamAvatar,
+        databasePlayer?.avatar_full,
+        databasePlayer?.avatarFull,
+        databasePlayer?.avatar_medium,
+        databasePlayer?.avatarMedium,
+      );
+      if (!databaseAvatar && !player?.steamAvatar) return player;
+      return {
+        ...player,
+        steamAvatar: firstText(player?.steamAvatar, databaseAvatar),
+        avatarSource: player?.steamAvatar ? "match-state" : "player-database",
+      };
+    });
+  } catch {
+    return players;
+  }
 }
 
 function attachSquadInfo(players, squads) {
