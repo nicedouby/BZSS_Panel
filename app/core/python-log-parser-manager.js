@@ -39,7 +39,6 @@ export class PythonLogParserManager {
     const workingDirectory = path.resolve(process.cwd(), String(this.config.workingDirectory ?? ".").trim());
     const scriptPath = String(this.config.scriptPath ?? "./main.py").trim();
     const configPath = String(this.config.configPath ?? "./config.json").trim();
-
     const scriptAbsolutePath = path.resolve(workingDirectory, scriptPath);
     const configAbsolutePath = path.resolve(workingDirectory, configPath);
 
@@ -58,7 +57,7 @@ export class PythonLogParserManager {
     this.diagnostics = null;
     this.pipeOutput = this.config.pipeOutput ?? true;
 
-    this.child = spawn(pythonExecutable, [scriptPath, configPath], {
+    this.child = spawn(pythonExecutable, [scriptAbsolutePath, configAbsolutePath], {
       cwd: workingDirectory,
       shell: false,
       stdio: ["ignore", "pipe", "pipe"],
@@ -110,6 +109,7 @@ export class PythonLogParserManager {
     });
   }
 
+
   async terminateDuplicateParsers({ pythonExecutable, scriptPath, configPath }) {
     const candidates = await this.listPythonProcesses();
     const expectedScript = normalizeProcessText(scriptPath);
@@ -128,7 +128,7 @@ export class PythonLogParserManager {
       const matchesConfig = commandLine.includes(expectedConfig) || commandLine.includes(configName);
       if (!matchesScript || !matchesConfig) continue;
 
-      this.logger.warn(`Stopping duplicate LogPost process pid=${pid}: ${processInfo.commandLine || executableName}`);
+      this.logger.warn(\`Stopping duplicate LogPost process pid=\${pid}: \${processInfo.commandLine || executableName}\`);
       await this.terminateProcess(pid);
     }
   }
@@ -142,84 +142,12 @@ export class PythonLogParserManager {
           "-ExecutionPolicy",
           "Bypass",
           "-Command",
-          "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(python|pythonw)(\.exe)?
-    this.stdoutBuffer += data.toString("utf8");
-    const lines = this.stdoutBuffer.split(/\r?\n/u);
-    this.stdoutBuffer = lines.pop() ?? "";
-    for (const line of lines) {
-      this.consumeStdoutLine(line);
-    }
-    // Bound an unterminated third-party line so a broken producer cannot grow memory forever.
-    if (this.stdoutBuffer.length > 1024 * 1024) {
-      this.logger.warn("Python stdout contained an oversized unterminated line; truncating buffer.");
-      this.stdoutBuffer = this.stdoutBuffer.slice(-64 * 1024);
-    }
-  }
-
-  consumeStdoutLine(line) {
-    const text = String(line ?? "").trimEnd();
-    if (!text) return;
-    if (text.startsWith(DIAGNOSTIC_PREFIX)) {
-      try {
-        const payload = JSON.parse(text.slice(DIAGNOSTIC_PREFIX.length));
-        this.diagnostics = {
-          ...payload,
-          receivedAt: new Date().toISOString(),
-          processStatus: "running",
-        };
-        this.webStatus.set("logPostPythonDiagnostics", this.diagnostics);
-      } catch (error) {
-        this.logger.warn(`Invalid Python LogPost diagnostic payload: ${error.message}`);
-      }
-      return;
-    }
-    if (this.pipeOutput) this.logger.info(`[PY] ${text}`);
-  }
-
-  flushStdoutBuffer() {
-    const text = this.stdoutBuffer;
-    this.stdoutBuffer = "";
-    if (text) this.consumeStdoutLine(text);
-  }
-
-  getDiagnostics() {
-    return this.diagnostics ? { ...this.diagnostics } : null;
-  }
-
-  async stop() {
-    this.stopping = true;
-
-    if (!this.child) return;
-
-    this.logger.info("Stopping Python LogParser...");
-    const child = this.child;
-
-    await new Promise((resolve) => {
-      child.once("exit", resolve);
-      child.kill("SIGTERM");
-
-      setTimeout(() => {
-        try { child.kill("SIGKILL"); } catch {}
-        resolve();
-      }, 3000);
-    });
-
-    this.child = null;
-  }
-
-  async restart() {
-    this.logger.info("Restarting Python LogParser...");
-    await this.stop();
-    this.stopping = false;
-    await this.start();
-  }
-}
- } | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress",
+          "Get-CimInstance Win32_Process | Where-Object { @('python.exe','pythonw.exe') -contains $_.Name.ToLower() } | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress",
         ], { windowsHide: true, maxBuffer: 1024 * 1024 });
         const parsed = JSON.parse(String(stdout || "null"));
         return Array.isArray(parsed) ? parsed.map(normalizeProcessInfo) : parsed ? [normalizeProcessInfo(parsed)] : [];
       } catch (error) {
-        this.logger.warn(`Unable to inspect existing Python processes: ${error.message}`);
+        this.logger.warn(\`Unable to inspect existing Python processes: \${error.message}\`);
         return [];
       }
     }
@@ -231,7 +159,7 @@ export class PythonLogParserManager {
         return match ? normalizeProcessInfo({ pid: match[1], name: match[2], commandLine: match[3] }) : null;
       }).filter(Boolean);
     } catch (error) {
-      this.logger.warn(`Unable to inspect existing Python processes: ${error.message}`);
+      this.logger.warn(\`Unable to inspect existing Python processes: \${error.message}\`);
       return [];
     }
   }
@@ -244,7 +172,7 @@ export class PythonLogParserManager {
         process.kill(pid, "SIGTERM");
       }
     } catch (error) {
-      this.logger.warn(`Unable to stop duplicate LogPost process pid=${pid}: ${error.message}`);
+      this.logger.warn(\`Unable to stop duplicate LogPost process pid=\${pid}: \${error.message}\`);
     }
   }
 
