@@ -3,8 +3,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 
-const WIDTH = 1600;
-const HEIGHT = 900;
+const WIDTH = 3200;
+const HEIGHT = 1800;
+const BASE_WIDTH = 1600;
+const BASE_HEIGHT = 900;
 const TEAM_COLUMN_WIDTH = 748;
 const TEAM_CONTENT_TOP = 186;
 const TEAM_CONTENT_BOTTOM = 844;
@@ -320,6 +322,7 @@ function renderOverviewSvg(model) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`);
   svg.push(renderDefs());
+  svg.push('<g transform="scale(2)">');
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
   svg.push('<path d="M36 32 H1112 L1162 82 H1564 V146 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
@@ -347,6 +350,7 @@ function renderOverviewSvg(model) {
 
   svg.push('<text x="48" y="880" class="footer">对局结束总览仅展示玩家基础状态；详细击杀、击倒、治疗和分数保留在个人详情中。</text>');
   svg.push(`<text x="1552" y="880" text-anchor="end" class="footer mono">${escapeXml(model.serverName)}</text>`);
+  svg.push("</g>");
   svg.push("</svg>");
   return svg.join("");
 }
