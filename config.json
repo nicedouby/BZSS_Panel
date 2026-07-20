@@ -523,13 +523,13 @@
   },
   "reserveSystem": {
     "enabled": true,
-    "adminFilePath": "D:\\BZSS_SQ_Server\\SquadGame\\ServerConfig\\Admins.cfg",
+    "adminFilePath": "E:\\BZSS_SQ_Server\\SquadGame\\ServerConfig\\Admins.cfg",
     "localReserveFilePath": "data/reserve-slots/store.json"
   },
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",
-    "workingDirectory": "D:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
+    "workingDirectory": "E:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
@@ -539,7 +539,7 @@
   },
   "logPostFileBridge": {
     "enabled": true,
-    "workingDirectory": "D:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
+    "workingDirectory": "E:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
     "eventName": "On_RawLogLine",
     "pollIntervalMs": 250,
     "replayRecentLines": 120,
@@ -1011,7 +1011,7 @@
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
-    "remoteSaveGamePath": "D:\\BZSS_SQ_Server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav",
+    "remoteSaveGamePath": "E:\\BZSS_SQ_Server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav",
     "playerInfoPollIntervalMs": 100
   }
 }
