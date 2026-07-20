@@ -4,19 +4,26 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { FIRETEAM_COLORS, fireTeamRank, resolveSnapshotPlayerFireTeam } from "./match-end-snapshot-fireteam.js";
 
-const WIDTH = 3200;
-const HEIGHT = 1800;
+const WIDTH = 1600;
+const HEIGHT = 900;
 const BASE_WIDTH = 1600;
 const BASE_HEIGHT = 900;
 const TEAM_COLUMN_WIDTH = 775;
-const TEAM_CONTENT_TOP = 220;
+const TEAM_CONTENT_TOP = 238;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 8;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
 const SQUAD_HEADER_HEIGHT = 16;
 const SQUAD_GAP = 4;
-const DEFAULT_PLAYER_ROW_HEIGHT = 20;
-const MIN_PLAYER_ROW_HEIGHT = 12;
+const DEFAULT_PLAYER_ROW_HEIGHT = 16;
+const MIN_PLAYER_ROW_HEIGHT = 13;
+const COMPACT_PLAYER_LAYOUT = Object.freeze({
+  infoWidth: 145,
+  stats: Object.freeze([
+    ["K", 16], ["W", 16], ["D", 16], ["TK", 18], ["VK", 18], ["R", 18],
+    ["H", 24], ["C", 24], ["O", 24], ["T", 24], ["P", 24],
+  ]),
+});
 
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
@@ -74,35 +81,33 @@ const ROLE_META = [
 
 export async function generateMatchEndSnapshotBundle(payload, options = {}) {
   const snapshotId = sanitizeFileToken(options.snapshotId || "match");
-  const sharp = await loadSharp();
-  const overviewBuffer = await generateMatchEndOverviewPng(payload);
-  const overviewPage = {
-    index: 0, type: "match-status-overview", teamId: null, teamPage: null, teamPageCount: null,
-    fileName: `${snapshotId}-00-overview.png`, width: WIDTH, height: HEIGHT,
-    playerCount: Number(payload?.summary?.recordedPlayerCount ?? payload?.players?.length ?? 0), buffer: overviewBuffer,
+  const buffer = await generateMatchEndOverviewPng(payload);
+  const page = {
+    index: 0,
+    type: "match-status-scoreboard",
+    teamId: null,
+    teamPage: null,
+    teamPageCount: null,
+    fileName: `${snapshotId}-00-scoreboard.png`,
+    width: WIDTH,
+    height: HEIGHT,
+    playerCount: Number(payload?.summary?.recordedPlayerCount ?? payload?.players?.length ?? 0),
+    buffer,
   };
-  const detailModels = buildDetailPageModels(payload);
-  const detailPages = [];
-  for (const model of detailModels) {
-    const buffer = await generateMatchEndDetailPng(payload, model);
-    detailPages.push({
-      index: detailPages.length + 1, type: "team-scoreboard", teamId: model.team.teamID,
-      teamPage: model.pageNumber, teamPageCount: model.pageCount,
-      fileName: `${snapshotId}-team${model.team.teamID}-${String(model.pageNumber).padStart(2, "0")}.png`,
-      width: WIDTH, height: HEIGHT, playerCount: model.playerCount, buffer,
-    });
-  }
-  const pages = [overviewPage, ...detailPages];
-  const combinedBuffer = await sharp({
-    create: { width: WIDTH, height: HEIGHT * pages.length, channels: 4, background: { r: 2, g: 6, b: 17, alpha: 1 } },
-  }).composite(pages.map((page, index) => ({ input: page.buffer, left: 0, top: index * HEIGHT }))).png().toBuffer();
   const manifest = {
-    schemaVersion: 2, snapshotId, generatedAt: new Date().toISOString(),
-    sourceCapturedAt: String(payload?.capturedAt ?? ""), width: WIDTH, height: HEIGHT,
-    pageCount: pages.length, primaryImage: `${snapshotId}.png`, combinedImage: `${snapshotId}-combined.png`,
-    pages: pages.map(({ buffer, ...page }) => page),
+    schemaVersion: 3,
+    snapshotId,
+    generatedAt: new Date().toISOString(),
+    sourceCapturedAt: String(payload?.capturedAt ?? ""),
+    width: WIDTH,
+    height: HEIGHT,
+    pageCount: 1,
+    primaryImage: `${snapshotId}.png`,
+    combinedImage: `${snapshotId}-combined.png`,
+    pages: [{ ...page, buffer: undefined }],
   };
-  return { width: WIDTH, height: HEIGHT, pages, combinedBuffer, manifest };
+  delete manifest.pages[0].buffer;
+  return { width: WIDTH, height: HEIGHT, pages: [page], combinedBuffer: buffer, manifest };
 }
 
 export async function generateMatchEndOverviewPng(payload) {
@@ -483,7 +488,7 @@ function renderOverviewSvg(model) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`);
   svg.push(renderDefs());
-  svg.push('<g transform="scale(2)">');
+  svg.push('<g>');
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
   svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
@@ -509,7 +514,7 @@ function renderOverviewSvg(model) {
     svg.push(renderTeamColumn(team));
   }
 
-  svg.push('<text x="48" y="880" class="footer">对局结束总览仅展示玩家基础状态；详细击杀、击倒、治疗和分数保留在个人详情中。</text>');
+  svg.push('<text x="48" y="880" class="footer">K=击杀  W=击倒  D=死亡  TK=友军击杀  VK=载具击杀  R=复苏  H=治疗分  C=战斗分  O=目标分  T=团队分  P=Ping</text>');
   svg.push(`<text x="1552" y="880" text-anchor="end" class="footer mono">${escapeXml(model.serverName)}</text>`);
   svg.push("</g>");
   svg.push("</svg>");
@@ -538,6 +543,7 @@ function renderTeamColumn(team) {
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
   team.lanes.forEach((groups, laneIndex) => {
+    svg.push(renderLaneColumnHeader(team, laneXs[laneIndex], team.contentTop - 18));
     let cursorY = team.contentTop;
     for (const group of groups) {
       svg.push(renderSquadCard(team, group, laneXs[laneIndex], cursorY));
@@ -545,6 +551,21 @@ function renderTeamColumn(team) {
     }
   });
 
+  return svg.join("");
+}
+
+function renderLaneColumnHeader(team, x, y) {
+  const { infoWidth, stats } = COMPACT_PLAYER_LAYOUT;
+  const svg = [
+    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="14" fill="#071426" fill-opacity=".92" stroke="${team.accent}" stroke-opacity=".55"/>`,
+    `<text x="${x + 9}" y="${y + 10}" class="column-head">PLAYER</text>`,
+  ];
+  let cursor = x + infoWidth;
+  for (const [label, width] of stats) {
+    svg.push(`<path d="M${cursor} ${y} V${y + 14}" stroke="#b9d9f1" stroke-opacity=".28"/>`);
+    svg.push(`<text x="${cursor + width / 2}" y="${y + 10}" text-anchor="middle" class="column-head">${label}</text>`);
+    cursor += width;
+  }
   return svg.join("");
 }
 
@@ -573,25 +594,31 @@ function renderSquadCard(team, group, x, y) {
 function renderPlayerRow(team, player, x, y, index) {
   const role = resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass));
   const rowHeight = team.rowHeight;
-  const health = null;
   const ping = readPing(player);
   const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
-  const overviewStats = playerDetailStats(player);
-  const leaderLabel = "";
-  const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
-  return [
-    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
-    `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".65"}"/>`,
-    `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
-    `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
-    player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
-    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 13))}</text>`,
-    `<text x="${x + 146}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">K ${overviewStats.kills}</text>`,
-    `<text x="${x + 182}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">W ${overviewStats.wounds}</text>`,
-    `<text x="${x + 218}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">D ${overviewStats.deaths}</text>`,
-    `<text x="${x + 258}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">TK ${overviewStats.teamKills}</text>`,
-    `<text x="${x + team.laneWidth - 4}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
-  ].join("");
+  const stats = playerDetailStats(player);
+  const values = [
+    stats.kills, stats.wounds, stats.deaths, stats.teamKills, stats.vehicleKills,
+    stats.revives, stats.healScore, stats.combatScore, stats.objectiveScore,
+    stats.teamworkScore, ping == null ? "--" : String(ping),
+  ];
+  const { infoWidth, stats: columns } = COMPACT_PLAYER_LAYOUT;
+  const backgroundOpacity = index % 2 === 0 ? ".74" : ".58";
+  let cursor = x + infoWidth;
+  const parts = [
+    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".07"/>`,
+    `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".7"}"/>`,
+    `<text x="${x + 11}" y="${y + rowHeight - 4}" class="compact-role">[${escapeXml(fireTeam || "?")}][${escapeXml(role.label)}]</text>`,
+    `<text x="${x + 45}" y="${y + rowHeight - 4}" class="compact-player-name">${escapeXml(clip(player?.name, 13))}</text>`,
+  ];
+  columns.forEach(([label, width], columnIndex) => {
+    const value = values[columnIndex];
+    const className = label === "P" ? "compact-ping" : "compact-stat";
+    const fill = label === "P" ? ` fill="${pingColor(ping)}"` : "";
+    parts.push(`<text x="${cursor + width / 2}" y="${y + rowHeight - 4}" text-anchor="middle" class="${className}"${fill}>${escapeXml(value)}</text>`);
+    cursor += width;
+  });
+  return parts.join("");
 }
 
 function comparePlayers(left, right) {
@@ -727,6 +754,11 @@ function renderDefs() {
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}
       .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}.overview-stat{font-size:6.5px;font-weight:800;fill:#f4f8fc}
+      .column-head{font-family:'Cascadia Mono','Consolas',monospace;font-size:6.3px;font-weight:900;fill:#d9ebfa}
+      .compact-role{font-family:'Cascadia Mono','Consolas',monospace;font-size:5.7px;font-weight:900;fill:#bcd3e6}
+      .compact-player-name{font-size:7px;font-weight:900;fill:#edf6ff}
+      .compact-stat{font-family:'Cascadia Mono','Consolas',monospace;font-size:6.4px;font-weight:900;fill:#f4f8fc}
+      .compact-ping{font-family:'Cascadia Mono','Consolas',monospace;font-size:6.3px;font-weight:900}
       .footer{font-size:10px;fill:#91a4b7}
       .detail-title{font-size:28px;font-weight:900}.detail-sub{font-size:11px;fill:#c7d8e8}
       .detail-head{font-size:8px;font-weight:900;fill:#d9ebfa}.detail-squad{font-size:9px;font-weight:900}
