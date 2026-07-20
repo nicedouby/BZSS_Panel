@@ -105,5 +105,24 @@ harness.coreHandlers.get("round.world_bring_up")({});
 assert.equal(harness.plugin.api.getState().summary.pending, 0);
 assert.equal(harness.plugin.api.getState().summary.totalTeamKills, 0);
 
+// English apology words must always be case-insensitive.
+for (const [index, message] of ["sorry", "SORRY", "SoRrY"].entries()) {
+  await harness.plugin.api.handleTeamKill({
+    eventName: "TEAM_KILL",
+    eventId: `case-insensitive-${index}`,
+    serverId: "BZSS_Main",
+    attackerName: "Attacker",
+    attackerSteam64ID: "steam-attacker",
+    victimName: `Victim ${index}`,
+  });
+  await harness.plugin.api.handleChat({
+    playerName: "Attacker",
+    steamId: "steam-attacker",
+    message,
+  });
+  assert.equal(harness.plugin.api.getState().summary.pending, 0, `Expected ${message} to clear the apology case`);
+}
+assert.equal(harness.plugin.api.getState().summary.totalApologies, 3);
+
 await harness.plugin.stop();
 console.log("team kill apology tests passed");
