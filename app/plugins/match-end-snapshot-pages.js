@@ -444,14 +444,14 @@ function renderPlayerRow(team, player, x, y, index) {
   const rowHeight = team.rowHeight;
   const health = null;
   const ping = readPing(player);
-  const fireTeam = normalizeFireTeam(firstText(player?.fireTeam, player?.fireteam, player?.fireTeamName, player?.fireTeamID, player?.fireteamID, player?.fireTeamId, player?.fireteamId, player?.soldierInfo?.fireTeam, player?.soldierInfo?.fireteam, player?.playerScoreboard?.fireTeam, player?.bzssCore?.fireTeam));
+  const fireTeam = normalizeFireTeam(firstText(player?.fireTeam, player?.fireteam, player?.fireTeamName, player?.fireTeamID, player?.fireteamID, player?.fireTeamId, player?.fireteamId, player?.soldierInfo?.fireTeam, player?.soldierInfo?.fireteam, player?.playerScoreboard?.fireTeam, player?.bzssCore?.fireTeam, player?.bzssCore?.fireTeamIndex, player?.bzssCore?.ftIndex));
   const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
     `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? ".98" : ".18"}"/>`,
     `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
-    `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="${role.tone}" stroke-opacity=".48"/>`,
+    `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
     `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
 
@@ -624,9 +624,9 @@ function isCommandSquad(value) {
 function normalizeFireTeam(value) {
   const text = String(value ?? "").trim().toUpperCase();
   if (!text) return "";
-  if (/^(?:0|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
-  if (/^(?:1|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
-  if (/^(?:2|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
+  if (/^(?:1|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
+  if (/^(?:2|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
+  if (/^(?:3|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
   const match = text.match(/(?:FIRE\s*TEAM\s*|火力[组組]\s*)?([ABC])(?:\s*TEAM|[组組])?/);
   return match?.[1] ?? "";
 }
