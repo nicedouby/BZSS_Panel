@@ -133,7 +133,7 @@ async function testSingleOverviewSnapshot() {
     assert.equal(item.playerCount, 1);
     assert.equal(item.queueCount, 5);
     assert.equal(item.imageAvailable, true);
-    assert.equal(item.pageCount, 1);
+    assert.equal(item.pageCount, 2);
 
     const snapshot = await plugin.api.readSnapshot(item.id);
     assert.equal(snapshot.snapshotType, "match-end-data");
@@ -145,7 +145,7 @@ async function testSingleOverviewSnapshot() {
     assert.equal(snapshot.players[0].bzssCore.ping, 38);
 
     const manifest = await plugin.api.readSnapshotManifest(item.id);
-    assert.equal(manifest.pageCount, 1);
+    assert.equal(manifest.pageCount, 2);
     assert.equal(manifest.pages[0].type, "match-status-overview");
 
     const image = await plugin.api.readSnapshotImage(item.id);
@@ -160,11 +160,11 @@ async function testSingleOverviewSnapshot() {
 
     const combined = await plugin.api.readSnapshotImage(item.id, { combined: true });
     assert.equal(combined.content.readUInt32BE(16), 3200);
-    assert.equal(combined.content.readUInt32BE(20), 1800);
+    assert.equal(combined.content.readUInt32BE(20), 3600);
 
     assert.equal(emitted.length, 1);
     assert.equal(emitted[0].name, "match.snapshot.ready");
-    assert.equal(emitted[0].payload.pageCount, 1);
+    assert.equal(emitted[0].payload.pageCount, 2);
 
     const dir = path.join(tempDir, "data", "match-end-snapshots");
     const names = await fs.readdir(dir);
