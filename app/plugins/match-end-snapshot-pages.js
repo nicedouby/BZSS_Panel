@@ -151,7 +151,7 @@ export function buildMatchEndOverviewModel(payload) {
     playtime,
     teams: [
       buildTeamColumnModel(teams.find((team) => team.teamID === 1) ?? emptyTeam(1), 24),
-      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 801),
+      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 813),
     ],
   };
 }
