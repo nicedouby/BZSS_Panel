@@ -576,6 +576,7 @@ function renderPlayerRow(team, player, x, y, index) {
   const health = null;
   const ping = readPing(player);
   const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
+  const overviewStats = playerDetailStats(player);
   const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   return [
@@ -584,8 +585,11 @@ function renderPlayerRow(team, player, x, y, index) {
     `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
     `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
-    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
-
+    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 13))}</text>`,
+    `<text x="${x + 146}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">K ${overviewStats.kills}</text>`,
+    `<text x="${x + 182}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">W ${overviewStats.wounds}</text>`,
+    `<text x="${x + 218}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">D ${overviewStats.deaths}</text>`,
+    `<text x="${x + 258}" y="${y + rowHeight - 6}" text-anchor="middle" class="overview-stat mono">TK ${overviewStats.teamKills}</text>`,
     `<text x="${x + team.laneWidth - 4}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
   ].join("");
 }
@@ -722,7 +726,7 @@ function renderDefs() {
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}
-      .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}
+      .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}.overview-stat{font-size:6.5px;font-weight:800;fill:#f4f8fc}
       .footer{font-size:10px;fill:#91a4b7}
       .detail-title{font-size:28px;font-weight:900}.detail-sub{font-size:11px;fill:#c7d8e8}
       .detail-head{font-size:8px;font-weight:900;fill:#d9ebfa}.detail-squad{font-size:9px;font-weight:900}
