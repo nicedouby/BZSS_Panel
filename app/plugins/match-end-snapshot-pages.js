@@ -444,19 +444,19 @@ function renderPlayerRow(team, player, x, y, index) {
   const rowHeight = team.rowHeight;
   const health = readHealth(player);
   const ping = readPing(player);
-  const fireTeam = normalizeFireTeam(player?.fireTeam);
+  const fireTeam = normalizeFireTeam(firstText(player?.fireTeam, player?.soldierInfo?.fireTeam, player?.playerScoreboard?.fireTeam, player?.bzssCore?.fireTeam));
   const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   const healthRatio = health == null ? 0 : Math.max(0, Math.min(1, Number(health) / 100));
   const healthHeight = Math.round(16 * healthRatio);
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
-    `<rect x="${x + 2}" y="${y}" width="2.5" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? ".95" : ".12"}"/>`,
-    `<rect x="${x + 5}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="${role.tone}" stroke-opacity=".48"/>`,
-    player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16" opacity=".82" preserveAspectRatio="xMidYMid meet"/>` : "",
-    player.roleIconData && healthHeight > 0 ? `<mask id="health-${team.teamID}-${index}-${Math.round(y)}" maskUnits="userSpaceOnUse"><image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16"/></mask>` : "",
-    player.roleIconData && healthHeight > 0 ? `<rect x="${x + 5}" y="${y + 18 - healthHeight}" width="16" height="${healthHeight}" fill="${healthColor(health)}" fill-opacity=".82" mask="url(#health-${team.teamID}-${index}-${Math.round(y)})"/>` : "",
-    `<text x="${x + 27}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
+    `<rect x="${x + 1}" y="${y}" width="4" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? ".95" : ".12"}"/>`,
+    `<rect x="${x + 8}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="${role.tone}" stroke-opacity=".48"/>`,
+    player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 8}" y="${y + 2}" width="16" height="16" opacity=".82" preserveAspectRatio="xMidYMid meet"/>` : "",
+    player.roleIconData && healthHeight > 0 ? `<mask id="health-${team.teamID}-${index}-${Math.round(y)}" maskUnits="userSpaceOnUse"><image href="${player.roleIconData}" x="${x + 8}" y="${y + 2}" width="16" height="16"/></mask>` : "",
+    player.roleIconData && healthHeight > 0 ? `<rect x="${x + 8}" y="${y + 18 - healthHeight}" width="16" height="${healthHeight}" fill="${healthColor(health)}" fill-opacity=".82" mask="url(#health-${team.teamID}-${index}-${Math.round(y)})"/>` : "",
+    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
 
     `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
   ].join("");
