@@ -2494,11 +2494,11 @@ function renderCompactPlayerRow(team, player, index, y) {
   const health = firstFiniteNumber(player?.health, core.health);
   const backgroundOpacity = index % 2 === 0 ? ".70" : ".56";
   const values = [
-    [330, health == null ? "-" : Math.round(health)], [370, compactStat(core.ping)],
-    [414, compactStat(core.kills)], [446, compactStat(core.downs)], [478, compactStat(core.deaths)],
-    [512, compactStat(core.teamKills)], [548, compactStat(core.vehicleKills)], [584, compactStat(core.revives)],
-    [626, compactStat(core.healPoints)], [668, compactStat(core.combatScore)],
-    [704, compactStat(core.objectiveScore)], [736, compactStat(core.teamworkScore)],
+    [330, health == null ? "-" : Math.round(health)], [370, compactStat(coreMetric(core, "ping", "latency"))],
+    [414, compactStat(coreMetric(core, "kills", "kill", "numKills"))], [446, compactStat(coreMetric(core, "downs", "wounds", "wound"))], [478, compactStat(coreMetric(core, "deaths", "death"))],
+    [512, compactStat(coreMetric(core, "teamKills", "tk"))], [548, compactStat(coreMetric(core, "vehicleKills", "vehicleKill", "vehicle_kills"))], [584, compactStat(coreMetric(core, "revives", "revive"))],
+    [626, compactStat(coreMetric(core, "healPoints", "healing", "heals"))], [668, compactStat(coreMetric(core, "combatScore", "combat"))],
+    [704, compactStat(coreMetric(core, "objectiveScore", "objective"))], [736, compactStat(coreMetric(core, "teamworkScore", "teamwork", "team"))],
   ];
   return [
     '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="22" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
@@ -2510,6 +2510,13 @@ function renderCompactPlayerRow(team, player, index, y) {
     '<text x="' + (x + 188) + '" y="' + (y + 15) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
     values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 15) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
   ].join("");
+}
+
+function coreMetric(core, ...keys) {
+  for (const key of keys) {
+    if (core && core[key] !== undefined && core[key] !== null && core[key] !== "") return core[key];
+  }
+  return null;
 }
 
 function compactStat(value) {
