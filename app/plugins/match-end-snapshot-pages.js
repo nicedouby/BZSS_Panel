@@ -451,20 +451,21 @@ function renderPlayerRow(team, player, x, y, index) {
   const healthHeight = Math.round(16 * healthRatio);
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
+    `<rect x="${x + 2}" y="${y}" width="2.5" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? ".95" : ".12"}"/>`,
     `<rect x="${x + 5}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="${role.tone}" stroke-opacity=".48"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16" opacity=".82" preserveAspectRatio="xMidYMid meet"/>` : "",
     player.roleIconData && healthHeight > 0 ? `<mask id="health-${team.teamID}-${index}-${Math.round(y)}" maskUnits="userSpaceOnUse"><image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16"/></mask>` : "",
-    player.roleIconData && healthHeight > 0 ? `<rect x="${x + 5}" y="${y + 18 - healthHeight}" width="16" height="${healthHeight}" fill="${healthColor(health)}" fill-opacity=".60" mask="url(#health-${team.teamID}-${index}-${Math.round(y)})"/>` : "",
+    player.roleIconData && healthHeight > 0 ? `<rect x="${x + 5}" y="${y + 18 - healthHeight}" width="16" height="${healthHeight}" fill="${healthColor(health)}" fill-opacity=".82" mask="url(#health-${team.teamID}-${index}-${Math.round(y)})"/>` : "",
     `<text x="${x + 27}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
-    fireTeam ? `<text x="${x + 124}" y="${y + rowHeight - 6}" text-anchor="middle" class="ft-badge">FT-${escapeXml(fireTeam)}</text>` : "",
+
     `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
   ].join("");
 }
 
 function comparePlayers(left, right) {
-  return Number(Boolean(right?.isCommander)) - Number(Boolean(left?.isCommander))
+  return fireTeamRank(left?.fireTeam) - fireTeamRank(right?.fireTeam)
+    || Number(Boolean(right?.isCommander)) - Number(Boolean(left?.isCommander))
     || Number(Boolean(right?.isLeader)) - Number(Boolean(left?.isLeader))
-    || fireTeamRank(left?.fireTeam) - fireTeamRank(right?.fireTeam)
     || String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "zh-CN", { numeric: true })
     || compareNullableNumbers(left?.playerID, right?.playerID);
 }
@@ -489,6 +490,13 @@ function compactMetric(core, ...keys) {
     if (Number.isFinite(value)) return Math.round(value);
   }
   return "-";
+}
+
+function fireTeamColor(fireTeam) {
+  if (fireTeam === "A") return "#35d07f";
+  if (fireTeam === "B") return "#a78bfa";
+  if (fireTeam === "C") return "#67c7ff";
+  return "#64748b";
 }
 
 function healthColor(health) {
