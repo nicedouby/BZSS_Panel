@@ -67,7 +67,13 @@ export function createPlugin(context = {}) {
   }
 
   function normalizeName(value) {
-    return normalizeText(value).toLocaleLowerCase().replace(/\s+/g, " ");
+    return normalizeText(value).toLowerCase().replace(/\s+/g, " ");
+  }
+
+  // Apology matching is deliberately case-insensitive: sorry, SORRY and
+  // SoRrY must all normalize to the same text before keyword matching.
+  function normalizeApologyText(value) {
+    return normalizeText(value).toLowerCase().replace(/\s+/g, " ");
   }
 
   function normalizeIdentity(value) {
@@ -247,8 +253,8 @@ export function createPlugin(context = {}) {
   }
 
   function isApology(message) {
-    const normalized = normalizeName(message);
-    return normalized && APOLOGY_WORDS.some((word) => normalized.includes(normalizeName(word)));
+    const normalized = normalizeApologyText(message);
+    return normalized && APOLOGY_WORDS.some((word) => normalized.includes(normalizeApologyText(word)));
   }
 
   function resolveChatIdentity(event = {}) {
@@ -263,8 +269,8 @@ export function createPlugin(context = {}) {
 
   function sameIdentity(left = {}, right = {}) {
     const same = (a, b) => {
-      const leftValue = normalizeIdentity(a).toLocaleLowerCase();
-      const rightValue = normalizeIdentity(b).toLocaleLowerCase();
+      const leftValue = normalizeIdentity(a).toLowerCase();
+      const rightValue = normalizeIdentity(b).toLowerCase();
       return Boolean(leftValue && rightValue && leftValue === rightValue);
     };
     return same(left.steamId, right.steamId)
