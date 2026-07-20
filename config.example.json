@@ -429,6 +429,7 @@
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
+    "killDuplicates": true,
     "restartOnExit": false,
     "pipeOutput": true
   },
