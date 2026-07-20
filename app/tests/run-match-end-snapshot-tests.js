@@ -194,8 +194,15 @@ function makeTeam(teamID, count) {
     bzssCore: {
       ping: 35 + (index % 8) * 5,
       kills: index,
-      deaths: 1,
       downs: index + 1,
+      deaths: 1,
+      teamKills: index % 2,
+      vehicleKills: index % 4,
+      revives: index % 3,
+      healPoints: 100 + index,
+      combatScore: 200 + index,
+      objectiveScore: 300 + index,
+      teamworkScore: 400 + index,
     },
   }));
 }
