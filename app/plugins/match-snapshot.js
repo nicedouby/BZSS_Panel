@@ -1586,13 +1586,7 @@ async function loadRoleIconCache() {
 }
 
 async function readIconAsDataUri(iconPath) {
-  const filePath = path.join(ICON_BASE_DIR, iconPath.replace(/^\//, "").replace(/\//g, path.sep));
-  try {
-    const content = await fs.readFile(filePath);
-    return `data:image/png;base64,${content.toString("base64")}`;
-  } catch {
-    return "";
-  }
+  return readAssetDataUri(iconPath);
 }
 
 function resolveRoleMeta(roleText) {
@@ -2251,9 +2245,9 @@ async function buildCompactMatchEndLayout(snapshot, options = {}) {
     await buildCompactTeamColumn(snapshot, team1, 40, "#2dd4bf", options, roleIconCache),
     await buildCompactTeamColumn(snapshot, team2, 812, "#f59e0b", options, roleIconCache),
   ];
-  const maxContentHeight = Math.max(28, ...columns.map((column) => column.contentHeight));
-  const contentTop = 73;
-  const requiredHeight = contentTop + maxContentHeight + 45;
+  const maxContentHeight = Math.max(24, ...columns.map((column) => column.contentHeight));
+  const contentTop = 92;
+  const requiredHeight = contentTop + maxContentHeight + 50;
   // Never crop the final Loading Screen. The report grows in complete 1600×900
   // template units so every export has a full scene background behind its data.
   const loadingScreenHeight = 900;
@@ -2316,9 +2310,9 @@ async function buildCompactTeamColumn(snapshot, team, x, accent, options = {}, r
   groups.sort((left, right) =>
     Number(right.isCommandSquad) - Number(left.isCommandSquad)
     || compactSquadSortValue(left.squadID) - compactSquadSortValue(right.squadID)
-    || String(left.label).localeCompare(String(left.label), "zh-CN", { numeric: true }));
+    || String(left.label).localeCompare(String(right.label), "zh-CN", { numeric: true }));
   const players = groups.flatMap((group) => group.players);
-  const contentHeight = groups.reduce((height, group) => height + 10 + group.players.length * 11, 0);
+  const contentHeight = groups.reduce((height, group) => height + 16 + group.players.length * 22, 0);
 
   return {
     x,
@@ -2421,7 +2415,7 @@ function renderCompactMatchEndSvg(layout) {
   svg.push('<linearGradient id="topBar" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#071426" stop-opacity=".88"/><stop offset="50%" stop-color="#10243c" stop-opacity=".76"/><stop offset="100%" stop-color="#07101f" stop-opacity=".88"/></linearGradient>');
   svg.push('<filter id="softMap"><feGaussianBlur stdDeviation="1.6"/></filter>');
   svg.push('<style><![CDATA[');
-  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:20px;font-weight:900}.sub{font-size:9px;fill:#b6c6d7}.chip{font-size:9px;font-weight:900}.team-name{font-size:10px;font-weight:900}.team-meta{font-size:7px;fill:#c5d2e0}.commander{font-size:8.5px;font-weight:900}.head{font-size:7px;font-weight:900;fill:#a5b8ca}.squad{font-size:7.5px;font-weight:900}.name{font-size:7.5px;font-weight:900}.row-meta{font-size:7px;fill:#b5c5d5}.stat{font-size:7.5px;font-weight:800;fill:#edf5ff}.foot{font-size:9px;fill:#8396aa}]]></style>");
+  svg.push("text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#edf5ff}.mono{font-family:'Cascadia Mono','Consolas',monospace}.title{font-size:20px;font-weight:900}.sub{font-size:9px;fill:#b6c6d7}.chip{font-size:9px;font-weight:900}.team-name{font-size:16px;font-weight:900}.team-meta{font-size:10px;fill:#c5d2e0}.commander{font-size:12px;font-weight:900}.head{font-size:9px;font-weight:900;fill:#a5b8ca}.squad{font-size:10px;font-weight:900}.name{font-size:11px;font-weight:900}.row-meta{font-size:9px;fill:#b5c5d5}.stat{font-size:10px;font-weight:800;fill:#edf5ff}.foot{font-size:9px;fill:#8396aa}]]></style>");
   svg.push('</defs>');
   svg.push('<rect width="1600" height="' + layout.height + '" fill="url(#pageShade)"/>');
 
@@ -2437,10 +2431,10 @@ function renderCompactMatchEndSvg(layout) {
     let rowY = layout.contentTop;
     for (const group of column.groups) {
       svg.push(renderCompactSquadHeader(column, group, rowY));
-      rowY += 10;
+      rowY += 16;
       group.players.forEach((player, index) => {
         svg.push(renderCompactPlayerRow(column, player, index, rowY));
-        rowY += 11;
+        rowY += 22;
       });
     }
     if (!column.groups.length) {
@@ -2460,27 +2454,27 @@ function renderCompactCommanderBar(team) {
   const width = team.width;
   const flagX = x + 12;
   return [
-    '<path d="M' + x + ' ' + y + ' H' + (x + width - 7) + ' L' + (x + width) + ' ' + (y + 7) + ' V' + (y + 18) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
-    '<rect x="' + x + '" y="' + y + '" width="4" height="18" fill="' + team.accent + '"/>',
+    '<path d="M' + x + ' ' + y + ' H' + (x + width - 7) + ' L' + (x + width) + ' ' + (y + 7) + ' V' + (y + 26) + ' H' + x + ' Z" fill="#061020" fill-opacity=".82" stroke="' + team.accent + '" stroke-opacity=".66"/>',
+    '<rect x="' + x + '" y="' + y + '" width="4" height="26" fill="' + team.accent + '"/>',
     team.flagDataUri
-      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 4) + '" width="20" height="10" preserveAspectRatio="xMidYMid meet"/>'
-      : '<rect x="' + flagX + '" y="' + (y + 4) + '" width="20" height="10" fill="' + team.accent + '" opacity=".24"/>',
-    '<text x="' + (x + 44) + '" y="' + (y + 13) + '" class="team-name">T' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 28)) + '</text>',
-    '<text x="' + (x + 494) + '" y="' + (y + 13) + '" class="commander">CO · ' + xmlEscape(truncateText(team.commanderName, 24)) + '</text>',
+      ? '<image href="' + team.flagDataUri + '" x="' + flagX + '" y="' + (y + 5) + '" width="52" height="16" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + flagX + '" y="' + (y + 5) + '" width="52" height="16" fill="' + team.accent + '" opacity=".24"/>',
+    '<text x="' + (x + 76) + '" y="' + (y + 18) + '" class="team-name">T' + xmlEscape(String(team.teamID ?? "?")) + ' · ' + xmlEscape(truncateText(team.teamName, 28)) + '</text>',
+    '<text x="' + (x + 494) + '" y="' + (y + 18) + '" class="commander">CO · ' + xmlEscape(truncateText(team.commanderName, 24)) + '</text>',
   ].join("");
 }
 
 function renderCompactStatHeader(team) {
   const x = team.x;
-  const y = 63;
+  const y = 72;
   const labels = [
     [12, "ROLE / PLAYER"], [188, "FT"], [330, "HP"], [370, "PING"],
     [414, "K"], [446, "W"], [478, "D"], [512, "TK"], [548, "VK"],
     [584, "REV"], [626, "HEAL"], [668, "C"], [704, "O"], [736, "T"],
   ];
-  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="10" fill="#020611" fill-opacity=".78"/>' +
+  return '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="18" fill="#020611" fill-opacity=".78"/>' +
     labels.map(([offset, label], index) =>
-      '<text x="' + (x + offset) + '" y="' + (y + 8) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
+      '<text x="' + (x + offset) + '" y="' + (y + 13) + '"' + (index ? ' text-anchor="middle"' : '') + ' class="head">' + label + '</text>'
     ).join("");
 }
 
@@ -2488,8 +2482,8 @@ function renderCompactSquadHeader(team, group, y) {
   const command = group.isCommandSquad ? " · COMMAND" : "";
   const creator = firstText(group.creatorName, "-");
   return [
-    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="9" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
-    '<text x="' + (team.x + 10) + '" y="' + (y + 7.5) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
+    '<rect x="' + team.x + '" y="' + y + '" width="' + team.width + '" height="16" fill="' + team.accent + '" fill-opacity=".22" stroke="' + team.accent + '" stroke-opacity=".35"/>',
+    '<text x="' + (team.x + 10) + '" y="' + (y + 12) + '" class="squad">' + xmlEscape(group.label + command) + '</text>',
     '<text x="' + (team.x + team.width - 10) + '" y="' + (y + 7.5) + '" text-anchor="end" class="team-meta mono">SCR ' + xmlEscape(truncateText(creator, 20)) + '</text>',
   ].join("");
 }
@@ -2507,14 +2501,14 @@ function renderCompactPlayerRow(team, player, index, y) {
     [704, compactStat(core.objectiveScore)], [736, compactStat(core.teamworkScore)],
   ];
   return [
-    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="10" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
-    '<rect x="' + x + '" y="' + y + '" width="2.5" height="10" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
+    '<rect x="' + x + '" y="' + y + '" width="' + team.width + '" height="22" fill="#061020" fill-opacity="' + backgroundOpacity + '" stroke="#ffffff" stroke-opacity=".045"/>',
+    '<rect x="' + x + '" y="' + y + '" width="2.5" height="22" fill="' + team.accent + '" opacity="' + (player.isCommander ? "1" : player.isLeader ? ".72" : ".18") + '"/>',
     player.roleIconData
-      ? '<image href="' + player.roleIconData + '" x="' + (x + 8) + '" y="' + (y + 1) + '" width="8" height="8" preserveAspectRatio="xMidYMid meet"/>'
-      : '<rect x="' + (x + 8) + '" y="' + (y + 1.5) + '" width="7" height="7" rx="1.5" fill="' + (player.roleTone || "#64748b") + '" fill-opacity=".85"/>',
-    '<text x="' + (x + 22) + '" y="' + (y + 8) + '" class="name">' + xmlEscape(truncateText(player.name, 21)) + '</text>',
-    '<text x="' + (x + 188) + '" y="' + (y + 8) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
-    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 8) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
+      ? '<image href="' + player.roleIconData + '" x="' + (x + 8) + '" y="' + (y + 3) + '" width="16" height="16" preserveAspectRatio="xMidYMid meet"/>'
+      : '<rect x="' + (x + 8) + '" y="' + (y + 4) + '" width="14" height="14" rx="1.5" fill="' + (player.roleTone || "#64748b") + '" fill-opacity=".85"/>',
+    '<text x="' + (x + 32) + '" y="' + (y + 15) + '" class="name">' + xmlEscape(truncateText(player.name, 21)) + '</text>',
+    '<text x="' + (x + 188) + '" y="' + (y + 15) + '" text-anchor="middle" class="row-meta mono">' + xmlEscape(compactFireTeam(player.fireTeam)) + '</text>',
+    values.map(([offset, value]) => '<text x="' + (x + offset) + '" y="' + (y + 15) + '" text-anchor="middle" class="stat mono">' + xmlEscape(String(value)) + '</text>').join(""),
   ].join("");
 }
 
