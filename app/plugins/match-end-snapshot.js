@@ -49,6 +49,11 @@ export function createPlugin({ core, modules, logger } = {}) {
       modules,
     });
     const id = buildSnapshotId(payload);
+    const coverage = payload.summary?.fireTeamCounts ?? {};
+    pluginLogger.info?.("[MatchEndSnapshot] fireteam coverage: A=" + (coverage.A ?? 0)
+      + " B=" + (coverage.B ?? 0) + " C=" + (coverage.C ?? 0)
+      + " unknown=" + (coverage.unknown ?? 0) + " total=" + payload.players.length
+      + " sources=" + JSON.stringify(payload.summary?.fireTeamSourceCounts ?? {}));
     await ensureSnapshotDir();
 
     let bundle = null;
