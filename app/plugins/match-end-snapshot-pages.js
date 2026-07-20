@@ -209,7 +209,7 @@ function buildSquadGroups(players, squads) {
     squadMap.set(key, {
       squadID,
       squadName: firstText(squad?.squadName, squad?.name, squadID == null ? "未加入小队" : `Squad ${squadID}`),
-      creatorName: firstText(squad?.creatorName),
+      creatorName: firstText(squad?.creatorName, squad?.creator?.name, squad?.creator, squad?.createdBy, squad?.ownerName),
       locked: Boolean(squad?.locked),
       isCommandSquad: isCommandSquad(firstText(squad?.squadName, squad?.name)),
       players: [],
@@ -223,7 +223,7 @@ function buildSquadGroups(players, squads) {
       squadMap.set(key, {
         squadID,
         squadName: firstText(player?.squadInfo?.name, squadID == null ? "未加入小队" : `Squad ${squadID}`),
-        creatorName: firstText(player?.squadInfo?.creatorName),
+        creatorName: firstText(player?.squadInfo?.creatorName, player?.squadInfo?.creator?.name, player?.squadInfo?.creator, player?.squadInfo?.createdBy),
         locked: Boolean(player?.squadInfo?.locked),
         isCommandSquad: isCommandSquad(firstText(player?.squadInfo?.name)),
         players: [],
