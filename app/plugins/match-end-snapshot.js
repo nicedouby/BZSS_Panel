@@ -228,7 +228,7 @@ export function createPlugin({ core, modules, logger } = {}) {
     const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: safeId });
     await persistBundle(safeId, bundle);
     payload.artifacts = {
-      format: "paged-scoreboard",
+      format: "single-scoreboard",
       pageCount: bundle.pages.length,
       primaryImage: safeId + ".png",
       combinedImage: safeId + "-combined.png",
