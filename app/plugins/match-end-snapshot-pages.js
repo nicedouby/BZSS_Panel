@@ -12,7 +12,7 @@ const TEAM_CONTENT_TOP = 220;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 8;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
-const SQUAD_HEADER_HEIGHT = 18;
+const SQUAD_HEADER_HEIGHT = 16;
 const SQUAD_GAP = 4;
 const DEFAULT_PLAYER_ROW_HEIGHT = 20;
 const MIN_PLAYER_ROW_HEIGHT = 12;
@@ -332,8 +332,17 @@ async function attachTeamVisuals(model) {
     if (file) {
       const candidate = path.resolve(process.cwd(), "web-client", "public", "assets", "flags", file);
       const fallback = path.resolve(process.cwd(), "web-client", "public", "assets", "factions", file);
-      const found = [candidate, fallback].find((item) => existsSync(item));
+      const sourceAsset = path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", file);
+      const found = [candidate, fallback, sourceAsset].find((item) => existsSync(item));
       if (found) try { team.flagData = `data:image/png;base64,${(await fs.readFile(found)).toString("base64")}`; } catch {}
+    }
+    const commander = team.commanderPlayer ?? {};
+    const avatar = commander.avatarUrl ?? commander.avatar ?? commander.steamAvatar ?? commander.steamAvatarUrl ?? commander.steamProfile?.avatar ?? commander.steam?.avatar ?? commander.profile?.avatar ?? "";
+    if (typeof avatar === "string" && avatar.startsWith("http")) {
+      try {
+        const response = await fetch(avatar);
+        if (response.ok) team.commanderAvatarData = `data:image/jpeg;base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+      } catch {}
     }
   }
 }
@@ -388,7 +397,7 @@ function renderTeamColumn(team) {
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
   svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
   svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
-  const commanderAvatar = team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
+  const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
   svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
   svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
   if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
@@ -417,7 +426,7 @@ function renderSquadCard(team, group, x, y) {
   svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".62" stroke="#ffffff" stroke-opacity=".10"/>`);
   svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
-  svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}${group.isCommandSquad ? " · CMD" : ""}</text>`);
+  svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}</text>`);
   svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
   svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 13}" text-anchor="end" class="${group.locked ? "squad-locked" : "squad-meta"} mono">${escapeXml(badge)}</text>`);
 
@@ -443,10 +452,11 @@ function renderPlayerRow(team, player, x, y, index) {
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
     `<rect x="${x + 5}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="${role.tone}" stroke-opacity=".48"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16" opacity=".82" preserveAspectRatio="xMidYMid meet"/>` : "",
-    healthHeight > 0 ? `<rect x="${x + 5}" y="${y + 18 - healthHeight}" width="16" height="${healthHeight}" fill="${healthColor(health)}" fill-opacity=".55"/>` : "",
+    player.roleIconData && healthHeight > 0 ? `<mask id="health-${team.teamID}-${index}-${Math.round(y)}" maskUnits="userSpaceOnUse"><image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16"/></mask>` : "",
+    player.roleIconData && healthHeight > 0 ? `<rect x="${x + 5}" y="${y + 18 - healthHeight}" width="16" height="${healthHeight}" fill="${healthColor(health)}" fill-opacity=".60" mask="url(#health-${team.teamID}-${index}-${Math.round(y)})"/>` : "",
     `<text x="${x + 27}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
     fireTeam ? `<text x="${x + 124}" y="${y + rowHeight - 6}" text-anchor="middle" class="ft-badge">FT-${escapeXml(fireTeam)}</text>` : "",
-    `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}ms`}</text>`,
+    `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
   ].join("");
 }
 
@@ -577,7 +587,7 @@ function renderDefs() {
       .player-name{font-size:8.5px;font-weight:900}
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
-      .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}
+      .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}
       .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}
       .footer{font-size:10px;fill:#91a4b7}
     ]]></style>
