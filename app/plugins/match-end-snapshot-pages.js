@@ -8,11 +8,11 @@ const HEIGHT = 1800;
 const BASE_WIDTH = 1600;
 const BASE_HEIGHT = 900;
 const TEAM_COLUMN_WIDTH = 748;
-const TEAM_CONTENT_TOP = 230;
+const TEAM_CONTENT_TOP = 220;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 10;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - TEAM_LANE_GAP) / 2);
-const SQUAD_HEADER_HEIGHT = 22;
+const SQUAD_HEADER_HEIGHT = 20;
 const SQUAD_GAP = 6;
 const DEFAULT_PLAYER_ROW_HEIGHT = 20;
 const MIN_PLAYER_ROW_HEIGHT = 12;
@@ -113,6 +113,7 @@ export async function generateMatchEndOverviewPng(payload) {
   const sharp = await loadSharp();
   const model = buildMatchEndOverviewModel(payload);
   await attachRoleIconData(model);
+  await attachTeamVisuals(model);
   const background = await buildBackground(sharp, payload);
   const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
   return sharp(background)
@@ -195,6 +196,7 @@ function buildTeams(payload) {
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
       commanderName: firstText(commander?.name, "Pending"),
+      commanderPlayer: commander,
       groups,
     };
   });
@@ -322,6 +324,20 @@ function roleIconFileName(label) {
   return files[key] ?? "T_role_rifleman.PNG";
 }
 
+async function attachTeamVisuals(model) {
+  const flagFiles = { ADF: "ADF.PNG", AFU: "AFU.PNG", BAF: "BAF.PNG", CAF: "CAF.PNG", CRF: "CRF.PNG", GFI: "GFI.PNG", IMF: "IMF.PNG", MEA: "MEA.PNG", MEI: "MEI.PNG", PLA: "PLA.PNG", PLAAGF: "PLAAGF.PNG", PLANMC: "PLANMC.png", RGF: "RGF.PNG", TLF: "TLF.PNG", USA: "USA.PNG", USMC: "USMC.PNG", VDV: "VDV.png", WPMC: "WPMC.PNG" };
+  for (const team of model.teams ?? []) {
+    const code = String(team.teamName ?? "").toUpperCase().match(/ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|PLAAGF|PLANMC|PLA|RGF|TLF|USA|USMC|VDV|WPMC/)?.[0];
+    const file = flagFiles[code];
+    if (file) {
+      const candidate = path.resolve(process.cwd(), "web-client", "public", "assets", "flags", file);
+      const fallback = path.resolve(process.cwd(), "web-client", "public", "assets", "factions", file);
+      const found = [candidate, fallback].find((item) => existsSync(item));
+      if (found) try { team.flagData = `data:image/png;base64,${(await fs.readFile(found)).toString("base64")}`; } catch {}
+    }
+  }
+}
+
 function renderOverviewSvg(model) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`);
@@ -329,11 +345,11 @@ function renderOverviewSvg(model) {
   svg.push('<g transform="scale(2)">');
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
-  svg.push('<path d="M36 32 H1112 L1162 82 H1564 V146 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
+  svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
   svg.push('<text x="64" y="62" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
-  svg.push(`<text x="64" y="108" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
-  svg.push(`<text x="66" y="136" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
-  svg.push(`<text x="1218" y="133" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
+  svg.push(`<text x="64" y="90" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
+  svg.push(`<text x="66" y="112" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
+  svg.push(`<text x="1218" y="114" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
 
   const cards = [
     ["PLAYERS", String(model.playerCount)],
@@ -343,9 +359,9 @@ function renderOverviewSvg(model) {
   ];
   cards.forEach(([label, value], index) => {
     const x = 920 + index * 156;
-    svg.push(`<path d="M${x} 50 H${x + 138} V112 H${x} Z" fill="#020817" fill-opacity=".72" stroke="#d7e7f7" stroke-opacity=".24"/>`);
-    svg.push(`<text x="${x + 12}" y="72" class="card-label">${escapeXml(label)}</text>`);
-    svg.push(`<text x="${x + 12}" y="101" class="card-value mono">${escapeXml(value)}</text>`);
+    svg.push(`<path d="M${x} 50 H${x + 138} V100 H${x} Z" fill="#020817" fill-opacity=".72" stroke="#d7e7f7" stroke-opacity=".24"/>`);
+    svg.push(`<text x="${x + 12}" y="62" class="card-label">${escapeXml(label)}</text>`);
+    svg.push(`<text x="${x + 12}" y="88" class="card-value mono">${escapeXml(value)}</text>`);
   });
 
   for (const team of model.teams) {
@@ -363,15 +379,20 @@ function renderTeamColumn(team) {
   const svg = [];
   const x = team.x;
   const y = 158;
-  const headerHeight = 70;
+  const headerHeight = 58;
 
   svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".72" stroke="${team.accent}" stroke-opacity=".34"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".88" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
-  svg.push(`<text x="${x + 28}" y="${y + 36}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
-  svg.push(`<text x="${x + 28}" y="${y + 58}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
-  svg.push(`<text x="${x + team.width - 22}" y="${y + 36}" text-anchor="end" class="team-commander">CO · ${escapeXml(clip(team.commanderName, 22))}</text>`);
+  if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
+  svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
+  svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
+  const commanderAvatar = team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? "";
+  svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
+  svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
+  if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
+  svg.push(`<text x="${x + team.width - 22}" y="${y + 31}" text-anchor="end" class="team-commander">CO · ${escapeXml(clip(team.commanderName, 18))}</text>`);
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
   team.lanes.forEach((groups, laneIndex) => {
@@ -388,7 +409,7 @@ function renderTeamColumn(team) {
 function renderSquadCard(team, group, x, y) {
   const svg = [];
   const height = SQUAD_HEADER_HEIGHT + group.players.length * team.rowHeight;
-  const badge = group.locked ? "LOCKED" : `${group.players.length}/9`;
+  const badge = group.locked ? "🔒" : `${group.players.length}/9`;
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
   const creator = firstText(group.creatorName, "-");
 
@@ -396,8 +417,8 @@ function renderSquadCard(team, group, x, y) {
   svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${SQUAD_HEADER_HEIGHT}" rx="8" fill="${team.accent}" fill-opacity=".16" stroke="${team.accent}" stroke-opacity=".28"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
   svg.push(`<text x="${x + 12}" y="${y + 18}" class="squad-title">${escapeXml(clip(title, 28))}${group.isCommandSquad ? " · CMD" : ""}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 15}" text-anchor="end" class="squad-meta mono">SCR ${escapeXml(clip(creator, 12))}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 15}" text-anchor="end" class="squad-meta mono">${escapeXml(badge)}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 15}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 15}" text-anchor="end" class="${group.locked ? "squad-locked" : "squad-meta"} mono">${escapeXml(badge)}</text>`);
 
   group.players.forEach((player, index) => {
     const rowY = y + SQUAD_HEADER_HEIGHT + index * team.rowHeight;
@@ -421,13 +442,13 @@ function renderPlayerRow(team, player, x, y, index) {
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
     player.roleIconData
-      ? `<image href="${player.roleIconData}" x="${x + 9}" y="${y + 2}" width="20" height="16" preserveAspectRatio="xMidYMid meet"/>`
-      : `<rect x="${x + 9}" y="${y + 4}" width="18" height="12" rx="3" fill="${role.tone}" fill-opacity=".35"/>`,
-    `<text x="${x + 44}" y="${y + rowHeight - 6}" class="player-name">${leaderLabel ? `${leaderLabel} ` : ""}${escapeXml(clip(player?.name, 17))}</text>`,
+      ? `<image href="${player.roleIconData}" x="${x + 5}" y="${y + 2}" width="16" height="16" preserveAspectRatio="xMidYMid meet"/>`
+      : `<rect x="${x + 5}" y="${y + 4}" width="14" height="12" rx="3" fill="${role.tone}" fill-opacity=".35"/>`,
+    `<text x="${x + 28}" y="${y + rowHeight - 6}" class="player-name">${leaderLabel ? `${leaderLabel} ` : ""}${escapeXml(clip(player?.name, 17))}</text>`,
     fireTeam
       ? `<text x="${x + 148}" y="${y + rowHeight - 6}" text-anchor="middle" class="ft-badge">${escapeXml(fireTeam)}</text>`
       : "",
-    `<text x="${x + 168}" y="${y + rowHeight - 6}" class="combat-stats mono">${escapeXml(statsText)}</text>`,
+    `<text x="${x + 140}" y="${y + rowHeight - 6}" class="combat-stats mono">${escapeXml(statsText)}</text>`,
     `<text x="${x + team.laneWidth - 52}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-meta mono">${health == null ? "--" : "HP " + Math.round(health)}</text>`,
     `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono">${ping == null ? "--" : `${ping}ms`}</text>`,
   ].join("");
@@ -532,19 +553,19 @@ function renderDefs() {
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
       .mono{font-family:'Cascadia Mono','Consolas',monospace}
-      .eyebrow{font-size:12px;font-weight:900;letter-spacing:1.5px;fill:#b9cadc}
-      .hero-title{font-size:42px;font-weight:900}
-      .hero-sub{font-size:15px;fill:#d4e1ee}
-      .meta{font-size:11px;fill:#b7c8d8}
-      .card-label{font-size:9px;font-weight:900;fill:#aabbd0}
-      .card-value{font-size:18px;font-weight:900}
+      .eyebrow{font-size:9px;font-weight:900;letter-spacing:1.5px;fill:#b9cadc}
+      .hero-title{font-size:32px;font-weight:900}
+      .hero-sub{font-size:11px;fill:#d4e1ee}
+      .meta{font-size:8px;fill:#b7c8d8}
+      .card-label{font-size:7px;font-weight:900;fill:#aabbd0}
+      .card-value{font-size:14px;font-weight:900}
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
-      .team-commander{font-size:11px;font-weight:900;fill:#dce8f3}
+      .commander-initial{font-size:12px;font-weight:900}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
       .squad-title{font-size:9px;font-weight:900}
-      .squad-meta{font-size:8px;font-weight:800;fill:#b6c5d3}
+      .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
       .role-badge{font-size:8px;font-weight:900}
-      .player-name{font-size:10.5px;font-weight:900}
+      .player-name{font-size:8.5px;font-weight:900}
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}
