@@ -7,11 +7,11 @@ const WIDTH = 3200;
 const HEIGHT = 1800;
 const BASE_WIDTH = 1600;
 const BASE_HEIGHT = 900;
-const TEAM_COLUMN_WIDTH = 748;
+const TEAM_COLUMN_WIDTH = 760;
 const TEAM_CONTENT_TOP = 220;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 10;
-const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - TEAM_LANE_GAP) / 2);
+const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
 const SQUAD_HEADER_HEIGHT = 20;
 const SQUAD_GAP = 6;
 const DEFAULT_PLAYER_ROW_HEIGHT = 20;
@@ -150,7 +150,7 @@ export function buildMatchEndOverviewModel(payload) {
     playtime,
     teams: [
       buildTeamColumnModel(teams.find((team) => team.teamID === 1) ?? emptyTeam(1), 36),
-      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 816),
+      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 804),
     ],
   };
 }
@@ -273,7 +273,7 @@ function buildTeamColumnModel(team, x) {
   const playerCountInTallestLane = Math.max(lanePlayerCounts[tallestLane] ?? 0, 1);
   const rowHeight = Math.max(
     MIN_PLAYER_ROW_HEIGHT,
-    Math.floor((availableHeight - fixedWeight) / playerCountInTallestLane),
+    Math.min(DEFAULT_PLAYER_ROW_HEIGHT, Math.floor((availableHeight - fixedWeight) / playerCountInTallestLane)),
   );
 
   return {
@@ -392,6 +392,7 @@ function renderTeamColumn(team) {
   svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
   svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
   if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
+  svg.push(`<text x="${x + team.width - 174}" y="${y + 52}" text-anchor="middle" class="commander-caption">${escapeXml(clip(team.commanderName, 12))}</text>`);
   svg.push(`<text x="${x + team.width - 22}" y="${y + 31}" text-anchor="end" class="team-commander">CO · ${escapeXml(clip(team.commanderName, 18))}</text>`);
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
@@ -438,7 +439,7 @@ function renderPlayerRow(team, player, x, y, index) {
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   const core = player?.bzssCore ?? {};
   const stat = (...keys) => compactMetric(core, ...keys);
-  const statsText = `K ${stat("kills", "kill", "numKills")} W ${stat("downs", "wounds", "wound")} D ${stat("deaths", "death")} TK ${stat("teamKills", "tk")} VK ${stat("vehicleKills", "vehicleKill")} R ${stat("revives", "revive")} H ${stat("healPoints", "healing")} C ${stat("combatScore", "combat")} O ${stat("objectiveScore", "objective")} T ${stat("teamworkScore", "teamwork")}`;
+  const statsText = "";
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
     player.roleIconData
@@ -448,9 +449,9 @@ function renderPlayerRow(team, player, x, y, index) {
     fireTeam
       ? `<text x="${x + 148}" y="${y + rowHeight - 6}" text-anchor="middle" class="ft-badge">${escapeXml(fireTeam)}</text>`
       : "",
-    `<text x="${x + 140}" y="${y + rowHeight - 6}" class="combat-stats mono">${escapeXml(statsText)}</text>`,
+    statsText ? `<text x="${x + 140}" y="${y + rowHeight - 6}" class="combat-stats mono">${escapeXml(statsText)}</text>` : "",
     `<text x="${x + team.laneWidth - 52}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-meta mono">${health == null ? "--" : "HP " + Math.round(health)}</text>`,
-    `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono">${ping == null ? "--" : `${ping}ms`}</text>`,
+    `<text x="${x + team.laneWidth - 8}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}ms`}</text>`,
   ].join("");
 }
 
@@ -482,6 +483,13 @@ function compactMetric(core, ...keys) {
     if (Number.isFinite(value)) return Math.round(value);
   }
   return "-";
+}
+
+function pingColor(ping) {
+  if (ping == null) return "#94a3b8";
+  if (ping < 70) return "#34d399";
+  if (ping <= 150) return "#facc15";
+  return "#fb7185";
 }
 
 function readPing(player) {
@@ -561,7 +569,7 @@ function renderDefs() {
       .card-value{font-size:14px;font-weight:900}
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
-      .commander-initial{font-size:12px;font-weight:900}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
+      .commander-initial{font-size:12px;font-weight:900}.commander-caption{font-size:7px;font-weight:800;fill:#b9c9d8}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
       .squad-title{font-size:9px;font-weight:900}
       .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
       .role-badge{font-size:8px;font-weight:900}
