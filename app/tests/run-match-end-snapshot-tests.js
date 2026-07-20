@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { createPlugin } from "../plugins/match-end-snapshot.js";
+import { FIRETEAM_COLORS, resolvePlayerFireTeam } from "../plugins/match-end-snapshot-fireteam.js";
 import {
   buildMatchEndOverviewModel,
   generateMatchEndSnapshotBundle,
@@ -260,6 +261,24 @@ async function testGlobalOverviewDoesNotRenderCombatStatistics() {
   assert.equal(source.includes("TEAM 1 / FULL SCOREBOARD"), false);
 }
 
+function testSourceAwareFireteamResolution() {
+  assert.equal(resolvePlayerFireTeam({ fireTeam: "A" }).fireTeam, "A");
+  assert.equal(resolvePlayerFireTeam({ fireTeam: "BRAVO" }).fireTeam, "B");
+  assert.equal(resolvePlayerFireTeam({ fireTeamID: 1 }).fireTeam, "A");
+  assert.equal(resolvePlayerFireTeam({ fireTeamID: 2 }).fireTeam, "B");
+  assert.equal(resolvePlayerFireTeam({ fireTeamID: 3 }).fireTeam, "C");
+  assert.equal(resolvePlayerFireTeam({ ftIndex: 0 }).fireTeam, "A");
+  assert.equal(resolvePlayerFireTeam({ ftIndex: 1 }).fireTeam, "B");
+  assert.equal(resolvePlayerFireTeam({ ftIndex: 2 }).fireTeam, "C");
+  const explicit = resolvePlayerFireTeam({ fireTeam: "C", fireTeamID: 1, ftIndex: 1 });
+  assert.equal(explicit.fireTeam, "C");
+  assert.equal(explicit.fireTeamSource, "player.fireTeam");
+  assert.equal(FIRETEAM_COLORS.A, "#35D07F");
+  assert.equal(FIRETEAM_COLORS.B, "#A78BFA");
+  assert.equal(FIRETEAM_COLORS.C, "#22D3EE");
+}
+
+testSourceAwareFireteamResolution();
 await testSingleOverviewSnapshot();
 await testHundredPlayersStayInOneOverview();
 await testGlobalOverviewDoesNotRenderCombatStatistics();
