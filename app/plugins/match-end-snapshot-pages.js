@@ -12,10 +12,10 @@ const TEAM_CONTENT_TOP = 230;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 10;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - TEAM_LANE_GAP) / 2);
-const SQUAD_HEADER_HEIGHT = 27;
-const SQUAD_GAP = 8;
+const SQUAD_HEADER_HEIGHT = 22;
+const SQUAD_GAP = 6;
 const DEFAULT_PLAYER_ROW_HEIGHT = 20;
-const MIN_PLAYER_ROW_HEIGHT = 16;
+const MIN_PLAYER_ROW_HEIGHT = 12;
 
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
@@ -258,16 +258,20 @@ function buildTeamColumnModel(team, x) {
     laneWeights[targetLane] += SQUAD_HEADER_HEIGHT + SQUAD_GAP + group.players.length * DEFAULT_PLAYER_ROW_HEIGHT;
   }
 
-  const maxWeight = Math.max(...laneWeights, 1);
-  const overflow = Math.max(0, maxWeight - availableHeight);
-  const totalPlayersInTallestLane = Math.max(
-    lanes[0].reduce((sum, group) => sum + group.players.length, 0),
-    lanes[1].reduce((sum, group) => sum + group.players.length, 0),
-    1,
+  const laneFixedWeights = lanes.map((groups) =>
+    groups.reduce((sum, group) => sum + SQUAD_HEADER_HEIGHT + SQUAD_GAP, 0)
   );
+  const lanePlayerCounts = lanes.map((groups) =>
+    groups.reduce((sum, group) => sum + group.players.length, 0)
+  );
+  const tallestLane = laneFixedWeights
+    .map((fixed, index) => fixed + lanePlayerCounts[index] * DEFAULT_PLAYER_ROW_HEIGHT)
+    .indexOf(Math.max(...laneFixedWeights.map((fixed, index) => fixed + lanePlayerCounts[index] * DEFAULT_PLAYER_ROW_HEIGHT), 1));
+  const fixedWeight = laneFixedWeights[tallestLane] ?? 0;
+  const playerCountInTallestLane = Math.max(lanePlayerCounts[tallestLane] ?? 0, 1);
   const rowHeight = Math.max(
     MIN_PLAYER_ROW_HEIGHT,
-    Math.floor(DEFAULT_PLAYER_ROW_HEIGHT - overflow / totalPlayersInTallestLane),
+    Math.floor((availableHeight - fixedWeight) / playerCountInTallestLane),
   );
 
   return {
@@ -386,12 +390,14 @@ function renderSquadCard(team, group, x, y) {
   const height = SQUAD_HEADER_HEIGHT + group.players.length * team.rowHeight;
   const badge = group.locked ? "LOCKED" : `${group.players.length}/9`;
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
+  const creator = firstText(group.creatorName, "-");
 
   svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="8" fill="#061020" fill-opacity=".80" stroke="#ffffff" stroke-opacity=".10"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${SQUAD_HEADER_HEIGHT}" rx="8" fill="${team.accent}" fill-opacity=".16" stroke="${team.accent}" stroke-opacity=".28"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
   svg.push(`<text x="${x + 12}" y="${y + 18}" class="squad-title">${escapeXml(clip(title, 28))}${group.isCommandSquad ? " · CMD" : ""}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 18}" text-anchor="end" class="squad-meta mono">${escapeXml(badge)}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 15}" text-anchor="end" class="squad-meta mono">SCR ${escapeXml(clip(creator, 12))}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 15}" text-anchor="end" class="squad-meta mono">${escapeXml(badge)}</text>`);
 
   group.players.forEach((player, index) => {
     const rowY = y + SQUAD_HEADER_HEIGHT + index * team.rowHeight;
@@ -407,7 +413,7 @@ function renderPlayerRow(team, player, x, y, index) {
   const health = readHealth(player);
   const ping = readPing(player);
   const fireTeam = normalizeFireTeam(player?.fireTeam);
-  const leaderLabel = player?.isCommander ? "CO" : player?.isLeader ? "SL" : "";
+  const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   const core = player?.bzssCore ?? {};
   const stat = (...keys) => compactMetric(core, ...keys);
@@ -535,7 +541,7 @@ function renderDefs() {
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
       .team-commander{font-size:11px;font-weight:900;fill:#dce8f3}
-      .squad-title{font-size:10px;font-weight:900}
+      .squad-title{font-size:9px;font-weight:900}
       .squad-meta{font-size:8px;font-weight:800;fill:#b6c5d3}
       .role-badge{font-size:8px;font-weight:900}
       .player-name{font-size:10.5px;font-weight:900}
