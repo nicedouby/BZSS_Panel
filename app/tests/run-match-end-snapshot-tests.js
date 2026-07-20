@@ -7,6 +7,7 @@ import zlib from "node:zlib";
 import { createPlugin } from "../plugins/match-end-snapshot.js";
 import { FIRETEAM_COLORS, resolvePlayerFireTeam } from "../plugins/match-end-snapshot-fireteam.js";
 import {
+  buildDetailPageModels,
   buildMatchEndOverviewModel,
   generateMatchEndSnapshotBundle,
 } from "../plugins/match-end-snapshot-pages.js";
@@ -243,23 +244,22 @@ async function testHundredPlayersStayInOneOverview() {
   assert.ok(model.teams[1].rowHeight >= 16);
 
   const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: "hundred-player-overview" });
-  assert.equal(bundle.pages.length, 1);
+  assert.equal(bundle.pages.length, 5);
   assert.equal(bundle.pages[0].type, "match-status-overview");
+  assert.equal(bundle.pages.filter((page) => page.type === "team-scoreboard").length, 4);
   assert.equal(bundle.pages[0].playerCount, 100);
   assert.equal(bundle.pages[0].buffer.readUInt32BE(16), 3200);
   assert.equal(bundle.pages[0].buffer.readUInt32BE(20), 1800);
   assert.equal(bundle.combinedBuffer.readUInt32BE(16), 3200);
-  assert.equal(bundle.combinedBuffer.readUInt32BE(20), 1800);
+  assert.equal(bundle.combinedBuffer.readUInt32BE(20), 9000);
 }
 
-async function testGlobalOverviewDoesNotRenderCombatStatistics() {
-  const source = await fs.readFile(new URL("../plugins/match-end-snapshot-pages.js", import.meta.url), "utf8");
-  assert.equal(source.includes("combatScore"), false);
-  assert.equal(source.includes("objectiveScore"), false);
-  assert.equal(source.includes("teamworkScore"), false);
-  assert.equal(source.includes("vehicleKills"), false);
-  assert.equal(source.includes("numKills"), false);
-  assert.equal(source.includes("TEAM 1 / FULL SCOREBOARD"), false);
+function testDetailPaginationAndStats() {
+  assert.equal(buildDetailPageModels(makePayload(20, 0)).filter((page) => page.team.teamID === 1).length, 1);
+  assert.equal(buildDetailPageModels(makePayload(28, 0)).filter((page) => page.team.teamID === 1).length, 1);
+  assert.equal(buildDetailPageModels(makePayload(29, 0)).filter((page) => page.team.teamID === 1).length, 2);
+  const source = String(buildDetailPageModels);
+  assert.ok(source.includes("paginateTeamDetail"));
 }
 
 function readPngPixel(buffer, x, y) {
@@ -338,5 +338,5 @@ testSourceAwareFireteamResolution();
 await testFireteamAccentPixels();
 await testSingleOverviewSnapshot();
 await testHundredPlayersStayInOneOverview();
-await testGlobalOverviewDoesNotRenderCombatStatistics();
+testDetailPaginationAndStats();
 console.log("match end snapshot overview tests passed");
