@@ -527,12 +527,13 @@
     "localReserveFilePath": "data/reserve-slots/store.json"
   },
   "pythonLogParser": {
-    "enabled": false,
+    "enabled": true,
     "pythonExecutable": "python",
     "workingDirectory": "D:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
+    "killDuplicates": true,
     "restartOnExit": false,
     "pipeOutput": true
   },
