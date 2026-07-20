@@ -4,8 +4,8 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { FIRETEAM_COLORS, fireTeamRank, resolveSnapshotPlayerFireTeam } from "./match-end-snapshot-fireteam.js";
 
-const WIDTH = 1600;
-const HEIGHT = 900;
+const WIDTH = 3200;
+const HEIGHT = 1800;
 const BASE_WIDTH = 1600;
 const BASE_HEIGHT = 900;
 const TEAM_COLUMN_WIDTH = 775;
@@ -368,13 +368,45 @@ async function attachTeamVisuals(model) {
       if (found) try { team.flagData = `data:image/png;base64,${(await fs.readFile(found)).toString("base64")}`; } catch {}
     }
     const commander = team.commanderPlayer ?? {};
-    const avatar = commander.avatarUrl ?? commander.avatar ?? commander.steamAvatar ?? commander.steamAvatarUrl ?? commander.steam_avatar ?? commander.steamAvatar ?? commander.avatar_full ?? commander.avatar_medium ?? commander.steamProfile?.avatar ?? commander.steamProfile?.avatar_full ?? commander.steam?.avatar ?? commander.profile?.avatar ?? "";
-    if (typeof avatar === "string" && avatar.startsWith("http")) {
-      try {
-        const response = await fetch(avatar);
-        if (response.ok) team.commanderAvatarData = `data:image/jpeg;base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
-      } catch {}
-    }
+    const avatar = firstText(
+      commander?.steamAvatar,
+      commander?.steam_avatar,
+      commander?.avatarUrl,
+      commander?.steamAvatarUrl,
+      commander?.avatar,
+      commander?.avatar_full,
+      commander?.avatar_medium,
+      commander?.steamProfile?.avatarFull,
+      commander?.steamProfile?.avatar_full,
+      commander?.steamProfile?.avatar,
+      commander?.steam?.avatar,
+      commander?.profile?.avatar,
+    );
+    team.commanderAvatarData = await loadAvatarDataUri(avatar);
+  }
+}
+
+async function loadAvatarDataUri(value) {
+  const avatar = String(value ?? "").trim();
+  if (!avatar) return "";
+  if (avatar.startsWith("data:image/")) return avatar;
+  if (!/^https?:\/\//i.test(avatar)) return "";
+
+  try {
+    const response = await fetch(avatar, {
+      headers: {
+        "User-Agent": "BZSS-Panel/1.0 Match-End-Snapshot",
+        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      },
+    });
+    if (!response.ok) return "";
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (!bytes.length) return "";
+    const contentType = String(response.headers.get("content-type") ?? "").split(";")[0].trim();
+    const mimeType = /^image\//i.test(contentType) ? contentType : "image/jpeg";
+    return `data:${mimeType};base64,${bytes.toString("base64")}`;
+  } catch {
+    return "";
   }
 }
 
@@ -382,7 +414,7 @@ function renderOverviewSvg(model) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`);
   svg.push(renderDefs());
-  svg.push('<g>');
+  svg.push('<g transform="scale(2)">');
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
   svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
