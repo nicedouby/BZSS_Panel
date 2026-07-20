@@ -406,7 +406,10 @@ function normalizePlayers(players) {
       ?? player?.fireTeamName
       ?? player?.fireteamName
       ?? player?.fireTeamID
-      ?? player?.fireteamID,
+      ?? player?.fireteamID
+      ?? player?.fireTeamId
+      ?? player?.fireteamId
+      ?? player?.fireTeamIndex,
     ),
     role: firstText(player?.role, player?.roleName),
     isLeader: Boolean(player?.isLeader ?? player?.leader),
@@ -420,8 +423,11 @@ function normalizePlayers(players) {
 function normalizeFireTeam(value) {
   const text = String(value ?? "").trim().toUpperCase();
   if (!text) return "";
-  const match = text.match(/(?:FIRE\s*TEAM\s*)?([ABC])(?:\s*TEAM)?/);
-  return match?.[1] ?? text;
+  if (/^(?:0|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
+  if (/^(?:1|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
+  if (/^(?:2|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
+  const match = text.match(/(?:FIRE\s*TEAM\s*|火力[组組]\s*)?([ABC])(?:\s*TEAM|[组組])?/);
+  return match?.[1] ?? "";
 }
 
 function normalizeSquads(squads) {
