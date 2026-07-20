@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { FIRETEAM_COLORS, fireTeamRank, resolveSnapshotPlayerFireTeam } from "./match-end-snapshot-fireteam.js";
 
 const WIDTH = 3200;
 const HEIGHT = 1800;
@@ -444,12 +445,12 @@ function renderPlayerRow(team, player, x, y, index) {
   const rowHeight = team.rowHeight;
   const health = null;
   const ping = readPing(player);
-  const fireTeam = normalizeFireTeam(firstText(player?.fireTeam, player?.fireteam, player?.fireTeamName, player?.fireTeamID, player?.fireteamID, player?.fireTeamId, player?.fireteamId, player?.soldierInfo?.fireTeam, player?.soldierInfo?.fireteam, player?.playerScoreboard?.fireTeam, player?.bzssCore?.fireTeam, player?.bzssCore?.fireTeamIndex, player?.bzssCore?.ftIndex));
+  const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
   const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   return [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
-    `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? ".98" : ".18"}"/>`,
+    `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".65"}"/>`,
     `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
     `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
@@ -490,10 +491,7 @@ function compactMetric(core, ...keys) {
 }
 
 function fireTeamColor(fireTeam) {
-  if (fireTeam === "A") return "#35d07f";
-  if (fireTeam === "B") return "#a78bfa";
-  if (fireTeam === "C") return "#67c7ff";
-  return "#64748b";
+  return FIRETEAM_COLORS[fireTeam] ?? FIRETEAM_COLORS.UNKNOWN;
 }
 
 function healthColor(health) {
@@ -619,21 +617,6 @@ function isCommandSquad(value) {
     || text === "cmd"
     || text === "command squad"
     || /\bcommand\s*squad\b/i.test(text);
-}
-
-function normalizeFireTeam(value) {
-  const text = String(value ?? "").trim().toUpperCase();
-  if (!text) return "";
-  if (/^(?:1|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
-  if (/^(?:2|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
-  if (/^(?:3|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
-  const match = text.match(/(?:FIRE\s*TEAM\s*|火力[组組]\s*)?([ABC])(?:\s*TEAM|[组組])?/);
-  return match?.[1] ?? "";
-}
-
-function fireTeamRank(value) {
-  const fireTeam = normalizeFireTeam(value);
-  return fireTeam === "A" ? 0 : fireTeam === "B" ? 1 : fireTeam === "C" ? 2 : 3;
 }
 
 function squadKey(value) {
