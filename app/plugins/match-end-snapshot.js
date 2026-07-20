@@ -225,6 +225,10 @@ export function createPlugin({ core, modules, logger } = {}) {
   async function regenerateBundle(id) {
     const safeId = sanitizeId(id);
     const payload = await readSnapshot(safeId);
+    payload.players = await enrichPlayersWithDatabaseAvatar(
+      Array.isArray(payload?.players) ? payload.players : [],
+      modules,
+    );
     const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: safeId });
     await persistBundle(safeId, bundle);
     payload.artifacts = {
