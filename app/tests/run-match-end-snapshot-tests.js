@@ -7,7 +7,6 @@ import zlib from "node:zlib";
 import { createPlugin } from "../plugins/match-end-snapshot.js";
 import { FIRETEAM_COLORS, resolvePlayerFireTeam } from "../plugins/match-end-snapshot-fireteam.js";
 import {
-  buildDetailPageModels,
   buildMatchEndOverviewModel,
   generateMatchEndSnapshotBundle,
 } from "../plugins/match-end-snapshot-pages.js";
@@ -133,7 +132,7 @@ async function testSingleOverviewSnapshot() {
     assert.equal(item.playerCount, 1);
     assert.equal(item.queueCount, 5);
     assert.equal(item.imageAvailable, true);
-    assert.equal(item.pageCount, 2);
+    assert.equal(item.pageCount, 1);
 
     const snapshot = await plugin.api.readSnapshot(item.id);
     assert.equal(snapshot.snapshotType, "match-end-data");
@@ -145,30 +144,30 @@ async function testSingleOverviewSnapshot() {
     assert.equal(snapshot.players[0].bzssCore.ping, 38);
 
     const manifest = await plugin.api.readSnapshotManifest(item.id);
-    assert.equal(manifest.pageCount, 2);
-    assert.equal(manifest.pages[0].type, "match-status-overview");
+    assert.equal(manifest.pageCount, 1);
+    assert.equal(manifest.pages[0].type, "match-status-scoreboard");
 
     const image = await plugin.api.readSnapshotImage(item.id);
     assert.equal(image.fileName, item.id + ".png");
-    assert.equal(image.content.readUInt32BE(16), 3200);
-    assert.equal(image.content.readUInt32BE(20), 1800);
+    assert.equal(image.content.readUInt32BE(16), 1600);
+    assert.equal(image.content.readUInt32BE(20), 900);
 
-    const overviewPage = await plugin.api.readSnapshotPage(item.id, "match-status-overview");
-    assert.equal(overviewPage.type, "match-status-overview");
-    assert.equal(overviewPage.content.readUInt32BE(16), 3200);
-    assert.equal(overviewPage.content.readUInt32BE(20), 1800);
+    const overviewPage = await plugin.api.readSnapshotPage(item.id, "match-status-scoreboard");
+    assert.equal(overviewPage.type, "match-status-scoreboard");
+    assert.equal(overviewPage.content.readUInt32BE(16), 1600);
+    assert.equal(overviewPage.content.readUInt32BE(20), 900);
 
     const combined = await plugin.api.readSnapshotImage(item.id, { combined: true });
-    assert.equal(combined.content.readUInt32BE(16), 3200);
-    assert.equal(combined.content.readUInt32BE(20), 3600);
+    assert.equal(combined.content.readUInt32BE(16), 1600);
+    assert.equal(combined.content.readUInt32BE(20), 900);
 
     assert.equal(emitted.length, 1);
     assert.equal(emitted[0].name, "match.snapshot.ready");
-    assert.equal(emitted[0].payload.pageCount, 2);
+    assert.equal(emitted[0].payload.pageCount, 1);
 
     const dir = path.join(tempDir, "data", "match-end-snapshots");
     const names = await fs.readdir(dir);
-    assert.equal(names.some((name) => name.endsWith("-00-overview.png")), true);
+    assert.equal(names.some((name) => name.endsWith("-00-scoreboard.png")), true);
     assert.equal(names.some((name) => name.endsWith("-combined.png")), true);
     assert.equal(names.some((name) => name.endsWith("-manifest.json")), true);
 
@@ -232,7 +231,7 @@ function makePayload(team1Count, team2Count) {
   };
 }
 
-async function testHundredPlayersStayInOneOverview() {
+async function testHundredPlayersStayInOneImage() {
   const payload = makePayload(50, 50);
   const model = buildMatchEndOverviewModel(payload);
   assert.equal(model.teams.length, 2);
@@ -240,26 +239,17 @@ async function testHundredPlayersStayInOneOverview() {
   assert.equal(model.teams[1].playerCount, 50);
   assert.equal(model.teams[0].lanes.length, 2);
   assert.equal(model.teams[1].lanes.length, 2);
-  assert.ok(model.teams[0].rowHeight >= 16);
-  assert.ok(model.teams[1].rowHeight >= 16);
+  assert.ok(model.teams[0].rowHeight >= 13);
+  assert.ok(model.teams[1].rowHeight >= 13);
 
   const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: "hundred-player-overview" });
-  assert.equal(bundle.pages.length, 5);
-  assert.equal(bundle.pages[0].type, "match-status-overview");
-  assert.equal(bundle.pages.filter((page) => page.type === "team-scoreboard").length, 4);
+  assert.equal(bundle.pages.length, 1);
+  assert.equal(bundle.pages[0].type, "match-status-scoreboard");
   assert.equal(bundle.pages[0].playerCount, 100);
-  assert.equal(bundle.pages[0].buffer.readUInt32BE(16), 3200);
-  assert.equal(bundle.pages[0].buffer.readUInt32BE(20), 1800);
-  assert.equal(bundle.combinedBuffer.readUInt32BE(16), 3200);
-  assert.equal(bundle.combinedBuffer.readUInt32BE(20), 9000);
-}
-
-function testDetailPaginationAndStats() {
-  assert.equal(buildDetailPageModels(makePayload(20, 0)).filter((page) => page.team.teamID === 1).length, 1);
-  assert.equal(buildDetailPageModels(makePayload(28, 0)).filter((page) => page.team.teamID === 1).length, 1);
-  assert.equal(buildDetailPageModels(makePayload(29, 0)).filter((page) => page.team.teamID === 1).length, 2);
-  const source = String(buildDetailPageModels);
-  assert.ok(source.includes("paginateTeamDetail"));
+  assert.equal(bundle.pages[0].buffer.readUInt32BE(16), 1600);
+  assert.equal(bundle.pages[0].buffer.readUInt32BE(20), 900);
+  assert.equal(bundle.combinedBuffer.readUInt32BE(16), 1600);
+  assert.equal(bundle.combinedBuffer.readUInt32BE(20), 900);
 }
 
 function readPngPixel(buffer, x, y) {
@@ -306,8 +296,8 @@ function readPngPixel(buffer, x, y) {
 
 async function testFireteamAccentPixels() {
   const bundle = await generateMatchEndSnapshotBundle(makePayload(3, 0), { snapshotId: "fireteam-pixels" });
-  // Team 1, first squad, rows A/B/C: base coordinates are scaled 2× in the 3200×1800 PNG.
-  const samples = [[74, 482], [74, 522], [74, 562]];
+  // Team 1 first lane: rows A/B/C have an unmasked 7px fireteam bar on the far left.
+  const samples = [[37, 262], [37, 278], [37, 294]];
   const expected = [[53, 208, 127], [167, 139, 250], [34, 211, 238]];
   samples.forEach(([x, y], index) => {
     const [red, green, blue] = readPngPixel(bundle.combinedBuffer, x, y);
@@ -337,6 +327,5 @@ function testSourceAwareFireteamResolution() {
 testSourceAwareFireteamResolution();
 await testFireteamAccentPixels();
 await testSingleOverviewSnapshot();
-await testHundredPlayersStayInOneOverview();
-testDetailPaginationAndStats();
+await testHundredPlayersStayInOneImage();
 console.log("match end snapshot overview tests passed");
