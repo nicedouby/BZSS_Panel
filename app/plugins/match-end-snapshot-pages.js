@@ -444,7 +444,7 @@ function renderPlayerRow(team, player, x, y, index) {
   const rowHeight = team.rowHeight;
   const health = null;
   const ping = readPing(player);
-  const fireTeam = normalizeFireTeam(firstText(player?.fireTeam, player?.fireteam, player?.fireTeamName, player?.soldierInfo?.fireTeam, player?.soldierInfo?.fireteam, player?.playerScoreboard?.fireTeam, player?.bzssCore?.fireTeam));
+  const fireTeam = normalizeFireTeam(firstText(player?.fireTeam, player?.fireteam, player?.fireTeamName, player?.fireTeamID, player?.fireteamID, player?.fireTeamId, player?.fireteamId, player?.soldierInfo?.fireTeam, player?.soldierInfo?.fireteam, player?.playerScoreboard?.fireTeam, player?.bzssCore?.fireTeam));
   const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
   return [
@@ -624,8 +624,11 @@ function isCommandSquad(value) {
 function normalizeFireTeam(value) {
   const text = String(value ?? "").trim().toUpperCase();
   if (!text) return "";
-  const match = text.match(/(?:FIRE\s*TEAM\s*)?([ABC])(?:\s*TEAM)?/);
-  return match?.[1] ?? text.slice(0, 3);
+  if (/^(?:0|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
+  if (/^(?:1|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
+  if (/^(?:2|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
+  const match = text.match(/(?:FIRE\s*TEAM\s*|火力[组組]\s*)?([ABC])(?:\s*TEAM|[组組])?/);
+  return match?.[1] ?? "";
 }
 
 function fireTeamRank(value) {
