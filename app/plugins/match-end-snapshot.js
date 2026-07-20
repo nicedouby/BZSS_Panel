@@ -63,7 +63,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       await persistBundle(id, bundle);
       imageAvailable = bundle.pages.length > 0;
       payload.artifacts = {
-        format: "paged-scoreboard",
+        format: "single-scoreboard",
         pageCount: bundle.pages.length,
         primaryImage: id + ".png",
         combinedImage: id + "-combined.png",
@@ -71,9 +71,9 @@ export function createPlugin({ core, modules, logger } = {}) {
         pages: bundle.manifest.pages,
       };
     } catch (error) {
-      pluginLogger.error?.("[MatchEndSnapshot] paged report failed for " + id + ": " + (error?.stack || error));
+      pluginLogger.error?.("[MatchEndSnapshot] scoreboard render failed for " + id + ": " + (error?.stack || error));
       payload.artifacts = {
-        format: "paged-scoreboard",
+        format: "single-scoreboard",
         pageCount: 0,
         primaryImage: "",
         combinedImage: "",
@@ -93,7 +93,7 @@ export function createPlugin({ core, modules, logger } = {}) {
     };
     pluginLogger.info?.(
       "[MatchEndSnapshot] saved " + id +
-      (imageAvailable ? " with " + item.pageCount + " pages." : " without report image."),
+      (imageAvailable ? " with its 1600x900 scoreboard." : " without scoreboard image."),
     );
 
     core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
