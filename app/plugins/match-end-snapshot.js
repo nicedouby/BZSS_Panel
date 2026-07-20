@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { generateMatchEndSnapshotBundle } from "./match-end-snapshot-pages.js";
+import { resolvePlayerFireTeam } from "./match-end-snapshot-fireteam.js";
 
 const PLUGIN_ID = "match-end-snapshot";
 const SNAPSHOT_DIR = path.join("data", "match-end-snapshots");
@@ -340,6 +341,15 @@ function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
   );
   const currentMap = firstText(match.map, status.map, serverStatus.map, status.currentMap);
   const currentLayer = firstText(match.layer, status.layer, serverStatus.layer, status.currentLayer);
+  const fireTeamCounts = { A: 0, B: 0, C: 0, unknown: 0 };
+  const fireTeamSourceCounts = {};
+  for (const player of players) {
+    if (player.fireTeam === "A" || player.fireTeam === "B" || player.fireTeam === "C") fireTeamCounts[player.fireTeam] += 1;
+    else fireTeamCounts.unknown += 1;
+    const source = player.fireTeamSource || "unknown";
+    fireTeamSourceCounts[source] = (fireTeamSourceCounts[source] || 0) + 1;
+  }
+
   const playerCount = firstNumber(
     status.playerCount,
     serverStatus.playerCount,
@@ -375,6 +385,8 @@ function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
       recordedPlayerCount: players.length,
       squadCount: squads.length,
       bzssCorePlayerCount: players.filter((player) => player.bzssCore?.available).length,
+      fireTeamCounts,
+      fireTeamSourceCounts,
       teamCounts: Object.fromEntries(
         [...new Set(players.map((player) => player.teamID).filter((value) => value != null))]
           .map((teamID) => [String(teamID), players.filter((player) => player.teamID === teamID).length]),
@@ -392,44 +404,25 @@ function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
 }
 
 function normalizePlayers(players) {
-  return players.map((player) => ({
-    playerID: nullableNumber(player?.playerID ?? player?.playerId ?? player?.id),
-    name: firstText(player?.name, player?.playerName, "Unknown"),
-    steamID: firstText(player?.steamID, player?.steamId, player?.steam64ID, player?.steam64),
-    eosID: firstText(player?.eosID, player?.eosId, player?.EOSID),
-    controllerID: firstText(player?.controllerID, player?.controllerId),
-    teamID: nullableNumber(player?.teamID ?? player?.teamId),
-    squadID: nullableNumber(player?.squadID ?? player?.squadId),
-    fireTeam: normalizeFireTeam(
-      player?.fireTeam
-      ?? player?.fireteam
-      ?? player?.fireTeamName
-      ?? player?.fireteamName
-      ?? player?.fireTeamID
-      ?? player?.fireteamID
-      ?? player?.ftIndex
-      ?? player?.fireTeamIndex
-      ?? player?.fireTeamId
-      ?? player?.fireteamId
-      ?? player?.fireTeamIndex,
-    ),
-    role: firstText(player?.role, player?.roleName),
-    isLeader: Boolean(player?.isLeader ?? player?.leader),
-    isCommander: Boolean(player?.isCommander ?? player?.commander),
-    online: player?.online !== false,
-    health: nullableNumber(player?.health),
-    bzssCore: null,
-  }));
-}
-
-function normalizeFireTeam(value) {
-  const text = String(value ?? "").trim().toUpperCase();
-  if (!text) return "";
-  if (/^(?:1|A|ALPHA|A组|A組|火力组A|火力組A)$/.test(text)) return "A";
-  if (/^(?:2|B|BRAVO|B组|B組|火力组B|火力組B)$/.test(text)) return "B";
-  if (/^(?:3|C|CHARLIE|C组|C組|火力组C|火力組C)$/.test(text)) return "C";
-  const match = text.match(/(?:FIRE\s*TEAM\s*|火力[组組]\s*)?([ABC])(?:\s*TEAM|[组組])?/);
-  return match?.[1] ?? "";
+  return players.map((player) => {
+    const fireTeamInfo = resolvePlayerFireTeam(player, null);
+    return {
+      playerID: nullableNumber(player?.playerID ?? player?.playerId ?? player?.id),
+      name: firstText(player?.name, player?.playerName, "Unknown"),
+      steamID: firstText(player?.steamID, player?.steamId, player?.steam64ID, player?.steam64),
+      eosID: firstText(player?.eosID, player?.eosId, player?.EOSID),
+      controllerID: firstText(player?.controllerID, player?.controllerId),
+      teamID: nullableNumber(player?.teamID ?? player?.teamId),
+      squadID: nullableNumber(player?.squadID ?? player?.squadId),
+      ...fireTeamInfo,
+      role: firstText(player?.role, player?.roleName),
+      isLeader: Boolean(player?.isLeader ?? player?.leader),
+      isCommander: Boolean(player?.isCommander ?? player?.commander),
+      online: player?.online !== false,
+      health: nullableNumber(player?.health),
+      bzssCore: null,
+    };
+  });
 }
 
 function normalizeSquads(squads) {
@@ -503,17 +496,10 @@ function enrichPlayersWithBzssCore(players, modules) {
     const stats = objectValue(corePlayer?.playerScoreboard?.stats);
     const health = firstNumber(corePlayer?.soldierInfo?.health, corePlayer?.health, player.health);
     const soldierClass = firstText(corePlayer?.soldierInfo?.soldierClass, corePlayer?.soldierClass);
+    const fireTeamInfo = resolvePlayerFireTeam(player, corePlayer);
     return {
       ...player,
-      fireTeam: normalizeFireTeam(firstText(
-        player.fireTeam,
-        corePlayer?.fireTeam,
-        corePlayer?.fireteam,
-        corePlayer?.soldierInfo?.fireTeam,
-        corePlayer?.soldierInfo?.fireteam,
-        corePlayer?.ftIndex,
-        corePlayer?.fireTeamIndex,
-      )),
+      ...fireTeamInfo,
       role: firstText(player.role, soldierClass),
       health,
       bzssCore: {
