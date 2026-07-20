@@ -7,13 +7,13 @@ const WIDTH = 3200;
 const HEIGHT = 1800;
 const BASE_WIDTH = 1600;
 const BASE_HEIGHT = 900;
-const TEAM_COLUMN_WIDTH = 760;
+const TEAM_COLUMN_WIDTH = 775;
 const TEAM_CONTENT_TOP = 220;
 const TEAM_CONTENT_BOTTOM = 844;
-const TEAM_LANE_GAP = 10;
+const TEAM_LANE_GAP = 8;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
-const SQUAD_HEADER_HEIGHT = 20;
-const SQUAD_GAP = 6;
+const SQUAD_HEADER_HEIGHT = 18;
+const SQUAD_GAP = 4;
 const DEFAULT_PLAYER_ROW_HEIGHT = 20;
 const MIN_PLAYER_ROW_HEIGHT = 12;
 
@@ -51,7 +51,7 @@ const MAP_SCENE_FILE_BY_KEY = {
 
 const TEAM_ACCENTS = {
   1: "#37c8ff",
-  2: "#ff9b45",
+  2: "#ef3b4f",
 };
 
 const ROLE_META = [
@@ -149,8 +149,8 @@ export function buildMatchEndOverviewModel(payload) {
     queueCount,
     playtime,
     teams: [
-      buildTeamColumnModel(teams.find((team) => team.teamID === 1) ?? emptyTeam(1), 36),
-      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 804),
+      buildTeamColumnModel(teams.find((team) => team.teamID === 1) ?? emptyTeam(1), 24),
+      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 801),
     ],
   };
 }
@@ -381,8 +381,8 @@ function renderTeamColumn(team) {
   const y = 158;
   const headerHeight = 58;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".72" stroke="${team.accent}" stroke-opacity=".34"/>`);
-  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".88" stroke="${team.accent}" stroke-opacity=".42"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".46" stroke="${team.accent}" stroke-opacity=".34"/>`);
+  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".58" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
@@ -414,12 +414,12 @@ function renderSquadCard(team, group, x, y) {
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
   const creator = firstText(group.creatorName, "-");
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="8" fill="#061020" fill-opacity=".80" stroke="#ffffff" stroke-opacity=".10"/>`);
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${SQUAD_HEADER_HEIGHT}" rx="8" fill="${team.accent}" fill-opacity=".16" stroke="${team.accent}" stroke-opacity=".28"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".62" stroke="#ffffff" stroke-opacity=".10"/>`);
+  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
-  svg.push(`<text x="${x + 12}" y="${y + 18}" class="squad-title">${escapeXml(clip(title, 28))}${group.isCommandSquad ? " · CMD" : ""}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 15}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 15}" text-anchor="end" class="${group.locked ? "squad-locked" : "squad-meta"} mono">${escapeXml(badge)}</text>`);
+  svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}${group.isCommandSquad ? " · CMD" : ""}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 13}" text-anchor="end" class="${group.locked ? "squad-locked" : "squad-meta"} mono">${escapeXml(badge)}</text>`);
 
   group.players.forEach((player, index) => {
     const rowY = y + SQUAD_HEADER_HEIGHT + index * team.rowHeight;
@@ -570,7 +570,7 @@ function renderDefs() {
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
       .commander-initial{font-size:12px;font-weight:900}.commander-caption{font-size:7px;font-weight:800;fill:#b9c9d8}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
-      .squad-title{font-size:9px;font-weight:900}
+      .squad-title{font-size:8px;font-weight:900}
       .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
       .role-badge{font-size:8px;font-weight:900}
       .player-name{font-size:8.5px;font-weight:900}
