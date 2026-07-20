@@ -123,6 +123,34 @@ export async function generateMatchEndOverviewPng(payload) {
     .toBuffer();
 }
 
+function formatMetric(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? String(Math.round(number)) : "—";
+}
+
+function detailMetric(core, ...keys) {
+  for (const key of keys) {
+    if (core?.[key] !== undefined && core?.[key] !== null && core?.[key] !== "") return core[key];
+  }
+  return null;
+}
+
+function playerDetailStats(player) {
+  const core = player?.bzssCore ?? {};
+  return {
+    kills: formatMetric(detailMetric(core, "kills", "kill", "numKills")),
+    wounds: formatMetric(detailMetric(core, "downs", "wounds", "numWoundeds")),
+    deaths: formatMetric(detailMetric(core, "deaths", "death", "numDeaths")),
+    teamKills: formatMetric(detailMetric(core, "teamKills", "tk", "numTeamKills")),
+    vehicleKills: formatMetric(detailMetric(core, "vehicleKills", "vehicleKill")),
+    revives: formatMetric(detailMetric(core, "revives", "revive", "revivedPoints")),
+    healScore: formatMetric(detailMetric(core, "healPoints", "healing")),
+    combatScore: formatMetric(detailMetric(core, "combatScore", "combat")),
+    objectiveScore: formatMetric(detailMetric(core, "objectiveScore", "objective")),
+    teamworkScore: formatMetric(detailMetric(core, "teamworkScore", "teamwork")),
+  };
+}
+
 export function buildMatchEndOverviewModel(payload) {
   const teams = buildTeams(payload);
   const mapTitle = firstText(payload?.match?.map, payload?.match?.layer, "Unknown Map");
