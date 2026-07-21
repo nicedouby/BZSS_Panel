@@ -4,6 +4,7 @@ import {
   SteamGameDurationService,
   createProxyAgent,
   resolveProxyUrlForTarget,
+  normalizeProxyMode,
   shouldBypassProxy,
 } from "../modules/playtime/index.js";
 
@@ -66,9 +67,32 @@ function testExplicitProxyWinsWithoutNoProxy() {
   assert.ok(agent);
 }
 
+function testProxyModes() {
+  assert.equal(normalizeProxyMode("off", "http://127.0.0.1:7890"), "off");
+  assert.equal(normalizeProxyMode("tun", "http://127.0.0.1:7890"), "tun");
+  assert.equal(normalizeProxyMode(undefined, "http://127.0.0.1:7890"), "explicit");
+
+  const off = resolveProxyUrlForTarget("https://api.steampowered.com/", {
+    proxyMode: "off",
+    proxyUrl: "http://127.0.0.1:7890",
+    env: { HTTPS_PROXY: "http://127.0.0.1:9999" },
+  });
+  assert.equal(off.proxyUrl, null);
+  assert.equal(off.source, "disabled");
+
+  const tun = resolveProxyUrlForTarget("https://api.steampowered.com/", {
+    proxyMode: "tun",
+    proxyUrl: "http://127.0.0.1:7890",
+    env: { HTTPS_PROXY: "http://127.0.0.1:9999" },
+  });
+  assert.equal(tun.proxyUrl, null);
+  assert.equal(tun.source, "tun");
+}
+
 testResolveHttpsProxyFromEnv();
 testNoProxyBypassesSteamHost();
 testAgentCachingUsesProxy();
 testExplicitProxyWinsWithoutNoProxy();
+testProxyModes();
 
 console.log("steam playtime proxy tests passed");
