@@ -36,6 +36,7 @@ def fetch_game_duration(
     timeout: int,
     proxy_url: str = "",
     no_proxy: str = "",
+    proxy_mode: str = "off",
 ) -> dict:
     params = {
         "key": api_key,
@@ -50,11 +51,16 @@ def fetch_game_duration(
 
     try:
         hostname = "api.steampowered.com"
-        if proxy_url and not _proxy_matches_host(no_proxy, hostname):
+        mode = (proxy_mode or "off").strip().lower()
+        if mode in {"explicit", "proxy", "manual"} and proxy_url and not _proxy_matches_host(no_proxy, hostname):
             opener = build_opener(ProxyHandler({"http": proxy_url, "https": proxy_url}))
-        else:
-            # No explicit proxy: urllib honors HTTP(S)_PROXY/ALL_PROXY from the environment.
+        elif mode == "auto":
+            # Legacy mode: allow urllib to use HTTP(S)_PROXY/ALL_PROXY.
             opener = build_opener()
+        else:
+            # off/tun deliberately ignore proxy environment variables. In tun mode the
+            # direct socket is intercepted by the operating system's TUN route.
+            opener = build_opener(ProxyHandler({}))
         with opener.open(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
@@ -88,6 +94,7 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout in seconds")
     parser.add_argument("--proxy", default="", help="Optional HTTP(S)/SOCKS proxy URL")
     parser.add_argument("--no-proxy", default="", help="Comma-separated hosts that bypass the explicit proxy")
+    parser.add_argument("--proxy-mode", default="auto", choices=("auto", "off", "explicit", "tun"), help="auto, off, explicit proxy, or direct system/TUN routing")
     args = parser.parse_args()
 
     try:
@@ -103,6 +110,7 @@ def main() -> int:
             args.timeout,
             args.proxy,
             args.no_proxy,
+            args.proxy_mode,
         )
         print(json.dumps(result, ensure_ascii=False))
         return 0
