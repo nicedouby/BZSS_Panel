@@ -11,6 +11,7 @@ const AUTO_SETTLE_MS = 1_800;
 
 export function createPlugin({ core, modules, logger } = {}) {
   const pluginLogger = logger ?? core?.logger ?? console;
+  const taskManager = core?.taskManager ?? null;
   const unsubscribers = [];
   let automaticCaptureInFlight = null;
   let lastAutomaticCaptureAt = 0;
@@ -56,40 +57,48 @@ export function createPlugin({ core, modules, logger } = {}) {
       + " sources=" + JSON.stringify(payload.summary?.fireTeamSourceCounts ?? {}));
     await ensureSnapshotDir();
 
-    let bundle = null;
-    let imageAvailable = false;
-    try {
-      bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: id });
-      await persistBundle(id, bundle);
-      imageAvailable = bundle.pages.length > 0;
-      payload.artifacts = {
-        format: "single-scoreboard",
-        pageCount: bundle.pages.length,
-        primaryImage: id + ".png",
-        combinedImage: id + "-combined.png",
-        manifest: id + "-manifest.json",
-        pages: bundle.manifest.pages,
-      };
-    } catch (error) {
-      pluginLogger.error?.("[MatchEndSnapshot] scoreboard render failed for " + id + ": " + (error?.stack || error));
-      payload.artifacts = {
-        format: "single-scoreboard",
-        pageCount: 0,
-        primaryImage: "",
-        combinedImage: "",
-        manifest: "",
-        pages: [],
-        error: String(error?.message ?? error),
-      };
-    }
-
+    let task = null;
+    payload.artifacts = {
+      format: "single-scoreboard",
+      status: "queued",
+      pageCount: 0,
+      primaryImage: "",
+      combinedImage: "",
+      manifest: "",
+      pages: [],
+    };
     await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
+
+    if (taskManager) {
+      try {
+        task = await taskManager.enqueue({
+          type: "snapshot.generate",
+          priority: 5,
+          maxRetry: 2,
+          payload: {
+            payload,
+            snapshotId: id,
+            snapshotDirectory: SNAPSHOT_DIR,
+          },
+        });
+      } catch (error) {
+        payload.artifacts.status = "failed";
+        payload.artifacts.error = String(error?.message ?? error);
+        pluginLogger.error?.("[MatchEndSnapshot] snapshot task enqueue failed for " + id + ": " + (error?.stack || error));
+        await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
+      }
+    } else {
+      payload.artifacts.status = "failed";
+      payload.artifacts.error = "TaskManager is unavailable.";
+      await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
+    }
 
     const item = {
       ...describePayload(id, payload),
-      imageAvailable,
-      pageCount: bundle?.pages?.length ?? 0,
-      pages: bundle?.manifest?.pages ?? [],
+      imageAvailable: false,
+      pageCount: 0,
+      taskId: task?.taskId ?? null,
+      pages: [],
     };
     pluginLogger.info?.(
       "[MatchEndSnapshot] saved " + id +
@@ -128,6 +137,57 @@ export function createPlugin({ core, modules, logger } = {}) {
       automaticCaptureInFlight = null;
     });
     return automaticCaptureInFlight;
+  }
+
+  async function handleSnapshotTaskDone(task) {
+    if (task?.type !== "snapshot.generate") return;
+    const snapshotId = String(task?.result?.snapshotId ?? task?.payload?.snapshotId ?? "");
+    if (!snapshotId) return;
+    try {
+      const safeId = sanitizeId(snapshotId);
+      const snapshotPath = path.join(resolveSnapshotDir(), safeId + ".json");
+      const payload = JSON.parse(await fs.readFile(snapshotPath, "utf8"));
+      payload.artifacts = {
+        format: "single-scoreboard",
+        status: "done",
+        pageCount: Number(task.result?.pageCount ?? 0),
+        primaryImage: task.result?.primaryImage ?? safeId + ".png",
+        combinedImage: task.result?.combinedImage ?? safeId + "-combined.png",
+        manifest: task.result?.manifest ?? safeId + "-manifest.json",
+        pages: Array.isArray(task.result?.pages) ? task.result.pages : [],
+      };
+      await writeJsonAtomic(snapshotPath, payload);
+      core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
+        snapshotId: safeId,
+        roundKey: buildRoundKey(payload),
+        pageCount: payload.artifacts.pageCount,
+        pages: payload.artifacts.pages,
+        primaryImage: payload.artifacts.primaryImage,
+        combinedImage: payload.artifacts.combinedImage,
+        taskId: task.id,
+      });
+    } catch (error) {
+      pluginLogger.error?.("[MatchEndSnapshot] failed to finalize task " + task.id + ": " + (error?.stack || error));
+    }
+  }
+
+  async function handleSnapshotTaskFailed(task) {
+    if (task?.type !== "snapshot.generate") return;
+    const snapshotId = String(task?.result?.snapshotId ?? task?.payload?.snapshotId ?? "");
+    if (!snapshotId) return;
+    try {
+      const safeId = sanitizeId(snapshotId);
+      const snapshotPath = path.join(resolveSnapshotDir(), safeId + ".json");
+      const payload = JSON.parse(await fs.readFile(snapshotPath, "utf8"));
+      payload.artifacts = {
+        ...(payload.artifacts ?? {}),
+        status: "failed",
+        error: task.error?.message ?? "Snapshot task failed.",
+      };
+      await writeJsonAtomic(snapshotPath, payload);
+    } catch (error) {
+      pluginLogger.error?.("[MatchEndSnapshot] failed to record task error: " + (error?.stack || error));
+    }
   }
 
   async function listSnapshots() {
@@ -287,6 +347,12 @@ export function createPlugin({ core, modules, logger } = {}) {
     },
 
     async start() {
+      if (taskManager) {
+        taskManager.on("done", handleSnapshotTaskDone);
+        taskManager.on("failed", handleSnapshotTaskFailed);
+        unsubscribers.push(() => taskManager.off("done", handleSnapshotTaskDone));
+        unsubscribers.push(() => taskManager.off("failed", handleSnapshotTaskFailed));
+      }
       if (core?.eventBus?.onCoreEvent) {
         unsubscribers.push(core.eventBus.onCoreEvent("round.match_winner", (event) => {
           captureAutomatic(event).catch((error) => {
