@@ -238,6 +238,17 @@ function makePayload(team1Count, team2Count) {
   };
 }
 
+function testFullFactionNamesResolveForSnapshotFlags() {
+  const payload = makePayload(1, 1);
+  payload.squads = [
+    { teamID: 1, squadID: 1, squadName: "Command", teamName: "United States Marine Corps" },
+    { teamID: 2, squadID: 1, squadName: "Command", teamName: "Russian Airborne Forces" },
+  ];
+  const model = buildMatchEndOverviewModel(payload);
+  assert.equal(model.teams[0].factionCode, "USMC");
+  assert.equal(model.teams[1].factionCode, "VDV");
+}
+
 async function testHundredPlayersStayInOneImage() {
   const payload = makePayload(50, 50);
   const model = buildMatchEndOverviewModel(payload);
@@ -332,6 +343,7 @@ function testSourceAwareFireteamResolution() {
 }
 
 testSourceAwareFireteamResolution();
+testFullFactionNamesResolveForSnapshotFlags();
 await testFireteamAccentPixels();
 await testSingleOverviewSnapshot();
 await testHundredPlayersStayInOneImage();
