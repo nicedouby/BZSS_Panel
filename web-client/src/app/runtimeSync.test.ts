@@ -150,7 +150,11 @@ describe("runtimeSync", () => {
   });
 
   it("does not start a request while the document is hidden", async () => {
-    document.hidden = true;
+    vi.stubGlobal("document", {
+      hidden: true,
+      addEventListener() {},
+      removeEventListener() {},
+    });
     await syncOnce();
 
     expect(fetchMock).not.toHaveBeenCalled();
