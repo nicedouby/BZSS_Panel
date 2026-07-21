@@ -8,6 +8,7 @@ import "./styles/base.css";
 import "./styles/primitives.css";
 import "./styles/utilities.css";
 import "./styles/squad-admin.css";
+import "./styles/logpost-diagnostics-fixed.css";
 
 import { renderFatalBootError } from "./app/bootError";
 
