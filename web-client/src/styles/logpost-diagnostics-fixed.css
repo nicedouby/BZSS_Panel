@@ -328,7 +328,7 @@
 @media (max-width: 760px) {
   .logpost-diagnostics-page.logpost-diagnostics-page {
     --logpost-header-height: 148px;
-    --logpost-overview-height: 236px;
+    --logpost-overview-height: 250px;
     --logpost-history-height: 330px;
   }
 
@@ -351,7 +351,7 @@
 @media (max-width: 480px) {
   .logpost-diagnostics-page.logpost-diagnostics-page {
     --logpost-header-height: 178px;
-    --logpost-overview-height: 372px;
+    --logpost-overview-height: 386px;
   }
 
   .logpost-diagnostics-page.logpost-diagnostics-page > .overview {
