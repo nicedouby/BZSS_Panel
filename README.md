@@ -4,7 +4,20 @@ BZSS Panel now uses the Vue client in `web-client/` as the primary frontend shel
 
 ## Development
 
-Start the backend:
+Start the backend on Windows with the configured CPU affinity:
+
+```bat
+run.bat
+```
+
+The launcher uses zero-based Windows logical CPU indices:
+
+- Node WebCore: CPU 26 and CPU 27 (`0x0C000000`)
+- Python LogPost parser: CPU 24 and CPU 25 (`0x03000000`)
+
+The Python affinity is applied by `PythonLogParserManager` after the child process starts. It can be overridden with `pythonLogParser.processorAffinityCpus` in `config.json`.
+
+Start the backend without the Windows affinity launcher:
 
 ```bash
 npm start
@@ -34,4 +47,4 @@ npm run release:portable
 - `config.web.useVueClient` should stay enabled for the Vue client.
 - The legacy shell now lives at `app/web/` and should not receive new features.
 - `npm run release:portable` creates `release/portable/`, with runtime data at the root and backend source/dependencies grouped under `app/`.
-- Auxiliary material is grouped under `support/`, with runtime assets, reference data, tools, docs, vendor archives, and adjacent side projects kept out of the main root.
+- The portable `run.bat` uses the same Node affinity mask as the repository root launcher.
