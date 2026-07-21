@@ -289,10 +289,41 @@ export function createPlugin({ core, modules, logger } = {}) {
       Array.isArray(payload?.players) ? payload.players : [],
       modules,
     );
+
+    if (taskManager) {
+      const task = await taskManager.enqueue({
+        type: "snapshot.generate",
+        priority: 5,
+        maxRetry: 2,
+        payload: {
+          payload,
+          snapshotId: safeId,
+          snapshotDirectory: SNAPSHOT_DIR,
+        },
+      });
+      await taskManager.waitForTask(task.taskId);
+      const manifest = JSON.parse(await fs.readFile(
+        path.join(resolveSnapshotDir(), safeId + "-manifest.json"),
+        "utf8",
+      ));
+      payload.artifacts = {
+        format: "single-scoreboard",
+        status: "done",
+        pageCount: manifest.pageCount ?? manifest.pages?.length ?? 0,
+        primaryImage: safeId + ".png",
+        combinedImage: safeId + "-combined.png",
+        manifest: safeId + "-manifest.json",
+        pages: manifest.pages ?? [],
+      };
+      await writeJsonAtomic(path.join(resolveSnapshotDir(), safeId + ".json"), payload);
+      return manifest;
+    }
+
     const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: safeId });
     await persistBundle(safeId, bundle);
     payload.artifacts = {
       format: "single-scoreboard",
+      status: "done",
       pageCount: bundle.pages.length,
       primaryImage: safeId + ".png",
       combinedImage: safeId + "-combined.png",
