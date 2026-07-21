@@ -141,7 +141,7 @@ export function createPlugin({ core, modules, logger } = {}) {
 
   async function handleSnapshotTaskDone(task) {
     if (task?.type !== "snapshot.generate") return;
-    const snapshotId = String(task?.result?.snapshotId ?? task?.payload?.snapshotId ?? "");
+    const snapshotId = String(task?.result?.snapshotId ?? task?.snapshotId ?? task?.payload?.snapshotId ?? "");
     if (!snapshotId) return;
     try {
       const safeId = sanitizeId(snapshotId);
