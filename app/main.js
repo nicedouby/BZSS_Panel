@@ -47,6 +47,7 @@ import { AuditManager } from "./core/audit/audit-manager.js";
 import { LogPostMonitor } from "./core/logpost-monitor.js";
 import { LogPostFileBridge } from "./core/logpost-file-bridge.js";
 import { FileIOManager } from "./core/file-io-manager.js";
+import { TaskManager } from "./core/task/TaskManager.js";
 import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
@@ -99,6 +100,12 @@ async function main() {
     logger: logger.child({ moduleId: "core.fileIO", source: "core.fileIO" }),
   });
   await fileIOManager.start();
+
+  const taskManager = new TaskManager({
+    config: configManager.get("task", {}),
+    logger: logger.child({ moduleId: "core.taskManager", source: "core.taskManager" }),
+  });
+  await taskManager.start();
 
   const consoleService = new ConsoleService({
     maxEntries: configManager.get("console.maxEntries", 5000),
@@ -178,6 +185,7 @@ async function main() {
     logPostMonitor,
     logPostFileBridge,
     fileIO: fileIOManager,
+    taskManager,
   };
   auditManager.core = coreContext;
 
@@ -321,6 +329,7 @@ async function main() {
     performanceMonitor.stop();
     await auditManager.close();
     await authManager.stop();
+    await taskManager.stop();
     await fileIOManager.stop();
 
     logger.info("BZSS Panel WebCore stopped.", {
