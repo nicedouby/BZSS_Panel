@@ -29,6 +29,11 @@ const supplementalPages: SupplementalPageDefinition[] = [
     superAdminOnly: true,
     load: () => import("../pages/LogPostDiagnosticsPage.vue"),
   },
+  {
+    path: "/system/logpost-consumption-performance",
+    superAdminOnly: true,
+    load: () => import("../pages/LogPostConsumptionPerformancePage.vue"),
+  },
 ];
 
 const loadedPaths = new Set<string>();
