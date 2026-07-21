@@ -1,0 +1,364 @@
+/*
+ * Fixed geometry for the LogPost diagnostics workspace.
+ * Dynamic diagnostics data scrolls inside its own panel instead of resizing
+ * the surrounding dashboard and causing layout jumps.
+ */
+
+.logpost-diagnostics-page.logpost-diagnostics-page {
+  --logpost-header-height: 88px;
+  --logpost-overview-height: 112px;
+  --logpost-pipeline-height: 348px;
+  --logpost-stage-width: 216px;
+  --logpost-stage-height: 266px;
+  --logpost-analysis-height: 360px;
+  --logpost-analysis-side-card-height: 174px;
+  --logpost-history-height: 360px;
+  --logpost-path-height: 48px;
+  --logpost-path-open-height: 220px;
+  grid-auto-rows: max-content;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page,
+.logpost-diagnostics-page.logpost-diagnostics-page * {
+  box-sizing: border-box;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .page-header {
+  width: 100%;
+  height: var(--logpost-header-height);
+  min-height: var(--logpost-header-height);
+  max-height: var(--logpost-header-height);
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .error-banner {
+  width: 100%;
+  height: 56px;
+  min-height: 56px;
+  max-height: 56px;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .overview {
+  width: 100%;
+  height: var(--logpost-overview-height);
+  min-height: var(--logpost-overview-height);
+  max-height: var(--logpost-overview-height);
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .overview-summary,
+.logpost-diagnostics-page.logpost-diagnostics-page .overview-metrics,
+.logpost-diagnostics-page.logpost-diagnostics-page .metric-value {
+  min-height: 0;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .metric-value {
+  height: 58px;
+  min-height: 58px;
+  max-height: 58px;
+  align-content: center;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .pipeline-panel {
+  width: 100%;
+  height: var(--logpost-pipeline-height);
+  min-height: var(--logpost-pipeline-height);
+  max-height: var(--logpost-pipeline-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .pipeline-panel > .section-heading {
+  height: 39px;
+  min-height: 39px;
+  max-height: 39px;
+  flex: 0 0 39px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .pipeline-scroll {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-gutter: stable;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .pipeline-track {
+  width: max-content;
+  min-width: max-content;
+  height: var(--logpost-stage-height);
+  min-height: var(--logpost-stage-height);
+  max-height: var(--logpost-stage-height);
+  grid-template-columns: repeat(6, var(--logpost-stage-width));
+  grid-auto-columns: var(--logpost-stage-width);
+  align-items: stretch;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .stage-card {
+  width: var(--logpost-stage-width);
+  min-width: var(--logpost-stage-width);
+  max-width: var(--logpost-stage-width);
+  height: var(--logpost-stage-height);
+  min-height: var(--logpost-stage-height);
+  max-height: var(--logpost-stage-height);
+  display: grid;
+  grid-template-rows: 32px 58px minmax(0, 1fr) 24px;
+  align-content: stretch;
+  overflow: visible;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .stage-header {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .stage-primary {
+  height: 58px;
+  min-height: 58px;
+  max-height: 58px;
+  margin: 8px 0 6px;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .stage-metrics {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .metric-row {
+  height: 25px;
+  min-height: 25px;
+  max-height: 25px;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .path {
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  margin: 0;
+  padding-top: 7px;
+  align-self: end;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .analysis-layout {
+  width: 100%;
+  height: var(--logpost-analysis-height);
+  min-height: var(--logpost-analysis-height);
+  max-height: var(--logpost-analysis-height);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .diagnosis-panel {
+  height: var(--logpost-analysis-height);
+  min-height: var(--logpost-analysis-height);
+  max-height: var(--logpost-analysis-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .diagnosis-panel > .section-heading,
+.logpost-diagnostics-page.logpost-diagnostics-page .timing-panel > .section-heading,
+.logpost-diagnostics-page.logpost-diagnostics-page .amplification-panel > .section-heading,
+.logpost-diagnostics-page.logpost-diagnostics-page .history-panel > .section-heading {
+  height: 39px;
+  min-height: 39px;
+  max-height: 39px;
+  flex: 0 0 39px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .bottleneck-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .diagnosis-panel > .empty-state {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .analysis-side {
+  height: var(--logpost-analysis-height);
+  min-height: var(--logpost-analysis-height);
+  max-height: var(--logpost-analysis-height);
+  grid-template-rows: repeat(2, var(--logpost-analysis-side-card-height));
+  align-content: start;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .timing-panel,
+.logpost-diagnostics-page.logpost-diagnostics-page .amplification-panel {
+  height: var(--logpost-analysis-side-card-height);
+  min-height: var(--logpost-analysis-side-card-height);
+  max-height: var(--logpost-analysis-side-card-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .timing-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  align-content: start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .timing-item {
+  height: 19px;
+  min-height: 19px;
+  max-height: 19px;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .amplification-score {
+  flex: 0 0 auto;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .amplification-panel > ul,
+.logpost-diagnostics-page.logpost-diagnostics-page .amplification-panel > .no-notes {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .history-panel {
+  width: 100%;
+  height: var(--logpost-history-height);
+  min-height: var(--logpost-history-height);
+  max-height: var(--logpost-history-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .history-table-wrap {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .path-panel {
+  width: 100%;
+  height: var(--logpost-path-height);
+  min-height: var(--logpost-path-height);
+  max-height: var(--logpost-path-height);
+  overflow: hidden;
+  transition: none;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page > .path-panel[open] {
+  height: var(--logpost-path-open-height);
+  min-height: var(--logpost-path-open-height);
+  max-height: var(--logpost-path-open-height);
+  display: flex;
+  flex-direction: column;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .path-panel > summary {
+  height: 20px;
+  min-height: 20px;
+  max-height: 20px;
+  flex: 0 0 20px;
+  overflow: hidden;
+}
+
+.logpost-diagnostics-page.logpost-diagnostics-page .path-panel[open] > dl {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-width: 1380px) {
+  .logpost-diagnostics-page.logpost-diagnostics-page {
+    --logpost-overview-height: 168px;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page > .overview {
+    grid-template-rows: 58px 58px;
+    align-content: space-between;
+  }
+}
+
+@media (max-width: 1050px) {
+  .logpost-diagnostics-page.logpost-diagnostics-page {
+    --logpost-analysis-height: 732px;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page > .analysis-layout {
+    grid-template-rows: 360px 360px;
+    align-content: start;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page .diagnosis-panel,
+  .logpost-diagnostics-page.logpost-diagnostics-page .analysis-side {
+    height: 360px;
+    min-height: 360px;
+    max-height: 360px;
+  }
+}
+
+@media (max-width: 760px) {
+  .logpost-diagnostics-page.logpost-diagnostics-page {
+    --logpost-header-height: 148px;
+    --logpost-overview-height: 236px;
+    --logpost-history-height: 330px;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page > .page-header {
+    justify-content: space-between;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page > .overview {
+    grid-template-rows: 58px 146px;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page .overview-metrics {
+    height: 146px;
+    align-content: start;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+}
+
+@media (max-width: 480px) {
+  .logpost-diagnostics-page.logpost-diagnostics-page {
+    --logpost-header-height: 178px;
+    --logpost-overview-height: 372px;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page > .overview {
+    grid-template-rows: 76px 264px;
+  }
+
+  .logpost-diagnostics-page.logpost-diagnostics-page .overview-metrics {
+    height: 264px;
+  }
+}
