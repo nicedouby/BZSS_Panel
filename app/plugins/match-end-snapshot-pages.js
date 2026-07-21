@@ -28,6 +28,14 @@ const COMPACT_PLAYER_LAYOUT = Object.freeze({
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
 let sharpLoaderPromise = null;
+let snapshotRenderQueue = Promise.resolve();
+let sharpConfigured = false;
+
+function enqueueSnapshotRender(task) {
+  const render = snapshotRenderQueue.then(task, task);
+  snapshotRenderQueue = render.catch(() => {});
+  return render;
+}
 
 const MAP_SCENE_FILE_BY_KEY = {
   AlBasrah: "LoadingScreen_AlBasrah_DQHD.PNG",
@@ -110,17 +118,21 @@ export async function generateMatchEndSnapshotBundle(payload, options = {}) {
   return { width: WIDTH, height: HEIGHT, pages: [page], combinedBuffer: buffer, manifest };
 }
 
-export async function generateMatchEndOverviewPng(payload) {
-  const sharp = await loadSharp();
-  const model = buildMatchEndOverviewModel(payload);
-  await attachRoleIconData(model);
-  await attachTeamVisuals(model);
-  const background = await buildBackground(sharp, payload);
-  const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
-  return sharp(background)
-    .composite([{ input: overlay }])
-    .png()
-    .toBuffer();
+export function generateMatchEndOverviewPng(payload) {
+  // A 3200×1800 composition needs several native pixel buffers.  Serialize jobs so
+  // automatic capture, manual refresh and image recovery never multiply that peak.
+  return enqueueSnapshotRender(async () => {
+    const sharp = await loadSharp();
+    const model = buildMatchEndOverviewModel(payload);
+    await attachRoleIconData(model);
+    await attachTeamVisuals(model);
+    const background = await buildBackground(sharp, payload);
+    const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
+    return sharp(background)
+      .composite([{ input: overlay }])
+      .png()
+      .toBuffer();
+  });
 }
 
 function formatMetric(value) {
@@ -433,7 +445,7 @@ function renderOverviewSvg(model) {
   ];
   cards.forEach(([label, value], index) => {
     const x = 920 + index * 156;
-    svg.push(`<path d="M${x} 50 H${x + 138} V100 H${x} Z" fill="#020817" fill-opacity=".72" stroke="#d7e7f7" stroke-opacity=".24"/>`);
+    svg.push(`<path d="M${x} 50 H${x + 138} V100 H${x} Z" fill="#020817" fill-opacity=".30" stroke="#d7e7f7" stroke-opacity=".30"/>`);
     svg.push(`<text x="${x + 12}" y="62" class="card-label">${escapeXml(label)}</text>`);
     svg.push(`<text x="${x + 12}" y="88" class="card-value mono">${escapeXml(value)}</text>`);
   });
@@ -455,8 +467,12 @@ function renderTeamColumn(team) {
   const y = 158;
   const headerHeight = 58;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".46" stroke="${team.accent}" stroke-opacity=".34"/>`);
-  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".58" stroke="${team.accent}" stroke-opacity=".42"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".10" stroke="${team.accent}" stroke-opacity=".46"/>`);
+  if (team.flagData) {
+    svg.push(`<image href="${team.flagData}" x="${x + 34}" y="${y + 68}" width="${team.width - 68}" height="${TEAM_CONTENT_BOTTOM - y - 84}" opacity=".28" preserveAspectRatio="xMidYMid meet"/>`);
+    svg.push(`<rect x="${x + 12}" y="${y + 64}" width="${team.width - 24}" height="${TEAM_CONTENT_BOTTOM - y - 72}" fill="${team.accent}" fill-opacity=".045"/>`);
+  }
+  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".50"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
@@ -499,7 +515,7 @@ function renderTeamColumn(team) {
 function renderLaneColumnHeader(team, x, y) {
   const { infoWidth, stats } = COMPACT_PLAYER_LAYOUT;
   const svg = [
-    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="14" fill="#071426" fill-opacity=".92" stroke="${team.accent}" stroke-opacity=".55"/>`,
+    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="14" fill="#071426" fill-opacity=".34" stroke="${team.accent}" stroke-opacity=".62"/>`,
     `<text x="${x + 9}" y="${y + 10}" class="column-head">PLAYER</text>`,
   ];
   let cursor = x + infoWidth;
@@ -518,8 +534,8 @@ function renderSquadCard(team, group, x, y) {
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
   const creator = firstText(group.creatorName, "-");
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".62" stroke="#ffffff" stroke-opacity=".10"/>`);
-  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".42"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".12" stroke="#ffffff" stroke-opacity=".13"/>`);
+  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".12" stroke="${team.accent}" stroke-opacity=".48"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
   svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}</text>`);
   svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
@@ -545,7 +561,7 @@ function renderPlayerRow(team, player, x, y, index) {
     stats.teamworkScore, ping == null ? "--" : String(ping),
   ];
   const { infoWidth, stats: columns } = COMPACT_PLAYER_LAYOUT;
-  const backgroundOpacity = index % 2 === 0 ? ".74" : ".58";
+  const backgroundOpacity = index % 2 === 0 ? ".16" : ".07";
   let cursor = x + infoWidth;
   const parts = [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".07"/>`,
@@ -624,8 +640,8 @@ async function buildBackground(sharp, payload) {
     try {
       return await sharp(assetPath)
         .resize(WIDTH, HEIGHT, { fit: "cover", position: "centre" })
-        .modulate({ brightness: 0.52, saturation: 0.60 })
-        .blur(1.4)
+        .modulate({ brightness: 0.72, saturation: 0.90 })
+        .blur(0.45)
         .png()
         .toBuffer();
     } catch {}
@@ -669,14 +685,14 @@ function resolveMapKey(value) {
 function renderDefs() {
   return `<defs>
     <linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#020611" stop-opacity=".28"/>
-      <stop offset="42%" stop-color="#020611" stop-opacity=".52"/>
-      <stop offset="100%" stop-color="#020611" stop-opacity=".82"/>
+      <stop offset="0%" stop-color="#020611" stop-opacity=".08"/>
+      <stop offset="42%" stop-color="#020611" stop-opacity=".22"/>
+      <stop offset="100%" stop-color="#020611" stop-opacity=".46"/>
     </linearGradient>
     <linearGradient id="headerPlate" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#061426" stop-opacity=".92"/>
-      <stop offset="55%" stop-color="#10243c" stop-opacity=".78"/>
-      <stop offset="100%" stop-color="#061020" stop-opacity=".90"/>
+      <stop offset="0%" stop-color="#061426" stop-opacity=".46"/>
+      <stop offset="55%" stop-color="#10243c" stop-opacity=".34"/>
+      <stop offset="100%" stop-color="#061020" stop-opacity=".44"/>
     </linearGradient>
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
@@ -806,21 +822,31 @@ function nullableNumber(value) {
 async function loadSharp() {
   if (!sharpLoaderPromise) {
     sharpLoaderPromise = (async () => {
+      let sharp;
       try {
         const imported = await import("sharp");
-        return imported.default ?? imported;
+        sharp = imported.default ?? imported;
       } catch (importError) {
         try {
-          return sharpRequire("sharp");
+          sharp = sharpRequire("sharp");
         } catch {}
-        try {
-          return sharpRequire(path.join(SHARP_BUNDLE_ROOT, "sharp"));
-        } catch {
-          const error = new Error(`sharp is unavailable: ${importError?.message ?? importError}`);
-          error.code = "SharpUnavailable";
-          throw error;
+        if (!sharp) {
+          try {
+            sharp = sharpRequire(path.join(SHARP_BUNDLE_ROOT, "sharp"));
+          } catch {
+            const error = new Error(`sharp is unavailable: ${importError?.message ?? importError}`);
+            error.code = "SharpUnavailable";
+            throw error;
+          }
         }
       }
+      if (!sharpConfigured) {
+        // Keep libvips' native cache well below the normal Node working set.
+        sharp.cache({ memory: 16, files: 0, items: 16 });
+        sharp.concurrency(1);
+        sharpConfigured = true;
+      }
+      return sharp;
     })();
   }
   return sharpLoaderPromise;
