@@ -101,18 +101,10 @@ export function createPlugin({ core, modules, logger } = {}) {
       pages: [],
     };
     pluginLogger.info?.(
-      "[MatchEndSnapshot] saved " + id +
-      (imageAvailable ? " with its 1600x900 scoreboard." : " without scoreboard image."),
+      "[MatchEndSnapshot] queued " + id +
+      " for scoreboard rendering" +
+      (task?.taskId ? " (" + task.taskId + ")." : "."),
     );
-
-    core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
-      snapshotId: id,
-      roundKey: buildRoundKey(payload),
-      pageCount: item.pageCount,
-      pages: item.pages,
-      primaryImage: payload?.artifacts?.primaryImage ?? "",
-      combinedImage: payload?.artifacts?.combinedImage ?? "",
-    });
 
     return item;
   }
