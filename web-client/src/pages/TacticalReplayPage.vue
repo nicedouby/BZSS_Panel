@@ -1,5 +1,5 @@
 <template>
-  <div class="tactical-replay-shell">
+  <div ref="shellRef" class="tactical-replay-shell">
     <TacticalMapPage
       class="tactical-replay-map"
       :snapshot="mapSnapshot"
@@ -9,6 +9,19 @@
       :main-zones="mainZones"
       :loading="windowLoading"
       :error-text="errorText"
+      @select-player="openHistoricalPlayer"
+    />
+
+    <PlayerInfoPanel
+      v-if="historicalPlayerPanel && historicalPanelPlayer"
+      :player="historicalPanelPlayer"
+      :x="historicalPlayerPanel.x"
+      :y="historicalPlayerPanel.y"
+      tone="neutral"
+      speed-text="历史帧"
+      core-status-text="HISTORICAL"
+      :rcon-detail="historicalPanelRconDetail"
+      @close="historicalPlayerPanel = null"
     />
 
     <section class="replay-session-bar glass-panel">
@@ -23,7 +36,7 @@
         <select
           v-model="selectedSessionId"
           :disabled="sessionsLoading"
-          @change="void selectSession(selectedSessionId)"
+          @change="selectSession(selectedSessionId)"
         >
           <option value="">请选择一局</option>
           <option v-for="session in sessions" :key="session.id" :value="session.id">
@@ -32,7 +45,7 @@
         </select>
       </label>
 
-      <button type="button" :disabled="sessionsLoading" @click="void refreshSessions(true)">
+      <button type="button" :disabled="sessionsLoading" @click="refreshSessions(true)">
         {{ sessionsLoading ? "刷新中" : "刷新记录" }}
       </button>
       <RouterLink class="replay-link" to="/tactical-map">返回实时地图</RouterLink>
@@ -64,7 +77,7 @@
           step="50"
           :disabled="!selectedSession"
           @input="onTimelineInput"
-          @change="void ensureWindowForTime(currentTimeMs, true)"
+          @change="ensureWindowForTime(currentTimeMs, true)"
         />
       </div>
 
@@ -93,6 +106,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import TacticalMapPage from "./TacticalMapPage.vue";
+import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import {
   fetchTacticalReplaySession,
   fetchTacticalReplaySessions,
@@ -112,6 +126,7 @@ const WINDOW_STEP_MS = 4_000;
 const WINDOW_CONTEXT_MS = 1_000;
 const WINDOW_PREFETCH_MS = 1_250;
 
+const shellRef = ref<HTMLElement | null>(null);
 const sessions = ref<TacticalReplaySession[]>([]);
 const selectedSessionId = ref("");
 const selectedSession = ref<TacticalReplaySession | null>(null);
@@ -125,6 +140,13 @@ const playbackRate = ref(1);
 const playing = ref(false);
 const loadedFromMs = ref(0);
 const loadedToMs = ref(0);
+const historicalPlayerPanel = ref<{
+  key: string;
+  fallback: TacticalLinkedPlayer;
+  x: number;
+  y: number;
+  rconDetail: any;
+} | null>(null);
 
 const serverStore = useServerStore();
 const tacticalStateStore = useTacticalStateStore();
@@ -187,6 +209,14 @@ const mapSnapshot = computed<any>(() => {
     },
   };
 });
+const historicalPanelPlayer = computed<TacticalLinkedPlayer | null>(() => {
+  const panel = historicalPlayerPanel.value;
+  if (!panel) return null;
+  return mapPlayers.value.find((player) => linkedPlayerKey(player) === panel.key) ?? panel.fallback;
+});
+const historicalPanelRconDetail = computed(() => (
+  (historicalPanelPlayer.value as any)?.rconDetail ?? historicalPlayerPanel.value?.rconDetail ?? null
+));
 
 const loadedWindowText = computed(() => {
   if (!selectedSession.value) return "未选择回放";
@@ -236,6 +266,7 @@ async function refreshSessions(preserveSelection: boolean) {
 
 async function selectSession(sessionId: string) {
   stopPlaybackLoop();
+  historicalPlayerPanel.value = null;
   sessionController?.abort();
   windowController?.abort();
   sessionController = new AbortController();
@@ -299,6 +330,22 @@ async function ensureWindowForTime(timeMs: number, force = false) {
   } finally {
     if (generation === requestGeneration) windowLoading.value = false;
   }
+}
+
+function openHistoricalPlayer(payload: { detail?: any; event?: MouseEvent }) {
+  const player = payload?.detail?.bzssCorePlayerInfo as TacticalLinkedPlayer | undefined;
+  const shell = shellRef.value;
+  if (!player || !shell) return;
+  const rect = shell.getBoundingClientRect();
+  const eventX = Number(payload?.event?.clientX ?? rect.left + rect.width / 2);
+  const eventY = Number(payload?.event?.clientY ?? rect.top + rect.height / 2);
+  historicalPlayerPanel.value = {
+    key: linkedPlayerKey(player),
+    fallback: player,
+    x: clamp(eventX - rect.left, 8, Math.max(8, rect.width - 310)),
+    y: clamp(eventY - rect.top, 8, Math.max(8, rect.height - 330)),
+    rconDetail: payload?.detail ?? null,
+  };
 }
 
 function onTimelineInput() {
@@ -473,6 +520,14 @@ function canonicalPlayerKey(player: any) {
   const identity = player?.identity ?? {};
   return String(identity.key ?? identity.steamID ?? identity.eosID ?? identity.controllerID
     ?? identity.playerID ?? identity.playerId ?? identity.name ?? "");
+}
+
+function linkedPlayerKey(player: TacticalLinkedPlayer) {
+  const index = Number((player as any)?.playerIndex ?? (player as any)?.playerId);
+  if (Number.isFinite(index)) return `idx:${index}`;
+  const guid = String((player as any)?.playerGuid ?? "").trim();
+  if (guid) return `guid:${guid}`;
+  return `name:${String((player as any)?.playerName ?? "").trim()}`;
 }
 
 function findFrameAtOrBefore<T extends TacticalReplayFrame>(source: T[], timeMs: number): T | null {
