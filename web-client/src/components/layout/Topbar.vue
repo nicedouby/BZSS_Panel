@@ -89,15 +89,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { apiGet, apiPost, ApiError } from "../../app/apiClient";
+import { apiPost, ApiError } from "../../app/apiClient";
 import { useAuthStore } from "../../stores/auth.store";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
 import { useSquadStore } from "../../stores/squad.store";
 import { useMatchStore } from "../../stores/match.store";
-import { getRuntimeSyncState } from "../../app/runtimeSync";
+import { getRuntimeSyncState, useSystemStatus } from "../../app/runtimeSync";
 import { useUiStore } from "../../stores/ui.store";
 import { fetchWarmupState, updateWarmupState } from "../../app/warmupApi";
 import { useIsMobile } from "../../composables/useMediaQuery";
@@ -117,6 +117,7 @@ const squads = useSquadStore();
 const match = useMatchStore();
 const auth = useAuthStore();
 const runtime = getRuntimeSyncState();
+const sysStatus = useSystemStatus();
 const route = useRoute();
 const ui = useUiStore();
 const isMobile = useIsMobile(1024);
@@ -261,33 +262,6 @@ const matchUpdatedLabel = computed(() => t("match.updated", "", {
 }));
 
 /* ── System Metrics (subtle topbar display) ── */
-interface SysStatus {
-  system: {
-    uptime: number;
-    memory: { rss: number };
-    performance?: {
-      latest?: {
-        network?: {
-          bytesInPerSec: number | null;
-          bytesOutPerSec: number | null;
-          bytesTotalPerSec: number | null;
-        } | null;
-      } | null;
-    } | null;
-  };
-}
-
-const sysStatus = ref<SysStatus | null>(null);
-let sysTimer: number | null = null;
-
-async function fetchSysStatus() {
-  try {
-    sysStatus.value = await apiGet<SysStatus>("/api/system/status");
-  } catch {
-    // Silently ignore – the metrics will just show "--".
-  }
-}
-
 function fmtSysUptime(seconds: number | null | undefined) {
   if (seconds == null || !Number.isFinite(seconds)) return "--";
   const s = Math.floor(seconds);
@@ -328,12 +302,6 @@ const sysNetOutLabel = computed(() => fmtSysRate(sysStatus.value?.system?.perfor
 
 onMounted(() => {
   void loadWarmupState();
-  void fetchSysStatus();
-  sysTimer = window.setInterval(() => void fetchSysStatus(), 5000);
-});
-
-onUnmounted(() => {
-  if (sysTimer) { clearInterval(sysTimer); sysTimer = null; }
 });
 
 function briefRuntimeError(value: string) {
