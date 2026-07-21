@@ -24,10 +24,14 @@
     "write_legacy_events": false,
     "write_v2_raw_archive": true,
     "write_legacy_raw_archive": false,
-    "flush_interval_ms": 75,
-    "batch_bytes": 131072,
-    "index_interval_ms": 5000,
-    "index_batch_bytes": 1048576
+    "event_flush_interval_ms": 200,
+    "event_batch_bytes": 262144,
+    "raw_flush_interval_ms": 500,
+    "raw_batch_bytes": 524288,
+    "flush_interval_ms": 200,
+    "batch_bytes": 262144,
+    "index_interval_ms": 30000,
+    "index_batch_bytes": 8388608
   },
   "preserve": {
     "enabled": true,
