@@ -22,6 +22,22 @@ export interface TacticalMapConfig {
   aliases: string[];
 }
 
+export interface TacticalStaticMapPoint {
+  id?: string;
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  teamId?: number;
+  teamID?: number;
+  team?: number;
+}
+
+export interface TacticalStaticAssets {
+  captureZones?: TacticalStaticMapPoint[];
+  mainZones?: TacticalStaticMapPoint[];
+}
+
 /**
  * The tactical map must always boot into a resource-free state. This sentinel
  * is intentionally excluded from the manual map list, but remains available
@@ -55,7 +71,9 @@ export function getDefaultTacticalMapKey(): string {
   return EMPTY_TACTICAL_MAP_KEY;
 }
 
-export function getStaticTacticalAssets(mapKey: string | null | undefined) {
+export function getStaticTacticalAssets(
+  mapKey: string | null | undefined,
+): TacticalStaticAssets | null {
   if (!mapKey || mapKey === EMPTY_TACTICAL_MAP_KEY) return null;
-  return getStaticTacticalAssetsShared(mapKey);
+  return getStaticTacticalAssetsShared(mapKey) as TacticalStaticAssets | null;
 }
