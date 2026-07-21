@@ -42,6 +42,8 @@ class RawArchiveWriter:
         raw_line: str,
         source_path: str,
         source_mode: str = "live",
+        log_time: str | None = None,
+        raw_line_hash: str | None = None,
     ) -> Dict[str, Any]:
         read_at = now_time_string()
         entry = {
@@ -49,9 +51,9 @@ class RawArchiveWriter:
             "seq": max(0, int(seq)),
             "offset": max(0, int(offset)),
             "readAt": read_at,
-            "logTime": extract_log_time(raw_line),
+            "logTime": str(log_time) if log_time is not None else extract_log_time(raw_line),
             "rawLine": str(raw_line or ""),
-            "rawLineHash": sha1_hex(raw_line),
+            "rawLineHash": str(raw_line_hash) if raw_line_hash is not None else sha1_hex(raw_line),
             "sourcePath": str(source_path or ""),
             "sourceMode": str(source_mode or "live"),
         }
@@ -72,7 +74,6 @@ class RawArchiveWriter:
             self._writers.get(segment_path).write(line)
             self._segment_bytes += len(line.encode("utf-8"))
             self._index_dirty = True
-            self._write_index_if_needed(force=False)
 
         return entry
 
@@ -97,10 +98,20 @@ class RawArchiveWriter:
         self._index_dirty = False
         self._last_index_write = now
 
-    def flush_all(self, force: bool = False) -> None:
+    def flush_data(self, force: bool = False) -> None:
+        """Flush raw segment data without rewriting the index."""
         self._writers.flush_all(force=force)
+
+    def flush_index(self, force: bool = False) -> None:
+        """Write the small index file on its own cadence."""
         self._write_index_if_needed(force=force)
 
+    def flush_all(self, force: bool = False) -> None:
+        # Compatibility API for callers outside the parser.
+        self.flush_data(force=force)
+        self.flush_index(force=force)
+
     def close(self) -> None:
-        self.flush_all(force=True)
+        self.flush_data(force=True)
+        self.flush_index(force=True)
         self._writers.close()
