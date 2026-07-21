@@ -16,3 +16,5 @@ export function listRegisteredTasks() {
 }
 
 registerTask(TaskTypes.SNAPSHOT_IMAGE, "../../tasks/snapshot/GenerateSnapshotImageTask.js");
+
+registerTask("test.sleep", "../../tasks/test/SleepTask.js");
