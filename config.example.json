@@ -1,4 +1,11 @@
 {
+  "task": {
+    "workers": 4,
+    "maxQueue": 100,
+    "taskTimeout": 600000,
+    "maxRetry": 2,
+    "directory": "./data/tasks"
+  },
   "server": {
     "id": "BZSS_Main",
     "name": "BZSS Main Server"
