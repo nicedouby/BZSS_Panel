@@ -73,6 +73,8 @@ class LogPostRuntimeProbe:
         self._wrap_timed(self.app, "try_parse_bzss_core_player_chunk", "bzss_parse", count_key="bzss_parse_calls", sample="player")
         self._wrap_timed(self.app, "build_raw_meta_only", "record_decode")
         self._wrap_timed(self.app, "build_source_meta", "metadata_build")
+        self._wrap_timed(self.app.builder, "build", "event_build")
+        self._wrap_timed(self.app.builder, "build_raw_log_line", "event_build")
         self._wrap_timed(self.app, "match_event", "generic_matchers", count_key="matcher_calls")
         self._wrap_timed(self.app, "persist_checkpoint", "checkpoint_prepare", count_key="checkpoint_prepare_calls")
         self._wrap_timed(self.app, "flush_pending_checkpoint", "checkpoint_total", sample="checkpoint")
