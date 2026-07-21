@@ -124,8 +124,15 @@ describe("runtimeSync", () => {
 
     await syncOnce();
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith("/api/snapshot/all", {
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/snapshot/all", {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: expect.any(AbortSignal),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/system/status", {
       credentials: "same-origin",
       headers: {
         Accept: "application/json",
@@ -140,6 +147,13 @@ describe("runtimeSync", () => {
     expect(events.updatedAt).toBe(1);
     expect(jobs.updatedAt).toBe(1);
     expect(useSnapshot().value.raw).toBeUndefined();
+  });
+
+  it("does not start a request while the document is hidden", async () => {
+    document.hidden = true;
+    await syncOnce();
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("updates players even when the incoming revision is unchanged", async () => {
