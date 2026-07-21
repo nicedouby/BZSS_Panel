@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { generateMatchEndSnapshotBundle } from "../../plugins/match-end-snapshot-pages.js";
+import { applyMatchEndSnapshotVisualTheme } from "./MatchEndSnapshotVisualTheme.js";
 
 export async function execute(task, { reportProgress } = {}) {
   const payload = task.payload?.payload;
@@ -10,8 +11,11 @@ export async function execute(task, { reportProgress } = {}) {
   const directory = path.resolve(process.cwd(), task.payload?.snapshotDirectory ?? "data/match-end-snapshots");
   await fs.mkdir(directory, { recursive: true });
   reportProgress?.(5);
-  const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId });
-  reportProgress?.(80);
+
+  const rawBundle = await generateMatchEndSnapshotBundle(payload, { snapshotId });
+  reportProgress?.(68);
+  const bundle = await applyMatchEndSnapshotVisualTheme(rawBundle, payload);
+  reportProgress?.(84);
 
   for (const page of bundle.pages ?? []) {
     await writeBufferAtomic(path.join(directory, page.fileName), page.buffer);
