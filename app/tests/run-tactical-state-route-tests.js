@@ -46,6 +46,7 @@ async function main() {
   };
 
   const replaySession = {
+    schemaVersion: 2,
     id: "20260721T120000Z_test_abcdef",
     status: "closed",
     map: "Jensens Range",
@@ -66,7 +67,6 @@ async function main() {
     },
     async readFrames(sessionId, options) {
       assert.equal(sessionId, replaySession.id);
-      assert.deepEqual(options.types, "players,assets");
       assert.equal(options.fromMs, 2_000);
       assert.equal(options.toMs, 5_000);
       assert.equal(options.includeContext, true);
@@ -75,8 +75,8 @@ async function main() {
         fromMs: options.fromMs,
         toMs: options.toMs,
         frames: [
-          { type: "assets", seq: 1, t: 0, assets: { captureZones: [], fobs: [], mainZones: [] } },
-          { type: "players", seq: 2, t: 2_000, players: [] },
+          { schemaVersion: 2, type: "assets", seq: 1, t: 0, scene: {}, assets: { captureZones: [], fobs: [], mainZones: [] } },
+          { schemaVersion: 2, type: "players", seq: 2, t: 2_000, scene: {}, players: [] },
         ],
         hasMore: false,
         nextFromMs: null,
@@ -113,7 +113,7 @@ async function main() {
   let replayFramesResponse = null;
   const replayFramesHandled = await handleTacticalStateRoutes({
     modules: { tacticalState, tacticalReplay },
-    url: new URL(`http://localhost/api/tactical-state/replays/${replaySession.id}/frames?from=2000&to=5000&types=players,assets&context=1`),
+    url: new URL(`http://localhost/api/tactical-state/replays/${replaySession.id}/frames?from=2000&to=5000&context=1`),
     req,
     res,
     user: null,
