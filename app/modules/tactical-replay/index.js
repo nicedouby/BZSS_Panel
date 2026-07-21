@@ -1,19 +1,12 @@
 // -*- coding: utf-8 -*-
 
-import { createReadStream } from "node:fs";
-import fs from "node:fs/promises";
+import { fork } from "node:child_process";
+import http from "node:http";
 import path from "node:path";
-import crypto from "node:crypto";
-import readline from "node:readline";
 
-const SCHEMA_VERSION = 1;
 const DEFAULT_PLAYER_INTERVAL_MS = 333;
 const DEFAULT_ASSET_INTERVAL_MS = 5_000;
-const DEFAULT_FLUSH_INTERVAL_MS = 1_000;
-const DEFAULT_META_INTERVAL_MS = 5_000;
-const DEFAULT_MAX_BUFFER_BYTES = 512 * 1024;
-const DEFAULT_RETENTION_DAYS = 14;
-const SESSION_ID_PATTERN = /^[A-Za-z0-9._-]{1,160}$/;
+const DEFAULT_SERVICE_PORT = 12766;
 
 export function createTacticalReplayModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -22,9 +15,12 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
     channel: "module",
   }) ?? core.logger;
 
-  const dataDirectory = path.resolve(
-    process.cwd(),
-    String(readConfig(config, "modules.tacticalReplay.dataDirectory", "./data/tactical-replays")),
+  const serviceHost = String(readConfig(config, "modules.tacticalReplay.serviceHost", "127.0.0.1"));
+  const servicePort = clampInteger(
+    readConfig(config, "modules.tacticalReplay.servicePort", DEFAULT_SERVICE_PORT),
+    1024,
+    65535,
+    DEFAULT_SERVICE_PORT,
   );
   const playerIntervalMs = clampInteger(
     readConfig(config, "modules.tacticalReplay.playerIntervalMs", DEFAULT_PLAYER_INTERVAL_MS),
@@ -38,529 +34,337 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
     300_000,
     DEFAULT_ASSET_INTERVAL_MS,
   );
-  const flushIntervalMs = clampInteger(
-    readConfig(config, "modules.tacticalReplay.flushIntervalMs", DEFAULT_FLUSH_INTERVAL_MS),
-    100,
-    60_000,
-    DEFAULT_FLUSH_INTERVAL_MS,
-  );
-  const metaIntervalMs = clampInteger(
-    readConfig(config, "modules.tacticalReplay.metaIntervalMs", DEFAULT_META_INTERVAL_MS),
-    500,
-    300_000,
-    DEFAULT_META_INTERVAL_MS,
-  );
-  const maxBufferedBytes = clampInteger(
-    readConfig(config, "modules.tacticalReplay.maxBufferedBytes", DEFAULT_MAX_BUFFER_BYTES),
-    16 * 1024,
-    32 * 1024 * 1024,
-    DEFAULT_MAX_BUFFER_BYTES,
-  );
-  const retentionDays = clampInteger(
-    readConfig(config, "modules.tacticalReplay.retentionDays", DEFAULT_RETENTION_DAYS),
-    1,
-    3650,
-    DEFAULT_RETENTION_DAYS,
-  );
+  const serviceConfig = {
+    host: serviceHost,
+    port: servicePort,
+    dataDirectory: path.resolve(process.cwd(), String(readConfig(
+      config,
+      "modules.tacticalReplay.dataDirectory",
+      "./data/tactical-replays",
+    ))),
+    playerIntervalMs,
+    assetIntervalMs,
+    chunkDurationMs: clampInteger(readConfig(config, "modules.tacticalReplay.chunkDurationMs", 10_000), 2_000, 60_000, 10_000),
+    flushIntervalMs: clampInteger(readConfig(config, "modules.tacticalReplay.flushIntervalMs", 500), 100, 10_000, 500),
+    maxBufferedBytes: clampInteger(readConfig(config, "modules.tacticalReplay.maxBufferedBytes", 512 * 1024), 16 * 1024, 32 * 1024 * 1024, 512 * 1024),
+    retentionDays: clampInteger(readConfig(config, "modules.tacticalReplay.retentionDays", 14), 1, 3650, 14),
+  };
+  const restartOnExit = readConfig(config, "modules.tacticalReplay.restartOnExit", true) !== false;
 
   const state = {
     started: false,
+    serviceReady: false,
+    servicePid: null,
+    restartCount: 0,
     lastError: "",
     lastSnapshotAt: "",
-    recordedPlayerFrames: 0,
-    recordedAssetFrames: 0,
-    writtenBytes: 0,
-    droppedFrames: 0,
+    sentPlayerSamples: 0,
+    sentAssetSamples: 0,
+    droppedPlayerSamples: 0,
+    droppedAssetSamples: 0,
   };
 
+  let child = null;
+  let stopping = false;
   let latestSnapshot = null;
-  let activeSession = null;
   let unsubscribeSnapshot = null;
   let playerTimer = null;
   let assetTimer = null;
-  let flushTimer = null;
-  let metaTimer = null;
-  let stopped = true;
-  let pendingLifecycleSnapshot = null;
-  let lifecycleScheduled = false;
-  let lifecycleChain = Promise.resolve();
-  let writeChain = Promise.resolve();
-  let metaWriteChain = Promise.resolve();
-  let bufferedLines = [];
-  let bufferedBytes = 0;
-
-  function enqueueLifecycle(task) {
-    lifecycleChain = lifecycleChain.then(task, task).catch((error) => {
-      state.lastError = error?.message ?? String(error);
-      moduleLogger.warn?.("Tactical replay lifecycle operation failed.", {
-        operation: "tacticalReplay.lifecycle",
-        data: { message: state.lastError },
-      });
-    });
-    return lifecycleChain;
-  }
-
-  function scheduleLifecycle(snapshot) {
-    pendingLifecycleSnapshot = snapshot;
-    if (lifecycleScheduled || stopped) return;
-    lifecycleScheduled = true;
-    queueMicrotask(() => {
-      lifecycleScheduled = false;
-      const nextSnapshot = pendingLifecycleSnapshot;
-      pendingLifecycleSnapshot = null;
-      if (!nextSnapshot || stopped) return;
-      void enqueueLifecycle(() => reconcileSession(nextSnapshot));
-    });
-  }
+  let restartTimer = null;
+  let fallbackRoundEpoch = 1;
+  let fallbackRoundBase = "";
+  let fallbackWasClosed = false;
+  const sendQueues = {
+    players: { busy: false, pending: null },
+    assets: { busy: false, pending: null },
+  };
 
   function onSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== "object") return;
     latestSnapshot = snapshot;
     state.lastSnapshotAt = firstText(snapshot?.meta?.generatedAt, new Date().toISOString());
-    scheduleLifecycle(snapshot);
   }
 
-  async function reconcileSession(snapshot) {
-    const identity = resolveRoundIdentity(snapshot);
-    if (!identity || !isRecordableSnapshot(snapshot)) return;
-
-    if (activeSession && (
-      activeSession.roundKey !== identity.key
-      || isRoundClosed(snapshot)
-    )) {
-      await closeActiveSession(
-        activeSession.roundKey !== identity.key ? "round-changed" : "round-ended",
-        snapshot,
-      );
-    }
-
-    if (!activeSession && !isRoundClosed(snapshot)) {
-      await openSession(snapshot, identity);
-    }
-  }
-
-  async function openSession(snapshot, identity) {
-    await fs.mkdir(dataDirectory, { recursive: true });
-    const now = new Date();
-    const sessionId = buildSessionId(now, identity.layer || identity.map || "round");
-    const directory = path.join(dataDirectory, sessionId);
-    await fs.mkdir(directory, { recursive: true });
-
-    const session = {
-      id: sessionId,
-      schemaVersion: SCHEMA_VERSION,
-      status: "active",
-      roundKey: identity.key,
-      serverId: identity.serverId,
-      serverName: firstText(snapshot?.server?.name),
-      map: identity.map,
-      layer: identity.layer,
-      mode: identity.mode,
-      roundStartedAt: identity.roundStartedAt,
-      startedAt: now.toISOString(),
-      startedMs: now.getTime(),
-      endedAt: "",
-      endReason: "",
-      durationMs: 0,
-      lastFrameAt: "",
-      lastFrameMs: 0,
-      nextSequence: 1,
-      frameCounts: { players: 0, assets: 0 },
-      fileBytes: 0,
-      playerIntervalMs,
-      assetIntervalMs,
-      framesPath: path.join(directory, "frames.jsonl"),
-      metaPath: path.join(directory, "meta.json"),
-      directory,
-    };
-
-    activeSession = session;
-    await persistSessionMeta(session);
-    captureAssetFrame(session, snapshot, { force: true });
-    capturePlayerFrame(session, snapshot, { force: true });
-    await flushBufferedFrames();
-
-    moduleLogger.info?.(`Tactical replay recording started: ${session.id}`, {
-      label: "REPLAY",
-      operation: "tacticalReplay.startSession",
-      data: {
-        sessionId: session.id,
-        map: session.map,
-        layer: session.layer,
-        playerIntervalMs,
-        assetIntervalMs,
+  async function startService() {
+    if (child || stopping) return;
+    state.serviceReady = false;
+    const servicePath = path.resolve(process.cwd(), "app/modules/tactical-replay/service.js");
+    child = fork(servicePath, [], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+      env: {
+        ...process.env,
+        BZSS_TACTICAL_REPLAY_CONFIG: JSON.stringify(serviceConfig),
       },
     });
-  }
+    state.servicePid = child.pid ?? null;
 
-  async function closeActiveSession(reason = "module-stop", finalSnapshot = latestSnapshot) {
-    const session = activeSession;
-    if (!session) return;
-
-    if (finalSnapshot && resolveRoundIdentity(finalSnapshot)?.key === session.roundKey) {
-      captureAssetFrame(session, finalSnapshot, { force: true });
-      capturePlayerFrame(session, finalSnapshot, { force: true });
-    }
-
-    activeSession = null;
-    await flushBufferedFrames();
-    await writeChain;
-
-    const endedAt = new Date();
-    session.status = "closed";
-    session.endedAt = endedAt.toISOString();
-    session.endReason = reason;
-    session.durationMs = Math.max(session.lastFrameMs, endedAt.getTime() - session.startedMs);
-    await persistSessionMeta(session);
-    await metaWriteChain;
-
-    moduleLogger.info?.(`Tactical replay recording closed: ${session.id}`, {
-      label: "REPLAY",
-      operation: "tacticalReplay.closeSession",
-      data: {
-        sessionId: session.id,
-        reason,
-        durationMs: session.durationMs,
-        frameCounts: session.frameCounts,
-        fileBytes: session.fileBytes,
-      },
+    child.stdout?.on("data", (data) => {
+      const text = data.toString("utf8").trimEnd();
+      if (text) moduleLogger.info?.(`[REPLAY] ${text}`);
+    });
+    child.stderr?.on("data", (data) => {
+      const text = data.toString("utf8").trimEnd();
+      if (text) moduleLogger.warn?.(`[REPLAY] ${text}`);
+    });
+    child.on("message", (message) => {
+      if (message?.type === "ready") {
+        state.serviceReady = true;
+        state.servicePid = Number(message.pid ?? child?.pid ?? 0) || null;
+        moduleLogger.info?.(`Tactical replay service ready. pid=${state.servicePid} port=${servicePort}`);
+        return;
+      }
+      if (message?.type === "diagnostic") {
+        const method = message.level === "error" ? "error" : message.level === "warn" ? "warn" : "info";
+        moduleLogger[method]?.(`[REPLAY] ${message.message}`);
+      }
+    });
+    child.on("error", (error) => {
+      state.lastError = error?.message ?? String(error);
+      moduleLogger.error?.(`Tactical replay service spawn failed: ${state.lastError}`);
+    });
+    child.on("exit", (code, signal) => {
+      const unexpected = !stopping;
+      state.serviceReady = false;
+      state.servicePid = null;
+      child = null;
+      sendQueues.players.busy = false;
+      sendQueues.assets.busy = false;
+      moduleLogger.warn?.(`Tactical replay service exited. code=${code} signal=${signal}`);
+      if (unexpected && restartOnExit) {
+        state.restartCount += 1;
+        restartTimer = setTimeout(() => {
+          restartTimer = null;
+          void startService();
+        }, 2_000);
+        restartTimer.unref?.();
+      }
     });
   }
 
   function samplePlayers() {
-    const session = activeSession;
     const snapshot = latestSnapshot;
-    if (!session || !snapshot || stopped) return;
-    const identity = resolveRoundIdentity(snapshot);
-    if (!identity || identity.key !== session.roundKey || isRoundClosed(snapshot)) return;
-    capturePlayerFrame(session, snapshot);
+    if (!snapshot || stopping || !state.serviceReady) return;
+    queueSample("players", {
+      round: resolveRoundDescriptor(snapshot),
+      snapshot: {
+        meta: snapshot.meta ?? {},
+        server: snapshot.server ?? {},
+        match: snapshot.match ?? {},
+        teams: Array.isArray(snapshot.teams) ? snapshot.teams : [],
+        players: Array.isArray(snapshot.players) ? snapshot.players : [],
+        diagnostics: snapshot.diagnostics ?? {},
+      },
+    });
   }
 
   function sampleAssets() {
-    const session = activeSession;
     const snapshot = latestSnapshot;
-    if (!session || !snapshot || stopped) return;
-    const identity = resolveRoundIdentity(snapshot);
-    if (!identity || identity.key !== session.roundKey) return;
-    captureAssetFrame(session, snapshot);
-  }
-
-  function capturePlayerFrame(session, snapshot, { force = false } = {}) {
-    if (!session || !snapshot) return;
-    const nowMs = Date.now();
-    const elapsedMs = Math.max(0, nowMs - session.startedMs);
-    if (!force && session.lastPlayerFrameMs != null && elapsedMs - session.lastPlayerFrameMs < playerIntervalMs * 0.75) return;
-
-    const frame = {
-      schemaVersion: SCHEMA_VERSION,
-      type: "players",
-      seq: session.nextSequence++,
-      t: elapsedMs,
-      at: new Date(nowMs).toISOString(),
-      revision: numberOrNull(snapshot?.meta?.revision),
-      players: (Array.isArray(snapshot?.players) ? snapshot.players : []).map(toReplayPlayer),
-    };
-    session.lastPlayerFrameMs = elapsedMs;
-    session.frameCounts.players += 1;
-    state.recordedPlayerFrames += 1;
-    appendFrame(session, frame);
-  }
-
-  function captureAssetFrame(session, snapshot, { force = false } = {}) {
-    if (!session || !snapshot) return;
-    const nowMs = Date.now();
-    const elapsedMs = Math.max(0, nowMs - session.startedMs);
-    if (!force && session.lastAssetFrameMs != null && elapsedMs - session.lastAssetFrameMs < assetIntervalMs * 0.75) return;
-
-    const frame = {
-      schemaVersion: SCHEMA_VERSION,
-      type: "assets",
-      seq: session.nextSequence++,
-      t: elapsedMs,
-      at: new Date(nowMs).toISOString(),
-      revision: numberOrNull(snapshot?.meta?.revision),
-      server: {
-        serverId: firstText(snapshot?.server?.serverId, snapshot?.meta?.serverId),
-        name: firstText(snapshot?.server?.name),
-        map: firstText(snapshot?.server?.map, snapshot?.match?.map),
-        layer: firstText(snapshot?.server?.layer, snapshot?.match?.layer),
-        mode: firstText(snapshot?.server?.mode, snapshot?.match?.mode),
-        playerCount: numberOrNull(snapshot?.server?.playerCount),
-        tickets: cloneJson(snapshot?.server?.tickets ?? null),
+    if (!snapshot || stopping || !state.serviceReady) return;
+    queueSample("assets", {
+      round: resolveRoundDescriptor(snapshot),
+      snapshot: {
+        meta: snapshot.meta ?? {},
+        server: snapshot.server ?? {},
+        match: snapshot.match ?? {},
+        teams: Array.isArray(snapshot.teams) ? snapshot.teams : [],
+        assets: {
+          captureZones: Array.isArray(snapshot?.assets?.captureZones) ? snapshot.assets.captureZones : [],
+          fobs: Array.isArray(snapshot?.assets?.fobs) ? snapshot.assets.fobs : [],
+          mainZones: Array.isArray(snapshot?.assets?.mainZones) ? snapshot.assets.mainZones : [],
+        },
       },
-      match: pickReplayMatch(snapshot?.match),
-      teams: cloneArray(snapshot?.teams),
-      assets: {
-        captureZones: cloneArray(snapshot?.assets?.captureZones),
-        fobs: cloneArray(snapshot?.assets?.fobs),
-        mainZones: cloneArray(snapshot?.assets?.mainZones),
-      },
-    };
-    session.lastAssetFrameMs = elapsedMs;
-    session.frameCounts.assets += 1;
-    state.recordedAssetFrames += 1;
-    appendFrame(session, frame);
-  }
-
-  function appendFrame(session, frame) {
-    try {
-      const line = `${JSON.stringify(frame)}\n`;
-      const byteLength = Buffer.byteLength(line);
-      bufferedLines.push({ sessionId: session.id, framesPath: session.framesPath, line });
-      bufferedBytes += byteLength;
-      session.fileBytes += byteLength;
-      session.lastFrameAt = frame.at;
-      session.lastFrameMs = frame.t;
-      session.durationMs = Math.max(session.durationMs, frame.t);
-      state.writtenBytes += byteLength;
-      if (bufferedBytes >= maxBufferedBytes) void flushBufferedFrames();
-    } catch (error) {
-      state.droppedFrames += 1;
-      state.lastError = error?.message ?? String(error);
-    }
-  }
-
-  function flushBufferedFrames() {
-    if (bufferedLines.length === 0) return writeChain;
-    const batch = bufferedLines;
-    bufferedLines = [];
-    bufferedBytes = 0;
-
-    const groups = new Map();
-    for (const entry of batch) {
-      const current = groups.get(entry.framesPath) ?? [];
-      current.push(entry.line);
-      groups.set(entry.framesPath, current);
-    }
-
-    writeChain = writeChain.then(async () => {
-      for (const [framesPath, lines] of groups.entries()) {
-        await fs.appendFile(framesPath, lines.join(""), "utf8");
-      }
-    }).catch((error) => {
-      state.lastError = error?.message ?? String(error);
-      state.droppedFrames += batch.length;
-      moduleLogger.warn?.("Failed to flush tactical replay frames.", {
-        operation: "tacticalReplay.flush",
-        data: { message: state.lastError, frameCount: batch.length },
-      });
     });
-
-    return writeChain;
   }
 
-  function persistSessionMeta(session) {
-    const metadata = serializeSession(session);
-    metaWriteChain = metaWriteChain.then(async () => {
-      await fs.mkdir(session.directory, { recursive: true });
-      const temporaryPath = `${session.metaPath}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`;
-      await fs.writeFile(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
-      await fs.rename(temporaryPath, session.metaPath);
-    }).catch((error) => {
-      state.lastError = error?.message ?? String(error);
-      moduleLogger.warn?.("Failed to persist tactical replay metadata.", {
-        operation: "tacticalReplay.persistMeta",
-        data: { sessionId: session.id, message: state.lastError },
-      });
-    });
-    return metaWriteChain;
-  }
-
-  async function listSessions({ limit = 100 } = {}) {
-    await fs.mkdir(dataDirectory, { recursive: true });
-    const entries = await fs.readdir(dataDirectory, { withFileTypes: true });
-    const sessions = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !SESSION_ID_PATTERN.test(entry.name)) continue;
-      try {
-        const metadata = await readSessionMetadata(entry.name);
-        if (metadata) sessions.push(metadata);
-      } catch {
-        // Ignore partially written or externally removed replay directories.
-      }
-    }
-
-    if (activeSession) {
-      const activeMetadata = serializeSession(activeSession);
-      const index = sessions.findIndex((item) => item.id === activeMetadata.id);
-      if (index >= 0) sessions[index] = activeMetadata;
-      else sessions.push(activeMetadata);
-    }
-
-    sessions.sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
-    return sessions.slice(0, clampInteger(limit, 1, 1000, 100));
-  }
-
-  async function getSession(sessionId) {
-    const safeId = validateSessionId(sessionId);
-    if (activeSession?.id === safeId) return serializeSession(activeSession);
-    return readSessionMetadata(safeId);
-  }
-
-  async function readFrames(sessionId, options = {}) {
-    const safeId = validateSessionId(sessionId);
-    if (activeSession?.id === safeId) {
-      await flushBufferedFrames();
-      await writeChain;
-    }
-
-    const metadata = await getSession(safeId);
-    if (!metadata) {
-      const error = new Error("Replay session was not found.");
-      error.code = "ReplaySessionNotFound";
-      error.statusCode = 404;
-      throw error;
-    }
-
-    const framesPath = path.join(dataDirectory, safeId, "frames.jsonl");
-    const fromMs = clampNumber(options.fromMs, 0, Number.MAX_SAFE_INTEGER, 0);
-    const toMs = clampNumber(options.toMs, fromMs, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    const limit = clampInteger(options.limit, 1, 100_000, 20_000);
-    const includeContext = options.includeContext !== false;
-    const typeSet = normalizeFrameTypes(options.types);
-    const frames = [];
-    const contextByType = new Map();
-    let hasMore = false;
-
-    try {
-      const input = createReadStream(framesPath, { encoding: "utf8" });
-      const lines = readline.createInterface({ input, crlfDelay: Infinity });
-      let contextInserted = false;
-
-      for await (const line of lines) {
-        if (!line.trim()) continue;
-        let frame;
-        try {
-          frame = JSON.parse(line);
-        } catch {
-          continue;
-        }
-        const frameType = String(frame?.type ?? "");
-        if (!typeSet.has(frameType)) continue;
-        const frameTime = Number(frame?.t);
-        if (!Number.isFinite(frameTime)) continue;
-
-        if (frameTime < fromMs) {
-          if (includeContext) contextByType.set(frameType, frame);
-          continue;
-        }
-        if (frameTime > toMs) break;
-
-        if (!contextInserted) {
-          contextInserted = true;
-          const contextFrames = [...contextByType.values()].sort((left, right) => Number(left.t) - Number(right.t));
-          for (const contextFrame of contextFrames) {
-            if (frames.length >= limit) break;
-            frames.push(contextFrame);
-          }
-        }
-
-        if (frames.length >= limit) {
-          hasMore = true;
-          break;
-        }
-        frames.push(frame);
-      }
-
-      if (!contextInserted && includeContext) {
-        for (const contextFrame of [...contextByType.values()].sort((left, right) => Number(left.t) - Number(right.t))) {
-          if (frames.length >= limit) break;
-          frames.push(contextFrame);
-        }
-      }
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-
-    const lastFrame = frames.at(-1) ?? null;
-    return {
-      session: metadata,
-      fromMs,
-      toMs: Number.isFinite(toMs) ? toMs : null,
-      frames,
-      hasMore,
-      nextFromMs: hasMore && lastFrame ? Number(lastFrame.t) + 1 : null,
-    };
-  }
-
-  function getStatus() {
-    return {
-      enabled: state.started && !stopped,
-      dataDirectory,
-      playerIntervalMs,
-      assetIntervalMs,
-      flushIntervalMs,
-      retentionDays,
-      bufferedFrames: bufferedLines.length,
-      bufferedBytes,
-      activeSession: activeSession ? serializeSession(activeSession) : null,
-      diagnostics: { ...state },
-    };
-  }
-
-  async function readSessionMetadata(sessionId) {
-    const safeId = validateSessionId(sessionId);
-    const metaPath = path.join(dataDirectory, safeId, "meta.json");
-    try {
-      return JSON.parse(await fs.readFile(metaPath, "utf8"));
-    } catch (error) {
-      if (error?.code === "ENOENT") return null;
-      throw error;
-    }
-  }
-
-  async function cleanupExpiredSessions() {
-    const threshold = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
-    let entries = [];
-    try {
-      entries = await fs.readdir(dataDirectory, { withFileTypes: true });
-    } catch {
+  function queueSample(kind, payload) {
+    const queue = sendQueues[kind];
+    if (!queue) return;
+    if (queue.busy) {
+      queue.pending = payload;
+      state[kind === "players" ? "droppedPlayerSamples" : "droppedAssetSamples"] += 1;
       return;
     }
-
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !SESSION_ID_PATTERN.test(entry.name)) continue;
-      try {
-        const metadata = await readSessionMetadata(entry.name);
-        const endedMs = Date.parse(metadata?.endedAt || metadata?.startedAt || "");
-        if (Number.isFinite(endedMs) && endedMs < threshold && metadata?.status !== "active") {
-          await fs.rm(path.join(dataDirectory, entry.name), { recursive: true, force: true });
-        }
-      } catch {
-        // Retention cleanup must not prevent the recorder from starting.
-      }
-    }
+    sendSampleNow(kind, payload);
   }
+
+  function sendSampleNow(kind, payload) {
+    const target = child;
+    const queue = sendQueues[kind];
+    if (!target?.connected || !queue) return;
+    queue.busy = true;
+    target.send({ type: kind === "players" ? "sample-players" : "sample-assets", payload }, (error) => {
+      queue.busy = false;
+      if (error) {
+        state.lastError = error.message;
+        moduleLogger.warn?.(`Tactical replay IPC ${kind} sample failed: ${error.message}`);
+      } else {
+        state[kind === "players" ? "sentPlayerSamples" : "sentAssetSamples"] += 1;
+      }
+      const pending = queue.pending;
+      queue.pending = null;
+      if (pending && !stopping) sendSampleNow(kind, pending);
+    });
+  }
+
+  function resolveRoundDescriptor(snapshot) {
+    const roundState = modules.matchState?.getRoundState?.() ?? {};
+    const currentRound = roundState?.current ?? {};
+    const serverId = firstText(snapshot?.server?.serverId, snapshot?.meta?.serverId, roundState?.serverId, "default");
+    const map = firstText(snapshot?.server?.map, snapshot?.match?.map, snapshot?.match?.mapName, currentRound?.mapName);
+    const layer = firstText(snapshot?.server?.layer, snapshot?.match?.layer, snapshot?.match?.layerName, currentRound?.layerName);
+    const mode = firstText(snapshot?.server?.mode, snapshot?.match?.mode, snapshot?.match?.gameMode);
+    const phase = firstText(snapshot?.match?.phase, snapshot?.match?.state, snapshot?.server?.phase).toLowerCase();
+    const closed = /waitingpostmatch|postmatch|intermission|roundended|matchended|complete|finished/.test(phase);
+    const stableToken = firstText(
+      currentRound?.dedupeKey,
+      currentRound?.sourceEventId,
+      currentRound?.roundId,
+      currentRound?.matchId,
+      currentRound?.id,
+      currentRound?.worldPath && currentRound?.serverPlayAt
+        ? `${currentRound.worldPath}|${currentRound.serverPlayAt}|${currentRound.logLineTime ?? ""}`
+        : "",
+    );
+
+    let token = stableToken;
+    if (!token) {
+      const base = `${serverId}|${layer || map}`;
+      if (!closed && (base !== fallbackRoundBase || fallbackWasClosed)) fallbackRoundEpoch += 1;
+      fallbackRoundBase = base;
+      fallbackWasClosed = closed;
+      token = `${base}|epoch:${fallbackRoundEpoch}`;
+    }
+
+    return {
+      serverId,
+      map,
+      layer,
+      mode,
+      token,
+      key: `${serverId}|${token}`,
+      startedAt: firstText(currentRound?.receivedAt, currentRound?.serverPlayAt, snapshot?.match?.startedAt, snapshot?.match?.startTime),
+      closed,
+    };
+  }
+
+  async function proxyRequest({ url, req, res }) {
+    if (!state.serviceReady) {
+      writeProxyError(res, 503, "ReplayServiceUnavailable", "Tactical replay service is starting or unavailable.");
+      return true;
+    }
+    await new Promise((resolve) => {
+      const upstream = http.request({
+        host: serviceHost,
+        port: servicePort,
+        method: "GET",
+        path: `${url.pathname}${url.search}`,
+        headers: { accept: req.headers.accept ?? "application/json" },
+        timeout: 15_000,
+      }, (upstreamResponse) => {
+        const headers = { ...upstreamResponse.headers, "x-tactical-replay-proxy": "child-process" };
+        res.writeHead(upstreamResponse.statusCode ?? 502, headers);
+        upstreamResponse.pipe(res);
+        upstreamResponse.once("end", resolve);
+        upstreamResponse.once("error", resolve);
+      });
+      upstream.on("timeout", () => upstream.destroy(new Error("Replay service request timed out.")));
+      upstream.on("error", (error) => {
+        state.lastError = error.message;
+        writeProxyError(res, 502, "ReplayServiceProxyError", error.message);
+        resolve();
+      });
+      req.once("close", () => {
+        if (!res.writableEnded) upstream.destroy();
+      });
+      upstream.end();
+    });
+    return true;
+  }
+
+  async function requestJson(pathname) {
+    if (!state.serviceReady) throw new Error("Tactical replay service is unavailable.");
+    return new Promise((resolve, reject) => {
+      const request = http.get({ host: serviceHost, port: servicePort, path: pathname, timeout: 15_000 }, (response) => {
+        let text = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => { text += chunk; });
+        response.on("end", () => {
+          try {
+            const parsed = JSON.parse(text || "null");
+            if ((response.statusCode ?? 500) >= 400) {
+              const error = new Error(parsed?.message ?? `Replay service request failed (${response.statusCode}).`);
+              error.statusCode = response.statusCode;
+              error.code = parsed?.error;
+              reject(error);
+              return;
+            }
+            resolve(parsed);
+          } catch (error) { reject(error); }
+        });
+      });
+      request.on("timeout", () => request.destroy(new Error("Replay service request timed out.")));
+      request.on("error", reject);
+    });
+  }
+
+  const api = {
+    async listSessions({ limit = 100, includeLegacy = false } = {}) {
+      const response = await requestJson(`/api/tactical-state/replays?limit=${encodeURIComponent(limit)}&includeLegacy=${includeLegacy ? 1 : 0}`);
+      return response?.sessions ?? [];
+    },
+    async getSession(sessionId) {
+      const response = await requestJson(`/api/tactical-state/replays/${encodeURIComponent(sessionId)}`);
+      return response?.session ?? null;
+    },
+    async readFrames(sessionId, options = {}) {
+      const fromMs = Math.max(0, Number(options.fromMs) || 0);
+      const toMs = Number(options.toMs);
+      const durationMs = Number.isFinite(toMs) ? Math.max(500, Math.min(15_000, toMs - fromMs)) : 6_000;
+      const response = await requestJson(
+        `/api/tactical-state/replays/${encodeURIComponent(sessionId)}/window?from=${fromMs}&duration=${durationMs}`
+        + `&limit=${Math.max(1, Math.min(10_000, Number(options.limit) || 3_000))}`
+        + `&context=${options.includeContext === false ? 0 : 1}`,
+      );
+      return response;
+    },
+    getStatus() {
+      return {
+        enabled: state.started && !stopping,
+        serviceReady: state.serviceReady,
+        servicePid: state.servicePid,
+        serviceHost,
+        servicePort,
+        playerIntervalMs,
+        assetIntervalMs,
+        diagnostics: { ...state },
+      };
+    },
+    proxyRequest,
+  };
 
   return {
     manifest: {
       id: "module.tacticalReplay",
-      name: "Tactical Replay Recorder",
+      name: "Tactical Replay Service",
       kind: "module",
-      version: "0.1.0",
-      description: "Record high-frequency player frames and low-frequency tactical asset keyframes for map replay.",
+      version: "0.2.0",
+      description: "Proxy and sampler for the isolated tactical replay data service.",
     },
     apiName: "tacticalReplay",
-    api: {
-      listSessions,
-      getSession,
-      readFrames,
-      getStatus,
-    },
+    api,
     async start() {
       if (state.started) return;
       state.started = true;
-      stopped = false;
-      await fs.mkdir(dataDirectory, { recursive: true });
-      await cleanupExpiredSessions();
-
+      stopping = false;
+      await startService();
       const tacticalState = modules.tacticalState;
       if (!tacticalState?.subscribe) {
         state.lastError = "tacticalState module is unavailable.";
-        moduleLogger.warn?.(state.lastError, { operation: "tacticalReplay.start" });
+        moduleLogger.warn?.(state.lastError);
         return;
       }
-
       unsubscribeSnapshot = tacticalState.subscribe(onSnapshot);
       try {
         const initialSnapshot = await tacticalState.getSnapshot?.();
@@ -568,227 +372,53 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
       } catch (error) {
         state.lastError = error?.message ?? String(error);
       }
-
       playerTimer = setInterval(samplePlayers, playerIntervalMs);
       assetTimer = setInterval(sampleAssets, assetIntervalMs);
-      flushTimer = setInterval(() => void flushBufferedFrames(), flushIntervalMs);
-      metaTimer = setInterval(() => {
-        if (activeSession) void persistSessionMeta(activeSession);
-      }, metaIntervalMs);
       playerTimer.unref?.();
       assetTimer.unref?.();
-      flushTimer.unref?.();
-      metaTimer.unref?.();
     },
     async stop() {
       if (!state.started) return;
-      stopped = true;
       state.started = false;
+      stopping = true;
       unsubscribeSnapshot?.();
       unsubscribeSnapshot = null;
-      for (const timer of [playerTimer, assetTimer, flushTimer, metaTimer]) {
-        if (timer) clearInterval(timer);
-      }
+      if (playerTimer) clearInterval(playerTimer);
+      if (assetTimer) clearInterval(assetTimer);
+      if (restartTimer) clearTimeout(restartTimer);
       playerTimer = null;
       assetTimer = null;
-      flushTimer = null;
-      metaTimer = null;
-      pendingLifecycleSnapshot = null;
-      await lifecycleChain;
-      await closeActiveSession("module-stop");
-      await flushBufferedFrames();
-      await writeChain;
-      await metaWriteChain;
+      restartTimer = null;
+      const target = child;
+      if (target) {
+        try { target.send({ type: "shutdown", reason: "module-stop" }); } catch {}
+        await new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            try { target.kill("SIGKILL"); } catch {}
+            resolve();
+          }, 3_000);
+          target.once("exit", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+        });
+      }
+      child = null;
+      state.serviceReady = false;
+      state.servicePid = null;
     },
   };
 }
 
-function serializeSession(session) {
-  return {
-    schemaVersion: session.schemaVersion,
-    id: session.id,
-    status: session.status,
-    serverId: session.serverId,
-    serverName: session.serverName,
-    map: session.map,
-    layer: session.layer,
-    mode: session.mode,
-    roundStartedAt: session.roundStartedAt,
-    startedAt: session.startedAt,
-    endedAt: session.endedAt,
-    endReason: session.endReason,
-    durationMs: Math.max(0, Number(session.durationMs ?? session.lastFrameMs ?? 0)),
-    lastFrameAt: session.lastFrameAt,
-    frameCounts: { ...session.frameCounts },
-    fileBytes: session.fileBytes,
-    playerIntervalMs: session.playerIntervalMs,
-    assetIntervalMs: session.assetIntervalMs,
-    dataModel: {
-      playerFrames: "Full player truth frame sampled at playerIntervalMs.",
-      assetFrames: "Capture Zone, FOB and Main Zone keyframe sampled at assetIntervalMs.",
-      reconstruction: "Merge each player frame with the latest asset frame at or before the same timestamp.",
-    },
-  };
-}
-
-function resolveRoundIdentity(snapshot) {
-  if (!snapshot || typeof snapshot !== "object") return null;
-  const serverId = firstText(snapshot?.server?.serverId, snapshot?.meta?.serverId, "default");
-  const map = firstText(snapshot?.server?.map, snapshot?.match?.map, snapshot?.match?.mapName);
-  const layer = firstText(snapshot?.server?.layer, snapshot?.match?.layer, snapshot?.match?.layerName);
-  const mode = firstText(snapshot?.server?.mode, snapshot?.match?.mode, snapshot?.match?.gameMode);
-  if (!map && !layer) return null;
-  const roundToken = firstText(
-    snapshot?.match?.roundId,
-    snapshot?.match?.matchId,
-    snapshot?.match?.id,
-    snapshot?.match?.startedAt,
-    snapshot?.match?.startTime,
-  );
-  const roundStartedAt = firstText(snapshot?.match?.startedAt, snapshot?.match?.startTime);
-  return {
-    serverId,
-    map,
-    layer,
-    mode,
-    roundStartedAt,
-    key: `${serverId}|${roundToken || `${map}|${layer}`}`,
-  };
-}
-
-function isRecordableSnapshot(snapshot) {
-  const players = Array.isArray(snapshot?.players) ? snapshot.players.length : 0;
-  const assets = snapshot?.assets ?? {};
-  const assetCount = [assets.captureZones, assets.fobs, assets.mainZones]
-    .reduce((sum, value) => sum + (Array.isArray(value) ? value.length : 0), 0);
-  return players > 0 || assetCount > 0 || Boolean(resolveRoundIdentity(snapshot));
-}
-
-function isRoundClosed(snapshot) {
-  const phase = firstText(
-    snapshot?.match?.phase,
-    snapshot?.match?.state,
-    snapshot?.server?.phase,
-    snapshot?.server?.matchPhase,
-  ).toLowerCase();
-  return /waitingpostmatch|postmatch|intermission|roundended|matchended|complete|finished/.test(phase);
-}
-
-function toReplayPlayer(player) {
-  const identity = player?.identity ?? {};
-  const match = player?.match ?? {};
-  const telemetry = player?.telemetry ?? {};
-  const vehicle = player?.vehicle ?? {};
-  const network = player?.network ?? {};
-  const combat = player?.combat ?? {};
-  const position = cloneJson(telemetry.position ?? player?.position ?? null);
-  const rotation = cloneJson(telemetry.rotation ?? player?.soldierInfo?.rotation ?? null);
-  const playerId = numberOrNull(identity.playerID, identity.playerId);
-  const steamId = firstText(identity.steamID);
-  const eosId = firstText(identity.eosID);
-  const playerGuid = steamId || eosId;
-
-  return {
-    key: firstText(identity.key, playerId == null ? "" : `player:${playerId}`, playerGuid, identity.name),
-    playerId,
-    playerIndex: playerId,
-    playerName: firstText(identity.name, "Unknown"),
-    playerGuid,
-    steamId: steamId || null,
-    eosId: eosId || null,
-    teamId: numberOrNull(match.teamId),
-    squadId: numberOrNull(match.squadId),
-    squadName: firstText(match.squadName),
-    teamName: firstText(match.teamName),
-    isLeader: Boolean(match.isLeader),
-    role: firstText(match.role),
-    health: numberOrNull(telemetry.health),
-    ping: numberOrNull(network.gamePing, network.icmpPing),
-    ftIndex: numberOrNull(telemetry.fireTeamIndex),
-    ftPosition: numberOrNull(telemetry.fireTeamPosition),
-    position,
-    yaw: numberOrNull(telemetry.yaw),
-    presenceHint: firstText(telemetry.presenceHint, player?.presence?.state),
-    presence: {
-      online: player?.presence?.online !== false,
-      state: firstText(player?.presence?.state, "online"),
-    },
-    hasTelemetry: telemetry.hasTelemetry !== false,
-    hasPosition: Boolean(telemetry.hasPosition || position),
-    soldierInfo: {
-      health: numberOrNull(telemetry.health),
-      soldierClass: firstText(telemetry.soldierClass),
-      weaponClass: firstText(telemetry.weaponClass),
-      position,
-      rotation,
-    },
-    vehicleInfo: {
-      vehicleType: firstText(vehicle.vehicleType),
-      health: numberOrNull(vehicle.health),
-      maxHealth: numberOrNull(vehicle.maxHealth),
-      position,
-      rotation,
-    },
-    playerScoreboard: {
-      ping: numberOrNull(network.gamePing),
-      stats: {
-        numKills: numberOrNull(combat.kills),
-        numDeaths: numberOrNull(combat.deaths),
-        numWounds: numberOrNull(combat.wounds),
-        numWoundeds: numberOrNull(combat.woundeds),
-        numTeamKills: numberOrNull(combat.teamKills),
-        revivedPoints: numberOrNull(combat.revives),
-        healPoints: numberOrNull(combat.healPoints),
-        objectiveScore: numberOrNull(combat.objectiveScore),
-        teamworkScore: numberOrNull(combat.teamworkScore),
-        combatScore: numberOrNull(combat.combatScore),
-      },
-    },
-    observedAt: firstText(player?.freshness?.bzssCoreUpdatedAt, player?.freshness?.generatedAt),
-  };
-}
-
-function pickReplayMatch(match) {
-  if (!match || typeof match !== "object") return {};
-  return {
-    roundId: match.roundId ?? match.matchId ?? match.id ?? null,
-    phase: firstText(match.phase, match.state),
-    map: firstText(match.map, match.mapName),
-    layer: firstText(match.layer, match.layerName),
-    mode: firstText(match.mode, match.gameMode),
-    startedAt: firstText(match.startedAt, match.startTime),
-    elapsedSeconds: numberOrNull(match.elapsedSeconds, match.elapsed),
-  };
-}
-
-function buildSessionId(date, layer) {
-  const timestamp = date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-  const slug = String(layer ?? "round")
-    .normalize("NFKD")
-    .replace(/[^A-Za-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64) || "round";
-  return `${timestamp}_${slug}_${crypto.randomBytes(3).toString("hex")}`;
-}
-
-function validateSessionId(value) {
-  const sessionId = String(value ?? "").trim();
-  if (!SESSION_ID_PATTERN.test(sessionId)) {
-    const error = new Error("Invalid replay session id.");
-    error.code = "InvalidReplaySessionId";
-    error.statusCode = 400;
-    throw error;
-  }
-  return sessionId;
-}
-
-function normalizeFrameTypes(value) {
-  const source = Array.isArray(value)
-    ? value
-    : String(value ?? "players,assets").split(",");
-  const allowed = new Set(["players", "assets"]);
-  const normalized = new Set(source.map((item) => String(item).trim()).filter((item) => allowed.has(item)));
-  return normalized.size > 0 ? normalized : allowed;
+function writeProxyError(res, statusCode, code, message) {
+  if (res.headersSent || res.writableEnded) return;
+  const text = JSON.stringify({ error: code, message });
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(text),
+    "Cache-Control": "no-store",
+  });
+  res.end(text);
 }
 
 function readConfig(config, key, fallback) {
@@ -806,41 +436,10 @@ function clampInteger(value, min, max, fallback) {
   return Math.max(min, Math.min(max, Math.round(numeric)));
 }
 
-function clampNumber(value, min, max, fallback) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return fallback;
-  return Math.max(min, Math.min(max, numeric));
-}
-
-function cloneJson(value) {
-  if (value == null || typeof value !== "object") return value ?? null;
-  if (typeof structuredClone === "function") {
-    try {
-      return structuredClone(value);
-    } catch {
-      // Fall through to JSON clone.
-    }
-  }
-  return JSON.parse(JSON.stringify(value));
-}
-
-function cloneArray(value) {
-  return Array.isArray(value) ? value.map((item) => cloneJson(item)) : [];
-}
-
 function firstText(...values) {
   for (const value of values) {
     const text = String(value ?? "").trim();
     if (text) return text;
   }
   return "";
-}
-
-function numberOrNull(...values) {
-  for (const value of values) {
-    if (value === null || value === undefined || value === "") continue;
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return null;
 }
