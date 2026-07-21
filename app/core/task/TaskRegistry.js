@@ -15,4 +15,4 @@ export function listRegisteredTasks() {
   return [...registry.keys()];
 }
 
-registerTask(TaskTypes.SNAPSHOT_IMAGE, "../tasks/snapshot/GenerateSnapshotImageTask.js");
+registerTask(TaskTypes.SNAPSHOT_IMAGE, "../../tasks/snapshot/GenerateSnapshotImageTask.js");
