@@ -71,6 +71,7 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
   let playerTimer = null;
   let assetTimer = null;
   let restartTimer = null;
+  let bootstrappedServicePid = null;
   let fallbackRoundEpoch = 1;
   let fallbackRoundBase = "";
   let fallbackWasClosed = false;
@@ -83,6 +84,15 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
     if (!snapshot || typeof snapshot !== "object") return;
     latestSnapshot = snapshot;
     state.lastSnapshotAt = firstText(snapshot?.meta?.generatedAt, new Date().toISOString());
+    bootstrapServiceSamples();
+  }
+
+  function bootstrapServiceSamples() {
+    const pid = Number(state.servicePid ?? 0) || null;
+    if (!latestSnapshot || !state.serviceReady || !pid || bootstrappedServicePid === pid) return;
+    bootstrappedServicePid = pid;
+    sampleAssets();
+    samplePlayers();
   }
 
   async function startService() {
@@ -113,6 +123,7 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
         state.serviceReady = true;
         state.servicePid = Number(message.pid ?? child?.pid ?? 0) || null;
         moduleLogger.info?.(`Tactical replay service ready. pid=${state.servicePid} port=${servicePort}`);
+        bootstrapServiceSamples();
         return;
       }
       if (message?.type === "diagnostic") {
@@ -128,9 +139,12 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
       const unexpected = !stopping;
       state.serviceReady = false;
       state.servicePid = null;
+      bootstrappedServicePid = null;
       child = null;
       sendQueues.players.busy = false;
+      sendQueues.players.pending = null;
       sendQueues.assets.busy = false;
+      sendQueues.assets.pending = null;
       moduleLogger.warn?.(`Tactical replay service exited. code=${code} signal=${signal}`);
       if (unexpected && restartOnExit) {
         state.restartCount += 1;
@@ -255,6 +269,13 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
       return true;
     }
     await new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        res.off("close", abortUpstream);
+        resolve();
+      };
       const upstream = http.request({
         host: serviceHost,
         port: servicePort,
@@ -266,17 +287,19 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
         const headers = { ...upstreamResponse.headers, "x-tactical-replay-proxy": "child-process" };
         res.writeHead(upstreamResponse.statusCode ?? 502, headers);
         upstreamResponse.pipe(res);
-        upstreamResponse.once("end", resolve);
-        upstreamResponse.once("error", resolve);
+        upstreamResponse.once("end", finish);
+        upstreamResponse.once("error", finish);
       });
+      const abortUpstream = () => {
+        if (!res.writableEnded) upstream.destroy();
+        finish();
+      };
+      res.once("close", abortUpstream);
       upstream.on("timeout", () => upstream.destroy(new Error("Replay service request timed out.")));
       upstream.on("error", (error) => {
         state.lastError = error.message;
         writeProxyError(res, 502, "ReplayServiceProxyError", error.message);
-        resolve();
-      });
-      req.once("close", () => {
-        if (!res.writableEnded) upstream.destroy();
+        finish();
       });
       upstream.end();
     });
@@ -406,6 +429,7 @@ export function createTacticalReplayModule({ core, modules, config, logger }) {
       child = null;
       state.serviceReady = false;
       state.servicePid = null;
+      bootstrappedServicePid = null;
     },
   };
 }
