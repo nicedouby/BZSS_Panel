@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
-import { getRuntimeSyncState, setRuntimeSyncRefreshPolicy, stopRuntimeSync, syncOnce } from "./runtimeSync";
+import { getRuntimeSyncState, setRuntimeSyncRefreshPolicy, stopRuntimeSync, syncOnce, useSnapshot } from "./runtimeSync";
 import { resolveRefreshDelay } from "./refreshPolicy";
 import { useAuthStore } from "../stores/auth.store";
 import { useEventStore } from "../stores/event.store";
@@ -139,6 +139,7 @@ describe("runtimeSync", () => {
     expect(squads.list).toHaveLength(1);
     expect(events.updatedAt).toBe(1);
     expect(jobs.updatedAt).toBe(1);
+    expect(useSnapshot().value.raw).toBeUndefined();
   });
 
   it("updates players even when the incoming revision is unchanged", async () => {
