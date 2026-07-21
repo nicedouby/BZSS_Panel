@@ -72,7 +72,16 @@ export const sectionMeta: Record<NavSectionKey, { label: string; description: st
   other:     { label: "其他工具", description: "暂未归类的页面",           icon: "🧩" },
 };
 
-export const staticNavItems: NavItem[] = getStaticNavItems();
+export const staticNavItems: NavItem[] = [
+  ...getStaticNavItems(),
+  {
+    path: "/system/logpost-consumption-performance",
+    icon: "📈",
+    label: "消费性能评估",
+    section: "system",
+    order: 17,
+  },
+];
 
 export function buildNavSections(options: {
   apiPages?: RegisteredWebPage[];
@@ -168,6 +177,10 @@ function addItem(
 
 function canShowRoute(route: unknown, user: any) {
   const normalizedRoute = normalizeRoute(route);
+  if (normalizedRoute === "/system/logpost-consumption-performance") {
+    return Boolean(user?.isSuperAdmin);
+  }
+
   const definition = pageRegistry.find((page) => page.path === normalizedRoute);
   const resolved = definition
     ? resolvePagePermissions(definition)
