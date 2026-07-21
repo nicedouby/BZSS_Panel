@@ -7,14 +7,12 @@ import {
   type PageDefinition,
 } from "./pageRegistry";
 
-const PRELOAD_START_DELAY_MS = 120;
-const INITIAL_BURST_SIZE = 8;
-const PRELOAD_BATCH_SIZE = 5;
-const IDLE_TIMEOUT_MS = 220;
-const FALLBACK_IDLE_DELAY_MS = 35;
+const IDLE_PRELOAD_DELAY_MS = 900;
+const IDLE_TIMEOUT_MS = 1500;
 
 interface NetworkInformationLike {
   saveData?: boolean;
+  effectiveType?: string;
 }
 
 interface SupplementalPageDefinition {
@@ -40,143 +38,91 @@ const loadedPaths = new Set<string>();
 const pendingLoads = new Map<string, Promise<void>>();
 
 let preloadGeneration = 0;
-let preloadStartTimer: number | null = null;
 let idleHandle: number | null = null;
-let fallbackIdleTimer: number | null = null;
+let idleTimer: number | null = null;
 
 export function startPageFrameworkPreload(user: AuthUser | null, currentPath = "") {
   stopPageFrameworkPreload();
-  if (!user || typeof window === "undefined" || shouldRespectDataSaver()) return;
+  if (!user || typeof window === "undefined" || shouldDisablePreload()) return;
 
   const generation = ++preloadGeneration;
-  const normalizedCurrentPath = normalizePath(currentPath);
-  if (normalizedCurrentPath !== "/") loadedPaths.add(normalizedCurrentPath);
+  const current = normalizePath(currentPath);
+  const currentPage = getPageDefinitionByPath(current);
+  if (!currentPage?.nav?.section) return;
 
-  const pageQueue = pageRegistry
-    .filter((page) => canUserAccessPage(page, user))
-    .filter((page) => normalizePath(page.path) !== normalizedCurrentPath)
-    .sort(comparePreloadPriority);
-  const supplementalQueue = supplementalPages
-    .filter((page) => !page.superAdminOnly || user.isSuperAdmin)
-    .filter((page) => normalizePath(page.path) !== normalizedCurrentPath);
+  idleTimer = window.setTimeout(() => {
+    idleTimer = null;
+    if (generation !== preloadGeneration || shouldDisablePreload()) return;
 
-  preloadStartTimer = window.setTimeout(() => {
-    preloadStartTimer = null;
-    void preloadInitialBurst(generation, pageQueue, supplementalQueue, user);
-  }, PRELOAD_START_DELAY_MS);
+    const schedule = () => {
+      idleHandle = null;
+      if (generation !== preloadGeneration || shouldDisablePreload()) return;
+
+      const candidate = pageRegistry
+        .filter((page) => page.nav?.section === currentPage.nav?.section)
+        .filter((page) => normalizePath(page.path) !== current)
+        .filter((page) => canUserAccessPage(page, user))
+        .filter((page) => !isHeavyPage(page.path))
+        .sort(comparePreloadPriority)[0];
+
+      if (candidate) void loadPageDefinition(candidate);
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      idleHandle = window.requestIdleCallback(schedule, { timeout: IDLE_TIMEOUT_MS });
+    } else {
+      idleHandle = window.setTimeout(schedule, 0);
+    }
+  }, IDLE_PRELOAD_DELAY_MS);
 }
 
 export function stopPageFrameworkPreload() {
   preloadGeneration += 1;
   if (typeof window === "undefined") return;
 
-  if (preloadStartTimer != null) {
-    window.clearTimeout(preloadStartTimer);
-    preloadStartTimer = null;
-  }
-
   if (idleHandle != null) {
-    if (typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idleHandle);
+    if (typeof window.cancelIdleCallback === "function") {
+      window.cancelIdleCallback(idleHandle);
+    } else {
+      window.clearTimeout(idleHandle);
+    }
     idleHandle = null;
   }
 
-  if (fallbackIdleTimer != null) {
-    window.clearTimeout(fallbackIdleTimer);
-    fallbackIdleTimer = null;
+  if (idleTimer != null) {
+    window.clearTimeout(idleTimer);
+    idleTimer = null;
   }
 }
 
 export function preloadPageFrameworkByPath(path: string, user: AuthUser | null) {
-  if (!user) return Promise.resolve();
+  if (!user || typeof window === "undefined" || shouldDisablePreload()) {
+    return Promise.resolve();
+  }
 
   const normalizedPath = normalizePath(path);
+  if (isHeavyPage(normalizedPath)) return Promise.resolve();
+
   const page = getPageDefinitionByPath(normalizedPath);
   if (page && canUserAccessPage(page, user)) {
     return loadPageDefinition(page);
   }
 
-  const supplemental = supplementalPages.find((item) => normalizePath(item.path) === normalizedPath);
-  if (!supplemental || (supplemental.superAdminOnly && !user.isSuperAdmin)) return Promise.resolve();
+  const supplemental = supplementalPages.find(
+    (item) => normalizePath(item.path) === normalizedPath,
+  );
+  if (!supplemental || (supplemental.superAdminOnly && !user.isSuperAdmin)) {
+    return Promise.resolve();
+  }
+
   return loadFramework(supplemental.path, supplemental.load);
 }
 
+// Kept for callers that already use this helper, but intent preloading is capped
+// to one page so opening a navigation section cannot trigger a batch import.
 export function preloadPageFrameworksByPaths(paths: string[], user: AuthUser | null) {
-  if (!user) return Promise.resolve();
-
-  const uniquePaths = [...new Set(paths.map(normalizePath).filter((path) => path !== "/"))];
-  return Promise.allSettled(
-    uniquePaths.map((path) => preloadPageFrameworkByPath(path, user)),
-  ).then(() => undefined);
-}
-
-async function preloadInitialBurst(
-  generation: number,
-  pageQueue: PageDefinition[],
-  supplementalQueue: SupplementalPageDefinition[],
-  user: AuthUser,
-) {
-  if (generation !== preloadGeneration) return;
-
-  const jobs = takePreloadJobs(INITIAL_BURST_SIZE, pageQueue, supplementalQueue, user);
-  if (jobs.length > 0) await Promise.allSettled(jobs);
-  scheduleNextBatch(generation, pageQueue, supplementalQueue, user);
-}
-
-function scheduleNextBatch(
-  generation: number,
-  pageQueue: PageDefinition[],
-  supplementalQueue: SupplementalPageDefinition[],
-  user: AuthUser,
-) {
-  if (generation !== preloadGeneration || typeof window === "undefined") return;
-  if (pageQueue.length === 0 && supplementalQueue.length === 0) return;
-
-  const run = () => {
-    idleHandle = null;
-    fallbackIdleTimer = null;
-    if (generation !== preloadGeneration) return;
-    void preloadBatch(generation, pageQueue, supplementalQueue, user);
-  };
-
-  if (typeof window.requestIdleCallback === "function") {
-    idleHandle = window.requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
-  } else {
-    fallbackIdleTimer = window.setTimeout(run, FALLBACK_IDLE_DELAY_MS);
-  }
-}
-
-async function preloadBatch(
-  generation: number,
-  pageQueue: PageDefinition[],
-  supplementalQueue: SupplementalPageDefinition[],
-  user: AuthUser,
-) {
-  const jobs = takePreloadJobs(PRELOAD_BATCH_SIZE, pageQueue, supplementalQueue, user);
-  if (jobs.length > 0) await Promise.allSettled(jobs);
-  scheduleNextBatch(generation, pageQueue, supplementalQueue, user);
-}
-
-function takePreloadJobs(
-  limit: number,
-  pageQueue: PageDefinition[],
-  supplementalQueue: SupplementalPageDefinition[],
-  user: AuthUser,
-) {
-  const jobs: Promise<void>[] = [];
-
-  while (jobs.length < limit && pageQueue.length > 0) {
-    const page = pageQueue.shift();
-    if (!page || !canUserAccessPage(page, user)) continue;
-    jobs.push(loadPageDefinition(page));
-  }
-
-  while (jobs.length < limit && supplementalQueue.length > 0) {
-    const page = supplementalQueue.shift();
-    if (!page || (page.superAdminOnly && !user.isSuperAdmin)) continue;
-    jobs.push(loadFramework(page.path, page.load));
-  }
-
-  return jobs;
+  const firstPath = paths.find((path) => !isHeavyPage(normalizePath(path)));
+  return firstPath ? preloadPageFrameworkByPath(firstPath, user) : Promise.resolve();
 }
 
 function loadPageDefinition(page: PageDefinition) {
@@ -185,8 +131,10 @@ function loadPageDefinition(page: PageDefinition) {
     return Promise.resolve();
   }
 
-  const loader = page.component as unknown as () => Promise<unknown>;
-  return loadFramework(page.path, loader);
+  return loadFramework(
+    page.path,
+    page.component as unknown as () => Promise<unknown>,
+  );
 }
 
 function loadFramework(path: string, loader: () => Promise<unknown>) {
@@ -226,25 +174,48 @@ function canUserAccessPage(page: PageDefinition, user: AuthUser) {
 }
 
 function comparePreloadPriority(left: PageDefinition, right: PageDefinition) {
-  const leftVisible = left.nav && !left.nav.hidden ? 1 : 0;
-  const rightVisible = right.nav && !right.nav.hidden ? 1 : 0;
-  if (leftVisible !== rightVisible) return rightVisible - leftVisible;
-
-  const categoryPriority: Record<PageDefinition["category"], number> = {
-    core: 0,
-    plugin: 1,
-    system: 2,
-    debug: 3,
-  };
-  const categoryDelta = categoryPriority[left.category] - categoryPriority[right.category];
-  if (categoryDelta !== 0) return categoryDelta;
+  const leftHidden = left.nav?.hidden ? 1 : 0;
+  const rightHidden = right.nav?.hidden ? 1 : 0;
+  if (leftHidden !== rightHidden) return leftHidden - rightHidden;
 
   return Number(left.nav?.order ?? 10_000) - Number(right.nav?.order ?? 10_000);
 }
 
-function shouldRespectDataSaver() {
-  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
-  return Boolean(connection?.saveData);
+function isHeavyPage(path: string) {
+  const normalized = normalizePath(path).toLowerCase();
+  return [
+    "tactical-map",
+    "player-database",
+    "combat-log",
+    "battle-log",
+    "logpost",
+    "statistics",
+    "analytics",
+    "echarts",
+    "snapshot",
+  ].some((token) => normalized.includes(token));
+}
+
+function shouldDisablePreload() {
+  if (typeof navigator === "undefined" || typeof document === "undefined") return true;
+  if (document.hidden) return true;
+
+  const connection = (
+    navigator as Navigator & {
+      connection?: NetworkInformationLike;
+    }
+  ).connection;
+
+  if (connection?.saveData) return true;
+  if (["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) return true;
+
+  const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  if (typeof deviceMemory === "number" && deviceMemory <= 4) return true;
+  if (typeof navigator.hardwareConcurrency === "number" && navigator.hardwareConcurrency <= 4) {
+    return true;
+  }
+
+  return false;
 }
 
 function normalizePath(path: string) {
