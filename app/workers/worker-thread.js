@@ -1,6 +1,6 @@
 import { parentPort, workerData } from "node:worker_threads";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { getTaskModulePath } from "../core/task/TaskRegistry.js";
 
 parentPort.on("message", async (message) => {
@@ -9,7 +9,7 @@ parentPort.on("message", async (message) => {
   try {
     const modulePath = getTaskModulePath(task.type);
     if (!modulePath) throw Object.assign(new Error("Unknown task type: " + task.type), { code: "UnknownTaskType" });
-    const moduleUrl = pathToFileURL(path.resolve(path.dirname(new URL(import.meta.url).pathname), "../core/task", modulePath)).href;
+    const moduleUrl = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../core/task", modulePath)).href;
     const module = await import(moduleUrl);
     const execute = module.execute ?? module.default?.execute;
     if (typeof execute !== "function") throw new Error("Task module has no execute().");
