@@ -4,6 +4,8 @@ export interface TacticalReplaySession {
   schemaVersion: number;
   id: string;
   status: "active" | "closed" | string;
+  roundKey?: string;
+  roundToken?: string;
   serverId: string;
   serverName: string;
   map: string;
@@ -22,6 +24,21 @@ export interface TacticalReplaySession {
   fileBytes: number;
   playerIntervalMs: number;
   assetIntervalMs: number;
+  storage?: {
+    format?: string;
+    timelineFile?: string;
+    chunksDirectory?: string;
+    chunkDurationMs?: number;
+    chunkCount?: number;
+  };
+}
+
+export interface TacticalReplaySceneFields {
+  meta?: Record<string, any>;
+  server?: Record<string, any>;
+  match?: Record<string, any>;
+  teams?: any[];
+  diagnostics?: Record<string, any>;
 }
 
 export interface TacticalReplayPlayersFrame {
@@ -31,6 +48,7 @@ export interface TacticalReplayPlayersFrame {
   t: number;
   at: string;
   revision: number | null;
+  scene: TacticalReplaySceneFields;
   players: any[];
 }
 
@@ -41,9 +59,7 @@ export interface TacticalReplayAssetsFrame {
   t: number;
   at: string;
   revision: number | null;
-  server: any;
-  match: any;
-  teams: any[];
+  scene: TacticalReplaySceneFields;
   assets: {
     captureZones: any[];
     fobs: any[];
@@ -56,6 +72,7 @@ export type TacticalReplayFrame = TacticalReplayPlayersFrame | TacticalReplayAss
 export interface TacticalReplaySessionsResponse {
   ok: boolean;
   sessions: TacticalReplaySession[];
+  hiddenLegacySessions?: number;
 }
 
 export interface TacticalReplaySessionResponse {
@@ -63,47 +80,82 @@ export interface TacticalReplaySessionResponse {
   session: TacticalReplaySession;
 }
 
-export interface TacticalReplayFramesResponse {
+export interface TacticalReplayWindowResponse {
   ok: boolean;
   session: TacticalReplaySession;
   fromMs: number;
-  toMs: number | null;
+  toMs: number;
+  durationMs: number;
   frames: TacticalReplayFrame[];
   hasMore: boolean;
   nextFromMs: number | null;
+  storage?: {
+    schemaVersion?: number;
+    chunkDurationMs?: number;
+    scannedChunks?: number;
+  };
 }
 
-export async function fetchTacticalReplaySessions(limit = 100) {
+export async function fetchTacticalReplaySessions(limit = 100, signal?: AbortSignal) {
   const safeLimit = Math.max(1, Math.min(1000, Math.floor(Number(limit) || 100)));
-  return apiGet<TacticalReplaySessionsResponse>(`/api/tactical-state/replays?limit=${safeLimit}`);
-}
-
-export async function fetchTacticalReplaySession(sessionId: string) {
-  return apiGet<TacticalReplaySessionResponse>(
-    `/api/tactical-state/replays/${encodeURIComponent(sessionId)}`,
+  return apiGet<TacticalReplaySessionsResponse>(
+    `/api/tactical-state/replays?limit=${safeLimit}`,
+    { signal },
+    { timeoutMs: 12_000 },
   );
 }
 
+export async function fetchTacticalReplaySession(sessionId: string, signal?: AbortSignal) {
+  return apiGet<TacticalReplaySessionResponse>(
+    `/api/tactical-state/replays/${encodeURIComponent(sessionId)}`,
+    { signal },
+    { timeoutMs: 12_000 },
+  );
+}
+
+export async function fetchTacticalReplayWindow(
+  sessionId: string,
+  options: {
+    fromMs?: number;
+    durationMs?: number;
+    limit?: number;
+    includeContext?: boolean;
+    contextMs?: number;
+    signal?: AbortSignal;
+  } = {},
+) {
+  const params = new URLSearchParams();
+  params.set("from", String(Math.max(0, Number(options.fromMs) || 0)));
+  params.set("duration", String(Math.max(500, Math.min(15_000, Number(options.durationMs) || 6_000))));
+  params.set("limit", String(Math.max(1, Math.min(10_000, Math.floor(Number(options.limit) || 3_000)))));
+  params.set("context", options.includeContext === false ? "0" : "1");
+  params.set("contextMs", String(Math.max(0, Math.min(10_000, Number(options.contextMs) || 1_000))));
+
+  return apiGet<TacticalReplayWindowResponse>(
+    `/api/tactical-state/replays/${encodeURIComponent(sessionId)}/window?${params.toString()}`,
+    { signal: options.signal },
+    { timeoutMs: 15_000 },
+  );
+}
+
+// Compatibility adapter for callers that still use the original frames API.
 export async function fetchTacticalReplayFrames(
   sessionId: string,
   options: {
     fromMs?: number;
     toMs?: number;
     limit?: number;
-    types?: Array<"players" | "assets">;
     includeContext?: boolean;
+    signal?: AbortSignal;
   } = {},
 ) {
-  const params = new URLSearchParams();
-  params.set("from", String(Math.max(0, Number(options.fromMs) || 0)));
-  if (Number.isFinite(Number(options.toMs))) {
-    params.set("to", String(Math.max(0, Number(options.toMs))));
-  }
-  params.set("limit", String(Math.max(1, Math.min(100_000, Math.floor(Number(options.limit) || 20_000)))));
-  params.set("types", (options.types?.length ? options.types : ["players", "assets"]).join(","));
-  params.set("context", options.includeContext === false ? "0" : "1");
-
-  return apiGet<TacticalReplayFramesResponse>(
-    `/api/tactical-state/replays/${encodeURIComponent(sessionId)}/frames?${params.toString()}`,
-  );
+  const fromMs = Math.max(0, Number(options.fromMs) || 0);
+  const toMs = Number(options.toMs);
+  return fetchTacticalReplayWindow(sessionId, {
+    fromMs,
+    durationMs: Number.isFinite(toMs) ? Math.max(500, Math.min(15_000, toMs - fromMs)) : 6_000,
+    limit: options.limit,
+    includeContext: options.includeContext,
+    signal: options.signal,
+  });
 }
