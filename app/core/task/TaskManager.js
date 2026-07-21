@@ -83,6 +83,37 @@ export class TaskManager extends EventEmitter {
     return { taskId: task.id, task: this.publicTask(task) };
   }
 
+  waitForTask(id, { timeoutMs = 600000 } = {}) {
+    const current = this.tasks.get(String(id));
+    if (!current) return Promise.reject(Object.assign(new Error("Task was not found."), { code: "TaskNotFound" }));
+    if (current.status === TaskStatus.DONE) return Promise.resolve(this.publicTask(current));
+    if (current.status === TaskStatus.FAILED) return Promise.reject(deserializeError(current.error));
+    return new Promise((resolve, reject) => {
+      let timer = null;
+      const cleanup = () => {
+        this.off("done", onDone);
+        this.off("failed", onFailed);
+        if (timer) clearTimeout(timer);
+      };
+      const onDone = (task) => {
+        if (task.id !== String(id)) return;
+        cleanup();
+        resolve(task);
+      };
+      const onFailed = (task) => {
+        if (task.id !== String(id)) return;
+        cleanup();
+        reject(deserializeError(task.error));
+      };
+      this.on("done", onDone);
+      this.on("failed", onFailed);
+      timer = setTimeout(() => {
+        cleanup();
+        reject(Object.assign(new Error("Task wait timed out."), { code: "TaskTimeout" }));
+      }, Math.max(1, Number(timeoutMs) || 600000));
+    });
+  }
+
   get(id) {
     const task = this.tasks.get(String(id));
     return task ? this.publicTask(task) : null;
