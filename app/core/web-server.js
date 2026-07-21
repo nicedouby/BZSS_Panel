@@ -460,6 +460,39 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/tasks/create" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      try {
+        const task = await this.core.taskManager.enqueue({
+          type: body?.type,
+          priority: body?.priority,
+          maxRetry: body?.maxRetry,
+          payload: body?.payload ?? {},
+        });
+        return this.json(res, 202, task);
+      } catch (error) {
+        const status = error?.code === "TaskQueueFull" ? 429 : 400;
+        return this.json(res, status, {
+          error: error?.code ?? "TaskCreateFailed",
+          message: error?.message ?? "Unable to create task.",
+        });
+      }
+    }
+
+    if (url.pathname === "/api/tasks" && req.method === "GET") {
+      return this.json(res, 200, {
+        tasks: this.core.taskManager?.list({ limit: url.searchParams.get("limit") }) ?? [],
+        diagnostics: this.core.taskManager?.getDiagnostics?.() ?? null,
+      });
+    }
+
+    const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
+    if (taskMatch && req.method === "GET") {
+      const task = this.core.taskManager?.get(taskMatch[1]);
+      if (!task) return this.json(res, 404, { error: "TaskNotFound", message: "Task was not found." });
+      return this.json(res, 200, task);
+    }
+
     if (url.pathname === "/api/tactical-map/viewers") {
       if (req.method === "POST") {
         const body = await this.readJsonBody(req);
