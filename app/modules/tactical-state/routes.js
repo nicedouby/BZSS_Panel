@@ -5,7 +5,7 @@ const STREAM_HEARTBEAT_MS = 20_000;
 export async function handleTacticalStateRoutes({ modules, url, req, res, user, json }) {
   if (!url.pathname.startsWith("/api/tactical-state")) return false;
 
-  const replayHandled = await handleTacticalReplayRoutes({ modules, url, req, json });
+  const replayHandled = await handleTacticalReplayRoutes({ modules, url, req, res, json });
   if (replayHandled) return true;
 
   const tacticalState = modules.tacticalState;
@@ -147,7 +147,7 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
   return false;
 }
 
-async function handleTacticalReplayRoutes({ modules, url, req, json }) {
+async function handleTacticalReplayRoutes({ modules, url, req, res, json }) {
   const isReplayStatus = url.pathname === "/api/tactical-state/replay/status";
   const isReplayCollection = url.pathname === "/api/tactical-state/replays"
     || url.pathname.startsWith("/api/tactical-state/replays/");
@@ -161,6 +161,13 @@ async function handleTacticalReplayRoutes({ modules, url, req, json }) {
 
   if (req.method !== "GET") {
     json(405, { error: "MethodNotAllowed", message: "Only GET is supported." });
+    return true;
+  }
+
+  // The replay child process owns file scanning, JSON serialization and response
+  // generation. The panel only authenticates the request and pipes bytes through.
+  if (typeof tacticalReplay.proxyRequest === "function") {
+    await tacticalReplay.proxyRequest({ url, req, res });
     return true;
   }
 
@@ -188,12 +195,11 @@ async function handleTacticalReplayRoutes({ modules, url, req, json }) {
     return true;
   }
 
-  if (segments.length === 5 && segments[4] === "frames") {
+  if (segments.length === 5 && (segments[4] === "frames" || segments[4] === "window")) {
     const result = await tacticalReplay.readFrames?.(sessionId, {
       fromMs: parseNonNegativeNumber(url.searchParams.get("from"), 0),
       toMs: parseOptionalNonNegativeNumber(url.searchParams.get("to")),
-      limit: parsePositiveInteger(url.searchParams.get("limit"), 20_000, 100_000),
-      types: url.searchParams.get("types") ?? "players,assets",
+      limit: parsePositiveInteger(url.searchParams.get("limit"), 3_000, 10_000),
       includeContext: url.searchParams.get("context") !== "0",
     });
     json(200, { ok: true, ...result });
