@@ -41,8 +41,6 @@
           :class="{ active: expandedSectionKey === section.key }"
           :title="section.label"
           :aria-expanded="expandedSectionKey === section.key"
-          @pointerenter="preloadSection(section.key)"
-          @focus="preloadSection(section.key)"
           @click="handleSectionClick(section.key)"
         >
           <span class="section-icon" aria-hidden="true">{{ section.icon }}</span>
@@ -93,7 +91,6 @@ import {
 } from "../../app/sidebarNav";
 import {
   preloadPageFrameworkByPath,
-  preloadPageFrameworksByPaths,
 } from "../../app/pageFrameworkPreloader";
 import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
@@ -134,18 +131,7 @@ function preloadPath(path: string) {
   void preloadPageFrameworkByPath(path, auth.user);
 }
 
-function preloadSection(key: NavSectionKey) {
-  const section = sections.value.find((item) => item.key === key);
-  if (!section) return;
-  void preloadPageFrameworksByPaths(
-    section.items.map((item) => item.path),
-    auth.user,
-  );
-}
-
 function handleSectionClick(key: NavSectionKey) {
-  preloadSection(key);
-
   // The compact rail was the source of a previous navigation dead zone.
   // Expand it first so every child page has a full-size, unambiguous click target.
   if (ui.sidebarCollapsed && !isNavDrawer.value) {
