@@ -6,6 +6,7 @@
         @open-plugin-center="pluginCenterOpen = true"
         @open-rcon-modal="rconModalOpen = true"
       />
+      <CleanWarzoneButton />
       <SectionSubnav />
       <section class="content-shell" :class="contentShellClass">
         <RouterView v-slot="{ Component }">
@@ -38,6 +39,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { useIsCompactLandscape, useIsMobile } from "../../composables/useMediaQuery";
 import Topbar from "./Topbar.vue";
+import CleanWarzoneButton from "./CleanWarzoneButton.vue";
 import Sidebar from "./StableSidebar.vue";
 import SectionSubnav from "./SectionSubnav.vue";
 import AppConfirmDialog from "../common/AppConfirmDialog.vue";
