@@ -233,7 +233,11 @@ function buildTeams(payload) {
       teamID,
       teamName,
       accent: TEAM_ACCENTS[teamID] ?? "#60a5fa",
-      factionCode: firstText(teamSquads.find((squad) => firstText(squad?.factionCode, squad?.faction))?.factionCode, teamSquads.find((squad) => firstText(squad?.faction))?.faction, teamPlayers.find((player) => firstText(player?.factionCode, player?.faction))?.factionCode, teamPlayers.find((player) => firstText(player?.faction))?.faction, ""),
+      factionCode: resolveFactionCode(
+        teamSquads.map((squad) => firstText(squad?.factionCode, squad?.faction, squad?.teamName)),
+        teamPlayers.map((player) => firstText(player?.factionCode, player?.faction, player?.squadInfo?.factionCode, player?.squadInfo?.teamName)),
+        teamName,
+      ),
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
@@ -372,7 +376,7 @@ function roleIconFileName(label) {
 async function attachTeamVisuals(model) {
   const flagFiles = { ADF: "ADF.PNG", AFU: "AFU.PNG", BAF: "BAF.PNG", CAF: "CAF.PNG", CRF: "CRF.PNG", GFI: "GFI.PNG", IMF: "IMF.PNG", MEA: "MEA.PNG", MEI: "MEI.PNG", PLA: "PLA.PNG", PLAAGF: "PLAAGF.PNG", PLANMC: "PLANMC.png", RGF: "RGF.PNG", TLF: "TLF.PNG", USA: "USA.PNG", USMC: "USMC.PNG", VDV: "VDV.png", WPMC: "WPMC.PNG" };
   for (const team of model.teams ?? []) {
-    const code = String(team.factionCode ?? team.teamName ?? "").toUpperCase().match(/ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|PLAAGF|PLANMC|PLA|RGF|TLF|USA|USMC|VDV|WPMC/)?.[0];
+    const code = resolveFactionCode(team.factionCode, team.teamName);
     const file = flagFiles[code];
     if (file) {
       const candidate = path.resolve(process.cwd(), "web-client", "public", "assets", "flags", file);
@@ -587,6 +591,28 @@ function comparePlayers(left, right) {
     || Number(Boolean(right?.isLeader)) - Number(Boolean(left?.isLeader))
     || String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "zh-CN", { numeric: true })
     || compareNullableNumbers(left?.playerID, right?.playerID);
+}
+
+function resolveFactionCode(...values) {
+  const text = values.flat(Infinity).map((value) => String(value ?? "").toUpperCase()).join(" | ");
+  const direct = text.match(/PLAAGF|PLANMC|USMC|WPMC|ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|RGF|TLF|USA|VDV|PLA/);
+  if (direct) return direct[0];
+  if (/UNITED STATES.*MARINE|U\.?S\.?\s*MARINE/.test(text)) return "USMC";
+  if (/UNITED STATES|US ARMY|U\.?S\.?\s*ARMY/.test(text)) return "USA";
+  if (/RUSSIAN.*AIRBORNE|RUSSIAN.*VDV/.test(text)) return "VDV";
+  if (/RUSSIAN|RUSSIAN GROUND/.test(text)) return "RGF";
+  if (/PEOPLE.S LIBERATION ARMY.*MARINE|CHINESE.*MARINE/.test(text)) return "PLANMC";
+  if (/PEOPLE.S LIBERATION ARMY.*GROUND|CHINESE.*GROUND/.test(text)) return "PLAAGF";
+  if (/PEOPLE.S LIBERATION ARMY|CHINESE/.test(text)) return "PLA";
+  if (/BRITISH|UNITED KINGDOM/.test(text)) return "BAF";
+  if (/CANADIAN|CANADA/.test(text)) return "CAF";
+  if (/AUSTRALIAN|AUSTRALIA/.test(text)) return "ADF";
+  if (/UKRAINIAN|UKRAINE/.test(text)) return "AFU";
+  if (/MIDDLE EASTERN ALLIANCE/.test(text)) return "MEA";
+  if (/MIDDLE EASTERN INSURGENT/.test(text)) return "MEI";
+  if (/INSURGENT/.test(text)) return "IMF";
+  if (/IRREGULAR MILITIA|MILITIA/.test(text)) return "GFI";
+  return "";
 }
 
 function resolveRoleMeta(value) {
