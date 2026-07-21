@@ -24,6 +24,18 @@ export const router = createRouter({
         superAdminOnly: true,
       },
     },
+    {
+      path: "/system/logpost-consumption-performance",
+      name: "logpost-consumption-performance",
+      component: () => import("../pages/LogPostConsumptionPerformancePage.vue"),
+      meta: {
+        title: "LogPost 消费性能评估",
+        refreshPolicy: "polling",
+        layoutMode: "workspace",
+        contentPadding: "none",
+        superAdminOnly: true,
+      },
+    },
     ...buildPageRoutes(),
     {
       path: "/combat-clean",
