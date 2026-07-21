@@ -43,6 +43,7 @@ import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/
 import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
+import { createTacticalReplayModule } from "../modules/tactical-replay/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
@@ -108,6 +109,7 @@ export class ModuleManager {
       createAstrbotBridgeModule,
       createBzssCoreMonitorModule,
       createTacticalStateModule,
+      createTacticalReplayModule,
       createTacticalStateV2Module,
       createNetworkStatsModule,
     ];
