@@ -2,6 +2,9 @@
 
 import { performance } from "node:perf_hooks";
 
+const DEFAULT_CORE_EVENT_DEDUPE_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_MAX_RECENT_CORE_EVENT_IDS = 20_000;
+
 /**
  * Core: EventBus
  *
@@ -11,11 +14,25 @@ import { performance } from "node:perf_hooks";
  * - Web 可以订阅状态变化，但一般通过 API/SSE 获取
  */
 export class EventBus {
-  constructor({ logger, performanceMonitor = null }) {
+  constructor({
+    logger,
+    performanceMonitor = null,
+    coreEventDedupeTtlMs = DEFAULT_CORE_EVENT_DEDUPE_TTL_MS,
+    maxRecentCoreEventIds = DEFAULT_MAX_RECENT_CORE_EVENT_IDS,
+  }) {
     this.logger = logger;
     this.performanceMonitor = performanceMonitor;
     this.coreListeners = new Map();
     this.moduleListeners = new Map();
+    this.coreEventDedupeTtlMs = Math.max(1000, Number(coreEventDedupeTtlMs) || DEFAULT_CORE_EVENT_DEDUPE_TTL_MS);
+    this.maxRecentCoreEventIds = Math.max(1000, Number(maxRecentCoreEventIds) || DEFAULT_MAX_RECENT_CORE_EVENT_IDS);
+    this.recentCoreEventIds = new Map();
+    this.metrics = {
+      coreEventsReceived: 0,
+      coreEventsEmitted: 0,
+      coreEventsDeduplicated: 0,
+      recentCoreEventIds: 0,
+    };
   }
 
   setPerformanceMonitor(performanceMonitor) {
@@ -34,6 +51,13 @@ export class EventBus {
   }
 
   emitCoreEvent(eventName, event) {
+    this.metrics.coreEventsReceived += 1;
+    if (!this.#claimCoreEvent(event)) {
+      this.metrics.coreEventsDeduplicated += 1;
+      return false;
+    }
+
+    this.metrics.coreEventsEmitted += 1;
     logWithFallback(this.logger, "event", () => `Emit core event ${eventName}`, {
       operation: "emitCoreEvent",
       eventName,
@@ -41,6 +65,25 @@ export class EventBus {
     });
     this.#emit(this.coreListeners, eventName, event);
     this.#emit(this.coreListeners, "*", event);
+    return true;
+  }
+
+  hasRecentCoreEventId(eventId) {
+    const key = normalizeEventId(eventId);
+    if (!key) return false;
+    const now = Date.now();
+    this.#pruneRecentCoreEventIds(now);
+    const seenAt = this.recentCoreEventIds.get(key);
+    return Number.isFinite(seenAt) && now - seenAt <= this.coreEventDedupeTtlMs;
+  }
+
+  getDiagnostics() {
+    return {
+      ...this.metrics,
+      recentCoreEventIds: this.recentCoreEventIds.size,
+      coreEventDedupeTtlMs: this.coreEventDedupeTtlMs,
+      maxRecentCoreEventIds: this.maxRecentCoreEventIds,
+    };
   }
 
   onModuleEvent(moduleId, eventName, handler) {
@@ -66,6 +109,35 @@ export class EventBus {
     });
     this.#emit(this.moduleListeners, `${moduleId}:${eventName}`, event);
     this.#emit(this.moduleListeners, `${moduleId}:*`, event);
+  }
+
+  #claimCoreEvent(event) {
+    const eventId = getLogPostEventId(event);
+    if (!eventId) return true;
+
+    const now = Date.now();
+    this.#pruneRecentCoreEventIds(now);
+    const seenAt = this.recentCoreEventIds.get(eventId);
+    if (Number.isFinite(seenAt) && now - seenAt <= this.coreEventDedupeTtlMs) {
+      return false;
+    }
+
+    this.recentCoreEventIds.set(eventId, now);
+    while (this.recentCoreEventIds.size > this.maxRecentCoreEventIds) {
+      const oldestKey = this.recentCoreEventIds.keys().next().value;
+      if (!oldestKey) break;
+      this.recentCoreEventIds.delete(oldestKey);
+    }
+    this.metrics.recentCoreEventIds = this.recentCoreEventIds.size;
+    return true;
+  }
+
+  #pruneRecentCoreEventIds(now = Date.now()) {
+    for (const [eventId, seenAt] of this.recentCoreEventIds) {
+      if (now - seenAt <= this.coreEventDedupeTtlMs) break;
+      this.recentCoreEventIds.delete(eventId);
+    }
+    this.metrics.recentCoreEventIds = this.recentCoreEventIds.size;
   }
 
   #on(map, key, handler) {
@@ -105,6 +177,21 @@ export class EventBus {
       }
     }
   }
+}
+
+function getLogPostEventId(event) {
+  if (!event || typeof event !== "object") return "";
+  const eventId = normalizeEventId(event.eventId ?? event.rawEvent?.EventId);
+  if (!eventId) return "";
+
+  const source = String(event.source ?? "").trim().toLowerCase();
+  const hasRawLogPostIdentity = Boolean(event.rawEvent?.EventId);
+  if (source !== "python-log-parser" && !hasRawLogPostIdentity) return "";
+  return eventId;
+}
+
+function normalizeEventId(value) {
+  return String(value ?? "").trim();
 }
 
 function getListenerCount(map, key) {
