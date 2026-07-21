@@ -154,6 +154,7 @@ class SteamGameDurationService {
     steamPlaytimeRepo,
     playerDatabase,
     logger,
+    proxyMode,
     proxyUrl,
     noProxy,
   } = {}) {
@@ -182,6 +183,7 @@ class SteamGameDurationService {
     this.steamPlaytimeRepo = steamPlaytimeRepo || null;
     this.playerDatabase = playerDatabase || null;
     this.logger = logger || null;
+    this.proxyMode = normalizeProxyMode(proxyMode, proxyUrl);
     this.proxyUrl = String(proxyUrl || "").trim() || null;
     this.noProxy = String(noProxy || "").trim() || null;
 
@@ -243,8 +245,14 @@ class SteamGameDurationService {
       runningJobs,
       completedJobs,
       failedJobs,
-      proxyConfigured: Boolean(this.proxyUrl || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY),
-      noProxyConfigured: Boolean(this.noProxy || process.env.NO_PROXY || process.env.no_proxy),
+      proxyMode: this.proxyMode,
+      proxyUrlConfigured: Boolean(this.proxyUrl),
+      proxyConfigured: this.proxyMode === "explicit"
+        ? Boolean(this.proxyUrl)
+        : this.proxyMode === "auto" && Boolean(process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY),
+      noProxyConfigured: this.proxyMode === "explicit"
+        ? Boolean(this.noProxy)
+        : this.proxyMode === "auto" && Boolean(process.env.NO_PROXY || process.env.no_proxy),
     };
   }
 
@@ -833,13 +841,8 @@ class SteamGameDurationService {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        const effectiveProxy = this.proxyUrl
-          || process.env.HTTPS_PROXY
-          || process.env.https_proxy
-          || process.env.ALL_PROXY
-          || process.env.all_proxy
-          || "";
-        const pythonSupportsProxy = !/^socks[45]?:/i.test(String(effectiveProxy).trim());
+        const pythonSupportsProxy = this.proxyMode !== "explicit"
+          || !/^socks[45]?:/i.test(String(this.proxyUrl || "").trim());
         if (this.usePythonScript && pythonSupportsProxy) {
           try {
             return await this._fetchSteamDurationViaPython(steamID);
@@ -878,12 +881,13 @@ class SteamGameDurationService {
       "--config", this.pythonConfigPath,
       "--app-id", String(this.appId),
       "--timeout", String(timeoutSeconds),
+      "--proxy-mode", this.proxyMode,
     ];
     const effectiveNoProxy = this.noProxy
       || process.env.NO_PROXY
       || process.env.no_proxy
       || "";
-    if (this.proxyUrl) args.push("--proxy", this.proxyUrl);
+    if (this.proxyMode === "explicit" && this.proxyUrl) args.push("--proxy", this.proxyUrl);
     if (effectiveNoProxy) args.push("--no-proxy", effectiveNoProxy);
 
     const candidates = collectPythonBinCandidates(this.pythonBin);
@@ -1019,6 +1023,7 @@ class SteamGameDurationService {
   _resolveSteamAgent(url) {
     const targetUrl = new URL(String(url));
     const resolved = resolveProxyUrlForTarget(targetUrl, {
+      proxyMode: this.proxyMode,
       proxyUrl: this.proxyUrl,
       noProxy: this.noProxy,
       env: process.env,
@@ -1399,26 +1404,43 @@ function shouldBypassProxy(url, noProxyStr) {
   return false;
 }
 
+function normalizeProxyMode(value, proxyUrl = "") {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (["explicit", "proxy", "manual"].includes(raw)) return "explicit";
+  if (["tun", "system", "direct-system", "system-route"].includes(raw)) return "tun";
+  if (["off", "disabled", "direct", "none"].includes(raw)) return "off";
+  return String(proxyUrl || "").trim() ? "explicit" : "auto";
+}
+
 function resolveProxyUrlForTarget(target, options = {}) {
   const targetUrl = target instanceof URL ? target : new URL(String(target));
   const env = options.env || process.env || {};
-  
-  let proxyUrl = options.proxyUrl || null;
-  let source = proxyUrl ? "explicit" : null;
-  
-  if (!proxyUrl) {
-    if (targetUrl.protocol === "https:") {
-      proxyUrl = env.HTTPS_PROXY || env.https_proxy || null;
-      if (proxyUrl) source = "env";
-    } else if (targetUrl.protocol === "http:") {
-      proxyUrl = env.HTTP_PROXY || env.http_proxy || null;
-      if (proxyUrl) source = "env";
-    }
+
+  const proxyMode = normalizeProxyMode(options.proxyMode, options.proxyUrl);
+  if (proxyMode === "off" || proxyMode === "tun") {
+    return {
+      proxyMode,
+      proxyUrl: null,
+      source: proxyMode === "tun" ? "tun" : "disabled",
+      bypassed: false,
+    };
   }
-  
-  const noProxy = options.noProxy || env.NO_PROXY || env.no_proxy || null;
+
+  let proxyUrl = String(options.proxyUrl || "").trim() || null;
+  let source = proxyUrl ? "explicit" : null;
+  if (proxyMode === "auto" && !proxyUrl) {
+    if (targetUrl.protocol === "https:") {
+      proxyUrl = env.HTTPS_PROXY || env.https_proxy || env.ALL_PROXY || env.all_proxy || null;
+    } else if (targetUrl.protocol === "http:") {
+      proxyUrl = env.HTTP_PROXY || env.http_proxy || env.ALL_PROXY || env.all_proxy || null;
+    }
+    if (proxyUrl) source = "env";
+  }
+
+  const noProxy = options.noProxy || (proxyMode === "auto" ? env.NO_PROXY || env.no_proxy : null);
   if (shouldBypassProxy(targetUrl, noProxy)) {
     return {
+      proxyMode,
       proxyUrl: null,
       source: "no_proxy",
       bypassed: true
@@ -1426,8 +1448,9 @@ function resolveProxyUrlForTarget(target, options = {}) {
   }
   
   return {
+    proxyMode,
     proxyUrl,
-    source,
+    source: source || "disabled",
     bypassed: false
   };
 }
@@ -1822,6 +1845,7 @@ function collectPythonBinCandidates(primary) {
 export {
   SteamGameDurationService,
   createProxyAgent,
+  normalizeProxyMode,
   resolveProxyUrlForTarget,
   shouldBypassProxy,
 };
