@@ -30,6 +30,7 @@ export class UdpEventReceiver {
       bytesReceived: 0,
       acceptedEvents: 0,
       bzssCoreChunks: 0,
+      duplicateEventsDropped: 0,
       invalidJson: 0,
       oversizedMessages: 0,
       missingEventField: 0,
@@ -132,11 +133,19 @@ export class UdpEventReceiver {
       return;
     }
 
+    const eventId = String(rawEvent?.EventId ?? "").trim();
+    if (eventId && this.eventBus?.hasRecentCoreEventId?.(eventId)) {
+      this.metrics.duplicateEventsDropped += 1;
+      this.publishDiagnostics();
+      return;
+    }
+
     this.metrics.acceptedEvents += 1;
 
     if (rawEvent.Event === BZSS_CORE_PLAYER_CHUNK_EVENT_NAME) {
       this.metrics.bzssCoreChunks += 1;
       const event = buildBzssCorePlayerChunkEvent(rawEvent, remoteInfo);
+      event.transportSource = "udp";
       this.logger.debug(() => `UDP event accepted ${event.eventName}`, {
         operation: "handleMessage",
         eventName: event.eventName,
@@ -152,6 +161,7 @@ export class UdpEventReceiver {
     const event = this.eventPipeline.processRawGameEvent(rawEvent);
     event.udpRemoteAddress = remoteInfo.address;
     event.udpRemotePort = remoteInfo.port;
+    event.transportSource = "udp";
 
     this.logger.debug(() => `UDP event accepted ${event.eventName}`, {
       operation: "handleMessage",
