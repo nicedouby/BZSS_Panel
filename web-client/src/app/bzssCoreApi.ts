@@ -40,6 +40,10 @@ export interface BzssCoreFobInfo {
   constructionPoints?: number | null;
   size?: string;
   instigator?: string;
+  /** Canonical FOB size before the legacy display field is decorated. */
+  fobSize?: string;
+  /** Canonical player name parsed from the final FOBI field. */
+  instigatorName?: string;
 }
 
 export interface BzssCoreMainZoneInfo {
@@ -273,6 +277,33 @@ export interface BzssCoreRawDataResponse {
   lastError: string;
 }
 
+export function normalizeBzssCoreFobInfo(fob: BzssCoreFobInfo): BzssCoreFobInfo {
+  const fobSize = String(fob?.fobSize ?? fob?.size ?? "").trim();
+  const instigatorName = String(fob?.instigatorName ?? fob?.instigator ?? "").trim();
+  const displayParts: string[] = [];
+
+  if (fobSize) displayParts.push(fobSize);
+  displayParts.push(`发起者：${instigatorName || "--"}`);
+
+  return {
+    ...fob,
+    fobSize,
+    instigatorName,
+    instigator: instigatorName,
+    // BzssCoreSnapshotsPage historically renders `size || instigator` in one cell.
+    // Decorate that legacy display field while retaining canonical values above.
+    size: displayParts.join(" · "),
+  };
+}
+
+function normalizeBzssCoreFobPayload<T extends { fobs?: BzssCoreFobInfo[] }>(payload: T): T {
+  if (!Array.isArray(payload?.fobs)) return payload;
+  return {
+    ...payload,
+    fobs: payload.fobs.map(normalizeBzssCoreFobInfo),
+  };
+}
+
 export async function executeBzssCoreCommand(input: {
   directive?: string;
   parameter?: string;
@@ -287,15 +318,18 @@ export async function fetchBzssCorePlayerInfo(input: { name?: string }) {
   const params = new URLSearchParams();
   if (input.name) params.set("name", input.name);
   const suffix = params.toString();
-  return apiGet<BzssCorePlayerInfoResponse>(`/api/bzss-core/player-info${suffix ? `?${suffix}` : ""}`);
+  const response = await apiGet<BzssCorePlayerInfoResponse>(`/api/bzss-core/player-info${suffix ? `?${suffix}` : ""}`);
+  return normalizeBzssCoreFobPayload(response);
 }
 
 export async function fetchBzssCorePlayerInfoList() {
-  return apiGet<BzssCorePlayerInfoResponse>("/api/bzss-core/player-info?all=1");
+  const response = await apiGet<BzssCorePlayerInfoResponse>("/api/bzss-core/player-info?all=1");
+  return normalizeBzssCoreFobPayload(response);
 }
 
 export async function fetchBzssCoreRawData() {
-  return apiGet<BzssCoreRawDataResponse>("/api/bzss-core/player-info/raw");
+  const response = await apiGet<BzssCoreRawDataResponse>("/api/bzss-core/player-info/raw");
+  return normalizeBzssCoreFobPayload(response);
 }
 
 export async function fetchBzssCoreVehicles() {
@@ -311,7 +345,7 @@ export function streamBzssCorePlayerInfoList(
 
   eventSource.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data);
+      const data = normalizeBzssCoreFobPayload(JSON.parse(event.data) as BzssCorePlayerInfoResponse);
       onMessage(data);
     } catch (err) {
       if (onError) onError(err, eventSource);
