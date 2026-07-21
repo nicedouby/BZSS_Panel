@@ -48,6 +48,7 @@ export class LogPostFileBridge {
       linesRead: 0,
       acceptedEvents: 0,
       replayedEvents: 0,
+      duplicateEventsDropped: 0,
       invalidJsonLines: 0,
       filteredEvents: 0,
       oversizedPartialLines: 0,
@@ -243,6 +244,12 @@ export class LogPostFileBridge {
       return;
     }
 
+    const eventId = String(rawEvent?.EventId ?? "").trim();
+    if (eventId && this.eventBus?.hasRecentCoreEventId?.(eventId)) {
+      this.metrics.duplicateEventsDropped += 1;
+      return;
+    }
+
     const sourceFileName = path.basename(String(filePath ?? ""));
     const acceptAllEvents = sourceFileName === ALL_EVENTS_FILE_NAME;
     if (!acceptAllEvents && String(rawEvent?.Event ?? "") !== this.eventName) {
@@ -253,6 +260,7 @@ export class LogPostFileBridge {
     const event = this.eventPipeline.processRawGameEvent(rawEvent);
     event.fileBridgeReplay = Boolean(replay);
     event.fileBridgeSourcePath = this.currentFilePath;
+    event.transportSource = "file-bridge";
     if (replay) this.metrics.replayedEvents += 1;
     else this.metrics.acceptedEvents += 1;
     if (event.eventName !== BZSS_CORE_PLAYER_CHUNK_EVENT_NAME) {
