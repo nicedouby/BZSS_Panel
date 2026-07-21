@@ -1,37 +1,37 @@
 <template>
   <div class="tactical-replay-page">
     <header class="replay-header">
-      <div class="replay-title-block">
-        <span class="replay-kicker">TACTICAL REPLAY</span>
+      <div>
+        <span class="eyebrow">TACTICAL REPLAY</span>
         <h1>战术地图回放</h1>
-        <p>玩家真值帧 0.33 秒 · FOB / Capture Zone / 主基地关键帧 5 秒</p>
+        <p>玩家真值帧 0.33 秒 · Capture Zone / FOB / 主基地关键帧 5 秒</p>
       </div>
 
-      <div class="replay-session-controls">
+      <div class="session-controls">
         <label>
           <span>对局记录</span>
-          <select v-model="selectedSessionId" :disabled="sessionsLoading" @change="void selectSession(selectedSessionId)">
+          <select v-model="selectedSessionId" :disabled="sessionsLoading" @change="selectSession(selectedSessionId)">
             <option value="">请选择一局</option>
             <option v-for="session in sessions" :key="session.id" :value="session.id">
               {{ formatSessionOption(session) }}
             </option>
           </select>
         </label>
-        <button type="button" :disabled="sessionsLoading" @click="void refreshSessions(true)">
+        <button type="button" :disabled="sessionsLoading" @click="refreshSessions(true)">
           {{ sessionsLoading ? "刷新中" : "刷新记录" }}
         </button>
-        <RouterLink class="live-map-link" to="/tactical-map">返回实时地图</RouterLink>
+        <RouterLink class="button-link" to="/tactical-map">返回实时地图</RouterLink>
       </div>
     </header>
 
-    <main class="replay-workspace">
+    <main class="workspace">
       <section class="map-stage">
         <div v-if="!selectedSession" class="empty-state">
           <strong>选择一局对局记录</strong>
-          <span>回放会合并当前玩家帧与该时间点之前最近的资产关键帧。</span>
+          <span>播放器会合并当前玩家帧与该时间点之前最近的资产关键帧。</span>
         </div>
 
-        <div v-else class="map-canvas" :class="{ 'has-resource': Boolean(activeMapConfig.image) }">
+        <div v-else class="map-canvas">
           <img
             v-if="activeMapConfig.image"
             class="map-background"
@@ -39,14 +39,13 @@
             :alt="selectedSession.layer || selectedSession.map || 'Tactical map'"
             draggable="false"
           />
-          <div v-else class="map-background-placeholder">
+          <div v-else class="map-placeholder">
             <strong>{{ selectedSession.layer || selectedSession.map || "未知地图" }}</strong>
             <span>当前图层尚未配置地图图片</span>
           </div>
-
           <div class="map-grid" aria-hidden="true"></div>
 
-          <svg class="player-trail-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
+          <svg class="trail-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true">
             <polyline
               v-for="trail in trailPaths"
               :key="trail.key"
@@ -57,7 +56,7 @@
             />
           </svg>
 
-          <div class="asset-layer main-zone-layer">
+          <div class="marker-layer">
             <div
               v-for="zone in mainZoneMarkers"
               :key="zone.id"
@@ -69,23 +68,24 @@
               <span class="main-zone-icon">◆</span>
               <strong>{{ zone.name }}</strong>
             </div>
-          </div>
 
-          <div class="asset-layer capture-zone-layer">
             <div
               v-for="zone in captureZoneMarkers"
               :key="zone.id"
               class="asset-marker capture-zone-marker"
-              :class="[teamClass(zone.teamId), { 'is-capturing': zone.isCapturing, 'is-locked': zone.isLocked }]"
+              :class="[
+                teamClass(zone.teamId),
+                { 'is-capturing': zone.isCapturing, 'is-locked': zone.isLocked },
+              ]"
               :style="markerStyle(zone.mapX, zone.mapY)"
               :title="zone.tooltip"
             >
-              <span class="capture-zone-ring" :style="{ '--capture-progress': `${zone.progress}%` }"></span>
+              <span class="capture-ring">
+                <i :style="{ height: `${zone.captureProgress}%` }"></i>
+              </span>
               <strong>{{ zone.name }}</strong>
             </div>
-          </div>
 
-          <div class="asset-layer fob-layer">
             <div
               v-for="fob in fobMarkers"
               :key="fob.id"
@@ -100,12 +100,15 @@
             </div>
           </div>
 
-          <div class="player-layer">
+          <div class="marker-layer player-layer">
             <div
               v-for="player in displayedPlayers"
               :key="player.key"
               class="player-marker"
-              :class="[teamClass(player.teamId), { 'is-dead': player.health != null && player.health <= 0 }]"
+              :class="[
+                teamClass(player.teamId),
+                { 'is-dead': player.health != null && player.health <= 0 },
+              ]"
               :style="markerStyle(player.mapX, player.mapY)"
               :title="player.tooltip"
             >
@@ -118,18 +121,17 @@
             </div>
           </div>
 
-          <div class="map-timecode">
-            <span>{{ formatClock(currentTimeMs) }}</span>
+          <div class="timecode">
+            <strong>{{ formatClock(currentTimeMs) }}</strong>
             <small>{{ currentPlayerFrame?.at ? formatTimestamp(currentPlayerFrame.at) : "--" }}</small>
           </div>
-
-          <div v-if="framesLoading" class="map-loading-mask">读取回放帧…</div>
+          <div v-if="framesLoading" class="loading-mask">读取回放帧…</div>
         </div>
       </section>
 
-      <aside class="replay-inspector">
+      <aside class="inspector">
         <section class="inspector-card">
-          <span class="card-label">SESSION</span>
+          <span class="eyebrow">SESSION</span>
           <h2>{{ selectedSession?.layer || selectedSession?.map || "未选择" }}</h2>
           <dl>
             <div><dt>地图</dt><dd>{{ selectedSession?.map || "--" }}</dd></div>
@@ -142,7 +144,7 @@
         </section>
 
         <section class="inspector-card">
-          <span class="card-label">CURRENT SCENE</span>
+          <span class="eyebrow">CURRENT SCENE</span>
           <dl>
             <div><dt>玩家</dt><dd>{{ displayedPlayers.length }}</dd></div>
             <div><dt>Capture Zone</dt><dd>{{ captureZoneMarkers.length }}</dd></div>
@@ -152,17 +154,17 @@
           </dl>
         </section>
 
-        <section class="inspector-card legend-card">
-          <span class="card-label">LEGEND</span>
-          <div><i class="legend-dot team-1"></i>Team 1</div>
-          <div><i class="legend-dot team-2"></i>Team 2</div>
-          <div><i class="legend-dot team-0"></i>未知阵营</div>
+        <section class="inspector-card legend">
+          <span class="eyebrow">LEGEND</span>
+          <div><i class="team-1"></i>Team 1</div>
+          <div><i class="team-2"></i>Team 2</div>
+          <div><i class="team-0"></i>未知阵营</div>
         </section>
       </aside>
     </main>
 
-    <footer class="replay-timeline">
-      <div class="transport-controls">
+    <footer class="timeline">
+      <div class="transport">
         <button type="button" :disabled="!selectedSession" @click="togglePlayback">
           {{ playing ? "暂停" : "播放" }}
         </button>
@@ -190,7 +192,7 @@
           step="50"
           :disabled="!selectedSession"
           @input="onTimelineInput"
-          @change="void ensureWindowForTime(currentTimeMs, true)"
+          @change="ensureWindowForTime(currentTimeMs, true)"
         />
         <span>{{ formatClock(durationMs) }}</span>
       </div>
@@ -217,12 +219,18 @@ import {
 import {
   EMPTY_TACTICAL_MAP_CONFIG,
   TACTICAL_MAP_CONFIGS,
+  getStaticTacticalAssets,
   resolveTacticalMapKey,
 } from "../shared/tactical-map-data";
 
 const REPLAY_WINDOW_BEFORE_MS = 5_000;
 const REPLAY_WINDOW_AFTER_MS = 60_000;
 const WINDOW_EDGE_PREFETCH_MS = 8_000;
+
+interface ProjectedMarker {
+  mapX: number;
+  mapY: number;
+}
 
 const sessions = ref<TacticalReplaySession[]>([]);
 const selectedSessionId = ref("");
@@ -244,19 +252,29 @@ let playbackAnchorReplayMs = 0;
 let loadGeneration = 0;
 let loadTimer: number | null = null;
 
-const durationMs = computed(() => Math.max(0, Number(selectedSession.value?.durationMs ?? 0)));
-const activeMapConfig = computed(() => {
-  const identity = selectedSession.value?.layer || selectedSession.value?.map || "";
-  const key = resolveTacticalMapKey(identity);
-  return key ? (TACTICAL_MAP_CONFIGS[key] ?? EMPTY_TACTICAL_MAP_CONFIG) : EMPTY_TACTICAL_MAP_CONFIG;
-});
+const activeMapKey = computed(() => resolveTacticalMapKey(
+  selectedSession.value?.layer || selectedSession.value?.map || "",
+));
+const activeMapConfig = computed(() => (
+  activeMapKey.value
+    ? (TACTICAL_MAP_CONFIGS[activeMapKey.value] ?? EMPTY_TACTICAL_MAP_CONFIG)
+    : EMPTY_TACTICAL_MAP_CONFIG
+));
+const staticAssets = computed(() => getStaticTacticalAssets(activeMapKey.value));
 
-const playerFrames = computed(() => frames.value
-  .filter((frame): frame is TacticalReplayPlayersFrame => frame.type === "players")
-  .sort(compareFrames));
-const assetFrames = computed(() => frames.value
-  .filter((frame): frame is TacticalReplayAssetsFrame => frame.type === "assets")
-  .sort(compareFrames));
+const orderedFrames = computed(() => [...frames.value].sort(compareFrames));
+const playerFrames = computed(() => orderedFrames.value.filter(
+  (frame): frame is TacticalReplayPlayersFrame => frame.type === "players",
+));
+const assetFrames = computed(() => orderedFrames.value.filter(
+  (frame): frame is TacticalReplayAssetsFrame => frame.type === "assets",
+));
+const latestLoadedTimeMs = computed(() => orderedFrames.value.at(-1)?.t ?? 0);
+const durationMs = computed(() => Math.max(
+  0,
+  Number(selectedSession.value?.durationMs ?? 0),
+  latestLoadedTimeMs.value,
+));
 
 const currentPlayerFrame = computed(() => findFrameAtOrBefore(playerFrames.value, currentTimeMs.value));
 const nextPlayerFrame = computed(() => findFrameAfter(playerFrames.value, currentTimeMs.value));
@@ -267,8 +285,11 @@ const displayedPlayers = computed(() => {
   if (!current) return [];
   const next = nextPlayerFrame.value;
   const denominator = next && next.t > current.t ? next.t - current.t : 0;
-  const alpha = denominator > 0 ? clamp((currentTimeMs.value - current.t) / denominator, 0, 1) : 0;
-  const nextByKey = new Map((next?.players ?? []).map((player) => [playerKey(player), player]));
+  const alpha = denominator > 0
+    ? clamp((currentTimeMs.value - current.t) / denominator, 0, 1)
+    : 0;
+  const nextByKey = new Map<string, any>();
+  for (const player of next?.players ?? []) nextByKey.set(playerKey(player), player);
 
   return (current.players ?? []).map((player) => {
     const key = playerKey(player);
@@ -278,12 +299,25 @@ const displayedPlayers = computed(() => {
     const x = interpolateNumber(currentPosition?.x, nextPosition?.x, alpha);
     const y = interpolateNumber(currentPosition?.y, nextPosition?.y, alpha);
     if (x == null || y == null) return null;
-    const mapPosition = projectPosition(x, y);
-    if (!mapPosition) return null;
+    const projected = projectPosition(x, y);
+    if (!projected) return null;
 
-    const health = numberOrNull(player?.health, player?.soldierInfo?.health);
-    const yaw = interpolateAngle(numberOrNull(player?.yaw), numberOrNull(nextPlayer?.yaw), alpha);
-    const name = String(player?.playerName ?? player?.name ?? player?.identity?.name ?? "Unknown").trim() || "Unknown";
+    const health = numberOrNull(
+      player?.health,
+      player?.telemetry?.health,
+      player?.soldierInfo?.health,
+    );
+    const yaw = interpolateAngle(
+      numberOrNull(player?.yaw, player?.telemetry?.yaw),
+      numberOrNull(nextPlayer?.yaw, nextPlayer?.telemetry?.yaw),
+      alpha,
+    );
+    const name = String(
+      player?.playerName
+      ?? player?.name
+      ?? player?.identity?.name
+      ?? "Unknown",
+    ).trim() || "Unknown";
     const teamId = numberOrNull(player?.teamId, player?.match?.teamId);
     const squadId = numberOrNull(player?.squadId, player?.match?.squadId);
     const role = String(player?.role ?? player?.match?.role ?? "").trim();
@@ -296,8 +330,7 @@ const displayedPlayers = computed(() => {
       role,
       health,
       yaw,
-      mapX: mapPosition.mapX,
-      mapY: mapPosition.mapY,
+      ...projected,
       tooltip: [
         name,
         teamId == null ? "" : `Team ${teamId}`,
@@ -349,41 +382,101 @@ const trailPaths = computed(() => {
 });
 
 const captureZoneMarkers = computed(() => {
-  const zones = currentAssetFrame.value?.assets?.captureZones ?? [];
-  return zones.map((zone, index) => {
-    const position = resolvePosition(zone);
-    const projected = position ? projectPosition(position.x, position.y) : null;
-    if (!projected) return null;
-    const teamId = numberOrNull(zone?.captureTeamId, zone?.capturingTeamId, zone?.teamId);
-    const progress = clamp(numberOrNull(zone?.capturePercent, zone?.captureProgress, zone?.progress) ?? 0, 0, 100);
-    const name = String(zone?.name ?? zone?.displayName ?? `Zone ${index + 1}`).trim();
-    return {
-      id: String(zone?.id ?? zone?.zoneId ?? `${name}:${index}`),
+  const runtimeZones = currentAssetFrame.value?.assets?.captureZones ?? [];
+  const staticZones = Array.isArray(staticAssets.value?.captureZones)
+    ? staticAssets.value.captureZones
+    : [];
+  const merged = new Map<string, any>();
+
+  for (const [index, zone] of staticZones.entries()) {
+    const name = String(zone?.name ?? `Zone ${index + 1}`).trim();
+    merged.set(name, {
+      ...zone,
       name,
-      teamId,
-      progress,
-      isCapturing: Boolean(zone?.isCapturing || Math.abs(numberOrNull(zone?.captureDirection) ?? 0) > 0),
+      position: resolvePosition(zone) ?? positionFromXY(zone),
+    });
+  }
+  for (const [index, zone] of runtimeZones.entries()) {
+    const name = String(zone?.name ?? zone?.displayName ?? `Zone ${index + 1}`).trim();
+    const fallback = merged.get(name) ?? {};
+    merged.set(name, {
+      ...fallback,
+      ...zone,
+      name,
+      position: resolvePosition(zone) ?? resolvePosition(fallback) ?? positionFromXY(fallback),
+    });
+  }
+
+  return [...merged.values()].map((zone, index) => {
+    const position = resolvePosition(zone);
+    if (!position) return null;
+    const projected = projectPosition(position.x, position.y);
+    if (!projected) return null;
+
+    const ownerTeamId = normalizeTeamId(
+      zone?.teamId
+      ?? zone?.ownerTeamId
+      ?? zone?.owner
+      ?? zone?.captureDirection,
+    );
+    const rawProgress = numberOrNull(
+      zone?.capturePercent,
+      zone?.captureProgress,
+      zone?.progress,
+    );
+    const captureProgress = rawProgress == null
+      ? 100
+      : clamp(rawProgress >= 0 && rawProgress <= 1 ? rawProgress * 100 : rawProgress, 0, 100);
+    const captureTeamId = normalizeTeamId(
+      zone?.captureTeamId
+      ?? zone?.capturingTeamId
+      ?? zone?.captureTeam
+      ?? zone?.captureDirection,
+    );
+    const isCapturing = Boolean(
+      captureTeamId
+      && captureProgress > 0
+      && captureProgress < 100
+      && (zone?.isCapturing ?? zone?.capturing ?? true),
+    );
+    const name = String(zone?.name ?? `Zone ${index + 1}`).trim();
+
+    return {
+      id: String(zone?.id ?? zone?.zoneId ?? `capture:${name}`),
+      name,
+      teamId: ownerTeamId,
+      captureTeamId,
+      captureProgress,
+      isCapturing,
       isLocked: Boolean(zone?.isLocked ?? zone?.locked),
-      mapX: projected.mapX,
-      mapY: projected.mapY,
-      tooltip: `${name} · ${teamId ? `Team ${teamId}` : "Neutral"} · ${Math.round(progress)}%`,
+      ...projected,
+      tooltip: [
+        name,
+        ownerTeamId ? `归属 Team ${ownerTeamId}` : "中立",
+        isCapturing ? `Team ${captureTeamId} 占领中` : "",
+        `${Math.round(captureProgress)}%`,
+      ].filter(Boolean).join(" · "),
     };
   }).filter(Boolean) as Array<any>;
 });
 
 const mainZoneMarkers = computed(() => {
-  const zones = currentAssetFrame.value?.assets?.mainZones ?? [];
-  return zones.map((zone, index) => {
-    const position = resolvePosition(zone);
-    const projected = position ? projectPosition(position.x, position.y) : null;
+  const runtimeZones = currentAssetFrame.value?.assets?.mainZones ?? [];
+  const source = runtimeZones.length > 0
+    ? runtimeZones
+    : (Array.isArray(staticAssets.value?.mainZones) ? staticAssets.value.mainZones : []);
+
+  return source.map((zone, index) => {
+    const position = resolvePosition(zone) ?? positionFromXY(zone);
+    if (!position) return null;
+    const projected = projectPosition(position.x, position.y);
     if (!projected) return null;
-    const teamId = numberOrNull(zone?.teamId, zone?.teamID);
+    const teamId = normalizeTeamId(zone?.teamId ?? zone?.teamID ?? zone?.team);
     return {
       id: String(zone?.id ?? `main:${teamId ?? index}`),
       name: String(zone?.name ?? (teamId ? `MAIN T${teamId}` : `MAIN ${index + 1}`)),
       teamId,
-      mapX: projected.mapX,
-      mapY: projected.mapY,
+      ...projected,
     };
   }).filter(Boolean) as Array<any>;
 });
@@ -391,10 +484,11 @@ const mainZoneMarkers = computed(() => {
 const fobMarkers = computed(() => {
   const fobs = currentAssetFrame.value?.assets?.fobs ?? [];
   return fobs.map((fob, index) => {
-    const position = resolvePosition(fob);
-    const projected = position ? projectPosition(position.x, position.y) : null;
+    const position = resolvePosition(fob) ?? positionFromXY(fob);
+    if (!position) return null;
+    const projected = projectPosition(position.x, position.y);
     if (!projected) return null;
-    const teamId = numberOrNull(fob?.teamId, fob?.teamID);
+    const teamId = normalizeTeamId(fob?.teamId ?? fob?.teamID);
     const name = String(fob?.name ?? "FOB Radio").trim() || "FOB Radio";
     const ammo = numberOrNull(fob?.ammo, fob?.ammunition);
     const construction = numberOrNull(fob?.construction, fob?.build);
@@ -406,9 +500,14 @@ const fobMarkers = computed(() => {
       ammo,
       construction,
       isBleeding,
-      mapX: projected.mapX,
-      mapY: projected.mapY,
-      tooltip: `${name} · Team ${teamId ?? "--"} · 弹药 ${formatResource(ammo)} · 建材 ${formatResource(construction)}${isBleeding ? " · 正在流血" : ""}`,
+      ...projected,
+      tooltip: [
+        name,
+        `Team ${teamId ?? "--"}`,
+        `弹药 ${formatResource(ammo)}`,
+        `建材 ${formatResource(construction)}`,
+        isBleeding ? "正在流血" : "",
+      ].filter(Boolean).join(" · "),
     };
   }).filter(Boolean) as Array<any>;
 });
@@ -429,8 +528,7 @@ onBeforeUnmount(() => {
 
 watch(playbackRate, () => {
   if (!playing.value) return;
-  playbackAnchorWallMs = performance.now();
-  playbackAnchorReplayMs = currentTimeMs.value;
+  resetPlaybackAnchor();
 });
 
 watch(currentTimeMs, (value) => {
@@ -477,11 +575,12 @@ async function selectSession(sessionId: string) {
     const response = await fetchTacticalReplaySession(sessionId);
     if (generation !== loadGeneration) return;
     selectedSession.value = response.session;
-    const listItem = sessions.value.find((session) => session.id === response.session.id);
-    if (listItem) Object.assign(listItem, response.session);
+    updateSessionListItem(response.session);
     await ensureWindowForTime(0, true);
   } catch (error: any) {
-    if (generation === loadGeneration) errorText.value = error?.message ?? "无法读取回放元数据。";
+    if (generation === loadGeneration) {
+      errorText.value = error?.message ?? "无法读取回放元数据。";
+    }
   } finally {
     if (generation === loadGeneration) framesLoading.value = false;
   }
@@ -491,12 +590,16 @@ async function ensureWindowForTime(targetMs: number, force: boolean) {
   const session = selectedSession.value;
   if (!session) return;
   const target = clamp(targetMs, 0, Math.max(durationMs.value, targetMs));
-  if (!force && frames.value.length > 0 && target >= loadedFromMs.value + 1_000 && target <= loadedToMs.value - WINDOW_EDGE_PREFETCH_MS) {
-    return;
-  }
+  const insideLoadedWindow = frames.value.length > 0
+    && target >= loadedFromMs.value + 1_000
+    && target <= loadedToMs.value - WINDOW_EDGE_PREFETCH_MS;
+  if (!force && insideLoadedWindow) return;
 
   const fromMs = Math.max(0, target - REPLAY_WINDOW_BEFORE_MS);
-  const toMs = Math.max(fromMs, Math.min(Math.max(durationMs.value, target + REPLAY_WINDOW_AFTER_MS), target + REPLAY_WINDOW_AFTER_MS));
+  const desiredToMs = target + REPLAY_WINDOW_AFTER_MS;
+  const toMs = session.status === "active"
+    ? desiredToMs
+    : Math.max(fromMs, Math.min(durationMs.value, desiredToMs));
   const generation = ++loadGeneration;
   framesLoading.value = true;
   errorText.value = "";
@@ -514,14 +617,20 @@ async function ensureWindowForTime(targetMs: number, force: boolean) {
     loadedToMs.value = response.toMs ?? toMs;
     if (response.session) {
       selectedSession.value = response.session;
-      const listItem = sessions.value.find((item) => item.id === response.session.id);
-      if (listItem) Object.assign(listItem, response.session);
+      updateSessionListItem(response.session);
     }
   } catch (error: any) {
-    if (generation === loadGeneration) errorText.value = error?.message ?? "无法读取回放帧。";
+    if (generation === loadGeneration) {
+      errorText.value = error?.message ?? "无法读取回放帧。";
+    }
   } finally {
     if (generation === loadGeneration) framesLoading.value = false;
   }
+}
+
+function updateSessionListItem(session: TacticalReplaySession) {
+  const existing = sessions.value.find((item) => item.id === session.id);
+  if (existing) Object.assign(existing, session);
 }
 
 function togglePlayback() {
@@ -530,10 +639,11 @@ function togglePlayback() {
     stopPlaybackLoop();
     return;
   }
-  if (currentTimeMs.value >= durationMs.value && durationMs.value > 0) currentTimeMs.value = 0;
+  if (durationMs.value > 0 && currentTimeMs.value >= durationMs.value) {
+    currentTimeMs.value = 0;
+  }
   playing.value = true;
-  playbackAnchorWallMs = performance.now();
-  playbackAnchorReplayMs = currentTimeMs.value;
+  resetPlaybackAnchor();
   runPlaybackFrame();
 }
 
@@ -543,7 +653,6 @@ function runPlaybackFrame() {
   const nextTime = playbackAnchorReplayMs + elapsed;
   const end = durationMs.value;
   currentTimeMs.value = end > 0 ? Math.min(end, nextTime) : nextTime;
-
   if (end > 0 && currentTimeMs.value >= end) {
     stopPlaybackLoop();
     return;
@@ -557,17 +666,20 @@ function stopPlaybackLoop() {
   animationFrame = null;
 }
 
+function resetPlaybackAnchor() {
+  playbackAnchorWallMs = performance.now();
+  playbackAnchorReplayMs = currentTimeMs.value;
+}
+
 function seekBy(deltaMs: number) {
   if (!selectedSession.value) return;
   currentTimeMs.value = clamp(currentTimeMs.value + deltaMs, 0, durationMs.value);
-  playbackAnchorWallMs = performance.now();
-  playbackAnchorReplayMs = currentTimeMs.value;
+  resetPlaybackAnchor();
   void ensureWindowForTime(currentTimeMs.value, false);
 }
 
 function onTimelineInput() {
-  playbackAnchorWallMs = performance.now();
-  playbackAnchorReplayMs = currentTimeMs.value;
+  resetPlaybackAnchor();
   if (loadTimer !== null) window.clearTimeout(loadTimer);
   loadTimer = window.setTimeout(() => {
     loadTimer = null;
@@ -575,7 +687,7 @@ function onTimelineInput() {
   }, 120);
 }
 
-function projectPosition(x: number, y: number) {
+function projectPosition(x: number, y: number): ProjectedMarker | null {
   const bounds = activeMapConfig.value.bounds;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   return {
@@ -590,8 +702,14 @@ function resolvePosition(source: any): { x: number; y: number } | null {
     ?? source?.telemetry?.position
     ?? source?.soldierInfo?.position
     ?? source?.vehicleInfo?.position;
-  const x = Number(position?.x ?? source?.x);
-  const y = Number(position?.y ?? source?.y);
+  const x = Number(position?.x);
+  const y = Number(position?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function positionFromXY(source: any): { x: number; y: number } | null {
+  const x = Number(source?.x ?? source?.gameX);
+  const y = Number(source?.y ?? source?.gameY);
   return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
 }
 
@@ -643,13 +761,18 @@ function findFrameAfter<T extends TacticalReplayFrame>(source: T[], timeMs: numb
 }
 
 function dedupeFrames(source: TacticalReplayFrame[]) {
-  const map = new Map<string, TacticalReplayFrame>();
-  for (const frame of source) map.set(`${frame.type}:${frame.seq}`, frame);
-  return [...map.values()].sort(compareFrames);
+  const unique = new Map<string, TacticalReplayFrame>();
+  for (const frame of source) unique.set(`${frame.type}:${frame.seq}`, frame);
+  return [...unique.values()].sort(compareFrames);
 }
 
 function compareFrames(left: TacticalReplayFrame, right: TacticalReplayFrame) {
   return left.t - right.t || left.seq - right.seq;
+}
+
+function normalizeTeamId(value: unknown): number | null {
+  const numeric = Number(value);
+  return numeric === 1 || numeric === 2 ? numeric : null;
 }
 
 function markerStyle(mapX: number, mapY: number) {
@@ -657,8 +780,7 @@ function markerStyle(mapX: number, mapY: number) {
 }
 
 function teamClass(teamId: number | null | undefined) {
-  const normalized = Number(teamId);
-  return normalized === 1 ? "team-1" : normalized === 2 ? "team-2" : "team-0";
+  return teamId === 1 ? "team-1" : teamId === 2 ? "team-2" : "team-0";
 }
 
 function interpolateNumber(current: unknown, next: unknown, alpha: number): number | null {
@@ -743,100 +865,91 @@ function formatHealth(value: number | null | undefined) {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  color: #e8f1f8;
-  background:
-    radial-gradient(circle at 12% 8%, rgba(29, 142, 184, 0.14), transparent 34%),
-    radial-gradient(circle at 88% 92%, rgba(181, 55, 76, 0.12), transparent 36%),
-    #050a10;
   overflow: hidden;
+  color: #e7f0f6;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(42, 178, 221, 0.12), transparent 34%),
+    radial-gradient(circle at 88% 92%, rgba(204, 57, 82, 0.1), transparent 36%),
+    #050a10;
 }
 
 .replay-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(148, 184, 207, 0.18);
-  background: rgba(5, 12, 20, 0.92);
+  gap: 22px;
+  padding: 13px 17px;
+  border-bottom: 1px solid rgba(143, 180, 204, 0.17);
+  background: rgba(5, 12, 20, 0.94);
 }
 
-.replay-title-block h1 {
+.replay-header h1 {
   margin: 2px 0 0;
   font-size: 22px;
   letter-spacing: 0.04em;
 }
 
-.replay-title-block p {
+.replay-header p {
   margin: 3px 0 0;
-  color: #8297a7;
+  color: #8195a4;
   font-size: 12px;
 }
 
-.replay-kicker,
-.card-label {
+.eyebrow {
   color: #51d7ff;
   font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.17em;
 }
 
-.replay-session-controls {
+.session-controls,
+.transport,
+.timeline-track {
   display: flex;
-  align-items: end;
-  justify-content: flex-end;
-  gap: 10px;
-  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 
-.replay-session-controls label,
-.transport-controls label {
+.session-controls { align-items: end; }
+.session-controls label,
+.transport label {
   display: grid;
   gap: 4px;
-  color: #8da1b1;
+  color: #8da1b0;
   font-size: 11px;
 }
 
 select,
 button,
-.live-map-link {
+.button-link {
   min-height: 34px;
   border: 1px solid rgba(112, 153, 180, 0.28);
   border-radius: 4px;
   color: #dbe9f2;
-  background: rgba(14, 27, 39, 0.92);
+  background: rgba(14, 27, 39, 0.94);
   font: inherit;
 }
 
-select {
-  min-width: 280px;
-  padding: 0 10px;
-}
-
+select { min-width: 280px; padding: 0 10px; }
 button,
-.live-map-link {
-  padding: 0 12px;
-  cursor: pointer;
-  text-decoration: none;
+.button-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0 12px;
+  cursor: pointer;
+  text-decoration: none;
 }
-
 button:hover:not(:disabled),
-.live-map-link:hover {
+.button-link:hover {
   border-color: rgba(81, 215, 255, 0.65);
-  background: rgba(25, 50, 68, 0.95);
+  background: rgba(25, 50, 68, 0.96);
 }
-
 button:disabled,
-select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+select:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.replay-workspace {
+.workspace {
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
@@ -853,7 +966,7 @@ select:disabled {
 
 .map-canvas {
   position: relative;
-  width: min(100%, calc(100vh - 220px));
+  width: min(100%, calc(100vh - 218px));
   max-height: 100%;
   aspect-ratio: 1;
   overflow: hidden;
@@ -863,11 +976,10 @@ select:disabled {
 }
 
 .map-background,
-.map-background-placeholder,
+.map-placeholder,
 .map-grid,
-.player-trail-layer,
-.asset-layer,
-.player-layer {
+.trail-layer,
+.marker-layer {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -880,41 +992,36 @@ select:disabled {
   filter: saturate(0.88) brightness(0.72) contrast(1.08);
 }
 
-.map-background-placeholder {
+.map-placeholder {
   display: grid;
   place-content: center;
   gap: 8px;
   text-align: center;
-  color: #6f8392;
+  color: #708492;
   background: linear-gradient(135deg, #09131d, #050a10);
 }
 
 .map-grid {
   pointer-events: none;
-  opacity: 0.25;
+  opacity: 0.24;
   background-image:
     linear-gradient(rgba(118, 169, 199, 0.14) 1px, transparent 1px),
     linear-gradient(90deg, rgba(118, 169, 199, 0.14) 1px, transparent 1px);
   background-size: 10% 10%;
 }
 
-.player-trail-layer,
-.asset-layer,
-.player-layer {
-  pointer-events: none;
-}
-
+.trail-layer,
+.marker-layer { pointer-events: none; }
 .player-trail {
   fill: none;
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.32;
+  opacity: 0.34;
 }
-
-.player-trail.team-1 { stroke: #4bc5ff; }
-.player-trail.team-2 { stroke: #ff6177; }
-.player-trail.team-0 { stroke: #a1afba; }
+.player-trail.team-1 { stroke: #43c6ff; }
+.player-trail.team-2 { stroke: #ff5a72; }
+.player-trail.team-0 { stroke: #a8b5bf; }
 
 .asset-marker,
 .player-marker {
@@ -922,23 +1029,21 @@ select:disabled {
   transform: translate(-50%, -50%);
 }
 
-.main-zone-marker,
-.capture-zone-marker,
-.fob-marker {
+.asset-marker {
   display: grid;
   justify-items: center;
   gap: 2px;
   white-space: nowrap;
   text-shadow: 0 1px 4px #000, 0 0 8px #000;
 }
-
-.asset-marker strong {
+.asset-marker strong,
+.fob-marker small {
   padding: 1px 4px;
   border-radius: 2px;
-  color: #f2f7fa;
-  background: rgba(3, 8, 13, 0.72);
-  font-size: 9px;
+  background: rgba(3, 8, 13, 0.74);
 }
+.asset-marker strong { color: #f2f7fa; font-size: 9px; }
+.fob-marker small { color: #c8d5de; font-size: 8px; }
 
 .main-zone-icon {
   display: grid;
@@ -946,61 +1051,49 @@ select:disabled {
   width: 20px;
   height: 20px;
   border: 2px solid currentColor;
-  background: rgba(3, 8, 13, 0.8);
+  background: rgba(3, 8, 13, 0.82);
   transform: rotate(45deg);
 }
 
-.main-zone-icon::first-letter { transform: rotate(-45deg); }
-
-.capture-zone-ring {
+.capture-ring {
+  position: relative;
   width: 24px;
   height: 24px;
+  overflow: hidden;
   border: 3px solid currentColor;
   border-radius: 50%;
-  background: rgba(3, 8, 13, 0.48);
+  background: rgba(3, 8, 13, 0.56);
   box-shadow: 0 0 0 2px rgba(3, 8, 13, 0.75), 0 0 12px currentColor;
 }
-
-.capture-zone-marker.is-capturing .capture-zone-ring {
-  animation: capturePulse 1.1s ease-in-out infinite;
+.capture-ring i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: currentColor;
+  opacity: 0.45;
 }
-
-.capture-zone-marker.is-locked .capture-zone-ring {
-  border-style: double;
-  filter: grayscale(0.55);
-}
+.capture-zone-marker.is-capturing .capture-ring { animation: pulse 1.1s ease-in-out infinite; }
+.capture-zone-marker.is-locked .capture-ring { border-style: double; filter: grayscale(0.55); }
 
 .fob-icon {
-  position: relative;
   display: grid;
   place-items: center;
   width: 24px;
   height: 19px;
   border: 2px solid currentColor;
   border-top-width: 6px;
-  background: rgba(3, 8, 13, 0.78);
+  background: rgba(3, 8, 13, 0.8);
   box-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
 }
+.fob-marker.is-bleeding .fob-icon { color: #ff334f; animation: pulse 0.75s ease-in-out infinite; }
 
-.fob-marker small {
-  padding: 1px 4px;
-  color: #c8d5de;
-  background: rgba(3, 8, 13, 0.72);
-  font-size: 8px;
-}
-
-.fob-marker.is-bleeding .fob-icon {
-  color: #ff334f;
-  animation: capturePulse 0.75s ease-in-out infinite;
-}
-
+.player-layer { z-index: 20; }
 .player-marker {
-  z-index: 20;
   width: 16px;
   height: 16px;
   color: #aab8c2;
 }
-
 .player-dot {
   position: absolute;
   inset: 4px;
@@ -1009,7 +1102,6 @@ select:disabled {
   background: currentColor;
   box-shadow: 0 0 8px currentColor, 0 1px 3px #000;
 }
-
 .player-direction {
   position: absolute;
   left: 5px;
@@ -1021,7 +1113,6 @@ select:disabled {
   border-bottom: 8px solid currentColor;
   transform-origin: 3px 13px;
 }
-
 .player-label {
   position: absolute;
   left: 13px;
@@ -1031,10 +1122,9 @@ select:disabled {
   padding: 2px 4px;
   border-left: 2px solid currentColor;
   color: #f0f6fa;
-  background: rgba(3, 8, 13, 0.72);
+  background: rgba(3, 8, 13, 0.74);
   text-shadow: 0 1px 3px #000;
 }
-
 .player-label strong { font-size: 8px; line-height: 1.1; }
 .player-label small { color: #aebdc8; font-size: 7px; }
 .player-marker.is-dead { opacity: 0.38; filter: grayscale(1); }
@@ -1043,7 +1133,7 @@ select:disabled {
 .team-2 { color: #ff5a72; }
 .team-0 { color: #a8b5bf; }
 
-.map-timecode {
+.timecode {
   position: absolute;
   left: 10px;
   bottom: 10px;
@@ -1052,14 +1142,12 @@ select:disabled {
   gap: 1px;
   padding: 7px 9px;
   border-left: 3px solid #51d7ff;
-  background: rgba(3, 8, 13, 0.84);
+  background: rgba(3, 8, 13, 0.86);
   font-family: "Cascadia Mono", Consolas, monospace;
 }
-
-.map-timecode span { font-size: 17px; font-weight: 800; }
-.map-timecode small { color: #8ea2b0; font-size: 9px; }
-
-.map-loading-mask {
+.timecode strong { font-size: 17px; }
+.timecode small { color: #8ea2b0; font-size: 9px; }
+.loading-mask {
   position: absolute;
   inset: 0;
   z-index: 100;
@@ -1077,37 +1165,28 @@ select:disabled {
   color: #728593;
   text-align: center;
 }
-
 .empty-state strong { color: #d4e2eb; font-size: 20px; }
 
-.replay-inspector {
+.inspector {
   min-height: 0;
   overflow-y: auto;
   padding: 10px;
   border-left: 1px solid rgba(148, 184, 207, 0.15);
   background: rgba(5, 12, 20, 0.72);
 }
-
 .inspector-card {
   margin-bottom: 10px;
   padding: 12px;
   border: 1px solid rgba(119, 157, 181, 0.18);
   background: rgba(12, 23, 33, 0.76);
 }
-
 .inspector-card h2 {
   margin: 6px 0 12px;
   color: #edf6fb;
   font-size: 16px;
   overflow-wrap: anywhere;
 }
-
-.inspector-card dl {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-}
-
+.inspector-card dl { display: grid; gap: 6px; margin: 0; }
 .inspector-card dl > div {
   display: flex;
   justify-content: space-between;
@@ -1116,23 +1195,11 @@ select:disabled {
   border-bottom: 1px solid rgba(126, 159, 180, 0.09);
   font-size: 11px;
 }
-
 .inspector-card dt { color: #8498a7; }
 .inspector-card dd { margin: 0; color: #d4e2ea; text-align: right; }
-
-.legend-card {
-  display: grid;
-  gap: 8px;
-  font-size: 11px;
-}
-
-.legend-card > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.legend-dot {
+.legend { display: grid; gap: 8px; font-size: 11px; }
+.legend > div { display: flex; align-items: center; gap: 8px; }
+.legend i {
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -1140,7 +1207,7 @@ select:disabled {
   box-shadow: 0 0 7px currentColor;
 }
 
-.replay-timeline {
+.timeline {
   display: grid;
   grid-template-columns: auto minmax(260px, 1fr) minmax(180px, auto);
   align-items: center;
@@ -1149,15 +1216,7 @@ select:disabled {
   border-top: 1px solid rgba(148, 184, 207, 0.18);
   background: rgba(5, 12, 20, 0.96);
 }
-
-.transport-controls,
-.timeline-track {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.transport-controls select { min-width: 78px; }
+.transport select { min-width: 78px; }
 .timeline-track span {
   min-width: 46px;
   color: #a9bac5;
@@ -1166,28 +1225,23 @@ select:disabled {
 }
 .timeline-track span:last-child { text-align: right; }
 .timeline-track input { width: 100%; accent-color: #51d7ff; }
-
-.timeline-status {
-  color: #7f94a3;
-  font-size: 10px;
-  text-align: right;
-}
+.timeline-status { color: #7f94a3; font-size: 10px; text-align: right; }
 .timeline-status.error { color: #ff788b; }
 
-@keyframes capturePulse {
+@keyframes pulse {
   0%, 100% { transform: scale(1); opacity: 0.85; }
   50% { transform: scale(1.13); opacity: 1; }
 }
 
 @media (max-width: 1080px) {
   .replay-header { align-items: flex-start; flex-direction: column; }
-  .replay-session-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
-  .replay-session-controls label { flex: 1; }
-  .replay-session-controls select { width: 100%; min-width: 220px; }
-  .replay-workspace { grid-template-columns: minmax(0, 1fr); }
-  .replay-inspector { display: none; }
-  .map-canvas { width: min(100%, calc(100vh - 280px)); }
-  .replay-timeline { grid-template-columns: 1fr; gap: 8px; }
+  .session-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .session-controls label { flex: 1; }
+  .session-controls select { width: 100%; min-width: 220px; }
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .inspector { display: none; }
+  .map-canvas { width: min(100%, calc(100vh - 278px)); }
+  .timeline { grid-template-columns: 1fr; gap: 8px; }
   .timeline-status { text-align: left; }
 }
 </style>
