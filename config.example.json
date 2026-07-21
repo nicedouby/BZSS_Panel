@@ -237,6 +237,13 @@
         "restartRequired": true
       },
       {
+        "path": "steam.proxyMode",
+        "label": "Steam Network Mode (off / explicit / tun)",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
         "path": "steam.proxyUrl",
         "label": "Steam Proxy URL (HTTP/HTTPS)",
         "type": "string",
@@ -451,6 +458,7 @@
     "usePythonScript": true,
     "pythonScript": "./support/runtime-assets/steam-playtime/FetchGameDuration.py",
     "pythonConfigPath": "./support/runtime-assets/steam-playtime/config.json",
+    "proxyMode": "off",
     "proxyUrl": "",
     "noProxy": "",
     "scriptTimeoutMs": 12000,
