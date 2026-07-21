@@ -73,8 +73,19 @@ export function createLogpostDiagnosticsModule(args) {
     parser.linesReadPerSec = finiteOrNull(probe?.rates?.linesReadPerSec);
     parser.linesProcessedPerSec = finiteOrNull(probe?.rates?.linesProcessedPerSec);
     parser.maxLineProcessMs = finiteOrNull(probe?.maxLineProcessMs);
+    parser.processLineAvgMs = finiteOrNull(probe?.processLineAvgMs);
+    parser.processLineP95Ms = finiteOrNull(probe?.processLineP95Ms);
+    parser.processLineP99Ms = finiteOrNull(probe?.processLineP99Ms);
+    parser.checkpointMaxMs = finiteOrNull(probe?.checkpointMaxMs);
+    parser.checkpointP95Ms = finiteOrNull(probe?.checkpointP95Ms);
+    parser.batchLines = finiteOrNull(probe?.batchLines);
+    parser.batchBytes = finiteOrNull(probe?.batchBytes);
+    parser.writerQueueDepth = finiteOrNull(probe?.writerQueueDepth);
+    parser.writerQueueBytes = finiteOrNull(probe?.writerQueueBytes);
+    parser.playerChunkParseMs = finiteOrNull(probe?.playerChunkParseMs);
     parser.stageShare = { ...(probe.stageShare ?? {}) };
     parser.stageDurationsMs = { ...(probe.durationsMs ?? {}) };
+    parser.stageTimings = { ...(probe.stages ?? {}) };
     parser.slowestStage = String(probe.slowestStage ?? "unknown");
 
     const directDiagnosis = diagnosePythonProbe(probe, parser, {
@@ -119,6 +130,9 @@ function diagnosePythonProbe(probe, parser, options = {}) {
   const other = finite(shares.other);
   const backlog = finite(parser.backlogBytes);
   const maxLineMs = finite(probe.maxLineProcessMs);
+  const processP95Ms = finite(probe.processLineP95Ms);
+  const processP99Ms = finite(probe.processLineP99Ms);
+  const checkpointP95Ms = finite(probe.checkpointP95Ms);
   const slowest = String(probe.slowestStage ?? "unknown");
   const durations = probe.durationsMs ?? {};
   const warningBacklogBytes = finite(options.warningBacklogBytes) || 2 * 1024 * 1024;
@@ -126,12 +140,16 @@ function diagnosePythonProbe(probe, parser, options = {}) {
   const sourceRate = finite(options.sourceRate);
   const consumeRate = finite(options.consumeRate);
   const fallingBehind = sourceRate > 0 && consumeRate > 0 && consumeRate < sourceRate * 0.9;
-  const slowSingleLine = maxLineMs >= 250;
-  const underPressure = backlog >= warningBacklogBytes || fallingBehind || slowSingleLine;
+  const slowProcessWindow = processP99Ms >= 250;
+  const severeSingleLine = maxLineMs >= 1000;
+  const slowCheckpointWindow = checkpointP95Ms >= 100;
+  const underPressure = backlog >= warningBacklogBytes || fallingBehind || slowProcessWindow || slowCheckpointWindow;
 
   if (!underPressure) return null;
 
-  const severity = backlog >= criticalBacklogBytes || maxLineMs >= 1000 ? "critical" : "warning";
+  const severity = backlog >= criticalBacklogBytes || severeSingleLine || checkpointP95Ms >= 500
+    ? "critical"
+    : "warning";
   if (fileIo >= 0.45) {
     return {
       severity,
@@ -146,7 +164,7 @@ function diagnosePythonProbe(probe, parser, options = {}) {
       severity,
       stage: "python-parse-cpu",
       title: "Python 日志解析占用主要处理时间",
-      evidence: `parse=${percent(parse)}, backlog=${formatBytes(backlog)}, BZSS parse=${ms(durations.bzss_parse)}, matchers=${ms(durations.matchers)}, max line=${maxLineMs.toFixed(1)}ms`,
+      evidence: `parse=${percent(parse)}, backlog=${formatBytes(backlog)}, BZSS parse=${ms(durations.bzss_parse)}, matchers=${ms(durations.matchers)}, line avg/p95/p99=${finite(probe.processLineAvgMs).toFixed(1)}/${processP95Ms.toFixed(1)}/${processP99Ms.toFixed(1)}ms, checkpoint p95=${checkpointP95Ms.toFixed(1)}ms`,
       recommendation: "为 BZSS-Core 玩家帧建立快速前缀通道，避免再经过普通 matcher；减少重复正则扫描，必要时拆分独立解析进程。",
     };
   }
@@ -173,7 +191,7 @@ function diagnosePythonProbe(probe, parser, options = {}) {
       severity,
       stage: "python-other",
       title: "Python 其他同步工作占用主要时间",
-      evidence: `other=${percent(other)}, slowest=${slowest}, backlog=${formatBytes(backlog)}, max line=${maxLineMs.toFixed(1)}ms`,
+      evidence: `other=${percent(other)}, slowest=${slowest}, backlog=${formatBytes(backlog)}, line p95/p99=${processP95Ms.toFixed(1)}/${processP99Ms.toFixed(1)}ms, checkpoint p95=${checkpointP95Ms.toFixed(1)}ms`,
       recommendation: "重点检查控制台逐事件输出、checkpoint 持久化、identity cache 和未被探针单独分类的同步函数。",
     };
   }
