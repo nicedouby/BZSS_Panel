@@ -184,7 +184,11 @@ export class TaskManager extends EventEmitter {
   }
 
   publicTask(task) {
-    return { ...task, payload: undefined };
+    return {
+      ...task,
+      payload: undefined,
+      snapshotId: task.payload?.snapshotId ?? null,
+    };
   }
 }
 
