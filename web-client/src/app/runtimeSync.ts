@@ -241,12 +241,20 @@ function normalizeRuntimeSnapshot(input: any) {
     rconStatus: matchState.rconStatus,
   };
 
-  return {
+  const normalized = {
     ...payload,
-    raw: input,
     matchState,
     overview,
     events: payload?.events ?? {},
     jobs: payload?.jobs ?? {},
   };
+
+  // Keep the normalized snapshot as the only shared reference in production.
+  // The raw response can be very large and is only useful while diagnosing
+  // payload-shape problems locally.
+  if (import.meta.env?.DEV && import.meta.env?.VITE_DEBUG_RUNTIME_SNAPSHOT === "true") {
+    (normalized as any).raw = input;
+  }
+
+  return normalized;
 }
