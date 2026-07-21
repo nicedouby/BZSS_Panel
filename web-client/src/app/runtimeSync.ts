@@ -46,6 +46,10 @@ let visibilityListenerAttached = false;
 let activeSnapshotController: AbortController | null = null;
 let snapshotRequestVersion = 0;
 
+function isPageHidden() {
+  return typeof document !== "undefined" && document.hidden;
+}
+
 // The snapshot is the panel's shared data path.  A server that is still
 // starting must never be able to leave it permanently in the "in flight"
 // state, otherwise every page that depends on it remains on its loading view.
@@ -91,7 +95,7 @@ export function getRuntimeSyncState() {
 function handleVisibilityChange() {
   if (!runtimeSyncState.started) return;
 
-  if (document.hidden) {
+  if (isPageHidden()) {
     clearRuntimeTimer();
     if (activeSnapshotController) {
       snapshotRequestVersion += 1;
@@ -127,7 +131,7 @@ function clearRuntimeTimer() {
 }
 
 function scheduleRuntimeSync() {
-  if (!runtimeSyncState.started || runtimeSyncState.inFlight || document.hidden) return;
+  if (!runtimeSyncState.started || runtimeSyncState.inFlight || isPageHidden()) return;
 
   clearRuntimeTimer();
   const delay = resolveRuntimeSyncDelay();
@@ -157,7 +161,7 @@ function getCurrentPlayerCount() {
 }
 
 async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boolean }) {
-  if (!runtimeSyncState.started || runtimeSyncState.inFlight || document.hidden) return;
+  if (!runtimeSyncState.started || runtimeSyncState.inFlight || isPageHidden()) return;
   if (options.immediate) clearRuntimeTimer();
 
   const requestVersion = ++snapshotRequestVersion;
