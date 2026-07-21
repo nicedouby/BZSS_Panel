@@ -97,7 +97,7 @@ class BufferedWriterRegistry:
         *,
         flush_interval_ms: int = 75,
         batch_bytes: int = 128 * 1024,
-        flush_first_write: bool = True,
+        flush_first_write: bool = False,
     ) -> None:
         self.flush_interval_ms = flush_interval_ms
         self.batch_bytes = batch_bytes
