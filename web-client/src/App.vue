@@ -83,6 +83,16 @@ watch(
 );
 
 watch(
+  () => route.path,
+  (path) => {
+    if (auth.authenticated && auth.sessionVerified) {
+      startPageFrameworkPreload(auth.user, path);
+    }
+  },
+  { flush: "post" },
+);
+
+watch(
   () => [auth.authenticated, auth.sessionVerified] as const,
   ([authenticated, sessionVerified]) => {
     if (authenticated && sessionVerified) {
