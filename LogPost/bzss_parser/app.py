@@ -59,7 +59,6 @@ class BzssLogParserApp:
         self.combat_matcher = CombatMatcher(self.identity_cache)
         self.matchers = [
             LoginMatcher(),
-            self.combat_matcher,
             ServerTickRateMatcher(self.config.get("server_tick_rate", {})),
             WorldBringUpMatcher(),
             RoundEndMatcher(),
@@ -80,10 +79,22 @@ class BzssLogParserApp:
             max_raw_chars=int(self.config.get("raw", {}).get("max_raw_chars", 4096)),
         )
         storage_config = self.config.get("storage", {})
-        flush_interval_ms = int(storage_config.get("flush_interval_ms", 75) or 75)
-        batch_bytes = int(storage_config.get("batch_bytes", 128 * 1024) or 128 * 1024)
-        index_interval_ms = int(storage_config.get("index_interval_ms", 5000) or 5000)
-        index_batch_bytes = int(storage_config.get("index_batch_bytes", 1024 * 1024) or 1024 * 1024)
+        flush_interval_ms = int(
+            storage_config.get("event_flush_interval_ms", storage_config.get("flush_interval_ms", 200))
+            or 200
+        )
+        batch_bytes = int(
+            storage_config.get("event_batch_bytes", storage_config.get("batch_bytes", 256 * 1024))
+            or 256 * 1024
+        )
+        raw_flush_interval_ms = int(
+            storage_config.get("raw_flush_interval_ms", 500) or 500
+        )
+        raw_batch_bytes = int(
+            storage_config.get("raw_batch_bytes", 512 * 1024) or 512 * 1024
+        )
+        index_interval_ms = int(storage_config.get("index_interval_ms", 30000) or 30000)
+        index_batch_bytes = int(storage_config.get("index_batch_bytes", 8 * 1024 * 1024) or 8 * 1024 * 1024)
 
         self.writer = LogPostWriter(
             output_dir=str(self.config.get("output_dir", "./LogPost")),
@@ -96,8 +107,8 @@ class BzssLogParserApp:
             output_dir=str(self.config.get("output_dir", "./LogPost")),
             write_v2_raw_archive=bool(storage_config.get("write_v2_raw_archive", True)),
             write_legacy_raw_archive=bool(storage_config.get("write_legacy_raw_archive", False)),
-            flush_interval_ms=flush_interval_ms,
-            batch_bytes=batch_bytes,
+            flush_interval_ms=raw_flush_interval_ms,
+            batch_bytes=raw_batch_bytes,
             index_interval_ms=index_interval_ms,
             index_batch_bytes=index_batch_bytes,
         )
@@ -111,8 +122,8 @@ class BzssLogParserApp:
             output_dir=str(raw_input_config.get("output_dir", "./ReceivedLogs")),
             file_name=str(raw_input_config.get("file_name", "Received.log")),
             fmt=str(raw_input_config.get("format", "raw")),
-            flush_interval_ms=int(raw_input_config.get("flush_interval_ms", flush_interval_ms) or flush_interval_ms),
-            batch_bytes=int(raw_input_config.get("batch_bytes", batch_bytes) or batch_bytes),
+            flush_interval_ms=int(raw_input_config.get("flush_interval_ms", raw_flush_interval_ms) or raw_flush_interval_ms),
+            batch_bytes=int(raw_input_config.get("batch_bytes", raw_batch_bytes) or raw_batch_bytes),
         )
         raw_log_output_config = self.config.get("raw_log_output", {})
         self.raw_log_output_enabled = bool(raw_log_output_config.get("enabled", False))
@@ -215,7 +226,8 @@ class BzssLogParserApp:
         while True:
             try:
                 self.tick()
-                time.sleep(self.poll_interval)
+                # Keep the parser responsive while still catching up quickly.
+                time.sleep(0.001 if self._has_backlog() else self.poll_interval)
 
             except KeyboardInterrupt:
                 print("")
@@ -252,13 +264,24 @@ class BzssLogParserApp:
             self._last_stats_report = now
 
         self.flush_storage(force=False)
+        if not self.transport_only:
+            self.raw_archive_writer.flush_index(force=False)
         self.flush_pending_checkpoint()
+
+    def _has_backlog(self) -> bool:
+        try:
+            return self.tail_reader.log_path.stat().st_size > int(
+                getattr(self.tail_reader, "position", 0) or 0
+            )
+        except OSError:
+            return False
 
     def flush_storage(self, force: bool = False) -> None:
         if self.transport_only:
             return
         self.writer.flush_all(force=force)
-        self.raw_archive_writer.flush_all(force=force)
+        # Checkpoint data flushes must not rewrite raw/index.json.
+        self.raw_archive_writer.flush_data(force=force)
         self.raw_input_writer.flush_all(force=force)
 
     def close_storage(self) -> None:
@@ -327,6 +350,8 @@ class BzssLogParserApp:
                         raw_line=line,
                         source_path=str(raw_archive.get("sourcePath", "")),
                         source_mode=source_mode,
+                        log_time=str(raw_archive.get("logTime", "")),
+                        raw_line_hash=str(raw_archive.get("rawLineHash", "")),
                     )
                 except Exception as e:
                     self.tail_reader.rewind_to_offset(int(record.get("offset", 0) or 0))
@@ -344,12 +369,12 @@ class BzssLogParserApp:
             if looks_like_combat_line(line):
                 matched = self.combat_matcher.match(line)
                 if matched:
-                    self.emit_matched_event(matched, line, source_meta, record, source_mode)
+                    self.emit_matched_event(matched, line, source_meta, record, source_mode, raw_archive)
                     return True
 
             matched = self.match_event(line, meta_for_files)
             if matched:
-                self.emit_matched_event(matched, line, source_meta, record, source_mode)
+                self.emit_matched_event(matched, line, source_meta, record, source_mode, raw_archive)
                 return True
 
             preserved_rule = ""
@@ -495,6 +520,7 @@ class BzssLogParserApp:
         source_meta: Dict[str, Any],
         record: Dict[str, Any],
         source_mode: str,
+        raw_archive: Dict[str, Any],
     ) -> None:
         event_name, params = matched
         event = self.builder.build(event_name, params, line, source_meta=source_meta)
@@ -503,8 +529,6 @@ class BzssLogParserApp:
             self.writer.write_outbox("pending", event)
         try:
             self.udp_sender.send(event)
-            if not self.transport_only:
-                self.writer.write_outbox("send_attempted", event)
         except Exception as e:
             if not self.transport_only:
                 self.writer.write_outbox("send_failed", event, str(e))
@@ -513,7 +537,6 @@ class BzssLogParserApp:
         if event_name in {"On_PlayerDamaged", "On_PlayerWounded", "On_PlayerDied", "On_PlayerRevived"}:
             self.stats["combat_events"] = int(self.stats.get("combat_events", 0)) + 1
         self.console.event(event)
-        raw_archive = self.build_raw_meta_only(record, line, source_mode)
         self.persist_checkpoint(
             record,
             source_mode,
@@ -579,8 +602,6 @@ class BzssLogParserApp:
                 self.writer.write_outbox("pending", event)
             try:
                 self.udp_sender.send(event)
-                if not self.transport_only:
-                    self.writer.write_outbox("send_attempted", event)
             except Exception as e:
                 if not self.transport_only:
                     self.writer.write_outbox("send_failed", event, str(e))
