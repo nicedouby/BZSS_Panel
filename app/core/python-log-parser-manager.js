@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 const DIAGNOSTIC_PREFIX = "[BZSS_DIAG] ";
+const DEFAULT_WINDOWS_PROCESSOR_AFFINITY_CPUS = [24, 25];
 
 /**
  * Core: PythonLogParserManager
@@ -24,6 +25,10 @@ export class PythonLogParserManager {
     this.diagnostics = null;
     this.pipeOutput = this.config.pipeOutput ?? true;
     this.killDuplicates = this.config.killDuplicates ?? true;
+    this.processorAffinityCpus = normalizeProcessorAffinityCpus(
+      this.config.processorAffinityCpus,
+      DEFAULT_WINDOWS_PROCESSOR_AFFINITY_CPUS,
+    );
   }
 
   async start() {
@@ -91,6 +96,7 @@ export class PythonLogParserManager {
         exitedAt: new Date().toISOString(),
         exitCode: code,
         exitSignal: signal,
+        processorAffinityCpus: [...this.processorAffinityCpus],
       });
       this.child = null;
 
@@ -107,8 +113,39 @@ export class PythonLogParserManager {
       this.webStatus.set("pythonLogParser", "error");
       this.logger.error(`Python LogParser spawn failed: ${error.stack ?? error}`);
     });
+
+    void this.applyProcessorAffinity(this.child.pid);
   }
 
+  async applyProcessorAffinity(pid) {
+    if (process.platform !== "win32" || !this.processorAffinityCpus.length) return false;
+    if (!Number.isInteger(Number(pid)) || Number(pid) <= 0) return false;
+
+    try {
+      const affinityMask = buildProcessorAffinityMask(this.processorAffinityCpus);
+      const command = [
+        `$process = Get-Process -Id ${Number(pid)} -ErrorAction Stop;`,
+        `$process.ProcessorAffinity = [IntPtr]([Int64]${affinityMask});`,
+      ].join(" ");
+      await execFileAsync("powershell.exe", [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        command,
+      ], {
+        windowsHide: true,
+        timeout: 5000,
+        maxBuffer: 256 * 1024,
+      });
+      this.logger.info(`Python LogParser affinity set. pid=${pid} cpus=${this.processorAffinityCpus.join(",")}`);
+      return true;
+    } catch (error) {
+      this.logger.warn(`Unable to set Python LogParser affinity pid=${pid} cpus=${this.processorAffinityCpus.join(",")}: ${error.message}`);
+      return false;
+    }
+  }
 
   async terminateDuplicateParsers({ pythonExecutable, scriptPath, configPath }) {
     const candidates = await this.listPythonProcesses();
@@ -200,6 +237,7 @@ export class PythonLogParserManager {
           ...payload,
           receivedAt: new Date().toISOString(),
           processStatus: "running",
+          processorAffinityCpus: [...this.processorAffinityCpus],
         };
         this.webStatus.set("logPostPythonDiagnostics", this.diagnostics);
       } catch (error) {
@@ -217,7 +255,9 @@ export class PythonLogParserManager {
   }
 
   getDiagnostics() {
-    return this.diagnostics ? { ...this.diagnostics } : null;
+    return this.diagnostics
+      ? { ...this.diagnostics, processorAffinityCpus: [...this.processorAffinityCpus] }
+      : null;
   }
 
   async stop() {
@@ -249,6 +289,27 @@ export class PythonLogParserManager {
   }
 }
 
+function normalizeProcessorAffinityCpus(value, fallback = []) {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? value.split(/[\s,;]+/u)
+      : [];
+  const cpus = [...new Set(source
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item >= 0 && item < 64))];
+  if (cpus.length > 0) return cpus;
+  return [...fallback];
+}
+
+function buildProcessorAffinityMask(cpus) {
+  let mask = 0n;
+  for (const cpu of cpus) {
+    mask |= 1n << BigInt(cpu);
+  }
+  if (mask <= 0n) throw new Error("processor affinity mask is empty");
+  return mask.toString(10);
+}
 
 function normalizeProcessText(value) {
   return String(value ?? "").replaceAll("\\", "/").replaceAll('"', "").trim().toLowerCase();
