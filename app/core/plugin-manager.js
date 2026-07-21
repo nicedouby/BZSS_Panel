@@ -183,6 +183,7 @@ export class PluginManager {
           webRegistry: this.core.webRegistry,
           pluginManager: this,
           webStatus: this.core.webStatus,
+          taskManager: this.core.taskManager,
         },
         modules: this.modules,
         playerRepository: this.modules.playerDatabase ?? null,
