@@ -80,6 +80,10 @@ export function useSnapshot() {
   return snapshot;
 }
 
+export function useSystemStatus() {
+  return systemStatus;
+}
+
 export function getRuntimeSyncState() {
   return runtimeSyncState;
 }
