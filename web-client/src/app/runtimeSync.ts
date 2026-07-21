@@ -13,6 +13,24 @@ export interface SnapshotStore {
 
 const snapshot = shallowRef<any>(null);
 
+interface RuntimeSystemStatus {
+  system?: {
+    uptime?: number;
+    memory?: { rss?: number };
+    performance?: {
+      latest?: {
+        network?: {
+          bytesInPerSec?: number | null;
+          bytesOutPerSec?: number | null;
+          bytesTotalPerSec?: number | null;
+        } | null;
+      } | null;
+    } | null;
+  };
+}
+
+const systemStatus = shallowRef<RuntimeSystemStatus | null>(null);
+
 const runtimeSyncState = reactive({
   started: false,
   inFlight: false,
@@ -68,7 +86,22 @@ export function getRuntimeSyncState() {
 
 function handleVisibilityChange() {
   if (!runtimeSyncState.started) return;
-  scheduleRuntimeSync();
+
+  if (document.hidden) {
+    clearRuntimeTimer();
+    if (activeSnapshotController) {
+      snapshotRequestVersion += 1;
+      activeSnapshotController.abort("runtime-sync-hidden");
+      activeSnapshotController = null;
+      runtimeSyncState.inFlight = false;
+    }
+    return;
+  }
+
+  // Do one coalesced refresh after returning to the tab; do not replay
+  // refreshes that would have happened while the page was hidden.
+  clearRuntimeTimer();
+  void fetchSnapshot({ scheduleNext: true, immediate: true });
 }
 
 function attachVisibilityListener() {
@@ -90,7 +123,7 @@ function clearRuntimeTimer() {
 }
 
 function scheduleRuntimeSync() {
-  if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
+  if (!runtimeSyncState.started || runtimeSyncState.inFlight || document.hidden) return;
 
   clearRuntimeTimer();
   const delay = resolveRuntimeSyncDelay();
@@ -101,12 +134,15 @@ function scheduleRuntimeSync() {
 }
 
 function resolveRuntimeSyncDelay() {
-  return resolveRefreshDelay({
+  const baseDelay = resolveRefreshDelay({
     policy: runtimeSyncState.refreshPolicy,
     playerCount: getCurrentPlayerCount(),
     hidden: false,
     surface: "auxiliary",
   });
+  const failureFactor = Math.pow(2, Math.min(runtimeSyncState.consecutiveFailures, 4));
+  const jitterFactor = 1 + Math.random() * 0.2;
+  return Math.min(180_000, Math.round(baseDelay * failureFactor * jitterFactor));
 }
 
 function getCurrentPlayerCount() {
@@ -117,7 +153,7 @@ function getCurrentPlayerCount() {
 }
 
 async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boolean }) {
-  if (!runtimeSyncState.started || runtimeSyncState.inFlight) return;
+  if (!runtimeSyncState.started || runtimeSyncState.inFlight || document.hidden) return;
   if (options.immediate) clearRuntimeTimer();
 
   const requestVersion = ++snapshotRequestVersion;
@@ -162,6 +198,7 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
     const normalized = markRaw(normalizeRuntimeSnapshot(data));
     snapshot.value = normalized;
     applySnapshotToStores(normalized);
+    await fetchSharedSystemStatus(controller);
 
     runtimeSyncState.lastSuccessAt = Date.now();
     runtimeSyncState.lastError = null;
@@ -185,6 +222,22 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
         scheduleRuntimeSync();
       }
     }
+  }
+}
+
+async function fetchSharedSystemStatus(controller: AbortController) {
+  try {
+    const response = await fetch("/api/system/status", {
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok || controller.signal.aborted) return;
+    systemStatus.value = await response.json() as RuntimeSystemStatus;
+  } catch {
+    // System metrics are auxiliary; keep the last known value on failure.
   }
 }
 
