@@ -70,18 +70,36 @@ async function testFriendlyFallbackBotAndEmptyWeapon() {
   await plugin.stop();
 }
 
-async function testRejectsAdministrativeInvalidAndSelfDamage() {
+async function testExplosiveDamageWithoutResolvedAttackerStillDisplays() {
+  const { plugin, warnings } = createHarness();
+  await plugin.start();
+  await plugin.api.handleCombatEvent({
+    eventId: "explosive",
+    record: damageRecord({
+      id: "explosive",
+      attacker: { resolved: false },
+      weapon: { raw: "BP_M67_Frag_Grenade_C_123456" },
+    }),
+  });
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0].message, /来源：自身\/环境/);
+  await plugin.stop();
+}
+
+async function testRejectsAdministrativeAndSelfDamage() {
   const { plugin, warnings } = createHarness();
   await plugin.start();
   await plugin.api.handleCombatEvent({ eventId: "admin", record: damageRecord({ damage: "1000000" }) });
   await plugin.api.handleCombatEvent({ eventId: "wound", record: damageRecord({ type: "wound" }) });
   await plugin.api.handleCombatEvent({ eventId: "invalid", record: damageRecord({ attacker: { resolved: false, name: "Unknown" } }) });
   await plugin.api.handleCombatEvent({ eventId: "self", record: damageRecord({ attacker: { resolved: true, playerId: "victim-id", name: "Victim" } }) });
-  assert.equal(warnings.length, 0);
+  // An unresolved attacker is treated as environment/explosive damage so a
+  // valid victim is not silently denied a damage notification.
+  assert.equal(warnings.length, 1);
   const state = plugin.api.getState();
   assert.equal(state.adminPunishmentSkipped, 1);
   assert.equal(state.nonDamageSkipped, 1);
-  assert.equal(state.invalidAttackerSkipped, 1);
+  assert.equal(state.invalidAttackerSkipped, 0);
   assert.equal(state.selfAttackerSkipped, 1);
   await plugin.stop();
 }
@@ -101,7 +119,8 @@ async function testDedupesAndUnsubscribes() {
 
 await testStandardDamageAndWeaponCompaction();
 await testFriendlyFallbackBotAndEmptyWeapon();
-await testRejectsAdministrativeInvalidAndSelfDamage();
+await testExplosiveDamageWithoutResolvedAttackerStillDisplays();
+await testRejectsAdministrativeAndSelfDamage();
 await testDedupesAndUnsubscribes();
 
 console.log("victim damage display tests passed");

@@ -90,14 +90,29 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
   function classifyAttackerSource(record, attacker, victim) {
     if (Boolean(record?.isBotAttack) || attacker.isBot) return { kind: "bot", label: "BOT" };
-    if (attacker.isFallback) return { kind: "environment", label: "自身/环境" };
 
     const attackerKey = stableIdentity(attacker);
     const victimKey = stableIdentity(victim);
-    if (!attacker.resolved || !attackerKey) return { kind: "invalid" };
+
+    // CombatClean uses the victim as a technical fallback when the original
+    // attacker is null.  This is environment damage, not self-attack.
+    if (attacker.isFallback) return { kind: "environment", label: "自身/环境" };
+
     // A real player may never be presented as having attacked themselves.
-    // CombatClean's explicit fallback above remains an environment source.
-    if (victimKey && attackerKey === victimKey) return { kind: "self" };
+    // Compare names as a final fallback because explosive damage records can
+    // lack a stable attacker ID even when CombatClean has a player name.
+    const attackerName = normalizeText(attacker.displayName || attacker.name).toLocaleLowerCase();
+    const victimName = normalizeText(victim.displayName || victim.name).toLocaleLowerCase();
+    if ((victimKey && attackerKey && attackerKey === victimKey) || (attackerName && victimName && attackerName === victimName)) {
+      return { kind: "self" };
+    }
+
+    if (attacker.isFallback || !attackerKey && !attackerName) return { kind: "environment", label: "自身/环境" };
+
+    // Do not drop valid damage merely because the explosive/projectile record
+    // has not resolved the attacker's stable ID yet.  A non-empty, different
+    // name is still useful to the victim; otherwise it is environment damage.
+    if (!attacker.resolved && !attackerName) return { kind: "environment", label: "自身/环境" };
     return {
       kind: "player",
       label: runtimeConfig.showAttackerName ? (attacker.displayName || attacker.name || "未知玩家") : "敌方玩家",
@@ -202,7 +217,6 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     if (!victim.playerId && !victim.name) return skip("invalid_victim");
     const attacker = resolveIdentity(record, "attacker");
     const source = classifyAttackerSource(record, attacker, victim);
-    if (source.kind === "invalid") return skip("invalid_attacker");
     if (source.kind === "self") return skip("self_attacker");
 
     const eventKey = buildEventKey(event, record, attacker, victim, damage);
