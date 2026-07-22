@@ -1,26 +1,65 @@
-import { spawnSync } from "node:child_process";
-import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
-// Volar's vue-tsc bridge uses TypeScript's dynamic compiler helpers. Some
-// hardened Node installations expose --disallow-code-generation-from-strings
-// through NODE_OPTIONS, which makes vue-tsc fail before it can report any
-// project diagnostics. Remove only that inherited restriction for this
-// trusted local compiler process; do not change the parent process.
-const env = { ...process.env };
-if (env.NODE_OPTIONS) {
-  env.NODE_OPTIONS = env.NODE_OPTIONS
-    .replace(/(^|\s)--disallow-code-generation-from-strings(?:=\w+)?(?=\s|$)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!env.NODE_OPTIONS) delete env.NODE_OPTIONS;
-}
+const require = createRequire(import.meta.url);
+const { runTsc } = require("@volar/typescript/lib/quickstart/runTsc");
+const vue = require("@vue/language-core");
+const tscPath = require.resolve("typescript/lib/tsc");
+const windowsPathReg = /\\/g;
 
-const result = spawnSync(
-  process.execPath,
-  [fileURLToPath(new URL("../node_modules/vue-tsc/bin/vue-tsc.js", import.meta.url)), ...process.argv.slice(2)],
-  { stdio: "inherit", env, windowsHide: false },
+// @volar/typescript normally injects this object into the transformed
+// TypeScript compiler:
+//
+//   new Proxy({}, { get(_, name) { return eval(name); } })
+//
+// That eval-based bridge is incompatible with Node's
+// --disallow-code-generation-from-strings. The transformed compiler only
+// needs TypeScript's public API here, while its private createProgram remains
+// in the transformed compiler module. Passing require("typescript") removes
+// the eval bridge without changing NODE_OPTIONS or weakening Node security.
+const typescriptObject = 'require("typescript")';
+
+let runExtensions = [".vue"];
+const extensionsChangedException = new Error("extensions changed");
+
+const main = () => runTsc(
+  tscPath,
+  runExtensions,
+  (ts, options) => {
+    const { configFilePath } = options.options;
+    const vueOptions = typeof configFilePath === "string"
+      ? vue.createParsedCommandLine(
+        ts,
+        ts.sys,
+        configFilePath.replace(windowsPathReg, "/"),
+      ).vueOptions
+      : vue.getDefaultCompilerOptions();
+    const allExtensions = vue.getAllExtensions(vueOptions);
+
+    if (
+      runExtensions.length === allExtensions.length
+      && runExtensions.every((extension) => allExtensions.includes(extension))
+    ) {
+      const vueLanguagePlugin = vue.createVueLanguagePlugin(
+        ts,
+        options.options,
+        vueOptions,
+        (id) => id,
+      );
+      return { languagePlugins: [vueLanguagePlugin] };
+    }
+
+    runExtensions = allExtensions;
+    throw extensionsChangedException;
+  },
+  typescriptObject,
 );
 
-if (result.error) throw result.error;
-process.exitCode = result.status ?? 1;
+try {
+  main();
+} catch (error) {
+  if (error === extensionsChangedException) {
+    main();
+  } else {
+    throw error;
+  }
+}
