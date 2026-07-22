@@ -75,6 +75,13 @@ export const sectionMeta: Record<NavSectionKey, { label: string; description: st
 export const staticNavItems: NavItem[] = [
   ...getStaticNavItems(),
   {
+    path: "/tactical-replay",
+    icon: "⏪",
+    label: "战术回放",
+    section: "opsLive",
+    order: 16,
+  },
+  {
     path: "/system/logpost-consumption-performance",
     icon: "📈",
     label: "消费性能评估",
