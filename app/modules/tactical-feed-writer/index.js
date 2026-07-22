@@ -5,7 +5,7 @@
 // into small append-only segments that a separate process can consume later.
 
 import { createHash } from "node:crypto";
-import { mkdir, open, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const MAGIC = 0x50525a42; // "BZRP" in a little-endian uint32.
@@ -160,6 +160,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
       startedAt: new Date(startedAt).toISOString(), endedAt: new Date(now).toISOString(),
       status: "closed", reason, payloadEncoding: "messagepack",
     });
+    await unlink(path.join(directory, "writer.lock")).catch(() => {});
     core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "sessionEnded", { sessionId, serverId, reason, time: new Date(now).toISOString() });
     resetSessionState();
   }
@@ -311,7 +312,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   }
 
   function resetSessionState() {
-    state.session = null; state.segment = null; state.segmentHandle = null; state.sequence = 0; state.segmentIndex = 0;
+    state.session = null; state.segment = null; state.segmentHandle = null; state.sequence = 0; state.segmentIndex = 0; state.nextPlayerId = 1; state.playerIds.clear();
     state.players.clear(); state.stats.clear(); state.pings.clear(); state.lastPingAt.clear(); state.pendingDictionaryUpdates.length = 0; state.fobs.clear(); state.zones.clear(); state.mainZones.clear(); state.vehicles.clear();
   }
 
