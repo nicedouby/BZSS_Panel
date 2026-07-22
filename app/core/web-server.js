@@ -17,6 +17,7 @@ import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/
 import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
 import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
+import { handleTacticalFeedWriterRoutes } from "../modules/tactical-feed-writer/routes.js";
 import {
   readSquadNamePolicyState,
   resolveSquadNamePolicyPath,
@@ -839,6 +840,19 @@ export class WebServer {
       json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
     });
     if (tacticalStateHandled) {
+      return;
+    }
+
+    const tacticalFeedWriterHandled = await handleTacticalFeedWriterRoutes({
+      core: this.core,
+      modules: this.modules,
+      url,
+      req,
+      user,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj, extraHeaders = {}) => this.json(res, status, obj, extraHeaders),
+    });
+    if (tacticalFeedWriterHandled) {
       return;
     }
 

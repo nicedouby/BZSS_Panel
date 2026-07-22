@@ -16,6 +16,25 @@
         <span>{{ tacticalMapViewerCount === null ? "正在统计查看人数" : `${tacticalMapViewerCount} 人正在查看` }}</span>
       </div>
 
+      <div
+        class="tactical-map-recording"
+        :class="{ 'is-recording': tacticalRecording.recording, 'is-disabled': !tacticalRecording.recordingEnabled }"
+        role="status"
+        aria-live="polite"
+      >
+        <span class="tactical-map-recording__dot" aria-hidden="true"></span>
+        <span>{{ tacticalRecordingLabel }}</span>
+        <button
+          type="button"
+          class="tactical-map-recording__button"
+          :disabled="tacticalRecording.pending || tacticalRecording.known === false"
+          :title="tacticalRecording.recordingEnabled ? '停止本局战术回放录制' : '开始本局战术回放录制'"
+          @click="toggleTacticalRecording"
+        >
+          {{ tacticalRecording.pending ? '处理中…' : tacticalRecording.recordingEnabled ? '停止' : '开始' }}
+        </button>
+      </div>
+
       <!-- Centered Transform Container -->
         <div
           ref="mapRef"
@@ -802,7 +821,7 @@ import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
 import { getChineseNameByFaction, getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
-import { apiDelete, apiPost } from "../app/apiClient";
+import { apiDelete, apiGet, apiPost } from "../app/apiClient";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -1261,6 +1280,12 @@ let fitViewportTimeout: number | null = null;
 let mapPageActive = false;
 const tilesReady = ref(false);
 const tacticalMapViewerCount = ref<number | null>(null);
+const tacticalRecording = ref({ known: false, recordingEnabled: false, recording: false, pending: false });
+const tacticalRecordingLabel = computed(() => {
+  if (!tacticalRecording.value.known) return "回放录制状态未知";
+  if (tacticalRecording.value.recording) return "正在录制战术回放";
+  return tacticalRecording.value.recordingEnabled ? "等待对局开始录制" : "战术回放录制已停止";
+});
 const TACTICAL_MAP_VIEWER_HEARTBEAT_MS = 15 * 1000;
 let tacticalMapViewerHeartbeat: number | null = null;
 let tacticalMapViewerPresenceGeneration = 0;
@@ -1284,12 +1309,47 @@ async function refreshTacticalMapViewerCount(generation: number) {
   }
 }
 
+async function refreshTacticalRecordingStatus() {
+  try {
+    const status = await apiGet<{ recordingEnabled?: boolean; recording?: boolean }>("/api/tactical-feed-writer/status");
+    tacticalRecording.value = {
+      ...tacticalRecording.value,
+      known: true,
+      recordingEnabled: status.recordingEnabled === true,
+      recording: status.recording === true,
+    };
+  } catch {
+    // The replay module is optional during rollout; retain the last known state.
+  }
+}
+
+async function toggleTacticalRecording() {
+  if (!tacticalRecording.value.known || tacticalRecording.value.pending) return;
+  tacticalRecording.value = { ...tacticalRecording.value, pending: true };
+  try {
+    const status = await apiPost<{ recordingEnabled?: boolean; recording?: boolean }>("/api/tactical-feed-writer/recording", {
+      enabled: !tacticalRecording.value.recordingEnabled,
+    });
+    tacticalRecording.value = {
+      known: true,
+      pending: false,
+      recordingEnabled: status.recordingEnabled === true,
+      recording: status.recording === true,
+    };
+  } catch (error) {
+    tacticalRecording.value = { ...tacticalRecording.value, pending: false };
+    console.warn("Failed to change tactical replay recording state.", error);
+  }
+}
+
 function startTacticalMapViewerPresence() {
   const generation = ++tacticalMapViewerPresenceGeneration;
   if (tacticalMapViewerHeartbeat !== null) window.clearInterval(tacticalMapViewerHeartbeat);
   void refreshTacticalMapViewerCount(generation);
+  void refreshTacticalRecordingStatus();
   tacticalMapViewerHeartbeat = window.setInterval(() => {
     void refreshTacticalMapViewerCount(generation);
+    void refreshTacticalRecordingStatus();
   }, TACTICAL_MAP_VIEWER_HEARTBEAT_MS);
 }
 
@@ -3457,6 +3517,34 @@ onBeforeUnmount(deactivateMapPage);
   background: #41f5b5;
   box-shadow: 0 0 0 3px rgba(65, 245, 181, 0.14), 0 0 10px rgba(65, 245, 181, 0.82);
 }
+
+.tactical-map-recording {
+  position: absolute;
+  top: 54px;
+  right: 14px;
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: rgba(5, 12, 24, 0.84);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.28);
+  color: #dbeafe;
+  font-size: 12px;
+  font-weight: 650;
+  backdrop-filter: blur(8px);
+}
+
+.tactical-map-recording.is-recording { border-color: rgba(248, 113, 113, 0.7); color: #fee2e2; }
+.tactical-map-recording.is-disabled { color: #94a3b8; }
+.tactical-map-recording__dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+.tactical-map-recording.is-recording .tactical-map-recording__dot { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18), 0 0 12px rgba(248, 113, 113, 0.9); animation: tactical-record-pulse 1.2s ease-in-out infinite; }
+.tactical-map-recording__button { border: 1px solid rgba(203, 213, 225, .3); border-radius: 999px; padding: 3px 8px; background: rgba(15, 23, 42, .76); color: inherit; cursor: pointer; font: inherit; font-size: 11px; }
+.tactical-map-recording__button:hover:not(:disabled) { border-color: rgba(255, 255, 255, .78); background: rgba(30, 41, 59, .92); }
+.tactical-map-recording__button:disabled { cursor: wait; opacity: .58; }
+@keyframes tactical-record-pulse { 50% { opacity: .45; } }
 .vehicle-markers-layer {
   position: absolute;
   inset: 0;
