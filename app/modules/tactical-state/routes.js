@@ -3,11 +3,10 @@
 const STREAM_HEARTBEAT_MS = 20_000;
 
 export async function handleTacticalStateRoutes({ modules, url, req, res, user, json }) {
-  if (!url.pathname.startsWith("/api/tactical-state")) return false;
-
   if (url.pathname.startsWith("/api/tactical-replay")) {
     return handleTacticalReplayPlayerRoutes({ modules, url, req, json });
   }
+  if (!url.pathname.startsWith("/api/tactical-state")) return false;
 
   const tacticalState = modules.tacticalState;
   if (!tacticalState) {
