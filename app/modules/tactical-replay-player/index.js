@@ -1,0 +1,569 @@
+// -*- coding: utf-8 -*-
+//
+// Read-only player for the TacticalFeedWriter .rps spool.
+// It rebuilds only the requested point in time and never keeps replay history
+// in the web process.
+
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const MAGIC = 0x50525a42;
+const VERSION = 1;
+const HEADER_BYTES = 24;
+const RECORD = Object.freeze({
+  SESSION_BEGIN: 0x01,
+  DICTIONARY_UPDATE: 0x02,
+  MATCH_DELTA: 0x03,
+  PLAYER_DELTA: 0x11,
+  PLAYER_REMOVE: 0x12,
+  PLAYER_STATS_DELTA: 0x13,
+  PLAYER_NETWORK_DELTA: 0x14,
+  ZONE_DELTA: 0x20,
+  MAIN_ZONE_DELTA: 0x21,
+  FOB_CREATE: 0x30,
+  FOB_DELTA: 0x31,
+  FOB_REMOVE: 0x32,
+  VEHICLE_DELTA: 0x40,
+  VEHICLE_REMOVE: 0x41,
+  SESSION_END: 0x7f,
+});
+const FIELD = Object.freeze({
+  POSITION: 1 << 0,
+  YAW: 1 << 1,
+  HEALTH: 1 << 2,
+  PRESENCE: 1 << 3,
+  TEAM: 1 << 4,
+  SQUAD: 1 << 5,
+  FIRETEAM: 1 << 6,
+  ROLE: 1 << 7,
+  VEHICLE: 1 << 8,
+  LEADER: 1 << 9,
+});
+const STAT_NAMES = [
+  "kills",
+  "wounds",
+  "deaths",
+  "teamKills",
+  "vehicleKills",
+  "revives",
+  "healPoints",
+  "combatScore",
+  "objectiveScore",
+  "teamworkScore",
+];
+
+export function createTacticalReplayPlayerModule({ config, logger }) {
+  const settings = readSettings(config);
+  const state = {
+    started: false,
+    lastError: "",
+    lastReadAt: "",
+    reads: 0,
+    invalidRecords: 0,
+  };
+
+  return {
+    manifest: {
+      id: "module.tacticalReplayPlayer",
+      name: "Tactical Replay Player",
+      kind: "module",
+      version: "1.0.0",
+      description: "Reads TacticalFeedWriter .rps sessions on demand.",
+      defaultEnabled: true,
+    },
+    apiName: "tacticalReplayPlayer",
+    api: {
+      getStatus() {
+        return {
+          enabled: state.started,
+          rootDir: settings.rootDir,
+          reads: state.reads,
+          invalidRecords: state.invalidRecords,
+          lastReadAt: state.lastReadAt || null,
+          lastError: state.lastError || null,
+        };
+      },
+      listSessions: (options) => listSessions(settings, options),
+      getSession: (sessionId) => getSession(settings, sessionId),
+      readState: async (sessionId, options) => {
+        state.reads += 1;
+        state.lastReadAt = new Date().toISOString();
+        try {
+          return await readState(settings, sessionId, options);
+        } catch (error) {
+          state.lastError = error?.message ?? String(error);
+          logger?.warn?.("Tactical replay read failed.", {
+            operation: "tacticalReplayPlayer.readState",
+            data: { sessionId, message: state.lastError },
+          });
+          throw error;
+        }
+      },
+    },
+    async start() {
+      state.started = true;
+    },
+    async stop() {
+      state.started = false;
+    },
+  };
+}
+
+async function listSessions(settings, { limit = 100 } = {}) {
+  await fs.mkdir(settings.rootDir, { recursive: true });
+  const entries = await fs.readdir(settings.rootDir, { withFileTypes: true });
+  const sessions = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !isSafeSessionId(entry.name)) continue;
+    const session = await getSession(settings, entry.name);
+    if (session) sessions.push(session);
+  }
+
+  sessions.sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
+  const maximum = clampInteger(limit, 1, 1000, 100);
+  return sessions.slice(0, maximum);
+}
+
+async function getSession(settings, sessionId) {
+  const safeId = validateSessionId(sessionId);
+  const directory = path.join(settings.rootDir, safeId);
+  let metadata;
+  try {
+    metadata = JSON.parse(await fs.readFile(path.join(directory, "session.json"), "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
+
+  const startedMs = Date.parse(metadata.startedAt ?? "");
+  const endedMs = Date.parse(metadata.endedAt ?? "");
+  const durationMs = Number.isFinite(Number(metadata.durationMs))
+    ? Math.max(0, Number(metadata.durationMs))
+    : Number.isFinite(startedMs)
+      ? Math.max(0, (Number.isFinite(endedMs) ? endedMs : Date.now()) - startedMs)
+      : 0;
+
+  return {
+    ...metadata,
+    id: metadata.sessionId ?? safeId,
+    sessionId: metadata.sessionId ?? safeId,
+    status: metadata.status ?? (metadata.endedAt ? "closed" : "recording"),
+    durationMs,
+    rootDir: undefined,
+  };
+}
+
+async function readState(settings, sessionId, { atMs = 0 } = {}) {
+  const session = await getSession(settings, sessionId);
+  if (!session) return null;
+
+  const safeId = validateSessionId(sessionId);
+  const directory = path.join(settings.rootDir, safeId);
+  const replay = createReplayState(session);
+  const targetMs = Math.max(0, Number.isFinite(Number(atMs)) ? Number(atMs) : 0);
+  const segmentNames = (await fs.readdir(path.join(directory, "segments"), { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isFile() && /^(\\d{6})\\.((open\\.)?rps)$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+
+  let lastAppliedMs = 0;
+  let stoppedAtTarget = false;
+  for (const segmentName of segmentNames) {
+    if (stoppedAtTarget) break;
+    const bytes = await fs.readFile(path.join(directory, "segments", segmentName));
+    let offset = 0;
+    while (offset + HEADER_BYTES <= bytes.length) {
+      const magic = bytes.readUInt32LE(offset);
+      const version = bytes.readUInt8(offset + 4);
+      const elapsedMs = bytes.readUInt32LE(offset + 12);
+      const payloadLength = bytes.readUInt32LE(offset + 16);
+      const recordEnd = offset + HEADER_BYTES + payloadLength;
+
+      if (magic !== MAGIC || version !== VERSION || payloadLength > bytes.length || recordEnd > bytes.length) {
+        stateInvalidRecord(replay);
+        break;
+      }
+      if (elapsedMs > targetMs) {
+        stoppedAtTarget = true;
+        break;
+      }
+
+      const payload = bytes.subarray(offset + HEADER_BYTES, recordEnd);
+      if (crc32(payload) !== bytes.readUInt32LE(offset + 20)) {
+        stateInvalidRecord(replay);
+        offset = recordEnd;
+        continue;
+      }
+
+      try {
+        applyRecord(replay, bytes.readUInt8(offset + 5), decodeMessagePack(payload));
+        lastAppliedMs = elapsedMs;
+      } catch {
+        stateInvalidRecord(replay);
+      }
+      offset = recordEnd;
+    }
+  }
+
+  return {
+    session,
+    atMs: targetMs,
+    resolvedAtMs: lastAppliedMs,
+    state: serializeReplayState(replay, session, targetMs),
+    diagnostics: {
+      segments: segmentNames.length,
+      invalidRecords: replay.invalidRecords,
+      lastSequence: replay.lastSequence,
+    },
+  };
+}
+
+function createReplayState(session) {
+  return {
+    server: {},
+    match: {},
+    teams: [],
+    dictionary: new Map(),
+    players: new Map(),
+    stats: new Map(),
+    pings: new Map(),
+    zones: new Map(),
+    mainZones: new Map(),
+    fobs: new Map(),
+    vehicles: new Map(),
+    invalidRecords: 0,
+    lastSequence: 0,
+    session,
+  };
+}
+
+function applyRecord(replay, type, payload) {
+  if (payload && typeof payload === "object" && Number.isFinite(Number(payload.seq))) {
+    replay.lastSequence = Number(payload.seq);
+  }
+
+  switch (type) {
+    case RECORD.SESSION_BEGIN:
+      replay.server = {
+        ...replay.server,
+        map: text(payload?.map),
+        layer: text(payload?.layer),
+        mode: text(payload?.mode),
+        serverId: text(payload?.serverId),
+      };
+      return;
+    case RECORD.MATCH_DELTA:
+      replay.server = { ...replay.server, ...(payload?.server ?? {}) };
+      replay.teams = Array.isArray(payload?.teams) ? payload.teams : replay.teams;
+      return;
+    case RECORD.DICTIONARY_UPDATE:
+      for (const item of payload?.players ?? []) {
+        if (Array.isArray(item) && item.length >= 2) replay.dictionary.set(String(item[0]), item[1] ?? {});
+      }
+      return;
+    case RECORD.PLAYER_DELTA:
+      for (const change of payload?.changes ?? []) applyPlayerChange(replay, change);
+      return;
+    case RECORD.PLAYER_REMOVE:
+      for (const id of payload?.ids ?? []) {
+        const key = String(id);
+        replay.players.delete(key);
+        replay.stats.delete(key);
+        replay.pings.delete(key);
+      }
+      return;
+    case RECORD.PLAYER_STATS_DELTA:
+      for (const item of payload?.changes ?? []) {
+        if (Array.isArray(item) && item.length >= 2) replay.stats.set(String(item[0]), item[1]);
+      }
+      return;
+    case RECORD.PLAYER_NETWORK_DELTA:
+      for (const item of payload?.players ?? []) {
+        if (Array.isArray(item) && item.length >= 2) replay.pings.set(String(item[0]), item[1]);
+      }
+      return;
+    case RECORD.ZONE_DELTA:
+      applyAssetUpsert(replay.zones, payload?.upsert);
+      return;
+    case RECORD.MAIN_ZONE_DELTA:
+      applyAssetUpsert(replay.mainZones, payload?.upsert);
+      return;
+    case RECORD.FOB_CREATE:
+    case RECORD.FOB_DELTA:
+      applyAssetUpsert(replay.fobs, payload?.fobs);
+      return;
+    case RECORD.VEHICLE_DELTA:
+      applyAssetUpsert(replay.vehicles, payload?.upsert);
+      return;
+    case RECORD.FOB_REMOVE:
+    case RECORD.VEHICLE_REMOVE:
+      for (const id of payload?.ids ?? []) {
+        const target = type === RECORD.FOB_REMOVE ? replay.fobs : replay.vehicles;
+        target.delete(String(id));
+      }
+      return;
+    default:
+      return;
+  }
+}
+
+function applyPlayerChange(replay, change) {
+  if (!Array.isArray(change) || change.length < 2) return;
+  const key = String(change[0]);
+  let player = replay.players.get(key);
+  if (!player) {
+    player = {
+      position: null,
+      yaw: null,
+      health: null,
+      presence: "",
+      team: null,
+      squad: null,
+      fireTeam: null,
+      role: "",
+      vehicle: "",
+      leader: false,
+    };
+    replay.players.set(key, player);
+  }
+
+  const mask = Number(change[1]) || 0;
+  let index = 2;
+  if (mask & FIELD.POSITION) player.position = change[index++];
+  if (mask & FIELD.YAW) player.yaw = change[index++];
+  if (mask & FIELD.HEALTH) player.health = change[index++];
+  if (mask & FIELD.PRESENCE) player.presence = text(change[index++]);
+  if (mask & FIELD.TEAM) player.team = numberOrNull(change[index++]);
+  if (mask & FIELD.SQUAD) player.squad = numberOrNull(change[index++]);
+  if (mask & FIELD.FIRETEAM) player.fireTeam = numberOrNull(change[index++]);
+  if (mask & FIELD.ROLE) player.role = text(change[index++]);
+  if (mask & FIELD.VEHICLE) player.vehicle = text(change[index++]);
+  if (mask & FIELD.LEADER) player.leader = Boolean(change[index++]);
+}
+
+function applyAssetUpsert(target, values) {
+  for (const item of Array.isArray(values) ? values : []) {
+    if (!Array.isArray(item) || item.length < 2) continue;
+    target.set(String(item[0]), item[1] ?? {});
+  }
+}
+
+function serializeReplayState(replay, session, atMs) {
+  const players = [...replay.players.entries()]
+    .map(([id, value]) => {
+      const identity = replay.dictionary.get(id) ?? {};
+      const stats = replay.stats.get(id);
+      const position = vectorObject(value.position);
+      const player = {
+        identity: {
+          key: text(identity.key || id),
+          name: text(identity.name || identity.key || id),
+          steamID: text(identity.steamID),
+          eosID: text(identity.eosID),
+          playerID: numberOrNull(identity.initialPlayerId),
+        },
+        match: {
+          teamId: numberOrNull(value.team),
+          squadId: numberOrNull(value.squad),
+          fireTeamIndex: numberOrNull(value.fireTeam),
+          isLeader: Boolean(value.leader),
+          role: text(value.role),
+        },
+        telemetry: {
+          position,
+          yaw: numberOrNull(value.yaw),
+          health: numberOrNull(value.health),
+          fireTeamIndex: numberOrNull(value.fireTeam),
+          hasPosition: Boolean(position),
+          hasTelemetry: true,
+        },
+        presence: { state: text(value.presence) },
+        vehicle: { vehicleType: text(value.vehicle) },
+        network: { gamePing: numberOrNull(replay.pings.get(id)) },
+        combat: statsToObject(stats),
+      };
+      return player;
+    })
+    .sort((left, right) => left.identity.name.localeCompare(right.identity.name));
+
+  return {
+    meta: {
+      generatedAt: new Date().toISOString(),
+      revision: 0,
+      replay: true,
+      replayAtMs: atMs,
+    },
+    server: replay.server,
+    match: replay.match,
+    teams: replay.teams,
+    players,
+    assets: {
+      captureZones: mapAssets(replay.zones),
+      mainZones: mapAssets(replay.mainZones),
+      fobs: mapAssets(replay.fobs),
+      vehicles: mapAssets(replay.vehicles),
+    },
+    session: {
+      id: session.id,
+      status: session.status,
+      map: session.map ?? replay.server.map ?? "",
+      layer: session.layer ?? replay.server.layer ?? "",
+      mode: session.mode ?? replay.server.mode ?? "",
+    },
+  };
+}
+
+function mapAssets(map) {
+  return [...map.entries()].map(([id, value]) => ({
+    ...(value && typeof value === "object" ? value : {}),
+    id,
+  }));
+}
+
+function statsToObject(values) {
+  if (!Array.isArray(values)) return {};
+  return Object.fromEntries(STAT_NAMES.map((name, index) => [name, numberOrNull(values[index])]));
+}
+
+function vectorObject(value) {
+  if (!Array.isArray(value) || value.length < 2) return null;
+  return {
+    x: numberOrNull(value[0]),
+    y: numberOrNull(value[1]),
+    z: numberOrNull(value[2] ?? 0),
+  };
+}
+
+function stateInvalidRecord(replay) {
+  replay.invalidRecords += 1;
+}
+
+function readSettings(config) {
+  const feed = config?.get?.("modules.tacticalFeedWriter", {}) ?? {};
+  return {
+    rootDir: path.resolve(String(feed.rootDir ?? "data/replay-spool")),
+  };
+}
+
+function validateSessionId(value) {
+  const id = String(value ?? "");
+  if (!isSafeSessionId(id)) {
+    const error = new Error("Invalid replay session id.");
+    error.code = "InvalidReplaySessionId";
+    error.statusCode = 400;
+    throw error;
+  }
+  return id;
+}
+
+function isSafeSessionId(value) {
+  return /^[A-Za-z0-9._-]{1,160}$/.test(String(value ?? ""));
+}
+
+function clampInteger(value, minimum, maximum, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(maximum, Math.max(minimum, Math.floor(n))) : fallback;
+}
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function text(value) {
+  return String(value ?? "").trim();
+}
+
+function decodeMessagePack(buffer) {
+  const cursor = { offset: 0 };
+  const value = readMessagePackValue(buffer, cursor);
+  if (cursor.offset !== buffer.length) throw new Error("Trailing MessagePack bytes.");
+  return value;
+}
+
+function readMessagePackValue(buffer, cursor) {
+  if (cursor.offset >= buffer.length) throw new Error("Unexpected end of MessagePack payload.");
+  const head = buffer[cursor.offset++];
+
+  if (head <= 0x7f) return head;
+  if (head >= 0xe0) return head - 0x100;
+  if ((head & 0xe0) === 0xa0) return readString(buffer, cursor, head & 0x1f);
+  if ((head & 0xf0) === 0x90) return readArray(buffer, cursor, head & 0x0f);
+  if ((head & 0xf0) === 0x80) return readMap(buffer, cursor, head & 0x0f);
+
+  if (head === 0xc0) return null;
+  if (head === 0xc2) return false;
+  if (head === 0xc3) return true;
+  if (head === 0xcb) {
+    ensureRemaining(buffer, cursor, 8);
+    const value = buffer.readDoubleBE(cursor.offset);
+    cursor.offset += 8;
+    return value;
+  }
+  if (head === 0xda) {
+    ensureRemaining(buffer, cursor, 2);
+    const length = buffer.readUInt16BE(cursor.offset);
+    cursor.offset += 2;
+    return readString(buffer, cursor, length);
+  }
+  if (head === 0xdc) {
+    ensureRemaining(buffer, cursor, 2);
+    const length = buffer.readUInt16BE(cursor.offset);
+    cursor.offset += 2;
+    return readArray(buffer, cursor, length);
+  }
+  if (head === 0xde) {
+    ensureRemaining(buffer, cursor, 2);
+    const length = buffer.readUInt16BE(cursor.offset);
+    cursor.offset += 2;
+    return readMap(buffer, cursor, length);
+  }
+
+  throw new Error("Unsupported MessagePack type: 0x" + head.toString(16));
+}
+
+function readString(buffer, cursor, length) {
+  ensureRemaining(buffer, cursor, length);
+  const value = buffer.subarray(cursor.offset, cursor.offset + length).toString("utf8");
+  cursor.offset += length;
+  return value;
+}
+
+function readArray(buffer, cursor, length) {
+  const result = [];
+  for (let index = 0; index < length; index += 1) result.push(readMessagePackValue(buffer, cursor));
+  return result;
+}
+
+function readMap(buffer, cursor, length) {
+  const result = {};
+  for (let index = 0; index < length; index += 1) {
+    const key = readMessagePackValue(buffer, cursor);
+    result[String(key)] = readMessagePackValue(buffer, cursor);
+  }
+  return result;
+}
+
+function ensureRemaining(buffer, cursor, count) {
+  if (cursor.offset + count > buffer.length) throw new Error("Unexpected end of MessagePack payload.");
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let index = 0; index < 8; index += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+export const TacticalReplayPlayerFormat = Object.freeze({
+  MAGIC,
+  VERSION,
+  HEADER_BYTES,
+  crc32,
+  decodeMessagePack,
+});
