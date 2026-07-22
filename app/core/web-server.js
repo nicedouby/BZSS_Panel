@@ -5050,6 +5050,14 @@ export class WebServer {
       };
     }
 
+    if (normalizedDirective === "SetAutomaticHeal" && !/^[01]$/.test(text)) {
+      return {
+        ok: false,
+        error: "InvalidAutomaticHealParameter",
+        message: "SetAutomaticHeal only accepts 1 (enabled) or 0 (disabled).",
+      };
+    }
+
     if (/[\r\n]/.test(text)) {
       return {
         ok: false,
