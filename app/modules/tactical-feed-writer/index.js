@@ -164,6 +164,13 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
       status: "closed", reason, payloadEncoding: "messagepack",
     });
     await unlink(path.join(directory, "writer.lock")).catch(() => {});
+    // A closed session must use the same directory name as the public sessionId.
+    // Keeping the `.open` suffix made the reader list the session but fail to
+    // resolve it when `/state` was requested.
+    const closedDirectory = path.join(path.dirname(directory), sessionId);
+    if (directory !== closedDirectory) {
+      await rename(directory, closedDirectory);
+    }
     core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "sessionEnded", { sessionId, serverId, reason, time: new Date(now).toISOString() });
     resetSessionState();
   }

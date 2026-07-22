@@ -1387,7 +1387,6 @@ const sidebarSearch = ref("");
 const sidebarSortMode = ref<SidebarSortMode>("squad");
 const sidebarOnlyAlive = ref(false);
 const sidebarOnlyVehicle = ref(false);
-const sidebarCollapsed = ref(false);
 const activeTeamTab = ref<number>(1);
 const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
@@ -2821,15 +2820,6 @@ function fitToViewport() {
 function onMapMousemove(e: MouseEvent) {
   handleMouseMove(e);
 }
-
-watch(
-  () => sidebarMode.value,
-  (mode) => {
-    if (mode === "hidden") {
-      sidebarCollapsed.value = true;
-    }
-  }
-);
 
 // Squad directory highlights
 function toggleSquadFocus(squadId: number) {

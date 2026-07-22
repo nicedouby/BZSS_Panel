@@ -127,7 +127,8 @@ async function listSessions(settings, { limit = 100 } = {}) {
 
 async function getSession(settings, sessionId) {
   const safeId = validateSessionId(sessionId);
-  const directory = path.join(settings.rootDir, safeId);
+  const directory = await resolveSessionDirectory(settings.rootDir, safeId);
+  if (!directory) return null;
   let metadata;
   try {
     metadata = JSON.parse(await fs.readFile(path.join(directory, "session.json"), "utf8"));
@@ -159,7 +160,8 @@ async function readState(settings, sessionId, { atMs = 0 } = {}) {
   if (!session) return null;
 
   const safeId = validateSessionId(sessionId);
-  const directory = path.join(settings.rootDir, safeId);
+  const directory = await resolveSessionDirectory(settings.rootDir, safeId);
+  if (!directory) return null;
   const replay = createReplayState(session);
   const targetMs = Math.max(0, Number.isFinite(Number(atMs)) ? Number(atMs) : 0);
   const segmentNames = (await fs.readdir(path.join(directory, "segments"), { withFileTypes: true }).catch(() => []))
@@ -459,6 +461,22 @@ function validateSessionId(value) {
 
 function isSafeSessionId(value) {
   return /^[A-Za-z0-9._-]{1,160}$/.test(String(value ?? ""));
+}
+
+async function resolveSessionDirectory(rootDir, sessionId) {
+  const candidates = [
+    path.join(rootDir, sessionId),
+    path.join(rootDir, `${sessionId}.open`),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const info = await fs.stat(candidate);
+      if (info.isDirectory()) return candidate;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  return null;
 }
 
 function clampInteger(value, minimum, maximum, fallback) {

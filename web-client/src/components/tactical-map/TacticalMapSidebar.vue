@@ -1,5 +1,5 @@
 <template>
-  <aside class="tactical-sidebar">
+  <aside class="tactical-sidebar" :class="{ 'is-map-sidebar-collapsed': isCollapsed }">
     <!-- Collapsible toggle tab -->
     <button
       class="sidebar-toggle-tab"
@@ -776,6 +776,16 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   backdrop-filter: blur(20px) saturate(180%);
   z-index: 30;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* The grid column is sized by this root element. Collapsing only the inner
+ * wrapper leaves the `auto` grid track at 340px, so the map never grows. */
+.tactical-sidebar.is-map-sidebar-collapsed {
+  width: 0;
+  min-width: 0;
+  flex-basis: 0;
+  border-left-color: transparent;
+  box-shadow: none;
 }
 
 /* ─── Toggle Tab ──────────────────────────────────── */

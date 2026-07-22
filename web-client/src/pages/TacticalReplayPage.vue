@@ -40,21 +40,38 @@
           <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span><span><b>{{ assetCount }}</b><small>战场设施</small></span></div>
         </div>
 
-        <div class="map-shell">
+        <div
+          ref="replayViewportRef"
+          class="map-shell"
+          :class="{ 'is-dragging': isDragging }"
+          @pointerdown="startDrag"
+          @pointermove="onPointerMove"
+          @pointerup="endDrag"
+          @pointercancel="endDrag"
+          @pointerleave="endDrag"
+          @wheel.prevent="onWheel"
+        >
           <div class="map-hud map-hud-top"><b>REPLAY</b><span>{{ activeSession && activeSession.status === "recording" ? "录制中" : "历史档案" }}</span><i>/</i><span>{{ activeMapConfig.name }}</span></div>
           <div class="map-grid"></div>
-          <div class="map-canvas" :style="{ opacity: hasMapResource ? 1 : 0 }">
-            <TiledMapRenderer :tile-base-path="activeMapConfig.tileBasePath" :max-zoom="activeMapConfig.maxZoomLevel" :tiles-enabled="hasMapResource" :interaction-active="false" :viewport-width="1280" :viewport-height="720" :fallback-image="activeMapConfig.image" />
+          <div class="replay-map-transform" :style="camera.getTransform()">
+            <div class="map-canvas" :style="{ opacity: hasMapResource ? 1 : 0 }">
+              <TiledMapRenderer :tile-base-path="activeMapConfig.tileBasePath" :max-zoom="activeMapConfig.maxZoomLevel" :tiles-enabled="hasMapResource" :interaction-active="isDragging" :viewport-width="viewportWidth" :viewport-height="viewportHeight" :fallback-image="activeMapConfig.image" />
+            </div>
+            <div v-if="!hasMapResource" class="map-placeholder"><span>MAP DATA UNAVAILABLE</span><small>当前录制没有匹配的地图资源</small></div>
+            <div class="asset-layer">
+              <span v-for="zone in replayZones" :key="zone.id" class="asset-marker zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">{{ zone.name || "ZONE" }}</span>
+              <span v-for="fob in replayFobs" :key="fob.id" class="asset-marker fob-marker" :class="'team-' + (fob.teamId || 0)" :style="markerStyle(fob)" :title="fob.name">⌂</span>
+            </div>
+            <div class="player-layer">
+              <button v-for="player in visiblePlayers" :key="player.key" type="button" class="replay-player" :class="{ selected: player.key === (selectedPlayer && selectedPlayer.key) }" :style="markerStyle(player)" @click.stop="selectPlayer(player)">
+                <span class="player-pip" :class="'team-' + (player.teamId || 0)" :style="{ transform: 'rotate(' + (player.yaw || 0) + 'deg)' }"></span><span class="player-label">{{ player.name }}</span>
+              </button>
+            </div>
           </div>
-          <div v-if="!hasMapResource" class="map-placeholder"><span>MAP DATA UNAVAILABLE</span><small>当前录制没有匹配的地图资源</small></div>
-          <div class="asset-layer">
-            <span v-for="zone in replayZones" :key="zone.id" class="asset-marker zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">{{ zone.name || "ZONE" }}</span>
-            <span v-for="fob in replayFobs" :key="fob.id" class="asset-marker fob-marker" :class="'team-' + (fob.teamId || 0)" :style="markerStyle(fob)" :title="fob.name">⌂</span>
-          </div>
-          <div class="player-layer">
-            <button v-for="player in visiblePlayers" :key="player.key" type="button" class="replay-player" :class="{ selected: player.key === (selectedPlayer && selectedPlayer.key) }" :style="markerStyle(player)" @click="selectedPlayer = player">
-              <span class="player-pip" :class="'team-' + (player.teamId || 0)" :style="{ transform: 'rotate(' + (player.yaw || 0) + 'deg)' }"></span><span class="player-label">{{ player.name }}</span>
-            </button>
+          <div class="map-controls" @pointerdown.stop>
+            <button type="button" title="放大" @click="zoomBy(1.25)">＋</button>
+            <button type="button" title="缩小" @click="zoomBy(0.8)">−</button>
+            <button type="button" title="重置视角" @click="resetCamera">⌂</button>
           </div>
           <div class="map-hud map-hud-bottom"><span>{{ activeSession && activeSession.layer || "NO LAYER" }}</span><i>·</i><span>数据点 {{ state ? formatClock(state.resolvedAtMs) : "--:--" }}</span></div>
           <div v-if="loadingState" class="map-loading">正在重建战场状态…</div>
@@ -83,16 +100,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { apiGet } from "../app/apiClient";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
+import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
 
-const sessions = ref<any[]>([]);
-const activeSession = ref<any | null>(null);
-const state = ref<any | null>(null);
-const status = ref<any | null>(null);
-const selectedPlayer = ref<any | null>(null);
+interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; }
+interface ReplayPosition { x: number; y: number; z?: number; }
+interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; health: number | null; ping: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; hasPosition: boolean; }
+interface ReplayAsset { id: string; name: string; teamId: number | null; position: ReplayPosition; hasPosition: boolean; [key: string]: unknown; }
+
+const sessions = ref<ReplaySession[]>([]);
+const activeSession = ref<ReplaySession | null>(null);
+const state = ref<Record<string, any> | null>(null);
+const status = ref<Record<string, any> | null>(null);
+const selectedPlayer = ref<ReplayPlayer | null>(null);
 const searchText = ref("");
 const currentMs = ref(0);
 const playing = ref(false);
@@ -101,6 +125,13 @@ const loadingSessions = ref(false);
 const loadingState = ref(false);
 const errorText = ref("");
 const speeds = [0.5, 1, 2, 4];
+const replayViewportRef = ref<HTMLElement | null>(null);
+const viewportWidth = ref(0);
+const viewportHeight = ref(0);
+const camera = useMapCamera();
+const isDragging = camera.isDragging;
+const dragMoved = ref(false);
+let resizeObserver: ResizeObserver | null = null;
 let animationTimer: ReturnType<typeof setInterval> | null = null;
 let seekTimer: ReturnType<typeof setTimeout> | null = null;
 let latestRequestedMs = -1;
@@ -117,24 +148,26 @@ const activeMapConfig = computed(() => {
 });
 const hasMapResource = computed(() => Boolean(activeMapConfig.value.tileBasePath || activeMapConfig.value.image));
 const currentSnapshot = computed(() => state.value && state.value.state || null);
-const rawPlayers = computed(() => Array.isArray(currentSnapshot.value && currentSnapshot.value.players) ? currentSnapshot.value.players : []);
-const visiblePlayers = computed(() => rawPlayers.value.map(normalizePlayer).filter((item) => item.hasPosition));
+const rawPlayers = computed<any[]>(() => Array.isArray(currentSnapshot.value && currentSnapshot.value.players) ? currentSnapshot.value.players : []);
+const visiblePlayers = computed<ReplayPlayer[]>(() => rawPlayers.value.map(normalizePlayer).filter((item: ReplayPlayer) => item.hasPosition));
 const replayZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.captureZones));
 const replayFobs = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.fobs));
 const assetCount = computed(() => replayZones.value.length + replayFobs.value.length + normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.mainZones).length);
-const teamOneCount = computed(() => visiblePlayers.value.filter((item) => item.teamId === 1).length);
-const teamTwoCount = computed(() => visiblePlayers.value.filter((item) => item.teamId === 2).length);
+const teamOneCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 1).length);
+const teamTwoCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 2).length);
 
-function normalizePlayer(source: any) {
+provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y });
+
+function normalizePlayer(source: any): ReplayPlayer {
   const position = source && source.telemetry && source.telemetry.position || source && source.position;
   return { key: String(source && source.identity && (source.identity.key || source.identity.name) || Math.random()), name: String(source && source.identity && source.identity.name || "Unknown"), teamId: numberOrNull(source && source.match && source.match.teamId), squadId: numberOrNull(source && source.match && source.match.squadId), role: String(source && source.match && source.match.role || ""), health: numberOrNull(source && source.telemetry && source.telemetry.health), ping: numberOrNull(source && source.network && source.network.gamePing), yaw: numberOrNull(source && source.telemetry && source.telemetry.yaw), position, positionText: position ? round(position.x) + ", " + round(position.y) : "--", hasPosition: Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) };
 }
-function normalizeAssets(values: any) {
+function normalizeAssets(values: any): ReplayAsset[] {
   return (Array.isArray(values) ? values : []).map((item, index) => {
     const position = item && (item.position || item.location || item.coordinates) || item;
     const x = Number(position && position.x);
     const y = Number(position && position.y);
-    return { ...item, id: String(item && (item.id || item.name) || index + "-" + x + "-" + y), name: String(item && item.name || ""), teamId: numberOrNull(item && (item.teamId || item.teamID || item.team)), position: { x, y }, hasPosition: Number.isFinite(x) && Number.isFinite(y) };
+    return { ...item, id: String(item && (item.id || item.name) || index + "-" + x + "-" + y), name: String(item && item.name || ""), teamId: numberOrNull(item && (item.teamId || item.teamID || item.team)), position: { x, y }, hasPosition: Number.isFinite(x) && Number.isFinite(y) } as ReplayAsset;
   }).filter((item) => item.hasPosition);
 }
 function markerStyle(item: any) {
@@ -147,6 +180,48 @@ function round(value: any) { const n = Number(value); return Number.isFinite(n) 
 function formatClock(value: any) { const total = Math.max(0, Math.floor(Number(value || 0) / 1000)); return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0"); }
 function formatDuration(value: any) { return Number(value) > 0 ? formatClock(value) : "--:--"; }
 function formatDate(value: any) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "未知时间" : date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
+
+function updateViewportSize() {
+  const element = replayViewportRef.value;
+  if (!element) return;
+  viewportWidth.value = element.clientWidth;
+  viewportHeight.value = element.clientHeight;
+  if (!isDragging.value && camera.zoom.value === 1 && camera.x.value === 0 && camera.y.value === 0) resetCamera();
+}
+function resetCamera() {
+  const mapSize = 1000;
+  camera.zoom.value = 1;
+  camera.x.value = (viewportWidth.value - mapSize) / 2;
+  camera.y.value = (viewportHeight.value - mapSize) / 2;
+}
+function zoomBy(factor: number) {
+  const next = Math.min(8, Math.max(0.35, camera.zoom.value * factor));
+  camera.setZoom(next, viewportWidth.value / 2, viewportHeight.value / 2);
+}
+function onWheel(event: WheelEvent) {
+  zoomBy(event.deltaY < 0 ? 1.12 : 0.89);
+}
+function startDrag(event: PointerEvent) {
+  if (event.button !== 0) return;
+  dragMoved.value = false;
+  (event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId);
+  camera.startDrag(event.clientX, event.clientY);
+}
+function onPointerMove(event: PointerEvent) {
+  if (!isDragging.value) return;
+  if (Math.abs(event.movementX) + Math.abs(event.movementY) > 0) dragMoved.value = true;
+  camera.onDrag(event.clientX, event.clientY);
+}
+function endDrag(event?: PointerEvent) {
+  if (event && (event.currentTarget as HTMLElement)?.hasPointerCapture?.(event.pointerId)) {
+    (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  }
+  camera.endDrag();
+}
+function selectPlayer(player: ReplayPlayer) {
+  if (dragMoved.value) { dragMoved.value = false; return; }
+  selectedPlayer.value = player;
+}
 
 function scheduleStateLoad() {
   if (!activeSession.value || (state.value && Math.abs(currentMs.value - latestRequestedMs) < 250)) return;
@@ -184,8 +259,15 @@ function togglePlaying() {
 }
 function jump(seconds: number) { currentMs.value = Math.min(durationMs.value, Math.max(0, currentMs.value + seconds * 1000)); }
 watch(currentMs, scheduleStateLoad);
-onMounted(async () => { try { const response = await apiGet<any>("/api/tactical-replay/status"); status.value = response && response.status || null; } catch { status.value = null; } await loadSessions(); });
-onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (seekTimer) clearTimeout(seekTimer); });
+watch(activeMapConfig, () => { void nextTick(updateViewportSize); });
+onMounted(async () => {
+  resizeObserver = new ResizeObserver(updateViewportSize);
+  if (replayViewportRef.value) resizeObserver.observe(replayViewportRef.value);
+  updateViewportSize();
+  try { const response = await apiGet<any>("/api/tactical-replay/status"); status.value = response && response.status || null; } catch { status.value = null; }
+  await loadSessions();
+});
+onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (seekTimer) clearTimeout(seekTimer); resizeObserver?.disconnect(); resizeObserver = null; });
 </script>
 
 <style scoped>
@@ -229,7 +311,9 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .stage-metrics span { display: grid; gap: 3px; text-align: right; }
 .stage-metrics b { color: #eaf7f5; font-size: 16px; }
 .stage-metrics small { color: #6f8d9e; font-size: 10px; }
-.map-shell { position: relative; min-height: 540px; margin-top: 15px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 12px; background: #081827; }
+.map-shell { position: relative; min-height: 540px; margin-top: 15px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 12px; background: #081827; cursor: grab; touch-action: none; user-select: none; }
+.map-shell.is-dragging { cursor: grabbing; }
+.replay-map-transform { position: absolute; top: 0; left: 0; width: 1000px; height: 1000px; transform-origin: 0 0; will-change: transform; z-index: 2; background: #020205; }
 .map-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(120,183,203,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(120,183,203,.12) 1px, transparent 1px); background-size: 64px 64px; }
 .map-canvas { position: absolute; inset: 0; z-index: 0; transition: opacity .2s; }
 .map-placeholder { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; gap: 8px; text-align: center; color: #7498ab; letter-spacing: .12em; font-size: 12px; }
@@ -252,6 +336,9 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .zone-marker.team-1 { border-color: #52d7ff; background: rgba(16,91,118,.75); }
 .zone-marker.team-2 { border-color: #ff7882; background: rgba(113,43,57,.75); }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 12px; }
+.map-controls { position: absolute; z-index: 12; right: 12px; top: 12px; display: grid; gap: 5px; }
+.map-controls button { width: 30px; height: 30px; border: 1px solid rgba(159,210,224,.2); border-radius: 7px; color: #bfeaf0; background: rgba(4,16,28,.78); cursor: pointer; font-size: 16px; }
+.map-controls button:hover { color: #fff; border-color: rgba(85,221,182,.7); background: rgba(24,92,83,.75); }
 .timeline { margin-top: 15px; padding: 13px 3px 2px; }
 .timeline-topline { color: #9ab4c0; font-size: 11px; }
 .timeline-range { width: 100%; margin: 13px 0 11px; accent-color: #3ed9a1; cursor: pointer; }
