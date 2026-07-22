@@ -115,8 +115,8 @@
               <label class="bzss-core-field">
                 <span>Automatic heal</span>
                 <select v-model="automaticHealEnabled" class="bzss-core-select">
-                  <option value="true">Enabled</option>
-                  <option value="false">Disabled</option>
+                  <option value="1">Enabled</option>
+                  <option value="0">Disabled</option>
                 </select>
               </label>
 
@@ -341,7 +341,7 @@
                 <code>RemoveAdminTrack:AdminName</code>
                 <code>SetWeather:SnowHeavy,10</code>
                   <code>SetFobResourceRegeneration:1,1,100,500,10</code>
-                  <code>SetAutomaticHeal:true</code>
+                  <code>SetAutomaticHeal:1</code>
                   <code>SetAutomaticHealValue:100</code>
               </div>
 
@@ -457,7 +457,7 @@ const forbRessEnabled = ref<"0" | "1">("1");
 const forbRessAmmo = ref("0");
 const forbRessConstruction = ref("0");
 const forbRessRate = ref("0");
-const automaticHealEnabled = ref<"true" | "false">("true");
+const automaticHealEnabled = ref<"0" | "1">("1");
 const automaticHealValue = ref("0");
 const timeParameter = ref("");
 const rawCommand = ref("");
@@ -653,7 +653,7 @@ function openDialog(mode: DialogMode) {
     forbRessConstruction.value = "0";
     forbRessRate.value = "0";
   } else if (mode === "automatic-heal") {
-    automaticHealEnabled.value = "true";
+    automaticHealEnabled.value = "1";
     automaticHealValue.value = "0";
   } else if (mode === "time") {
     timeParameter.value = "";
