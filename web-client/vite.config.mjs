@@ -4,6 +4,7 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
+import { rollupRuntimeGuard } from "./scripts/rollup-runtime-guard.mjs";
 
 const mapSceneDirectory = fileURLToPath(new URL("../MapScene/", import.meta.url));
 const contentTypes = {
@@ -63,7 +64,7 @@ function mapSceneAssets() {
 }
 
 export default defineConfig({
-  plugins: [vue(), mapSceneAssets()],
+  plugins: [vue(), mapSceneAssets(), rollupRuntimeGuard()],
   server: {
     port: 5173,
     proxy: {
