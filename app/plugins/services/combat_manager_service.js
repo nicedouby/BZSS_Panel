@@ -332,17 +332,29 @@ export function createCombatManagerService({ core, modules, config, logger }) {
       return null;
     }
 
-    emitCombatManagerUpdate({
-      eventId: String(event?.eventId ?? normalized.id ?? `${COMBAT_MANAGER_MODULE_ID}:${Date.now()}`),
+    const eventId = String(event?.eventId ?? normalized.id ?? `${COMBAT_MANAGER_MODULE_ID}:${Date.now()}`);
+    const processedPayload = {
+      eventId,
       eventName: NEW_EVENT_NAMES.eventProcessed,
       source: COMBAT_MANAGER_MODULE_ID,
       serverId: normalized.serverId ?? event?.serverId ?? "",
       time: normalized.time ?? event?.time ?? new Date().toISOString(),
       record: normalized,
+    };
+
+    // This is the single-record ingress for downstream consumers.  Keep it
+    // separate from manager snapshots: a snapshot is intentionally emitted
+    // several times for compatibility, while a cleaned combat record must be
+    // observable exactly once.
+    emitModuleEvent(NEW_EVENT_NAMES.eventProcessed, processedPayload);
+
+    emitCombatManagerUpdate({
+      eventName: NEW_EVENT_NAMES.eventProcessed,
+      ...processedPayload,
     });
 
     emitModuleEvent(LEGACY_EVENT_NAMES.killEvent, {
-      eventId: event?.eventId ?? normalized.id ?? `${COMBAT_MANAGER_MODULE_ID}:${Date.now()}`,
+      eventId,
       eventName: LEGACY_EVENT_NAMES.killEvent,
       source: COMBAT_MANAGER_MODULE_ID,
       serverId: normalized.serverId ?? event?.serverId ?? "",

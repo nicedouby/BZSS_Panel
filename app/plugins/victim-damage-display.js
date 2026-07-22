@@ -1,0 +1,300 @@
+// -*- coding: utf-8 -*-
+
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const PLUGIN_ID = "plugin.victimDamageDisplay";
+const EVENT_MODULE_ID = "module.combatManager";
+const EVENT_NAME = "COMBAT_EVENT_PROCESSED";
+const HANDLED_TTL_MS = 10 * 60_000;
+const MAX_HANDLED_EVENTS = 2_000;
+const DEFAULT_ADMIN_PUNISHMENT_DAMAGE = 1_000_000;
+
+export function createPlugin({ core = {}, modules = {}, config = null, logger = console } = {}) {
+  const unsubscribers = [];
+  const handledEvents = new Map();
+  let runtimeConfig = readRuntimeConfig(config);
+  let weaponAliases = new Map();
+
+  const state = {
+    received: 0,
+    displayed: 0,
+    skipped: 0,
+    invalidAttackerSkipped: 0,
+    invalidVictimSkipped: 0,
+    selfAttackerSkipped: 0,
+    adminPunishmentSkipped: 0,
+    duplicateSkipped: 0,
+    nonDamageSkipped: 0,
+    lastReceivedAt: "",
+    lastDisplayedAt: "",
+    lastSkipReason: "",
+    lastError: "",
+  };
+
+  function isSubscribed() {
+    return core?.pluginSubscriptions?.isSubscribed?.(PLUGIN_ID) !== false
+      && modules?.pluginSubscriptions?.isSubscribed?.(PLUGIN_ID) !== false;
+  }
+
+  function isActive() {
+    return runtimeConfig.enabled && isSubscribed();
+  }
+
+  function skip(reason) {
+    state.skipped += 1;
+    state.lastSkipReason = reason;
+    if (reason === "invalid_attacker") state.invalidAttackerSkipped += 1;
+    else if (reason === "invalid_victim") state.invalidVictimSkipped += 1;
+    else if (reason === "self_attacker") state.selfAttackerSkipped += 1;
+    else if (reason === "admin_punishment_damage") state.adminPunishmentSkipped += 1;
+    else if (reason === "duplicate") state.duplicateSkipped += 1;
+    else if (reason === "non_damage") state.nonDamageSkipped += 1;
+    return { success: false, skipped: true, skipReason: reason };
+  }
+
+  function resolveRecord(event = {}) {
+    return event?.record ?? event?.payload?.record ?? event?.payload ?? event ?? {};
+  }
+
+  function normalizeText(value) {
+    return String(value ?? "").normalize("NFKC").trim();
+  }
+
+  function normalizeDamage(value) {
+    const damage = Number(value);
+    return Number.isFinite(damage) ? damage : NaN;
+  }
+
+  function resolveIdentity(record = {}, side) {
+    const prefix = side === "attacker" ? "attacker" : "victim";
+    const nested = record?.[side] && typeof record[side] === "object" ? record[side] : {};
+    return {
+      name: normalizeText(record?.[`${prefix}Name`] ?? nested.displayName ?? nested.name ?? nested.playerName),
+      displayName: normalizeText(nested.displayName ?? nested.name ?? record?.[`${prefix}Name`]),
+      playerId: normalizeText(record?.[`${prefix}PlayerId`] ?? record?.[`${prefix}PlayerID`] ?? nested.playerId ?? nested.playerID ?? nested.controllerID),
+      steamId: normalizeText(record?.[`${prefix}Steam64ID`] ?? record?.[`${prefix}SteamId`] ?? record?.[`${prefix}SteamID`] ?? nested.steam64ID ?? nested.steamId ?? nested.steamID),
+      eosId: normalizeText(record?.[`${prefix}EOSID`] ?? record?.[`${prefix}EosID`] ?? nested.eosID ?? nested.eosId),
+      resolved: nested.resolved === true || record?.[`${prefix}Resolved`] === true,
+      isFallback: nested.isFallback === true,
+      isBot: nested.isBot === true,
+    };
+  }
+
+  function stableIdentity(identity = {}) {
+    if (identity.playerId) return `player:${identity.playerId}`;
+    if (identity.steamId) return `steam:${identity.steamId}`;
+    if (identity.eosId) return `eos:${identity.eosId}`;
+    return "";
+  }
+
+  function classifyAttackerSource(record, attacker, victim) {
+    if (Boolean(record?.isBotAttack) || attacker.isBot) return { kind: "bot", label: "BOT" };
+    if (attacker.isFallback) return { kind: "environment", label: "自身/环境" };
+
+    const attackerKey = stableIdentity(attacker);
+    const victimKey = stableIdentity(victim);
+    if (!attacker.resolved || !attackerKey) return { kind: "invalid" };
+    // A real player may never be presented as having attacked themselves.
+    // CombatClean's explicit fallback above remains an environment source.
+    if (victimKey && attackerKey === victimKey) return { kind: "self" };
+    return {
+      kind: "player",
+      label: runtimeConfig.showAttackerName ? (attacker.displayName || attacker.name || "未知玩家") : "敌方玩家",
+    };
+  }
+
+  function buildEventKey(event, record, attacker, victim, damage) {
+    const direct = normalizeText(record?.id ?? record?.sourceEventId ?? event?.eventId);
+    if (direct) return direct;
+    const weapon = resolveWeaponRaw(record);
+    return [event?.serverId ?? record?.serverId, record?.time ?? event?.time, stableIdentity(attacker), stableIdentity(victim), damage, weapon]
+      .map(normalizeText)
+      .join("|");
+  }
+
+  function pruneHandledEvents(now = Date.now()) {
+    for (const [key, timestamp] of handledEvents) {
+      if (now - timestamp > HANDLED_TTL_MS) handledEvents.delete(key);
+    }
+    while (handledEvents.size > MAX_HANDLED_EVENTS) {
+      handledEvents.delete(handledEvents.keys().next().value);
+    }
+  }
+
+  function isDuplicate(eventKey) {
+    const now = Date.now();
+    pruneHandledEvents(now);
+    if (!eventKey || handledEvents.has(eventKey)) return true;
+    handledEvents.set(eventKey, now);
+    return false;
+  }
+
+  function resolveWeaponRaw(record = {}) {
+    const weapon = record?.weapon;
+    if (weapon && typeof weapon === "object") {
+      return normalizeText(weapon.displayName ?? weapon.cleaned ?? weapon.raw ?? weapon.name);
+    }
+    return normalizeText(weapon ?? record?.weaponName ?? record?.causedBy ?? record?.rawCausedBy);
+  }
+
+  function displayWeapon(record) {
+    const raw = resolveWeaponRaw(record);
+    if (!raw) return "";
+    const normalized = raw.toLowerCase();
+    if (weaponAliases.has(normalized)) return weaponAliases.get(normalized);
+    for (const [alias, label] of weaponAliases) {
+      if (normalized.includes(alias)) return label;
+    }
+
+    // Generated UE object names often contain a long instance suffix.  Keep
+    // the useful weapon stem, then cap the remaining display value.
+    const compact = raw
+      .replace(/^\/?(?:game|content)\/[^/]+\//i, "")
+      .replace(/(?:[_-](?:c|copy|instance|gen|generated))?[_-]\d{3,}.*$/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return compact.length > 36 ? `${compact.slice(0, 35)}…` : compact;
+  }
+
+  function formatDamage(damage) {
+    return Number.isInteger(damage) ? String(damage) : String(Math.round(damage * 100) / 100);
+  }
+
+  function buildVictimMessage(record, source, damage) {
+    const relation = record?.relation ?? {};
+    const friendly = Boolean(record?.isFriendlyFire ?? relation.isFriendlyFire);
+    const sourceLabel = friendly && source.kind === "player" && runtimeConfig.showFriendlyFireLabel
+      ? `友伤：${source.label}`
+      : `来源：${source.label}`;
+    const weapon = runtimeConfig.showWeapon ? `｜武器：${displayWeapon(record)}` : "";
+    return `受到 ${formatDamage(damage)} 点伤害｜${sourceLabel}${weapon}`;
+  }
+
+  async function sendVictimWarning(event, record, victim, message) {
+    const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
+    if (typeof sender !== "function") throw new Error("adminWarn API unavailable");
+    return sender.call(modules.adminWarn, {
+      targetPlayerId: victim.playerId || undefined,
+      targetName: victim.name || undefined,
+      targetEosId: victim.eosId || undefined,
+      targetSteamId: victim.steamId || undefined,
+      message,
+      reason: "victim_damage_display",
+      sourceModule: PLUGIN_ID,
+      relatedEventId: normalizeText(record?.id ?? event?.eventId),
+      system: true,
+    });
+  }
+
+  async function handleCombatEvent(event = {}) {
+    if (!isActive()) return skip("disabled");
+    state.received += 1;
+    state.lastReceivedAt = new Date().toISOString();
+    const record = resolveRecord(event);
+    if (normalizeText(record?.type).toLowerCase() !== "damage") return skip("non_damage");
+
+    const damage = normalizeDamage(record?.damage);
+    if (!(damage > 0)) return skip("invalid_damage");
+    if (damage === runtimeConfig.adminPunishmentDamage) return skip("admin_punishment_damage");
+
+    const victim = resolveIdentity(record, "victim");
+    if (!victim.playerId && !victim.name) return skip("invalid_victim");
+    const attacker = resolveIdentity(record, "attacker");
+    const source = classifyAttackerSource(record, attacker, victim);
+    if (source.kind === "invalid") return skip("invalid_attacker");
+    if (source.kind === "self") return skip("self_attacker");
+
+    const eventKey = buildEventKey(event, record, attacker, victim, damage);
+    if (isDuplicate(eventKey)) return skip("duplicate");
+
+    try {
+      const result = await sendVictimWarning(event, record, victim, buildVictimMessage(record, source, damage));
+      if (result?.success) {
+        state.displayed += 1;
+        state.lastDisplayedAt = new Date().toISOString();
+      }
+      return result;
+    } catch (error) {
+      state.lastError = error instanceof Error ? error.message : String(error);
+      logger?.warn?.(`[VictimDamageDisplay] warning failed: ${state.lastError}`);
+      return { success: false, error: state.lastError };
+    }
+  }
+
+  async function loadWeaponAliases() {
+    const aliases = new Map();
+    const configured = runtimeConfig.weaponAliases;
+    for (const [alias, label] of Object.entries(configured)) addAlias(aliases, alias, label);
+    if (runtimeConfig.weaponAliasFile) {
+      try {
+        const filePath = path.resolve(process.cwd(), runtimeConfig.weaponAliasFile);
+        const parsed = JSON.parse(await fs.readFile(filePath, "utf8"));
+        for (const [alias, label] of Object.entries(parsed ?? {})) addAlias(aliases, alias, label);
+      } catch (error) {
+        if (error?.code !== "ENOENT") logger?.warn?.(`[VictimDamageDisplay] weapon alias file unavailable: ${error?.message ?? error}`);
+      }
+    }
+    weaponAliases = new Map([...aliases.entries()].sort((a, b) => b[0].length - a[0].length));
+  }
+
+  function getState() {
+    return {
+      enabled: runtimeConfig.enabled,
+      subscribed: isSubscribed(),
+      active: isActive(),
+      config: { ...runtimeConfig, weaponAliases: undefined },
+      weaponAliasCount: weaponAliases.size,
+      handledEventCount: handledEvents.size,
+      ...state,
+    };
+  }
+
+  return {
+    manifest: {
+      id: PLUGIN_ID,
+      name: "被命中伤害显示",
+      kind: "plugin",
+      version: "1.0.0",
+      category: "Combat",
+      description: "仅订阅清洗后的伤害事件，并且只向受害者发送伤害提示。",
+    },
+    apiName: "victimDamageDisplay",
+    api: { getState, handleCombatEvent, displayWeapon },
+    async start() {
+      runtimeConfig = readRuntimeConfig(config);
+      await loadWeaponAliases();
+      unsubscribers.push(core?.eventBus?.onModuleEvent?.(EVENT_MODULE_ID, EVENT_NAME, (event) => { void handleCombatEvent(event); }));
+      logger?.info?.("[VictimDamageDisplay] started; listening only to COMBAT_EVENT_PROCESSED.");
+    },
+    async stop() {
+      for (const unsubscribe of unsubscribers.splice(0)) {
+        try { unsubscribe?.(); } catch {}
+      }
+      handledEvents.clear();
+      weaponAliases.clear();
+    },
+  };
+}
+
+function readRuntimeConfig(config) {
+  const raw = config?.get?.("plugins.victimDamageDisplay", {}) ?? {};
+  const adminPunishmentDamage = Number(raw.adminPunishmentDamage);
+  return {
+    enabled: raw.enabled !== false,
+    showWeapon: raw.showWeapon !== false,
+    showAttackerName: raw.showAttackerName !== false,
+    showFriendlyFireLabel: raw.showFriendlyFireLabel !== false,
+    adminPunishmentDamage: Number.isFinite(adminPunishmentDamage) ? adminPunishmentDamage : DEFAULT_ADMIN_PUNISHMENT_DAMAGE,
+    weaponAliasFile: String(raw.weaponAliasFile ?? "./config/victim-damage-display-weapons.json").trim(),
+    weaponAliases: raw.weaponAliases && typeof raw.weaponAliases === "object" ? raw.weaponAliases : {},
+  };
+}
+
+function addAlias(map, alias, label) {
+  const key = String(alias ?? "").trim().toLowerCase();
+  const value = String(label ?? "").trim();
+  if (key && value) map.set(key, value);
+}
+
+export default { createPlugin };
