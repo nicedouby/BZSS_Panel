@@ -1004,6 +1004,14 @@
       "deadlineSeconds": 600,
       "reminderSeconds": 60,
       "timeoutAction": "remove_from_squad"
+    },
+    "victimDamageDisplay": {
+      "enabled": true,
+      "showWeapon": true,
+      "showAttackerName": true,
+      "showFriendlyFireLabel": true,
+      "adminPunishmentDamage": 1000000,
+      "weaponAliasFile": "./config/victim-damage-display-weapons.json"
     }
   },
   "warmup": {
