@@ -44,6 +44,7 @@ const FIELD = Object.freeze({
 });
 
 const DEFAULTS = Object.freeze({
+  enabled: true,
   rootDir: "data/replay-spool",
   serverId: "",
   playerSampleMs: 333,
@@ -60,6 +61,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   const moduleLogger = logger ?? core.logger;
   const settings = readSettings(config);
   const state = createState();
+  state.recordingEnabled = settings.enabled !== false;
   let started = false;
   let stopped = false;
   let unsubscribe = null;
@@ -87,6 +89,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   async function reconcile(now) {
     const snapshot = state.latestSnapshot;
     if (!snapshot) return;
+    if (!state.recordingEnabled) return;
     if (!state.session && isMatchActive(snapshot)) await beginSession(snapshot, now);
     if (!state.session) return;
     if (isMatchEnded(snapshot)) {
@@ -320,9 +323,32 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     manifest: { id: "module.tacticalFeedWriter", name: "Tactical Feed Writer", kind: "module", version: "1.0.0", description: "Writes incremental tactical-state replay spool segments.", defaultEnabled: true },
     apiName: "tacticalFeedWriter",
     api: {
-      getDiagnostics: () => ({ activeSession: state.session?.sessionId ?? null, recordCount: state.recordCount, lastError: state.lastError, latestReceivedAt: state.latestReceivedAt }),
+      getDiagnostics: () => ({
+        recordingEnabled: state.recordingEnabled,
+        recording: Boolean(state.session),
+        activeSession: state.session?.sessionId ?? null,
+        recordCount: state.recordCount,
+        lastError: state.lastError,
+        latestReceivedAt: state.latestReceivedAt,
+      }),
       getActiveSession: () => state.session ? { ...state.session } : null,
-      forceStart: () => enqueue(() => beginSession(state.latestSnapshot, Date.now())),
+      setRecordingEnabled: (enabled) => enqueue(async () => {
+        const nextEnabled = enabled === true;
+        if (state.recordingEnabled === nextEnabled) return state.recordingEnabled;
+        state.recordingEnabled = nextEnabled;
+        if (!nextEnabled) {
+          await endSession("manual-disabled", Date.now());
+        } else {
+          await reconcile(Date.now());
+        }
+        core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "recordingChanged", {
+          enabled: state.recordingEnabled,
+          time: new Date().toISOString(),
+        });
+        return state.recordingEnabled;
+      }),
+      // Compatibility helpers for scripts written during phase 1.
+      forceStart: () => enqueue(async () => { state.recordingEnabled = true; await reconcile(Date.now()); }),
       forceEnd: (reason = "manual") => enqueue(() => endSession(reason, Date.now())),
     },
     async start() {
@@ -339,7 +365,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   };
 }
 
-function createState() { return { latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "" }; }
+function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "" }; }
 function readSettings(config) { const value = config?.get?.("modules.tacticalFeedWriter", {}) ?? {}; return { ...DEFAULTS, ...value, rootDir: value.rootDir ?? DEFAULTS.rootDir }; }
 function isMatchActive(snapshot) { return Boolean(safeText(snapshot?.server?.map) || safeText(snapshot?.server?.layer)) && !isMatchEnded(snapshot); }
 function isMatchEnded(snapshot) { const text = [snapshot?.match?.state, snapshot?.match?.phase, snapshot?.server?.state, snapshot?.server?.phase].map(safeText).join(" "); return /waitingpostmatch|postmatch|matchended|ended/i.test(text); }
