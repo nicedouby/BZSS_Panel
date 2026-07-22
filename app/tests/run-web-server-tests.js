@@ -178,6 +178,15 @@ async function testBzssCoreCreateVehicleAcceptsOptionalTeamId() {
   assert.equal(invalidRaw.error, "InvalidCreateVehicleTeamId");
 }
 
+async function testAutomaticHealUsesBinaryParameter() {
+  const server = createServer();
+  assert.equal(server.normalizeBzssCoreDirective("SetAutomaticHeal", "1").command, "SetAutomaticHeal:1");
+  assert.equal(server.normalizeBzssCoreDirective("SetAutomaticHeal", "0").command, "SetAutomaticHeal:0");
+  const invalid = server.normalizeBzssCoreDirective("SetAutomaticHeal", "false");
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error, "InvalidAutomaticHealParameter");
+}
+
 async function testHealthEndpointDoesNotRequireAuth() {
   const server = createServer({
     config: {
@@ -3840,6 +3849,7 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testBzssCoreCreateVehicleAcceptsOptionalTeamId();
+await testAutomaticHealUsesBinaryParameter();
 await testHealthEndpointDoesNotRequireAuth();
 await testAuthSessionAndLoginIncludeSteamAvatar();
 await testWebPagesEndpointFiltersByPermissions();
