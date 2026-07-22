@@ -129,6 +129,7 @@ async function testUsesCombatCleanAsPrimaryIngress() {
   }
 
   assert.ok(moduleEvents.some((item) => item.eventName === "COMBAT_MANAGER_UPDATED"));
+  assert.equal(moduleEvents.filter((item) => item.eventName === "COMBAT_EVENT_PROCESSED").length, 1);
   assert.ok(moduleEvents.some((item) => item.eventName === "KILL_MANAGER_EVENT"));
   assert.ok(moduleEvents.some((item) => item.eventName === "KILL_MANAGER_UPDATED"));
   assert.ok(moduleEvents.some((item) => item.eventName === "KILL_MANAGER_LOG_UPDATED"));
