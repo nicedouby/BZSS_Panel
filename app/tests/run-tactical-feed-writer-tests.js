@@ -12,7 +12,9 @@ async function main() {
   const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe() { return () => {}; } } }, config: { get() { return { rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
   await feed.start();
   await new Promise((resolve) => setTimeout(resolve, 10));
-  await feed.api.forceEnd("test");
+  await feed.api.setRecordingEnabled(false);
+  assert.equal(feed.api.getDiagnostics().recordingEnabled, false);
+  assert.equal(feed.api.getDiagnostics().recording, false);
   const entries = await readdir(root);
   assert.equal(entries.length, 1);
   const segments = await readdir(path.join(root, entries[0], "segments"));
