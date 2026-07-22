@@ -307,7 +307,7 @@
                     >
                       <div class="btn-inner">
                         <span class="btn-icon btn-icon--cheer" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
-                        <span class="btn-text">Cheer / 击杀</span>
+        <span class="btn-text">KILL / 击杀</span>
                       </div>
                     </button>
 
@@ -1194,7 +1194,7 @@ async function handleCheer() {
   const playerId = Number(player.playerId);
   if (!Number.isInteger(playerId) || playerId < 0) {
     ui.pushToast({
-      title: "Cheer 无法执行",
+          title: "KILL 无法执行",
       message: "当前玩家缺少有效的 RCON 玩家 ID。",
       tone: "error",
     });
@@ -1203,7 +1203,7 @@ async function handleCheer() {
 
   const target = "#" + playerId;
   const confirmed = await ui.openConfirm({
-    title: "确认执行 Cheer？",
+    title: "确认执行 KILL？",
     message: "将通过 BZSS-Core 击杀玩家 " + target + "。此操作不可撤销。",
     tone: "error",
   });
@@ -1215,15 +1215,15 @@ async function handleCheer() {
       directive: "Cheer",
       parameter: target,
     });
-    if (!result.ok) throw new Error(result.message || "Cheer 执行失败");
+    if (!result.ok) throw new Error(result.message || "KILL 执行失败");
     ui.pushToast({
-      title: "Cheer 已执行",
+      title: "KILL 已执行",
       message: "目标玩家：" + target,
       tone: "ok",
     });
   } catch (error) {
     ui.pushToast({
-      title: "Cheer 执行失败",
+      title: "KILL 执行失败",
       message: error instanceof Error ? error.message : String(error),
       tone: "error",
     });
