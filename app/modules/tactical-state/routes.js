@@ -5,6 +5,9 @@ const STREAM_HEARTBEAT_MS = 20_000;
 export async function handleTacticalStateRoutes({ modules, url, req, res, user, json }) {
   if (!url.pathname.startsWith("/api/tactical-state")) return false;
 
+  const replayHandled = await handleTacticalReplayRoutes({ modules, url, req, json });
+  if (replayHandled) return true;
+
   const tacticalState = modules.tacticalState;
   if (!tacticalState) {
     json(404, { error: "ModuleNotFound", message: "tacticalState module is not loaded." });
@@ -142,4 +145,87 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
   }
 
   return false;
+}
+
+async function handleTacticalReplayRoutes({ modules, url, req, json }) {
+  const isReplayStatus = url.pathname === "/api/tactical-state/replay/status";
+  const isReplayCollection = url.pathname === "/api/tactical-state/replays"
+    || url.pathname.startsWith("/api/tactical-state/replays/");
+  if (!isReplayStatus && !isReplayCollection) return false;
+
+  const tacticalReplay = modules.tacticalReplay;
+  if (!tacticalReplay) {
+    json(404, { error: "ModuleNotFound", message: "tacticalReplay module is not loaded." });
+    return true;
+  }
+
+  if (req.method !== "GET") {
+    json(405, { error: "MethodNotAllowed", message: "Only GET is supported." });
+    return true;
+  }
+
+  if (isReplayStatus) {
+    json(200, { ok: true, status: tacticalReplay.getStatus?.() ?? null });
+    return true;
+  }
+
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (segments.length === 3) {
+    const limit = parsePositiveInteger(url.searchParams.get("limit"), 100, 1000);
+    const sessions = await tacticalReplay.listSessions?.({ limit });
+    json(200, { ok: true, sessions: Array.isArray(sessions) ? sessions : [] });
+    return true;
+  }
+
+  const sessionId = decodePathSegment(segments[3]);
+  if (segments.length === 4) {
+    const session = await tacticalReplay.getSession?.(sessionId);
+    if (!session) {
+      json(404, { error: "ReplaySessionNotFound", message: "Replay session was not found." });
+      return true;
+    }
+    json(200, { ok: true, session });
+    return true;
+  }
+
+  if (segments.length === 5 && segments[4] === "frames") {
+    const result = await tacticalReplay.readFrames?.(sessionId, {
+      fromMs: parseNonNegativeNumber(url.searchParams.get("from"), 0),
+      toMs: parseOptionalNonNegativeNumber(url.searchParams.get("to")),
+      limit: parsePositiveInteger(url.searchParams.get("limit"), 20_000, 100_000),
+      types: url.searchParams.get("types") ?? "players,assets",
+      includeContext: url.searchParams.get("context") !== "0",
+    });
+    json(200, { ok: true, ...result });
+    return true;
+  }
+
+  json(404, { error: "ReplayRouteNotFound", message: "Unknown tactical replay route." });
+  return true;
+}
+
+function parsePositiveInteger(value, fallback, maximum) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
+  return Math.min(maximum, Math.max(1, Math.floor(numeric)));
+}
+
+function parseNonNegativeNumber(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return fallback;
+  return numeric;
+}
+
+function parseOptionalNonNegativeNumber(value) {
+  if (value === null || value === undefined || value === "") return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : undefined;
+}
+
+function decodePathSegment(value) {
+  try {
+    return decodeURIComponent(String(value ?? ""));
+  } catch {
+    return String(value ?? "");
+  }
 }
