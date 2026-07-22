@@ -76,8 +76,8 @@ export const staticNavItems: NavItem[] = [
   ...getStaticNavItems(),
   {
     path: "/tactical-replay",
-    icon: "⏪",
-    label: "战术回放",
+    icon: "◷",
+    label: "回放工作台",
     section: "opsLive",
     order: 16,
   },

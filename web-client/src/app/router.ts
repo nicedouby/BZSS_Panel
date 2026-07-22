@@ -41,7 +41,7 @@ export const router = createRouter({
       name: "tactical-replay",
       component: () => import("../pages/TacticalReplayPage.vue"),
       meta: {
-        title: "战术地图回放",
+        title: "战术回放工作台",
         refreshPolicy: "manual",
         layoutMode: "workspace",
         contentPadding: "none",
