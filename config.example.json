@@ -801,6 +801,14 @@
       "maxPacketBytes": 1200,
       "logSuccess": false,
       "logFailure": true
+    },
+    "victimDamageDisplay": {
+      "enabled": true,
+      "showWeapon": true,
+      "showAttackerName": true,
+      "showFriendlyFireLabel": true,
+      "adminPunishmentDamage": 1000000,
+      "weaponAliasFile": "./config/victim-damage-display-weapons.json"
     }
   },
   "performance": {
