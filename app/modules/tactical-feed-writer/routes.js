@@ -32,8 +32,17 @@ export async function handleTacticalFeedWriterRoutes({
       json(400, { error: "InvalidRecordingState", message: "enabled must be a boolean." });
       return true;
     }
-    const recordingEnabled = await api.setRecordingEnabled(body.enabled);
-    json(200, { ok: true, recordingEnabled, ...api.getDiagnostics() });
+    try {
+      const recordingEnabled = await api.setRecordingEnabled(body.enabled);
+      json(200, { ok: true, recordingEnabled, ...api.getDiagnostics() });
+    } catch (error) {
+      const message = error?.message ?? String(error);
+      json(500, {
+        error: "TacticalReplayRecordingTransitionFailed",
+        message,
+        diagnostics: api.getDiagnostics?.() ?? null,
+      });
+    }
     return true;
   }
 
