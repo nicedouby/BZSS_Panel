@@ -47,6 +47,17 @@ export const router = createRouter({
         contentPadding: "none",
       },
     },
+    {
+      path: "/tactical-replay/player/:sessionId",
+      name: "tactical-replay-player",
+      component: () => import("../pages/TacticalReplayPage.vue"),
+      meta: {
+        title: "战术回放播放器",
+        refreshPolicy: "manual",
+        layoutMode: "workspace",
+        contentPadding: "none",
+      },
+    },
     ...buildPageRoutes(),
     {
       path: "/combat-clean",
