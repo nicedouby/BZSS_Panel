@@ -66,9 +66,30 @@
               <span v-for="vehicle in replayVehicles" :key="vehicle.id" class="asset-marker vehicle-marker" :class="'team-' + (vehicle.teamId || 0)" :style="markerStyle(vehicle)" :title="vehicle.name">◆</span>
             </div>
             <div class="player-layer">
-              <button v-for="player in visiblePlayers" :key="player.key" type="button" class="replay-player" :class="{ selected: player.key === (selectedPlayer && selectedPlayer.key) }" :style="markerStyle(player)" @click.stop="selectPlayer(player)">
-                <span class="player-pip" :class="'team-' + (player.teamId || 0)" :style="{ transform: 'rotate(' + (player.yaw || 0) + 'deg)' }"></span><span class="player-label">{{ player.name }}</span>
-              </button>
+              <PlayerMarker
+                v-for="player in visiblePlayers"
+                :key="player.key"
+                mode="tactical"
+                :player-name="player.name"
+                :team-id="player.teamId"
+                :map-x="player.mapX"
+                :map-y="player.mapY"
+                :yaw="player.yaw"
+                :health="player.health"
+                :squad-id="player.squadId"
+                :is-squad-leader="player.isLeader"
+                :role-icon="player.roleInfo.icon"
+                :role-label="player.roleInfo.label"
+                :vehicle-type="player.vehicleType"
+                :is-focused="player.key === (selectedPlayer && selectedPlayer.key)"
+                :show-name="true"
+                :show-coords="false"
+                :game-x="player.position && player.position.x"
+                :game-y="player.position && player.position.y"
+                :scale="1"
+                :tone="getReplayPerspectiveTone(player.teamId)"
+                @click.stop="selectPlayer(player)"
+              />
             </div>
           </div>
           <div class="map-controls" @pointerdown.stop>
@@ -106,13 +127,16 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { apiGet } from "../app/apiClient";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
+import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
+import { resolveVehicleIcon } from "../utils/vehicle-icons";
 
 interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; isPlayable?: boolean; archiveError?: string; }
 interface ReplayPosition { x: number; y: number; z?: number; }
-interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; hasPosition: boolean; }
+interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; roleInfo: RoleIconInfo; vehicleType: string | null; isLeader: boolean; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; mapX: number; mapY: number; hasPosition: boolean; }
 interface ReplayAsset { id: string; name: string; teamId: number | null; position: ReplayPosition; hasPosition: boolean; [key: string]: unknown; }
 
 const sessions = ref<ReplaySession[]>([]);
@@ -137,7 +161,10 @@ const dragMoved = ref(false);
 let resizeObserver: ResizeObserver | null = null;
 let animationTimer: ReturnType<typeof setInterval> | null = null;
 let seekTimer: ReturnType<typeof setTimeout> | null = null;
-let latestRequestedMs = -1;
+let stateAbortController: AbortController | null = null;
+let stateRequestSequence = 0;
+let lastStateRequestStartedAt = -Infinity;
+const STATE_LOAD_INTERVAL_MS = 200;
 
 const filteredSessions = computed(() => {
   const query = searchText.value.trim().toLocaleLowerCase();
@@ -166,7 +193,37 @@ provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y }
 
 function normalizePlayer(source: any): ReplayPlayer {
   const position = source && source.telemetry && source.telemetry.position || source && source.position;
-  return { key: String(source && source.identity && (source.identity.key || source.identity.name) || Math.random()), name: String(source && source.identity && source.identity.name || "Unknown"), teamId: numberOrNull(source && source.match && source.match.teamId), squadId: numberOrNull(source && source.match && source.match.squadId), role: String(source && source.match && source.match.role || ""), health: numberOrNull(source && source.telemetry && source.telemetry.health), ping: numberOrNull(source && source.network && source.network.gamePing), kills: numberOrNull(source && source.combat && source.combat.kills), wounds: numberOrNull(source && source.combat && source.combat.wounds), deaths: numberOrNull(source && source.combat && source.combat.deaths), yaw: numberOrNull(source && source.telemetry && source.telemetry.yaw), position, positionText: position ? round(position.x) + ", " + round(position.y) : "--", hasPosition: Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) };
+  const health = numberOrNull(source && source.telemetry && source.telemetry.health);
+  const role = String(source && source.match && source.match.role || source && source.telemetry && source.telemetry.soldierClass || "");
+  const vehicleType = String(source && source.vehicle && source.vehicle.vehicleType || "").trim() || null;
+  const roleInfo = health != null && health <= 0
+    ? resolveRoleIcon("dead")
+    : vehicleType && vehicleType !== "None"
+      ? resolveVehicleIcon(vehicleType)
+      : resolveRoleIcon(role);
+  const hasPosition = Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y)));
+  const bounds = activeMapConfig.value.bounds;
+  return {
+    key: String(source && source.identity && (source.identity.key || source.identity.name) || Math.random()),
+    name: String(source && source.identity && source.identity.name || "Unknown"),
+    teamId: numberOrNull(source && source.match && source.match.teamId),
+    squadId: numberOrNull(source && source.match && source.match.squadId),
+    role,
+    roleInfo,
+    vehicleType,
+    isLeader: source && source.match && source.match.isLeader === true,
+    health,
+    ping: numberOrNull(source && source.network && source.network.gamePing),
+    kills: numberOrNull(source && source.combat && source.combat.kills),
+    wounds: numberOrNull(source && source.combat && source.combat.wounds),
+    deaths: numberOrNull(source && source.combat && source.combat.deaths),
+    yaw: numberOrNull(source && source.telemetry && source.telemetry.yaw),
+    position,
+    positionText: position ? round(position.x) + ", " + round(position.y) : "--",
+    mapX: project(Number(position && position.x), bounds.minX, bounds.maxX),
+    mapY: project(Number(position && position.y), bounds.minY, bounds.maxY),
+    hasPosition,
+  };
 }
 function normalizeAssets(values: any): ReplayAsset[] {
   return (Array.isArray(values) ? values : []).map((item, index) => {
@@ -229,10 +286,22 @@ function selectPlayer(player: ReplayPlayer) {
   selectedPlayer.value = player;
 }
 
+function getReplayPerspectiveTone(teamId: number | null): "friendly" | "enemy" | "neutral" {
+  if (teamId === 1) return "friendly";
+  if (teamId === 2) return "enemy";
+  return "neutral";
+}
+
 function scheduleStateLoad() {
-  if (!activeSession.value || (state.value && Math.abs(currentMs.value - latestRequestedMs) < 250)) return;
-  if (seekTimer) clearTimeout(seekTimer);
-  seekTimer = setTimeout(() => void loadState(currentMs.value), 120);
+  if (!activeSession.value || seekTimer) return;
+  // This must be a throttle, rather than a debounce.  Playback changes the
+  // clock every 100ms; a debounced timer was cancelled forever while playing,
+  // so the time bar moved but the reconstructed battlefield stayed on one frame.
+  const delay = Math.max(0, STATE_LOAD_INTERVAL_MS - (performance.now() - lastStateRequestStartedAt));
+  seekTimer = setTimeout(() => {
+    seekTimer = null;
+    void loadState(currentMs.value);
+  }, delay);
 }
 async function loadSessions() {
   loadingSessions.value = true;
@@ -250,18 +319,32 @@ async function selectSession(session: ReplaySession) {
   playing.value = false;
   activeSession.value = session;
   currentMs.value = 0;
-  latestRequestedMs = -1;
+  stateRequestSequence += 1;
+  stateAbortController?.abort();
+  stateAbortController = null;
+  lastStateRequestStartedAt = -Infinity;
   selectedPlayer.value = null;
   await loadState(0);
 }
 async function loadState(atMs: number) {
   if (!activeSession.value) return;
-  latestRequestedMs = atMs;
+  const sessionId = activeSession.value.id;
+  const requestSequence = ++stateRequestSequence;
+  stateAbortController?.abort();
+  const controller = new AbortController();
+  stateAbortController = controller;
+  lastStateRequestStartedAt = performance.now();
   loadingState.value = true;
   try {
-    state.value = await apiGet<any>("/api/tactical-replay/sessions/" + encodeURIComponent(activeSession.value.id) + "/state?at=" + Math.max(0, Math.round(atMs)));
-  } catch (error: any) { errorText.value = error && error.message || "无法重建回放状态"; }
-  finally { loadingState.value = false; }
+    const response = await apiGet<any>("/api/tactical-replay/sessions/" + encodeURIComponent(sessionId) + "/state?at=" + Math.max(0, Math.round(atMs)), { signal: controller.signal });
+    if (requestSequence !== stateRequestSequence || activeSession.value?.id !== sessionId) return;
+    state.value = response;
+  } catch (error: any) {
+    if (controller.signal.aborted) return;
+    errorText.value = error && error.message || "无法重建回放状态";
+  } finally {
+    if (requestSequence === stateRequestSequence) loadingState.value = false;
+  }
 }
 function togglePlaying() {
   if (!activeSession.value) return;
@@ -281,7 +364,7 @@ onMounted(async () => {
   try { const response = await apiGet<any>("/api/tactical-replay/status"); status.value = response && response.status || null; } catch { status.value = null; }
   await loadSessions();
 });
-onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (seekTimer) clearTimeout(seekTimer); resizeObserver?.disconnect(); resizeObserver = null; });
+onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (seekTimer) clearTimeout(seekTimer); stateAbortController?.abort(); stateAbortController = null; resizeObserver?.disconnect(); resizeObserver = null; });
 </script>
 
 <style scoped>
@@ -341,12 +424,7 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .map-hud b, .timeline-caption { color: #55ddb6; letter-spacing: .12em; }
 .map-hud i { color: #507080; font-style: normal; }
 .asset-layer, .player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
-.replay-player, .asset-marker { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; }
-.replay-player { display: flex; align-items: center; gap: 3px; flex-direction: column; border: 0; background: transparent; color: #e9f7ff; cursor: pointer; }
-.player-pip { width: 10px; height: 10px; border: 2px solid #eafcff; background: #49c9ff; clip-path: polygon(50% 0,100% 100%,50% 78%,0 100%); }
-.player-pip.team-2 { background: #ff6572; }
-.replay-player.selected .player-pip { box-shadow: 0 0 0 4px rgba(255,255,255,.4), 0 0 18px currentColor; }
-.player-label { max-width: 100px; padding: 2px 4px; overflow: hidden; border-radius: 4px; color: #f1fbff; background: rgba(3,12,21,.7); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.asset-marker { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; }
 .asset-marker { padding: 3px 5px; border: 1px solid rgba(255,255,255,.55); border-radius: 5px; color: #fff; background: rgba(12,85,95,.75); font-size: 9px; }
 .fob-marker { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: #8debd1; background: rgba(4,53,54,.86); font-size: 14px; }
 .fob-marker.team-2 { color: #ff9ca5; background: rgba(90,30,43,.86); }
