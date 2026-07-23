@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createTacticalFeedWriterModule, TacticalReplayRecord } from "../modules/tactical-feed-writer/index.js";
@@ -16,6 +16,7 @@ async function main() {
   await feed.api.setRecordingEnabled(false);
   assert.equal(feed.api.getDiagnostics().recordingEnabled, false);
   assert.equal(feed.api.getDiagnostics().recording, false);
+  assert.equal(feed.api.getDiagnostics().lastFinalization?.directoryRenamed, true);
   const entries = await readdir(root);
   assert.equal(entries.length, 1);
   assert.match(entries[0], /^[A-Za-z0-9._-]+$/);
@@ -34,8 +35,21 @@ async function main() {
   const sessions = await replay.api.listSessions();
   assert.equal(sessions.length, 1);
   assert.equal(sessions[0].status, "closed");
+  assert.equal(sessions[0].isPlayable, true);
+  assert.equal(sessions[0].map, "Jensens Range");
+  assert.equal(sessions[0].layer, "Jensens Range AAS");
   const replayState = await replay.api.readState(sessions[0].id, { atMs: 60_000 });
   assert.equal(replayState.session.status, "closed");
+  assert.equal(replayState.state.session.map, "Jensens Range");
+
+  // A damaged manual/archive directory must not hide the healthy session.
+  const brokenDirectory = path.join(root, "broken_archive");
+  await mkdir(brokenDirectory);
+  await writeFile(path.join(brokenDirectory, "session.json"), "{invalid json", "utf8");
+  const sessionsWithBrokenArchive = await replay.api.listSessions();
+  assert.equal(sessionsWithBrokenArchive.length, 2);
+  assert.ok(sessionsWithBrokenArchive.some((item) => item.isPlayable === true));
+  assert.ok(sessionsWithBrokenArchive.some((item) => item.status === "unreadable"));
   await replay.stop();
   await feed.stop();
   await rm(root, { recursive: true, force: true });

@@ -116,8 +116,20 @@ async function listSessions(settings, { limit = 100 } = {}) {
 
   for (const entry of entries) {
     if (!entry.isDirectory() || !isSafeSessionId(entry.name)) continue;
-    const session = await getSession(settings, entry.name);
-    if (session) sessions.push(session);
+    try {
+      const session = await getSession(settings, entry.name);
+      if (session) sessions.push(session);
+    } catch (error) {
+      // One interrupted or manually damaged archive must not hide all of the
+      // healthy recordings from the replay page.
+      sessions.push({
+        id: entry.name.replace(/\.open$/i, ""),
+        sessionId: entry.name.replace(/\.open$/i, ""),
+        status: "unreadable",
+        isPlayable: false,
+        archiveError: error?.message ?? String(error),
+      });
+    }
   }
 
   sessions.sort((left, right) => String(right.startedAt ?? "").localeCompare(String(left.startedAt ?? "")));
@@ -137,22 +149,67 @@ async function getSession(settings, sessionId) {
     throw error;
   }
 
-  const startedMs = Date.parse(metadata.startedAt ?? "");
-  const endedMs = Date.parse(metadata.endedAt ?? "");
-  const durationMs = Number.isFinite(Number(metadata.durationMs))
-    ? Math.max(0, Number(metadata.durationMs))
+  const recovered = await recoverSessionHeader(directory);
+  const enriched = {
+    ...recovered,
+    ...metadata,
+    // Closed sessions written by the first recorder version accidentally
+    // omitted these fields.  Prefer explicit metadata but repair it from the
+    // immutable SESSION_BEGIN record when necessary.
+    map: text(metadata.map || recovered.map),
+    layer: text(metadata.layer || recovered.layer),
+    mode: text(metadata.mode || recovered.mode),
+    serverId: text(metadata.serverId || recovered.serverId),
+    startedAt: metadata.startedAt || recovered.startedAt || "",
+  };
+  const startedMs = Date.parse(enriched.startedAt ?? "");
+  const endedMs = Date.parse(enriched.endedAt ?? "");
+  const durationMs = Number.isFinite(Number(enriched.durationMs))
+    ? Math.max(0, Number(enriched.durationMs))
     : Number.isFinite(startedMs)
       ? Math.max(0, (Number.isFinite(endedMs) ? endedMs : Date.now()) - startedMs)
       : 0;
 
   return {
-    ...metadata,
-    id: metadata.sessionId ?? safeId,
-    sessionId: metadata.sessionId ?? safeId,
-    status: metadata.status ?? (metadata.endedAt ? "closed" : "recording"),
+    ...enriched,
+    id: enriched.sessionId ?? safeId.replace(/\.open$/i, ""),
+    sessionId: enriched.sessionId ?? safeId.replace(/\.open$/i, ""),
+    status: enriched.status ?? (enriched.endedAt ? "closed" : "recording"),
     durationMs,
+    isPlayable: await hasReplayRecords(directory),
     rootDir: undefined,
   };
+}
+
+async function recoverSessionHeader(directory) {
+  const segmentDirectory = path.join(directory, "segments");
+  const names = (await fs.readdir(segmentDirectory, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isFile() && /^(\d{6})\.(?:open\.)?rps$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  if (!names.length) return {};
+
+  const bytes = await fs.readFile(path.join(segmentDirectory, names[0]));
+  if (bytes.length < HEADER_BYTES || bytes.readUInt32LE(0) !== MAGIC || bytes.readUInt8(4) !== VERSION) return {};
+  const payloadLength = bytes.readUInt32LE(16);
+  const recordEnd = HEADER_BYTES + payloadLength;
+  if (bytes.readUInt8(5) !== RECORD.SESSION_BEGIN || recordEnd > bytes.length) return {};
+  const payload = bytes.subarray(HEADER_BYTES, recordEnd);
+  if (crc32(payload) !== bytes.readUInt32LE(20)) return {};
+  const header = decodeMessagePack(payload);
+  return header && typeof header === "object" ? header : {};
+}
+
+async function hasReplayRecords(directory) {
+  const entries = await fs.readdir(path.join(directory, "segments"), { withFileTypes: true }).catch(() => []);
+  const names = entries
+    .filter((entry) => entry.isFile() && /^(\d{6})\.(?:open\.)?rps$/.test(entry.name))
+    .map((entry) => entry.name);
+  for (const name of names) {
+    const info = await fs.stat(path.join(directory, "segments", name)).catch(() => null);
+    if (info?.size > HEADER_BYTES) return true;
+  }
+  return false;
 }
 
 async function readState(settings, sessionId, { atMs = 0 } = {}) {
