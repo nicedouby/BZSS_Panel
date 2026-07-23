@@ -180,7 +180,7 @@ function reasonLabel(value: string) {
     admin_warn_sent: "AdminWarn 已发送",
     admin_warn_failed: "AdminWarn 返回失败",
     admin_warn_exception: "AdminWarn 异常",
-  } as Record<string, string>)[value] ?? value || "--";
+  } as Record<string, string>)[value] ?? value) || "--";
 }
 function formatTime(value: string) {
   if (!value) return "--";
