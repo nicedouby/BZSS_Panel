@@ -69,21 +69,31 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   let writeChain = Promise.resolve();
 
   function enqueue(work) {
-    writeChain = writeChain.then(work, work).catch((error) => {
+    // Keep the background queue alive after an error, but return the original
+    // operation to API callers.  The old version returned the recovered queue,
+    // causing a failed "stop recording" request to look like success.
+    const operation = writeChain.then(work, work);
+    writeChain = operation.catch((error) => {
       moduleLogger?.warn?.("Tactical feed writer operation failed.", {
         operation: "tacticalFeedWriter",
         data: { message: error?.message ?? String(error) },
       });
       state.lastError = error?.message ?? String(error);
     });
-    return writeChain;
+    return operation;
+  }
+
+  function enqueueBackground(work) {
+    void enqueue(work).catch(() => {
+      // The error has already been stored in diagnostics by enqueue().
+    });
   }
 
   function acceptSnapshot(snapshot) {
     if (!snapshot || typeof snapshot !== "object") return;
     state.latestSnapshot = snapshot;
     state.latestReceivedAt = Date.now();
-    void enqueue(() => reconcile(Date.now()));
+    enqueueBackground(() => reconcile(Date.now()));
   }
 
   async function reconcile(now) {
@@ -127,16 +137,24 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     const root = path.resolve(settings.rootDir);
     const directory = path.join(root, `${sessionId}.open`);
     await mkdir(path.join(directory, "segments"), { recursive: true });
-    state.session = { sessionId, serverId, directory, startedAt: now, layer };
+    state.session = {
+      sessionId,
+      serverId,
+      directory,
+      startedAt: now,
+      map: safeText(snapshot?.server?.map),
+      layer,
+      mode: safeText(snapshot?.server?.mode),
+    };
     await writeJsonAtomic(path.join(directory, "session.json"), {
       version: VERSION,
       sessionId,
       serverId,
       startedAt: new Date(now).toISOString(),
       status: "recording",
-      map: safeText(snapshot?.server?.map),
+      map: state.session.map,
       layer,
-      mode: safeText(snapshot?.server?.mode),
+      mode: state.session.mode,
       payloadEncoding: "messagepack",
     });
     await writeFile(path.join(directory, "writer.lock"), `${process.pid}\n`, "utf8");
@@ -145,9 +163,9 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
       sessionId,
       serverId,
       startedAt: new Date(now).toISOString(),
-      map: safeText(snapshot?.server?.map),
+      map: state.session.map,
       layer,
-      mode: safeText(snapshot?.server?.mode),
+      mode: state.session.mode,
     });
     await append(RECORD.MATCH_DELTA, now, compactMatch(snapshot));
     core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "sessionStarted", { sessionId, serverId, time: new Date(now).toISOString() });
@@ -157,21 +175,54 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     if (!state.session) return;
     await append(RECORD.SESSION_END, now, { reason, endedAt: new Date(now).toISOString() });
     await closeSegment();
-    const { directory, sessionId, serverId, startedAt } = state.session;
+    const { directory, sessionId, serverId, startedAt, map, layer, mode } = state.session;
     await writeJsonAtomic(path.join(directory, "session.json"), {
       version: VERSION, sessionId, serverId,
       startedAt: new Date(startedAt).toISOString(), endedAt: new Date(now).toISOString(),
-      status: "closed", reason, payloadEncoding: "messagepack",
+      status: "closed", reason, map, layer, mode, payloadEncoding: "messagepack",
     });
     await unlink(path.join(directory, "writer.lock")).catch(() => {});
     // A closed session must use the same directory name as the public sessionId.
     // Keeping the `.open` suffix made the reader list the session but fail to
     // resolve it when `/state` was requested.
     const closedDirectory = path.join(path.dirname(directory), sessionId);
-    if (directory !== closedDirectory) {
-      await rename(directory, closedDirectory);
+    let finalDirectory = directory;
+    let directoryRenamed = directory === closedDirectory;
+    if (!directoryRenamed) {
+      try {
+        await rename(directory, closedDirectory);
+        finalDirectory = closedDirectory;
+        directoryRenamed = true;
+      } catch (error) {
+        // A closed session is still fully playable from its legacy `.open`
+        // directory.  Do not lose it merely because Windows has a transient
+        // handle on the directory; preserve a diagnostic instead.
+        state.lastFinalization = {
+          sessionId,
+          completedAt: new Date(now).toISOString(),
+          directory: finalDirectory,
+          directoryRenamed: false,
+          message: error?.message ?? String(error),
+        };
+        moduleLogger?.warn?.("Tactical replay session was closed but directory finalization was deferred.", {
+          operation: "tacticalFeedWriter.finalizeSession",
+          data: { sessionId, message: state.lastFinalization.message },
+        });
+      }
     }
-    core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "sessionEnded", { sessionId, serverId, reason, time: new Date(now).toISOString() });
+    if (directoryRenamed) {
+      state.lastFinalization = {
+        sessionId,
+        completedAt: new Date(now).toISOString(),
+        directory: finalDirectory,
+        directoryRenamed: true,
+        message: "",
+      };
+    }
+    core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "sessionEnded", {
+      sessionId, serverId, reason, time: new Date(now).toISOString(),
+      directory: finalDirectory, directoryRenamed,
+    });
     resetSessionState();
   }
 
@@ -337,6 +388,8 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
         recordCount: state.recordCount,
         lastError: state.lastError,
         latestReceivedAt: state.latestReceivedAt,
+        replayRootDir: path.resolve(settings.rootDir),
+        lastFinalization: state.lastFinalization,
       }),
       getActiveSession: () => state.session ? { ...state.session } : null,
       setRecordingEnabled: (enabled) => enqueue(async () => {
@@ -362,7 +415,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
       if (started) return; started = true; stopped = false;
       unsubscribe = modules.tacticalState?.subscribe?.(acceptSnapshot) ?? null;
       const initial = await modules.tacticalState?.getSnapshot?.(); if (initial) acceptSnapshot(initial);
-      timer = setInterval(() => { if (!stopped) void enqueue(() => reconcile(Date.now())); }, Math.min(settings.playerSampleMs, 500));
+      timer = setInterval(() => { if (!stopped) enqueueBackground(() => reconcile(Date.now())); }, Math.min(settings.playerSampleMs, 500));
       timer.unref?.();
     },
     async stop() {
@@ -372,7 +425,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   };
 }
 
-function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "" }; }
+function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "", lastFinalization: null }; }
 function readSettings(config) { const value = config?.get?.("modules.tacticalFeedWriter", {}) ?? {}; return { ...DEFAULTS, ...value, rootDir: value.rootDir ?? DEFAULTS.rootDir }; }
 function isMatchActive(snapshot) { return Boolean(safeText(snapshot?.server?.map) || safeText(snapshot?.server?.layer)) && !isMatchEnded(snapshot); }
 function isMatchEnded(snapshot) { const text = [snapshot?.match?.state, snapshot?.match?.phase, snapshot?.server?.state, snapshot?.server?.phase].map(safeText).join(" "); return /waitingpostmatch|postmatch|matchended|ended/i.test(text); }
