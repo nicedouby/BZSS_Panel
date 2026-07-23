@@ -477,6 +477,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "victim-damage-display-debug",
+    path: "/debug/victim-damage-display",
+    component: () => import("../pages/VictimDamageDisplayDebugPage.vue"),
+    title: "被命中伤害调试",
+    category: "debug",
+    refreshPolicy: "polling",
+    nav: { section: "combat", label: "伤害显示调试", icon: "🩸", order: 80 },
+    superAdminOnly: true,
+    ...documentPage,
+  },
+  {
     name: "welcome-join-warning",
     path: "/debug/welcome-join-warning",
     component: () => import("../pages/WelcomeJoinWarningDebugPage.vue"),

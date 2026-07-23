@@ -13,6 +13,8 @@ const DEFAULT_ADMIN_PUNISHMENT_DAMAGE = 1_000_000;
 export function createPlugin({ core = {}, modules = {}, config = null, logger = console } = {}) {
   const unsubscribers = [];
   const handledEvents = new Map();
+  const auditRecords = [];
+  const MAX_AUDIT_RECORDS = 500;
   let runtimeConfig = readRuntimeConfig(config);
   let weaponAliases = new Map();
 
@@ -41,6 +43,42 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return runtimeConfig.enabled && isSubscribed();
   }
 
+  function recordAudit(event, record, status, reason, extra = {}) {
+    const damage = normalizeDamage(record?.damage);
+    const attacker = resolveIdentity(record, "attacker");
+    const victim = resolveIdentity(record, "victim");
+    auditRecords.unshift({
+      id: String(Date.now()) + "-" + String(auditRecords.length),
+      createdAt: new Date().toISOString(),
+      status, reason,
+      damage: Number.isFinite(damage) ? damage : null,
+      attacker: attacker.displayName || attacker.name || (attacker.isBot ? "BOT" : ""),
+      attackerId: stableIdentity(attacker),
+      victim: victim.displayName || victim.name || "",
+      victimId: stableIdentity(victim),
+      weapon: displayWeapon(record),
+      friendlyFire: Boolean(record?.isFriendlyFire ?? record?.relation?.isFriendlyFire),
+      message: extra.message || "",
+      success: extra.success ?? null,
+      error: extra.error || "",
+    });
+    if (auditRecords.length > MAX_AUDIT_RECORDS) auditRecords.length = MAX_AUDIT_RECORDS;
+  }
+
+  function getDebugSnapshot() {
+    const byReason = {};
+    const byStatus = {};
+    for (const item of auditRecords) {
+      byReason[item.reason] = (byReason[item.reason] ?? 0) + 1;
+      byStatus[item.status] = (byStatus[item.status] ?? 0) + 1;
+    }
+    return { state: getState(), records: auditRecords.slice(), byReason, byStatus, maxRecords: MAX_AUDIT_RECORDS };
+  }
+
+  function clearDebugRecords() {
+    auditRecords.length = 0;
+    return getDebugSnapshot();
+  }
   function skip(reason) {
     state.skipped += 1;
     state.lastSkipReason = reason;
@@ -210,20 +248,22 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     if (normalizeText(record?.type).toLowerCase() !== "damage") return skip("non_damage");
 
     const damage = normalizeDamage(record?.damage);
-    if (!(damage > 0)) return skip("invalid_damage");
-    if (damage === runtimeConfig.adminPunishmentDamage) return skip("admin_punishment_damage");
+    if (!(damage > 0)) { recordAudit(event, record, "intercepted", "invalid_damage"); return skip("invalid_damage"); }
+    if (damage === runtimeConfig.adminPunishmentDamage) { recordAudit(event, record, "intercepted", "admin_punishment_damage"); return skip("admin_punishment_damage"); }
 
     const victim = resolveIdentity(record, "victim");
-    if (!victim.playerId && !victim.name) return skip("invalid_victim");
+    if (!victim.playerId && !victim.name) { recordAudit(event, record, "intercepted", "invalid_victim"); return skip("invalid_victim"); }
     const attacker = resolveIdentity(record, "attacker");
     const source = classifyAttackerSource(record, attacker, victim);
-    if (source.kind === "self") return skip("self_attacker");
+    if (source.kind === "self") { recordAudit(event, record, "intercepted", "self_attacker"); return skip("self_attacker"); }
 
     const eventKey = buildEventKey(event, record, attacker, victim, damage);
-    if (isDuplicate(eventKey)) return skip("duplicate");
+    if (isDuplicate(eventKey)) { recordAudit(event, record, "intercepted", "duplicate"); return skip("duplicate"); }
 
     try {
-      const result = await sendVictimWarning(event, record, victim, buildVictimMessage(record, source, damage));
+      const message = buildVictimMessage(record, source, damage);
+      const result = await sendVictimWarning(event, record, victim, message);
+      recordAudit(event, record, result?.success ? "warned" : "send_failed", result?.success ? "admin_warn_sent" : "admin_warn_failed", { message, success: Boolean(result?.success), error: result?.errorMessage });
       if (result?.success) {
         state.displayed += 1;
         state.lastDisplayedAt = new Date().toISOString();
@@ -232,6 +272,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     } catch (error) {
       state.lastError = error instanceof Error ? error.message : String(error);
       logger?.warn?.(`[VictimDamageDisplay] warning failed: ${state.lastError}`);
+      recordAudit(event, record, "send_failed", "admin_warn_exception", { error: state.lastError });
       return { success: false, error: state.lastError };
     }
   }
@@ -274,7 +315,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       description: "仅订阅清洗后的伤害事件，并且只向受害者发送伤害提示。",
     },
     apiName: "victimDamageDisplay",
-    api: { getState, handleCombatEvent, displayWeapon },
+    api: { getState, handleCombatEvent, displayWeapon, getDebugSnapshot, clearDebugRecords },
     async start() {
       runtimeConfig = readRuntimeConfig(config);
       await loadWeaponAliases();
@@ -286,6 +327,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
         try { unsubscribe?.(); } catch {}
       }
       handledEvents.clear();
+      auditRecords.length = 0;
       weaponAliases.clear();
     },
   };
