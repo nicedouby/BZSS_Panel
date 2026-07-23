@@ -119,7 +119,12 @@ const records = computed(() => Array.isArray(snapshot.value?.records) ? snapshot
 const reasonEntries = computed(() => Object.entries(snapshot.value?.byReason ?? {})
   .map(([key, value]) => ({ key, value: Number(value) }))
   .sort((a, b) => b.value - a.value));
-const allReasons = computed<string[]>(() => [...new Set(records.value.map((item: any) => item.reason).filter((reason: unknown): reason is string => typeof reason === "string" && reason.length > 0))]);
+const allReasons = computed<string[]>(() => {
+  const reasons = records.value
+    .map((item: any) => item.reason)
+    .filter((reason: unknown): reason is string => typeof reason === "string" && reason.length > 0);
+  return Array.from(new Set<string>(reasons));
+});
 const filteredRecords = computed(() => {
   const needle = query.value.toLowerCase();
   return records.value.filter((item: any) => {
