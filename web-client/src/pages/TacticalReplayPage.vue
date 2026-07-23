@@ -1,14 +1,15 @@
 <template>
-  <div class="replay-workbench">
+  <div class="replay-workbench" :class="{ 'is-player-mode': isPlayerMode }">
     <header class="replay-header">
       <div>
-        <p class="eyebrow">TACTICAL ARCHIVE / REPLAY WORKBENCH</p>
-        <h1>战术回放工作台</h1>
-        <p class="subtitle">从增量录制中还原任意时刻的战场状态，不生成视频，也不把整场回放常驻在浏览器内存。</p>
+        <p class="eyebrow">{{ isPlayerMode ? "TACTICAL REPLAY / PLAYER" : "TACTICAL ARCHIVE / WORKBENCH" }}</p>
+        <h1>{{ isPlayerMode ? "战术回放播放器" : "战术回放工作台" }}</h1>
+        <p class="subtitle">{{ isPlayerMode ? "独立读取 .rps 增量记录，使用与实时战术地图一致的图标、缩放和拖动操作。" : "管理已录制的对局；地图仅用于快速预览当前时间点，完整操作在独立播放器中进行。" }}</p>
       </div>
       <div class="header-actions">
         <span class="source-chip" :class="{ live: status && status.enabled }"><i></i>{{ status && status.enabled ? "回放读取器在线" : "读取器未启动" }}</span>
-        <button class="ghost-button" type="button" :disabled="loadingSessions" @click="loadSessions">{{ loadingSessions ? "刷新中…" : "刷新档案" }}</button>
+        <button v-if="isPlayerMode" class="ghost-button" type="button" @click="backToWorkbench">返回工作台</button>
+        <button v-else class="ghost-button" type="button" :disabled="loadingSessions" @click="loadSessions">{{ loadingSessions ? "刷新中…" : "刷新档案" }}</button>
       </div>
     </header>
 
@@ -35,36 +36,37 @@
         </div>
       </aside>
 
-      <main class="stage panel">
+      <main class="stage panel" :class="{ 'is-player-stage': isPlayerMode }">
         <div class="stage-heading">
-          <div><span class="panel-kicker">RECONSTRUCTED SCENE</span><h2>{{ activeSession && activeSession.map || "选择一场对局" }}</h2><span class="stage-layer">{{ activeSession && activeSession.layer || "等待选择录制档案" }}</span></div>
-          <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span><span><b>{{ assetCount }}</b><small>战场设施</small></span></div>
+          <div><span class="panel-kicker">{{ isPlayerMode ? "RECONSTRUCTED SCENE" : "MAP PREVIEW" }}</span><h2>{{ activeSession && activeSession.map || "选择一场对局" }}</h2><span class="stage-layer">{{ activeSession && activeSession.layer || "等待选择录制档案" }}</span></div>
+          <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span></div>
+        </div>
+
+        <div v-if="!isPlayerMode" class="session-overview">
+          <span><small>录制时间</small><b>{{ activeSession ? formatDate(activeSession.startedAt) : "--" }}</b></span>
+          <span><small>回放时长</small><b>{{ activeSession ? formatDuration(activeSession.durationMs) : "--:--" }}</b></span>
+          <span><small>档案状态</small><b :class="{ recording: activeSession && activeSession.status === 'recording' }">{{ activeSession && activeSession.status === "recording" ? "录制中" : "可播放" }}</b></span>
+          <button class="primary-button enter-player-button" type="button" :disabled="!activeSession" @click="openPlayer">进入完整播放 <span>›</span></button>
         </div>
 
         <div
           ref="replayViewportRef"
           class="map-shell"
-          :class="{ 'is-dragging': isDragging }"
+          :class="{ 'is-dragging': isDragging, 'is-preview': !isPlayerMode }"
           @pointerdown="startDrag"
           @pointermove="onPointerMove"
           @pointerup="endDrag"
           @pointercancel="endDrag"
           @pointerleave="endDrag"
-          @wheel.prevent="onWheel"
+          @wheel="onWheel"
         >
-          <div class="map-hud map-hud-top"><b>REPLAY</b><span>{{ activeSession && activeSession.status === "recording" ? "录制中" : "历史档案" }}</span><i>/</i><span>{{ activeMapConfig.name }}</span></div>
+          <div class="map-hud map-hud-top"><b>{{ isPlayerMode ? "REPLAY" : "PREVIEW" }}</b><span>{{ activeSession && activeSession.status === "recording" ? "录制中" : "历史档案" }}</span><i>/</i><span>{{ activeMapConfig.name }}</span></div>
           <div class="map-grid"></div>
           <div class="replay-map-transform" :style="camera.getTransform()">
             <div class="map-canvas" :style="{ opacity: hasMapResource ? 1 : 0 }">
               <TiledMapRenderer :tile-base-path="activeMapConfig.tileBasePath" :max-zoom="activeMapConfig.maxZoomLevel" :tiles-enabled="hasMapResource" :interaction-active="isDragging" :viewport-width="viewportWidth" :viewport-height="viewportHeight" :fallback-image="activeMapConfig.image" />
             </div>
             <div v-if="!hasMapResource" class="map-placeholder"><span>MAP DATA UNAVAILABLE</span><small>当前录制没有匹配的地图资源</small></div>
-            <div class="asset-layer">
-              <span v-for="zone in replayMainZones" :key="zone.id" class="asset-marker main-zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">⚑ {{ zone.name || "MAIN" }}</span>
-              <span v-for="zone in replayZones" :key="zone.id" class="asset-marker zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">{{ zone.name || "ZONE" }}</span>
-              <span v-for="fob in replayFobs" :key="fob.id" class="asset-marker fob-marker" :class="'team-' + (fob.teamId || 0)" :style="markerStyle(fob)" :title="fob.name">⌂</span>
-              <span v-for="vehicle in replayVehicles" :key="vehicle.id" class="asset-marker vehicle-marker" :class="'team-' + (vehicle.teamId || 0)" :style="markerStyle(vehicle)" :title="vehicle.name">◆</span>
-            </div>
             <div class="player-layer">
               <PlayerMarker
                 v-for="player in visiblePlayers"
@@ -80,19 +82,19 @@
                 :is-squad-leader="player.isLeader"
                 :role-icon="player.roleInfo.icon"
                 :role-label="player.roleInfo.label"
-                :vehicle-type="player.vehicleType"
                 :is-focused="player.key === (selectedPlayer && selectedPlayer.key)"
-                :show-name="true"
+                :show-name="isPlayerMode"
                 :show-coords="false"
                 :game-x="player.position && player.position.x"
                 :game-y="player.position && player.position.y"
                 :scale="1"
+                :compact="true"
                 :tone="getReplayPerspectiveTone(player.teamId)"
                 @click.stop="selectPlayer(player)"
               />
             </div>
           </div>
-          <div class="map-controls" @pointerdown.stop>
+          <div v-if="isPlayerMode" class="map-controls" @pointerdown.stop>
             <button type="button" title="放大" @click="zoomBy(1.25)">＋</button>
             <button type="button" title="缩小" @click="zoomBy(0.8)">−</button>
             <button type="button" title="重置视角" @click="resetCamera">⌂</button>
@@ -101,16 +103,21 @@
           <div v-if="loadingState" class="map-loading">正在重建战场状态…</div>
         </div>
 
-        <div class="timeline">
+        <div v-if="isPlayerMode" class="timeline">
           <div class="timeline-topline"><span class="timeline-caption">时间轴</span><span>{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span></div>
           <input v-model.number="currentMs" class="timeline-range" type="range" min="0" :max="Math.max(1, durationMs)" step="100" :disabled="!activeSession" />
           <div class="timeline-controls"><button class="play-button" type="button" :disabled="!activeSession" @click="togglePlaying">{{ playing ? "Ⅱ" : "▶" }}</button><button class="control-button" type="button" :disabled="!activeSession" @click="jump(-10)">−10s</button><button class="control-button" type="button" :disabled="!activeSession" @click="jump(10)">+10s</button><div class="speed-group"><button v-for="speed in speeds" :key="speed" class="speed-button" :class="{ active: playbackRate === speed }" type="button" @click="playbackRate = speed">{{ speed }}×</button></div><span class="timeline-hint">{{ playing ? "正在播放" : "已暂停" }}</span></div>
         </div>
+        <div v-else class="preview-timeline">
+          <div><span>预览时间点</span><b>{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</b></div>
+          <input v-model.number="currentMs" class="timeline-range" type="range" min="0" :max="Math.max(1, durationMs)" step="100" :disabled="!activeSession" />
+          <p>拖动时间轴快速查看；预览不加载完整播放控件。</p>
+        </div>
       </main>
 
-      <aside class="inspector panel">
+      <aside v-if="isPlayerMode" class="inspector panel">
         <div class="panel-heading"><div><span class="panel-kicker">AT THIS MOMENT</span><h2>现场摘要</h2></div></div>
-        <div class="summary-grid"><div><strong>{{ teamOneCount }}</strong><span>Team 1</span></div><div><strong>{{ teamTwoCount }}</strong><span>Team 2</span></div><div><strong>{{ replayZones.length }}</strong><span>点位</span></div><div><strong>{{ replayFobs.length }}</strong><span>FOB</span></div><div><strong>{{ replayVehicles.length }}</strong><span>载具</span></div><div><strong>{{ replayMainZones.length }}</strong><span>主基地</span></div></div>
+        <div class="summary-grid"><div><strong>{{ teamOneCount }}</strong><span>Team 1 玩家</span></div><div><strong>{{ teamTwoCount }}</strong><span>Team 2 玩家</span></div></div>
         <div class="inspector-divider"></div>
         <div v-if="selectedPlayer" class="selected-player">
           <div class="selected-top"><span class="large-pip" :class="'team-' + (selectedPlayer.teamId || 0)"></span><div><span class="panel-kicker">SELECTED UNIT</span><h3>{{ selectedPlayer.name }}</h3></div></div>
@@ -125,6 +132,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { apiGet } from "../app/apiClient";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
@@ -132,14 +140,15 @@ import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
-import { resolveVehicleIcon } from "../utils/vehicle-icons";
 
 interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; isPlayable?: boolean; archiveError?: string; }
 interface ReplayPosition { x: number; y: number; z?: number; }
-interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; roleInfo: RoleIconInfo; vehicleType: string | null; isLeader: boolean; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; mapX: number; mapY: number; hasPosition: boolean; }
-interface ReplayAsset { id: string; name: string; teamId: number | null; position: ReplayPosition; hasPosition: boolean; [key: string]: unknown; }
+interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; roleInfo: RoleIconInfo; isLeader: boolean; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; mapX: number; mapY: number; hasPosition: boolean; }
 
 const sessions = ref<ReplaySession[]>([]);
+const route = useRoute();
+const router = useRouter();
+const isPlayerMode = computed(() => route.name === "tactical-replay-player");
 const activeSession = ref<ReplaySession | null>(null);
 const state = ref<Record<string, any> | null>(null);
 const status = ref<Record<string, any> | null>(null);
@@ -181,11 +190,6 @@ const hasMapResource = computed(() => Boolean(activeMapConfig.value.tileBasePath
 const currentSnapshot = computed(() => state.value && state.value.state || null);
 const rawPlayers = computed<any[]>(() => Array.isArray(currentSnapshot.value && currentSnapshot.value.players) ? currentSnapshot.value.players : []);
 const visiblePlayers = computed<ReplayPlayer[]>(() => rawPlayers.value.map(normalizePlayer).filter((item: ReplayPlayer) => item.hasPosition));
-const replayZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.captureZones));
-const replayFobs = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.fobs));
-const replayMainZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.mainZones));
-const replayVehicles = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.vehicles));
-const assetCount = computed(() => replayZones.value.length + replayFobs.value.length + replayMainZones.value.length + replayVehicles.value.length);
 const teamOneCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 1).length);
 const teamTwoCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 2).length);
 
@@ -195,12 +199,10 @@ function normalizePlayer(source: any): ReplayPlayer {
   const position = source && source.telemetry && source.telemetry.position || source && source.position;
   const health = numberOrNull(source && source.telemetry && source.telemetry.health);
   const role = String(source && source.match && source.match.role || source && source.telemetry && source.telemetry.soldierClass || "");
-  const vehicleType = String(source && source.vehicle && source.vehicle.vehicleType || "").trim() || null;
+  // 回放当前阶段只显示玩家，始终使用玩家职业图标，不渲染或替换为载具图标。
   const roleInfo = health != null && health <= 0
     ? resolveRoleIcon("dead")
-    : vehicleType && vehicleType !== "None"
-      ? resolveVehicleIcon(vehicleType)
-      : resolveRoleIcon(role);
+    : resolveRoleIcon(role);
   const hasPosition = Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y)));
   const bounds = activeMapConfig.value.bounds;
   return {
@@ -210,7 +212,6 @@ function normalizePlayer(source: any): ReplayPlayer {
     squadId: numberOrNull(source && source.match && source.match.squadId),
     role,
     roleInfo,
-    vehicleType,
     isLeader: source && source.match && source.match.isLeader === true,
     health,
     ping: numberOrNull(source && source.network && source.network.gamePing),
@@ -225,18 +226,6 @@ function normalizePlayer(source: any): ReplayPlayer {
     hasPosition,
   };
 }
-function normalizeAssets(values: any): ReplayAsset[] {
-  return (Array.isArray(values) ? values : []).map((item, index) => {
-    const position = item && (item.position || item.location || item.coordinates) || item;
-    const x = Number(position && position.x);
-    const y = Number(position && position.y);
-    return { ...item, id: String(item && (item.id || item.name) || index + "-" + x + "-" + y), name: String(item && item.name || ""), teamId: numberOrNull(item && (item.teamId || item.teamID || item.team)), position: { x, y }, hasPosition: Number.isFinite(x) && Number.isFinite(y) } as ReplayAsset;
-  }).filter((item) => item.hasPosition);
-}
-function markerStyle(item: any) {
-  const bounds = activeMapConfig.value.bounds;
-  return { left: project(Number(item.position && item.position.x), bounds.minX, bounds.maxX) + "%", top: project(Number(item.position && item.position.y), bounds.minY, bounds.maxY) + "%" };
-}
 function project(value: number, min: number, max: number) { if (!Number.isFinite(value) || max <= min) return 50; return Math.min(98, Math.max(2, ((value - min) / (max - min)) * 100)); }
 function numberOrNull(value: any) { const n = Number(value); return Number.isFinite(n) ? n : null; }
 function round(value: any) { const n = Number(value); return Number.isFinite(n) ? Math.round(n) : "--"; }
@@ -249,22 +238,29 @@ function updateViewportSize() {
   if (!element) return;
   viewportWidth.value = element.clientWidth;
   viewportHeight.value = element.clientHeight;
-  if (!isDragging.value && camera.zoom.value === 1 && camera.x.value === 0 && camera.y.value === 0) resetCamera();
+  if (!isDragging.value && (!isPlayerMode.value || (camera.zoom.value === 1 && camera.x.value === 0 && camera.y.value === 0))) resetCamera();
 }
 function resetCamera() {
   const mapSize = 1000;
-  camera.zoom.value = 1;
-  camera.x.value = (viewportWidth.value - mapSize) / 2;
-  camera.y.value = (viewportHeight.value - mapSize) / 2;
+  const zoom = isPlayerMode.value
+    ? 1
+    : Math.max(0.2, Math.min(0.72, Math.min(viewportWidth.value, viewportHeight.value) / mapSize * 0.94));
+  camera.zoom.value = zoom;
+  camera.x.value = (viewportWidth.value - mapSize * zoom) / 2;
+  camera.y.value = (viewportHeight.value - mapSize * zoom) / 2;
 }
 function zoomBy(factor: number) {
+  if (!isPlayerMode.value) return;
   const next = Math.min(8, Math.max(0.35, camera.zoom.value * factor));
   camera.setZoom(next, viewportWidth.value / 2, viewportHeight.value / 2);
 }
 function onWheel(event: WheelEvent) {
+  if (!isPlayerMode.value) return;
+  event.preventDefault();
   zoomBy(event.deltaY < 0 ? 1.12 : 0.89);
 }
 function startDrag(event: PointerEvent) {
+  if (!isPlayerMode.value) return;
   if (event.button !== 0) return;
   dragMoved.value = false;
   (event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId);
@@ -283,7 +279,22 @@ function endDrag(event?: PointerEvent) {
 }
 function selectPlayer(player: ReplayPlayer) {
   if (dragMoved.value) { dragMoved.value = false; return; }
+  if (!isPlayerMode.value) { openPlayer(); return; }
   selectedPlayer.value = player;
+}
+
+function openPlayer() {
+  if (!activeSession.value) return;
+  playing.value = false;
+  if (animationTimer) clearInterval(animationTimer);
+  animationTimer = null;
+  void router.push({ name: "tactical-replay-player", params: { sessionId: activeSession.value.id }, query: { at: String(Math.max(0, Math.round(currentMs.value))) } });
+}
+function backToWorkbench() {
+  playing.value = false;
+  if (animationTimer) clearInterval(animationTimer);
+  animationTimer = null;
+  void router.push({ name: "tactical-replay" });
 }
 
 function getReplayPerspectiveTone(teamId: number | null): "friendly" | "enemy" | "neutral" {
@@ -309,7 +320,11 @@ async function loadSessions() {
   try {
     const response = await apiGet<any>("/api/tactical-replay/sessions?limit=100");
     sessions.value = Array.isArray(response && response.sessions) ? response.sessions : [];
-    const selected = sessions.value.find((item) => item.id === (activeSession.value && activeSession.value.id)) || sessions.value[0] || null;
+    const routeSessionId = String(route.params.sessionId || "");
+    const selected = sessions.value.find((item) => item.id === routeSessionId)
+      || sessions.value.find((item) => item.id === (activeSession.value && activeSession.value.id))
+      || sessions.value[0]
+      || null;
     if (selected) await selectSession(selected);
   } catch (error: any) { errorText.value = error && error.message || "无法读取回放档案"; }
   finally { loadingSessions.value = false; }
@@ -318,13 +333,14 @@ async function selectSession(session: ReplaySession) {
   if (session.isPlayable === false) return;
   playing.value = false;
   activeSession.value = session;
-  currentMs.value = 0;
+  const requestedAt = isPlayerMode.value ? Number(route.query.at) : 0;
+  currentMs.value = Number.isFinite(requestedAt) ? Math.max(0, requestedAt) : 0;
   stateRequestSequence += 1;
   stateAbortController?.abort();
   stateAbortController = null;
   lastStateRequestStartedAt = -Infinity;
   selectedPlayer.value = null;
-  await loadState(0);
+  await loadState(currentMs.value);
 }
 async function loadState(atMs: number) {
   if (!activeSession.value) return;
@@ -357,6 +373,11 @@ function togglePlaying() {
 function jump(seconds: number) { currentMs.value = Math.min(durationMs.value, Math.max(0, currentMs.value + seconds * 1000)); }
 watch(currentMs, scheduleStateLoad);
 watch(activeMapConfig, () => { void nextTick(updateViewportSize); });
+watch(isPlayerMode, () => { void nextTick(resetCamera); });
+watch(() => route.params.sessionId, (sessionId) => {
+  const next = sessions.value.find((item) => item.id === String(sessionId || ""));
+  if (next && next.id !== activeSession.value?.id) void selectSession(next);
+});
 onMounted(async () => {
   resizeObserver = new ResizeObserver(updateViewportSize);
   if (replayViewportRef.value) resizeObserver.observe(replayViewportRef.value);
@@ -385,8 +406,10 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .archive-path { display: block; max-width: min(100%, 720px); margin: 12px auto; overflow: auto; padding: 8px 10px; border: 1px solid rgba(150,190,211,.14); border-radius: 7px; color: #89a9b9; background: rgba(4,15,26,.45); font-size: 11px; text-align: left; }
 .error-banner { padding: 12px 14px; margin-bottom: 18px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 10px; }
 .panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 24px 80px rgba(0,0,0,.2); border-radius: 16px; }
-.replay-grid { display: grid; grid-template-columns: 235px minmax(0,1fr) 245px; gap: 15px; min-height: calc(100vh - 190px); }
+.replay-grid { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 15px; align-items: start; min-height: 650px; }
+.is-player-mode .replay-grid { grid-template-columns: 235px minmax(0,1fr) 245px; }
 .session-rail, .inspector { padding: 16px; min-height: 640px; }
+.session-rail { position: sticky; top: 14px; }
 .panel-heading, .stage-heading, .timeline-topline, .timeline-controls, .selected-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-heading h2, .stage-heading h2 { margin: 5px 0 0; font-size: 17px; }
 .count-badge { min-width: 25px; padding: 4px 7px; text-align: center; border-radius: 7px; background: rgba(65,151,191,.18); color: #9bcee2; font-size: 12px; }
@@ -405,13 +428,22 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .session-card em { display: flex; justify-content: space-between; color: #6c879a; font-size: 10px; font-style: normal; }
 .session-arrow { color: #5e879d; font-size: 20px; }
 .muted-empty, .inspector-placeholder { color: #6f8b9e; font-size: 12px; text-align: center; }
-.stage { min-width: 0; padding: 17px; }
+.stage { min-width: 0; padding: 18px; }
 .stage-layer { display: inline-block; margin-top: 7px; color: #7697ab; font-size: 11px; }
 .stage-metrics { display: flex; gap: 18px; }
 .stage-metrics span { display: grid; gap: 3px; text-align: right; }
 .stage-metrics b { color: #eaf7f5; font-size: 16px; }
 .stage-metrics small { color: #6f8d9e; font-size: 10px; }
-.map-shell { position: relative; min-height: 540px; margin-top: 15px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 12px; background: #081827; cursor: grab; touch-action: none; user-select: none; }
+.session-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; margin-top: 16px; padding: 10px; border: 1px solid rgba(136,190,205,.13); border-radius: 11px; background: rgba(4,15,26,.38); }
+.session-overview > span { display: grid; gap: 4px; min-width: 0; padding: 5px 7px; }
+.session-overview small { color: #6e8c9e; font-size: 10px; }
+.session-overview b { overflow: hidden; color: #dcecf2; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.session-overview b.recording { color: #72e5b6; }
+.enter-player-button { align-self: center; white-space: nowrap; }
+.enter-player-button span { margin-left: 6px; font-size: 16px; line-height: 0; }
+.map-shell { position: relative; min-height: 355px; margin-top: 15px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 12px; background: #081827; cursor: grab; touch-action: none; user-select: none; }
+.is-player-mode .map-shell { min-height: 540px; }
+.map-shell.is-preview { cursor: default; touch-action: auto; background: #061420; }
 .map-shell.is-dragging { cursor: grabbing; }
 .replay-map-transform { position: absolute; top: 0; left: 0; width: 1000px; height: 1000px; transform-origin: 0 0; will-change: transform; z-index: 2; background: #020205; }
 .map-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(120,183,203,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(120,183,203,.12) 1px, transparent 1px); background-size: 64px 64px; }
@@ -423,18 +455,7 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .map-hud-bottom { right: 12px; bottom: 12px; border-radius: 7px; }
 .map-hud b, .timeline-caption { color: #55ddb6; letter-spacing: .12em; }
 .map-hud i { color: #507080; font-style: normal; }
-.asset-layer, .player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
-.asset-marker { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; }
-.asset-marker { padding: 3px 5px; border: 1px solid rgba(255,255,255,.55); border-radius: 5px; color: #fff; background: rgba(12,85,95,.75); font-size: 9px; }
-.fob-marker { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: #8debd1; background: rgba(4,53,54,.86); font-size: 14px; }
-.fob-marker.team-2 { color: #ff9ca5; background: rgba(90,30,43,.86); }
-.main-zone-marker { border-color: rgba(255,255,255,.76); color: #f8fafc; background: rgba(30,41,59,.88); font-weight: 700; }
-.main-zone-marker.team-1 { border-color: #52d7ff; color: #b8eeff; }
-.main-zone-marker.team-2 { border-color: #ff7882; color: #ffd0d5; }
-.vehicle-marker { width: 19px; height: 19px; display: grid; place-items: center; padding: 0; border-radius: 4px; color: #aeeeff; background: rgba(8,74,98,.9); font-size: 11px; }
-.vehicle-marker.team-2 { color: #ffd0d5; background: rgba(105,35,48,.9); }
-.zone-marker.team-1 { border-color: #52d7ff; background: rgba(16,91,118,.75); }
-.zone-marker.team-2 { border-color: #ff7882; background: rgba(113,43,57,.75); }
+.player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 12px; }
 .map-controls { position: absolute; z-index: 12; right: 12px; top: 12px; display: grid; gap: 5px; }
 .map-controls button { width: 30px; height: 30px; border: 1px solid rgba(159,210,224,.2); border-radius: 7px; color: #bfeaf0; background: rgba(4,16,28,.78); cursor: pointer; font-size: 16px; }
@@ -449,6 +470,10 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .speed-button { padding: 6px 8px; }
 .speed-button.active { color: #071b18; border-color: #40dfa0; background: #40dfa0; }
 .timeline-hint { color: #668697; font-size: 10px; }
+.preview-timeline { display: grid; gap: 2px; padding: 11px 3px 0; }
+.preview-timeline > div { display: flex; justify-content: space-between; color: #7393a4; font-size: 11px; }
+.preview-timeline b { color: #bcd6df; font-weight: 600; }
+.preview-timeline p { margin: 0; color: #577588; font-size: 10px; }
 .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 17px; }
 .summary-grid div { display: grid; gap: 4px; padding: 11px 10px; border-radius: 9px; background: rgba(5,17,29,.5); }
 .summary-grid strong { color: #ecfafa; font-size: 20px; }
@@ -471,6 +496,6 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .empty-icon { color: #55ddb6; font-size: 48px; }
 .empty-state h2 { margin: 0; font-size: 20px; }
 .empty-state p { margin: 0 0 8px; color: #7897a7; font-size: 13px; }
-@media (max-width: 1200px) { .replay-grid { grid-template-columns: 210px minmax(0,1fr); } .inspector { grid-column: 1 / -1; min-height: auto; } .inspector-placeholder { min-height: 100px; } }
-@media (max-width: 800px) { .replay-workbench { padding: 18px 12px 24px; } .replay-header { display: grid; } .header-actions { justify-content: space-between; } .replay-grid { display: block; } .session-rail, .stage, .inspector { min-height: auto; margin-bottom: 12px; } .session-list { max-height: 260px; } .map-shell { min-height: 420px; } .stage-metrics { gap: 8px; } .stage-metrics span:nth-child(3) { display: none; } }
+@media (max-width: 1200px) { .is-player-mode .replay-grid { grid-template-columns: 210px minmax(0,1fr); } .is-player-mode .inspector { grid-column: 1 / -1; min-height: auto; } .inspector-placeholder { min-height: 100px; } .session-overview { grid-template-columns: repeat(3, minmax(0,1fr)); } .enter-player-button { grid-column: 1 / -1; justify-self: stretch; } }
+@media (max-width: 800px) { .replay-workbench { padding: 18px 12px 24px; } .replay-header { display: grid; } .header-actions { justify-content: space-between; } .replay-grid, .is-player-mode .replay-grid { display: block; } .session-rail { position: static; } .session-rail, .stage, .inspector { min-height: auto; margin-bottom: 12px; } .session-list { max-height: 260px; } .map-shell, .is-player-mode .map-shell { min-height: 350px; } .stage-metrics { gap: 8px; } .session-overview { grid-template-columns: 1fr 1fr; } .session-overview > span:last-of-type { grid-column: 1 / -1; } }
 </style>
