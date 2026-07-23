@@ -170,7 +170,7 @@ function statusLabel(value: string) {
   return ({ warned: "已警告", intercepted: "已拦截", send_failed: "发送失败" } as Record<string, string>)[value] ?? value;
 }
 function reasonLabel(value: string) {
-  return ({
+  const labels: Record<string, string> = {
     admin_punishment_damage: "管理员一百万伤害",
     self_attacker: "攻击者是自己",
     invalid_victim: "无效受害者",
@@ -180,7 +180,8 @@ function reasonLabel(value: string) {
     admin_warn_sent: "AdminWarn 已发送",
     admin_warn_failed: "AdminWarn 返回失败",
     admin_warn_exception: "AdminWarn 异常",
-  } as Record<string, string>)[value] ?? value) || "--";
+  };
+  return labels[value] ?? value ?? "--";
 }
 function formatTime(value: string) {
   if (!value) return "--";
