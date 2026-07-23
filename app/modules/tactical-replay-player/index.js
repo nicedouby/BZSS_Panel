@@ -222,7 +222,10 @@ async function readState(settings, sessionId, { atMs = 0 } = {}) {
   const replay = createReplayState(session);
   const targetMs = Math.max(0, Number.isFinite(Number(atMs)) ? Number(atMs) : 0);
   const segmentNames = (await fs.readdir(path.join(directory, "segments"), { withFileTypes: true }).catch(() => []))
-    .filter((entry) => entry.isFile() && /^(\\d{6})\\.((open\\.)?rps)$/.test(entry.name))
+    // Keep this expression as a regex literal. The previous double escaping
+    // matched a backslash followed by "d", rather than 000000.rps or
+    // 000000.open.rps, leaving every reconstructed replay map empty.
+    .filter((entry) => entry.isFile() && /^(\d{6})\.((open\.)?rps)$/.test(entry.name))
     .map((entry) => entry.name)
     .sort();
 
