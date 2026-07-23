@@ -26,6 +26,14 @@ async function main() {
   const denied = await handleTacticalFeedWriterRoutes({ core: { authManager: { hasEverything: () => false } }, modules: { tacticalFeedWriter: api }, url: new URL("http://localhost/api/tactical-feed-writer/recording"), req, user: {}, readJsonBody: async () => ({ enabled: true }), json });
   assert.equal(denied, true);
   assert.equal(response.status, 403);
+
+  const failedApi = {
+    getDiagnostics: () => ({ recordingEnabled: true, recording: true, lastError: "disk is busy" }),
+    async setRecordingEnabled() { throw new Error("disk is busy"); },
+  };
+  assert.equal(await handleTacticalFeedWriterRoutes({ core, modules: { tacticalFeedWriter: failedApi }, url: new URL("http://localhost/api/tactical-feed-writer/recording"), req, user: {}, readJsonBody: async () => ({ enabled: false }), json }), true);
+  assert.equal(response.status, 500);
+  assert.equal(response.payload.error, "TacticalReplayRecordingTransitionFailed");
   console.log("run-tactical-feed-writer-route-tests: ok");
 }
 
