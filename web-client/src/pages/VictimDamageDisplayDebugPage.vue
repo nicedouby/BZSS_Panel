@@ -8,7 +8,7 @@
       </div>
       <div class="actions">
         <span class="refresh-state">{{ loading ? "读取中..." : lastUpdated }}</span>
-        <button class="btn" :disabled="loading" @click="refresh">刷新</button>
+        <button class="btn" :disabled="loading" @click="refresh()">刷新</button>
         <button class="btn" :class="{ active: autoRefresh }" @click="autoRefresh = !autoRefresh">
           {{ autoRefresh ? "自动刷新中" : "自动刷新" }}
         </button>
@@ -119,7 +119,7 @@ const records = computed(() => Array.isArray(snapshot.value?.records) ? snapshot
 const reasonEntries = computed(() => Object.entries(snapshot.value?.byReason ?? {})
   .map(([key, value]) => ({ key, value: Number(value) }))
   .sort((a, b) => b.value - a.value));
-const allReasons = computed(() => [...new Set(records.value.map((item: any) => item.reason).filter(Boolean))]);
+const allReasons = computed<string[]>(() => [...new Set(records.value.map((item: any) => item.reason).filter((reason: unknown): reason is string => typeof reason === "string" && reason.length > 0))]);
 const filteredRecords = computed(() => {
   const needle = query.value.toLowerCase();
   return records.value.filter((item: any) => {
