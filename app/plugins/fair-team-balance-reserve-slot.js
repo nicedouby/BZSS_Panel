@@ -14,16 +14,10 @@ const DEFAULT_VARIANCE_DAYS = 3;
 const EVENT_DEDUPE_TTL_MS = 2 * 60 * 1000;
 
 export function createPlugin({ core, modules, config, logger } = {}) {
-  const pluginLogger =
-    logger
-    ?? core?.createLogger?.({
-      moduleId: PLUGIN_ID,
-      source: PLUGIN_ID,
-      channel: "module",
-    })
+  const pluginLogger = logger
+    ?? core?.createLogger?.({ moduleId: PLUGIN_ID, source: PLUGIN_ID, channel: "module" })
     ?? core?.logger
     ?? console;
-
   const runtimeConfig = readConfig(config);
   const dataDir = path.resolve(process.cwd(), runtimeConfig.directory);
   const unsubscribers = [];
@@ -60,12 +54,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const steamId = normalizeText(event?.steamId ?? event?.steamID ?? event?.steamid);
     const eosId = normalizeText(event?.eosId ?? event?.eosID ?? event?.eosid);
     const playerName = normalizeText(event?.playerName ?? event?.name ?? event?.player_name);
-
     return players.find((player) => {
       if (steamId && normalizeText(player?.steamId ?? player?.steamID) === steamId) return true;
       if (eosId && normalizeText(player?.eosId ?? player?.eosID) === eosId) return true;
-      if (playerName && normalizeText(player?.name ?? player?.playerName) === playerName) return true;
-      return false;
+      return Boolean(playerName && normalizeText(player?.name ?? player?.playerName) === playerName);
     }) ?? null;
   }
 
@@ -115,15 +107,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   async function appendAudit(entry = {}) {
     try {
-      await fs.mkdir(dataDir, { recursive: true });
       const now = new Date();
+      await fs.mkdir(dataDir, { recursive: true });
       const dateKey = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
-      const filePath = path.join(dataDir, `reserve-slot-${dateKey}.jsonl`);
-      await fs.appendFile(filePath, `${JSON.stringify({
-        at: now.toISOString(),
-        type: "RESERVE_SLOT_TB",
-        ...entry,
-      })}\n`, "utf8");
+      await fs.appendFile(
+        path.join(dataDir, `reserve-slot-${dateKey}.jsonl`),
+        `${JSON.stringify({ at: now.toISOString(), type: "RESERVE_SLOT_TB", ...entry })}\n`,
+        "utf8",
+      );
     } catch (error) {
       pluginLogger?.warn?.(`[ReserveSlotTB] audit write failed: ${error?.message ?? error}`);
     }
@@ -134,7 +125,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     for (const [eventId, seenAt] of recentEventIds) {
       if (now - seenAt > EVENT_DEDUPE_TTL_MS) recentEventIds.delete(eventId);
     }
-
     const eventId = normalizeText(event?.id ?? event?.seq);
     if (!eventId) return false;
     if (recentEventIds.has(eventId)) return true;
@@ -164,15 +154,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const player = findOnlinePlayer(matchState, event);
     const actor = buildActor(player, event);
 
-    if (!matchState || !player) {
-      return reject(actor, event, "PlayerUnavailable", "未找到当前在线玩家状态。");
-    }
-    if (!actor.steamId) {
-      return reject(actor, event, "SteamIdMissing", "玩家 SteamID 无效，无法读取预留位。");
-    }
-    if (actor.teamId !== 1 && actor.teamId !== 2) {
-      return reject(actor, event, "InvalidTeam", "玩家必须位于队伍 1 或队伍 2。");
-    }
+    if (!matchState || !player) return reject(actor, event, "PlayerUnavailable", "未找到当前在线玩家状态。");
+    if (!actor.steamId) return reject(actor, event, "SteamIdMissing", "玩家 SteamID 无效，无法读取预留位。");
+    if (actor.teamId !== 1 && actor.teamId !== 2) return reject(actor, event, "InvalidTeam", "玩家必须位于队伍 1 或队伍 2。");
     if (typeof modules?.reserveSlots?.getState !== "function" || typeof modules?.reserveSlots?.upsertMember !== "function") {
       return reject(actor, event, "ReserveSlotsUnavailable", "预留位模块当前不可用。");
     }
@@ -181,9 +165,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     const teamCheck = calculateProjectedTeamDelta(matchState?.players, actor.teamId);
-    if (!teamCheck.ok) {
-      return reject(actor, event, teamCheck.error, teamCheck.message, teamCheck);
-    }
+    if (!teamCheck.ok) return reject(actor, event, teamCheck.error, teamCheck.message, teamCheck);
     if (teamCheck.projectedDelta > runtimeConfig.maxProjectedTeamDelta) {
       return reject(
         actor,
@@ -205,15 +187,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const reserveMember = (Array.isArray(reserveState?.members) ? reserveState.members : [])
       .find((member) => normalizeText(member?.steamId ?? member?.steamID) === actor.steamId) ?? null;
-    if (!reserveMember) {
-      return reject(actor, event, "ReserveSlotNotFound", "未找到该玩家的有效预留位。");
-    }
+    if (!reserveMember) return reject(actor, event, "ReserveSlotNotFound", "未找到该玩家的有效预留位。");
 
     const oldExpireAt = normalizeText(reserveMember?.expireAt);
     const oldExpireMs = parseReserveExpireAt(oldExpireAt);
-    if (!oldExpireMs) {
-      return reject(actor, event, "InvalidReserveExpireAt", "预留位到期时间无效。");
-    }
+    if (!oldExpireMs) return reject(actor, event, "InvalidReserveExpireAt", "预留位到期时间无效。");
 
     const nowMs = Date.now();
     const remainingDaysBefore = calculateRemainingReserveDays(oldExpireMs, nowMs);
@@ -233,12 +211,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const newExpireMs = oldExpireMs - costDays * DAY_MS;
     const newExpireAt = formatReserveExpireAt(newExpireMs);
     const remainingDaysAfter = calculateRemainingReserveDays(newExpireMs, nowMs);
+    const deductionInput = buildReserveMemberUpdate(reserveMember, actor.steamId, newExpireAt);
+    const refundInput = buildReserveMemberUpdate(reserveMember, actor.steamId, oldExpireAt);
 
     try {
-      await modules.reserveSlots.upsertMember({
-        steamId: actor.steamId,
-        expireAt: newExpireAt,
-      });
+      await modules.reserveSlots.upsertMember(deductionInput);
     } catch (error) {
       return reject(actor, event, "ReserveDeductionFailed", "预留位日期扣除失败，未执行跳边。", {
         remainingDaysBefore,
@@ -278,10 +255,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       let refundOk = false;
       let refundError = "";
       try {
-        await modules.reserveSlots.upsertMember({
-          steamId: actor.steamId,
-          expireAt: oldExpireAt,
-        });
+        await modules.reserveSlots.upsertMember(refundInput);
         refundOk = true;
       } catch (error) {
         refundError = normalizeText(error?.message);
@@ -313,12 +287,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           "reserve_slot_tb_refund_failed",
           event,
         );
-        return {
-          ok: false,
-          error: "ReserveRefundFailed",
-          message: failureMessage,
-          refundOk: false,
-        };
+        return { ok: false, error: "ReserveRefundFailed", message: failureMessage, refundOk: false };
       }
 
       await warnPlayer(actor, `预留位跳边失败: ${failureMessage}，已返还 ${costDays} 天。`, "reserve_slot_tb_switch_rejected", event);
@@ -349,12 +318,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       ...teamCheck,
     });
 
-    await warnPlayer(
-      actor,
-      `预留位跳边成功: 本次扣除 ${costDays} 天，剩余约 ${remainingDaysAfter} 天。`,
-      "reserve_slot_tb_success",
-      event,
-    );
+    await warnPlayer(actor, `预留位跳边成功: 本次扣除 ${costDays} 天，剩余约 ${remainingDaysAfter} 天。`, "reserve_slot_tb_success", event);
     await broadcast(
       `预留位跳边成功: ${actor.playerName || actor.steamId}，扣除 ${costDays} 天，剩余约 ${remainingDaysAfter} 天。`,
       "reserve_slot_tb_broadcast",
@@ -378,12 +342,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return enqueue(async () => {
       const message = normalizeTriggerMessage(event?.message);
       if (!TRIGGER_PATTERN.test(message)) return { matched: false };
-      if (!isActive()) {
-        return { matched: true, skipped: true, reason: "plugin_disabled_or_unsubscribed" };
-      }
-      if (isDuplicateEvent(event)) {
-        return { matched: true, skipped: true, reason: "duplicate_event" };
-      }
+      if (!isActive()) return { matched: true, skipped: true, reason: "plugin_disabled_or_unsubscribed" };
+      if (isDuplicateEvent(event)) return { matched: true, skipped: true, reason: "duplicate_event" };
       const result = await handleReserveSlotTb(event);
       return { matched: true, trigger: "reserve_slot_tb", ...result };
     });
@@ -469,15 +429,10 @@ export function calculateReserveSlotSwitchCost(remainingDays, options = {}) {
   const random = typeof options.random === "function" ? options.random : Math.random;
 
   let baseDays = 5;
-  if (days > 90) {
-    baseDays = Math.max(1, Math.round(days / 10));
-  } else if (days >= 90) {
-    baseDays = 20;
-  } else if (days >= 60) {
-    baseDays = 15;
-  } else if (days > 30) {
-    baseDays = 10;
-  }
+  if (days > 90) baseDays = Math.max(1, Math.round(days / 10));
+  else if (days >= 90) baseDays = 20;
+  else if (days >= 60) baseDays = 15;
+  else if (days > 30) baseDays = 10;
 
   const randomValue = Math.min(0.999999999, Math.max(0, Number(random()) || 0));
   const offset = varianceDays > 0
@@ -503,11 +458,22 @@ export function formatReserveExpireAt(value) {
 }
 
 export function calculateRemainingReserveDays(expireAtOrMs, nowMs = Date.now()) {
-  const expireMs = typeof expireAtOrMs === "number"
-    ? expireAtOrMs
-    : parseReserveExpireAt(expireAtOrMs);
+  const expireMs = typeof expireAtOrMs === "number" ? expireAtOrMs : parseReserveExpireAt(expireAtOrMs);
   if (!expireMs) return 0;
   return Math.max(0, Math.floor((expireMs - Number(nowMs || Date.now())) / DAY_MS));
+}
+
+export function buildReserveMemberUpdate(member = {}, steamId = "", expireAt = "") {
+  const reasons = Array.isArray(member?.reasons)
+    ? member.reasons.map(normalizeText).filter(Boolean)
+    : [];
+  return {
+    steamId: normalizeText(steamId ?? member?.steamId ?? member?.steamID),
+    group: normalizeText(member?.group) || "BZSSVIP",
+    name: normalizeText(member?.name),
+    reason: normalizeText(member?.remark) || reasons.join("，"),
+    expireAt: normalizeText(expireAt),
+  };
 }
 
 function readConfig(config) {
