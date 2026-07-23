@@ -38,7 +38,7 @@
       <main class="stage panel">
         <div class="stage-heading">
           <div><span class="panel-kicker">RECONSTRUCTED SCENE</span><h2>{{ activeSession && activeSession.map || "选择一场对局" }}</h2><span class="stage-layer">{{ activeSession && activeSession.layer || "等待选择录制档案" }}</span></div>
-          <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span><span><b>{{ assetCount }}</b><small>战场设施</small></span></div>
+          <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span></div>
         </div>
 
         <div
@@ -59,12 +59,6 @@
               <TiledMapRenderer :tile-base-path="activeMapConfig.tileBasePath" :max-zoom="activeMapConfig.maxZoomLevel" :tiles-enabled="hasMapResource" :interaction-active="isDragging" :viewport-width="viewportWidth" :viewport-height="viewportHeight" :fallback-image="activeMapConfig.image" />
             </div>
             <div v-if="!hasMapResource" class="map-placeholder"><span>MAP DATA UNAVAILABLE</span><small>当前录制没有匹配的地图资源</small></div>
-            <div class="asset-layer">
-              <span v-for="zone in replayMainZones" :key="zone.id" class="asset-marker main-zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">⚑ {{ zone.name || "MAIN" }}</span>
-              <span v-for="zone in replayZones" :key="zone.id" class="asset-marker zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">{{ zone.name || "ZONE" }}</span>
-              <span v-for="fob in replayFobs" :key="fob.id" class="asset-marker fob-marker" :class="'team-' + (fob.teamId || 0)" :style="markerStyle(fob)" :title="fob.name">⌂</span>
-              <span v-for="vehicle in replayVehicles" :key="vehicle.id" class="asset-marker vehicle-marker" :class="'team-' + (vehicle.teamId || 0)" :style="markerStyle(vehicle)" :title="vehicle.name">◆</span>
-            </div>
             <div class="player-layer">
               <PlayerMarker
                 v-for="player in visiblePlayers"
@@ -80,7 +74,6 @@
                 :is-squad-leader="player.isLeader"
                 :role-icon="player.roleInfo.icon"
                 :role-label="player.roleInfo.label"
-                :vehicle-type="player.vehicleType"
                 :is-focused="player.key === (selectedPlayer && selectedPlayer.key)"
                 :show-name="true"
                 :show-coords="false"
@@ -110,7 +103,7 @@
 
       <aside class="inspector panel">
         <div class="panel-heading"><div><span class="panel-kicker">AT THIS MOMENT</span><h2>现场摘要</h2></div></div>
-        <div class="summary-grid"><div><strong>{{ teamOneCount }}</strong><span>Team 1</span></div><div><strong>{{ teamTwoCount }}</strong><span>Team 2</span></div><div><strong>{{ replayZones.length }}</strong><span>点位</span></div><div><strong>{{ replayFobs.length }}</strong><span>FOB</span></div><div><strong>{{ replayVehicles.length }}</strong><span>载具</span></div><div><strong>{{ replayMainZones.length }}</strong><span>主基地</span></div></div>
+        <div class="summary-grid"><div><strong>{{ teamOneCount }}</strong><span>Team 1 玩家</span></div><div><strong>{{ teamTwoCount }}</strong><span>Team 2 玩家</span></div></div>
         <div class="inspector-divider"></div>
         <div v-if="selectedPlayer" class="selected-player">
           <div class="selected-top"><span class="large-pip" :class="'team-' + (selectedPlayer.teamId || 0)"></span><div><span class="panel-kicker">SELECTED UNIT</span><h3>{{ selectedPlayer.name }}</h3></div></div>
@@ -132,12 +125,10 @@ import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
-import { resolveVehicleIcon } from "../utils/vehicle-icons";
 
 interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; isPlayable?: boolean; archiveError?: string; }
 interface ReplayPosition { x: number; y: number; z?: number; }
-interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; roleInfo: RoleIconInfo; vehicleType: string | null; isLeader: boolean; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; mapX: number; mapY: number; hasPosition: boolean; }
-interface ReplayAsset { id: string; name: string; teamId: number | null; position: ReplayPosition; hasPosition: boolean; [key: string]: unknown; }
+interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; roleInfo: RoleIconInfo; isLeader: boolean; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; mapX: number; mapY: number; hasPosition: boolean; }
 
 const sessions = ref<ReplaySession[]>([]);
 const activeSession = ref<ReplaySession | null>(null);
@@ -181,11 +172,6 @@ const hasMapResource = computed(() => Boolean(activeMapConfig.value.tileBasePath
 const currentSnapshot = computed(() => state.value && state.value.state || null);
 const rawPlayers = computed<any[]>(() => Array.isArray(currentSnapshot.value && currentSnapshot.value.players) ? currentSnapshot.value.players : []);
 const visiblePlayers = computed<ReplayPlayer[]>(() => rawPlayers.value.map(normalizePlayer).filter((item: ReplayPlayer) => item.hasPosition));
-const replayZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.captureZones));
-const replayFobs = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.fobs));
-const replayMainZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.mainZones));
-const replayVehicles = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.vehicles));
-const assetCount = computed(() => replayZones.value.length + replayFobs.value.length + replayMainZones.value.length + replayVehicles.value.length);
 const teamOneCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 1).length);
 const teamTwoCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 2).length);
 
@@ -195,12 +181,10 @@ function normalizePlayer(source: any): ReplayPlayer {
   const position = source && source.telemetry && source.telemetry.position || source && source.position;
   const health = numberOrNull(source && source.telemetry && source.telemetry.health);
   const role = String(source && source.match && source.match.role || source && source.telemetry && source.telemetry.soldierClass || "");
-  const vehicleType = String(source && source.vehicle && source.vehicle.vehicleType || "").trim() || null;
+  // 回放当前阶段只显示玩家，始终使用玩家职业图标，不渲染或替换为载具图标。
   const roleInfo = health != null && health <= 0
     ? resolveRoleIcon("dead")
-    : vehicleType && vehicleType !== "None"
-      ? resolveVehicleIcon(vehicleType)
-      : resolveRoleIcon(role);
+    : resolveRoleIcon(role);
   const hasPosition = Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y)));
   const bounds = activeMapConfig.value.bounds;
   return {
@@ -210,7 +194,6 @@ function normalizePlayer(source: any): ReplayPlayer {
     squadId: numberOrNull(source && source.match && source.match.squadId),
     role,
     roleInfo,
-    vehicleType,
     isLeader: source && source.match && source.match.isLeader === true,
     health,
     ping: numberOrNull(source && source.network && source.network.gamePing),
@@ -224,18 +207,6 @@ function normalizePlayer(source: any): ReplayPlayer {
     mapY: project(Number(position && position.y), bounds.minY, bounds.maxY),
     hasPosition,
   };
-}
-function normalizeAssets(values: any): ReplayAsset[] {
-  return (Array.isArray(values) ? values : []).map((item, index) => {
-    const position = item && (item.position || item.location || item.coordinates) || item;
-    const x = Number(position && position.x);
-    const y = Number(position && position.y);
-    return { ...item, id: String(item && (item.id || item.name) || index + "-" + x + "-" + y), name: String(item && item.name || ""), teamId: numberOrNull(item && (item.teamId || item.teamID || item.team)), position: { x, y }, hasPosition: Number.isFinite(x) && Number.isFinite(y) } as ReplayAsset;
-  }).filter((item) => item.hasPosition);
-}
-function markerStyle(item: any) {
-  const bounds = activeMapConfig.value.bounds;
-  return { left: project(Number(item.position && item.position.x), bounds.minX, bounds.maxX) + "%", top: project(Number(item.position && item.position.y), bounds.minY, bounds.maxY) + "%" };
 }
 function project(value: number, min: number, max: number) { if (!Number.isFinite(value) || max <= min) return 50; return Math.min(98, Math.max(2, ((value - min) / (max - min)) * 100)); }
 function numberOrNull(value: any) { const n = Number(value); return Number.isFinite(n) ? n : null; }
@@ -423,18 +394,7 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .map-hud-bottom { right: 12px; bottom: 12px; border-radius: 7px; }
 .map-hud b, .timeline-caption { color: #55ddb6; letter-spacing: .12em; }
 .map-hud i { color: #507080; font-style: normal; }
-.asset-layer, .player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
-.asset-marker { position: absolute; transform: translate(-50%,-50%); pointer-events: auto; }
-.asset-marker { padding: 3px 5px; border: 1px solid rgba(255,255,255,.55); border-radius: 5px; color: #fff; background: rgba(12,85,95,.75); font-size: 9px; }
-.fob-marker { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: #8debd1; background: rgba(4,53,54,.86); font-size: 14px; }
-.fob-marker.team-2 { color: #ff9ca5; background: rgba(90,30,43,.86); }
-.main-zone-marker { border-color: rgba(255,255,255,.76); color: #f8fafc; background: rgba(30,41,59,.88); font-weight: 700; }
-.main-zone-marker.team-1 { border-color: #52d7ff; color: #b8eeff; }
-.main-zone-marker.team-2 { border-color: #ff7882; color: #ffd0d5; }
-.vehicle-marker { width: 19px; height: 19px; display: grid; place-items: center; padding: 0; border-radius: 4px; color: #aeeeff; background: rgba(8,74,98,.9); font-size: 11px; }
-.vehicle-marker.team-2 { color: #ffd0d5; background: rgba(105,35,48,.9); }
-.zone-marker.team-1 { border-color: #52d7ff; background: rgba(16,91,118,.75); }
-.zone-marker.team-2 { border-color: #ff7882; background: rgba(113,43,57,.75); }
+.player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 12px; }
 .map-controls { position: absolute; z-index: 12; right: 12px; top: 12px; display: grid; gap: 5px; }
 .map-controls button { width: 30px; height: 30px; border: 1px solid rgba(159,210,224,.2); border-radius: 7px; color: #bfeaf0; background: rgba(4,16,28,.78); cursor: pointer; font-size: 16px; }
