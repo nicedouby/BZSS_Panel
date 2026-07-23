@@ -9,6 +9,7 @@
       { 'is-hovered': isHovered },
       { 'no-pointer': disableInteraction },
       { 'is-vehicle': hasVehicle },
+      { 'is-compact': compact },
       `mode-${mode}`
     ]"
     :style="markerStyle"
@@ -32,6 +33,12 @@
     >
       <div class="direction-arrow"></div>
     </div>
+
+    <!-- Outer team ring + inner dark ring keep the original BOB silhouette. -->
+    <span v-if="mode === 'tactical'" class="marker-rings" aria-hidden="true">
+      <span class="marker-ring marker-ring-outer"></span>
+      <span class="marker-ring marker-ring-inner"></span>
+    </span>
 
     <!-- Marker Icon -->
     <div class="marker-icon">
@@ -102,6 +109,8 @@ const props = withDefaults(
     gameX?: number | null;
     gameY?: number | null;
     scale?: number;
+    /** Smaller on-screen footprint for dense views such as tactical replay. */
+    compact?: boolean;
     tone?: "friendly" | "enemy" | "neutral";
     disableInteraction?: boolean;
   }>(),
@@ -121,6 +130,7 @@ const props = withDefaults(
     gameX: null,
     gameY: null,
     scale: 1.0,
+    compact: false,
     tone: "neutral",
     disableInteraction: false
   }
@@ -324,10 +334,75 @@ function isRoleIconImage(icon: string | undefined) {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  z-index: 3;
   filter: none;
   transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.16s ease, opacity 0.16s ease;
 }
+
+/* The two circles remain behind the existing role icon and make the marker
+   legible on both light and dark parts of a tactical map. */
+.marker-rings {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.marker-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  border-radius: 50%;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+}
+
+.marker-ring-outer {
+  width: 30px;
+  height: 30px;
+  border: 1.5px solid var(--perspective-primary);
+  box-shadow: 0 0 6px var(--perspective-glow);
+}
+
+.marker-ring-inner {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--perspective-soft);
+  background: color-mix(in srgb, var(--perspective-deep) 76%, transparent);
+  box-shadow: 0 0 3px rgba(0, 0, 0, .72);
+}
+
+.is-dead .marker-rings { opacity: .58; filter: grayscale(1); }
+
+.is-compact {
+  width: 30px;
+  height: 30px;
+}
+
+.is-compact .marker-icon {
+  width: 25px;
+  height: 25px;
+}
+
+.is-compact .marker-ring-outer {
+  width: 24px;
+  height: 24px;
+}
+
+.is-compact .marker-ring-inner {
+  width: 19px;
+  height: 19px;
+}
+
+.is-compact .kit-icon-stack { transform: scale(.8); }
+
+.is-compact .marker-direction {
+  width: 25px;
+  height: 25px;
+}
+
+.is-compact .direction-arrow { top: -5px; }
 
 /* Dead marker styling */
 .is-dead .marker-icon {
