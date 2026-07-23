@@ -96,13 +96,14 @@ export function stopPageFrameworkPreload() {
 }
 
 export function preloadPageFrameworkByPath(path: string, user: AuthUser | null) {
-  if (!user || typeof window === "undefined" || shouldDisablePreload()) {
+  // This function is called because the user explicitly intends to navigate.
+  // Performance/data-saver gates belong to idle background warming only;
+  // applying them here makes cold-route navigation look like a dead click.
+  if (!user || typeof window === "undefined" || document.hidden) {
     return Promise.resolve();
   }
 
   const normalizedPath = normalizePath(path);
-  if (isHeavyPage(normalizedPath)) return Promise.resolve();
-
   const page = getPageDefinitionByPath(normalizedPath);
   if (page && canUserAccessPage(page, user)) {
     return loadPageDefinition(page);
