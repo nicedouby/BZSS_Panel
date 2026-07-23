@@ -1273,6 +1273,9 @@ export function createSquadManagementService({ core, modules, config, logger, re
         creatorEosId,
         createdAt: creationRecord?.createdAt ?? "",
         createdAtMs: creationRecord?.createdAtMs ?? 0,
+        // Expose the lifecycle generation to safety-critical consumers such as
+        // impeachment votes.  A reused squad number must never identify a new squad.
+        generation: creationRecord?.generation ?? "",
         creationSource: creationRecord?.creationSource ?? "",
         creationConfidence: creationRecord?.creationConfidence ?? "",
         source: "LIST_PLAYERS",

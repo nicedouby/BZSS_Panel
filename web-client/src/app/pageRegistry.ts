@@ -488,6 +488,17 @@ export const pageRegistry: PageDefinition[] = [
     ...documentPage,
   },
   {
+    name: "squad-leader-impeachment",
+    path: "/plugins/squad-leader-impeachment",
+    component: () => import("../pages/SquadLeaderImpeachmentPage.vue"),
+    title: "弹劾队长",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "moderation", label: "弹劾队长", icon: "⚖️", order: 84 },
+    superAdminOnly: true,
+    ...documentPage,
+  },
+  {
     name: "welcome-join-warning",
     path: "/debug/welcome-join-warning",
     component: () => import("../pages/WelcomeJoinWarningDebugPage.vue"),

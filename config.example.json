@@ -809,6 +809,18 @@
       "showFriendlyFireLabel": true,
       "adminPunishmentDamage": 1000000,
       "weaponAliasFile": "./config/victim-damage-display-weapons.json"
+    },
+    "squadLeaderImpeachment": {
+      "enabled": true,
+      "directory": "./data/squad-leader-impeachment",
+      "selectionTimeoutMs": 30000,
+      "voteTimeoutMs": 90000,
+      "reminderMs": 10000,
+      "initiatorCooldownMs": 1800000,
+      "targetCooldownMs": 1200000,
+      "invalidCooldownMs": 60000,
+      "maxStartsPerTeam": 3,
+      "maxInvalidInputs": 3
     }
   },
   "performance": {
