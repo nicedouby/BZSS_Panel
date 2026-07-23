@@ -132,6 +132,23 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return false;
   }
 
+  async function persistReserveMember(input) {
+    await modules.reserveSlots.upsertMember(input);
+    if (typeof modules?.reserveSlots?.reload !== "function") return;
+
+    let state = await modules.reserveSlots.reload();
+    let persisted = findReserveMember(state, input.steamId);
+    if (normalizeText(persisted?.expireAt) === normalizeText(input.expireAt)) return;
+
+    pluginLogger?.warn?.(`[ReserveSlotTB] reserve write verification failed once, retrying steamId=${input.steamId}`);
+    await modules.reserveSlots.upsertMember(input);
+    state = await modules.reserveSlots.reload();
+    persisted = findReserveMember(state, input.steamId);
+    if (normalizeText(persisted?.expireAt) !== normalizeText(input.expireAt)) {
+      throw new Error(`Reserve persistence verification failed for ${input.steamId}`);
+    }
+  }
+
   async function reject(actor, event, error, message, extra = {}) {
     await appendAudit({
       status: "rejected",
@@ -185,8 +202,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       });
     }
 
-    const reserveMember = (Array.isArray(reserveState?.members) ? reserveState.members : [])
-      .find((member) => normalizeText(member?.steamId ?? member?.steamID) === actor.steamId) ?? null;
+    const reserveMember = findReserveMember(reserveState, actor.steamId);
     if (!reserveMember) return reject(actor, event, "ReserveSlotNotFound", "未找到该玩家的有效预留位。");
 
     const oldExpireAt = normalizeText(reserveMember?.expireAt);
@@ -215,7 +231,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const refundInput = buildReserveMemberUpdate(reserveMember, actor.steamId, oldExpireAt);
 
     try {
-      await modules.reserveSlots.upsertMember(deductionInput);
+      await persistReserveMember(deductionInput);
     } catch (error) {
       return reject(actor, event, "ReserveDeductionFailed", "预留位日期扣除失败，未执行跳边。", {
         remainingDaysBefore,
@@ -255,7 +271,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       let refundOk = false;
       let refundError = "";
       try {
-        await modules.reserveSlots.upsertMember(refundInput);
+        await persistReserveMember(refundInput);
         refundOk = true;
       } catch (error) {
         refundError = normalizeText(error?.message);
@@ -474,6 +490,12 @@ export function buildReserveMemberUpdate(member = {}, steamId = "", expireAt = "
     reason: normalizeText(member?.remark) || reasons.join("，"),
     expireAt: normalizeText(expireAt),
   };
+}
+
+function findReserveMember(state = {}, steamId = "") {
+  const expected = normalizeText(steamId);
+  return (Array.isArray(state?.members) ? state.members : [])
+    .find((member) => normalizeText(member?.steamId ?? member?.steamID) === expected) ?? null;
 }
 
 function readConfig(config) {
