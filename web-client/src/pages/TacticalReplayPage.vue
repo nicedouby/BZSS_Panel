@@ -16,7 +16,8 @@
     <div v-if="!sessions.length && !loadingSessions" class="empty-state">
       <div class="empty-icon">◷</div>
       <h2>还没有可播放的战术录制</h2>
-      <p>请先在实时战术地图打开录制。录制结束后，档案会出现在这里。</p>
+      <p>请先在实时战术地图打开录制。录制结束后，档案会出现在这里；进行中的 `.open` 会话也可直接读取。</p>
+      <code v-if="archiveRootDir" class="archive-path">{{ archiveRootDir }}</code>
       <button class="primary-button" type="button" @click="loadSessions">重新扫描</button>
     </div>
 
@@ -25,9 +26,9 @@
         <div class="panel-heading"><div><span class="panel-kicker">ARCHIVE</span><h2>对局档案</h2></div><span class="count-badge">{{ sessions.length }}</span></div>
         <label class="search-box"><span>⌕</span><input v-model="searchText" type="search" placeholder="搜索地图或图层" /></label>
         <div class="session-list">
-          <button v-for="item in filteredSessions" :key="item.id" type="button" class="session-card" :class="{ selected: item.id === (activeSession && activeSession.id) }" @click="selectSession(item)">
+          <button v-for="item in filteredSessions" :key="item.id" type="button" class="session-card" :class="{ selected: item.id === (activeSession && activeSession.id), unreadable: item.isPlayable === false }" :disabled="item.isPlayable === false" @click="selectSession(item)">
             <span class="session-status" :class="item.status"></span>
-            <span class="session-body"><strong>{{ item.map || "未知地图" }}</strong><small>{{ item.layer || "未记录图层" }}</small><em><span>{{ formatDate(item.startedAt) }}</span><span>{{ formatDuration(item.durationMs) }}</span></em></span>
+            <span class="session-body"><strong>{{ item.map || (item.isPlayable === false ? "异常档案" : "未知地图") }}</strong><small>{{ item.archiveError || item.layer || "未记录图层" }}</small><em><span>{{ formatDate(item.startedAt) }}</span><span>{{ formatDuration(item.durationMs) }}</span></em></span>
             <span class="session-arrow">›</span>
           </button>
           <p v-if="!filteredSessions.length" class="muted-empty">没有匹配的档案</p>
@@ -107,7 +108,7 @@ import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
 
-interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; }
+interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; isPlayable?: boolean; archiveError?: string; }
 interface ReplayPosition { x: number; y: number; z?: number; }
 interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; health: number | null; ping: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; hasPosition: boolean; }
 interface ReplayAsset { id: string; name: string; teamId: number | null; position: ReplayPosition; hasPosition: boolean; [key: string]: unknown; }
@@ -140,6 +141,7 @@ const filteredSessions = computed(() => {
   const query = searchText.value.trim().toLocaleLowerCase();
   return query ? sessions.value.filter((item) => (String(item.map || "") + " " + String(item.layer || "")).toLocaleLowerCase().includes(query)) : sessions.value;
 });
+const archiveRootDir = computed(() => String(status.value && status.value.rootDir || ""));
 const durationMs = computed(() => Math.max(1, Number((activeSession.value && activeSession.value.durationMs) || (state.value && state.value.session && state.value.session.durationMs) || 1)));
 const activeMapConfig = computed(() => {
   const source = (activeSession.value && activeSession.value.map) || (state.value && state.value.state && state.value.state.server && state.value.state.server.map) || (activeSession.value && activeSession.value.layer) || "";
@@ -239,7 +241,15 @@ async function loadSessions() {
   } catch (error: any) { errorText.value = error && error.message || "无法读取回放档案"; }
   finally { loadingSessions.value = false; }
 }
-async function selectSession(session: any) { playing.value = false; activeSession.value = session; currentMs.value = 0; latestRequestedMs = -1; selectedPlayer.value = null; await loadState(0); }
+async function selectSession(session: ReplaySession) {
+  if (session.isPlayable === false) return;
+  playing.value = false;
+  activeSession.value = session;
+  currentMs.value = 0;
+  latestRequestedMs = -1;
+  selectedPlayer.value = null;
+  await loadState(0);
+}
 async function loadState(atMs: number) {
   if (!activeSession.value) return;
   latestRequestedMs = atMs;
@@ -285,6 +295,7 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .source-chip.live i { background: #40dfa0; box-shadow: 0 0 12px #40dfa0; }
 .ghost-button, .primary-button, .control-button, .speed-button { padding: 9px 12px; cursor: pointer; }
 .primary-button { background: #2ec98b; color: #062117; border-color: #2ec98b; font-weight: 700; }
+.archive-path { display: block; max-width: min(100%, 720px); margin: 12px auto; overflow: auto; padding: 8px 10px; border: 1px solid rgba(150,190,211,.14); border-radius: 7px; color: #89a9b9; background: rgba(4,15,26,.45); font-size: 11px; text-align: left; }
 .error-banner { padding: 12px 14px; margin-bottom: 18px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 10px; }
 .panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 24px 80px rgba(0,0,0,.2); border-radius: 16px; }
 .replay-grid { display: grid; grid-template-columns: 235px minmax(0,1fr) 245px; gap: 15px; min-height: calc(100vh - 190px); }
@@ -297,6 +308,8 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .session-list { display: grid; gap: 7px; max-height: calc(100vh - 300px); overflow: auto; }
 .session-card { display: grid; grid-template-columns: 8px minmax(0,1fr) auto; gap: 9px; width: 100%; padding: 11px 9px; text-align: left; color: #bad0df; border: 1px solid transparent; border-radius: 10px; background: rgba(4,13,24,.34); cursor: pointer; }
 .session-card:hover, .session-card.selected { border-color: rgba(71,211,165,.45); background: rgba(23,81,79,.25); }
+.session-card.unreadable { cursor: not-allowed; opacity: .58; }
+.session-card.unreadable:hover { border-color: rgba(248,113,113,.45); background: rgba(127,29,29,.18); }
 .session-status { margin: 4px 0 0; background: #718298; }
 .session-status.recording { background: #40dfa0; box-shadow: 0 0 8px #40dfa0; }
 .session-body { min-width: 0; display: grid; gap: 4px; }
