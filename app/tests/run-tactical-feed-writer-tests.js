@@ -10,9 +10,12 @@ function snapshot({ x = 100, y = 200, health = 100, map = "Jensens Range" } = {}
 
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "tactical-feed-"));
-  const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe() { return () => {}; } } }, config: { get() { return { rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
+  let onSnapshot = null;
+  const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe(listener) { onSnapshot = listener; return () => { onSnapshot = null; }; } } }, config: { get() { return { rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
   await feed.start();
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 75));
+  onSnapshot?.(snapshot({ x: 800, y: 900 }));
+  await new Promise((resolve) => setTimeout(resolve, 75));
   await feed.api.setRecordingEnabled(false);
   assert.equal(feed.api.getDiagnostics().recordingEnabled, false);
   assert.equal(feed.api.getDiagnostics().recording, false);
@@ -44,7 +47,10 @@ async function main() {
   assert.ok(replayState.diagnostics.segments >= 1);
   assert.equal(replayState.state.players.length, 1);
   assert.equal(replayState.state.players[0].identity.name, "Alpha");
-  assert.deepEqual(replayState.state.players[0].telemetry.position, { x: 100, y: 200, z: 3 });
+  assert.deepEqual(replayState.state.players[0].telemetry.position, { x: 800, y: 900, z: 3 });
+  const earlyReplayState = await replay.api.readState(sessions[0].id, { atMs: 50 });
+  assert.deepEqual(earlyReplayState.state.players[0].telemetry.position, { x: 100, y: 200, z: 3 });
+  assert.ok(replayState.resolvedAtMs > earlyReplayState.resolvedAtMs, "later replay requests must apply later recorded state");
 
   // A damaged manual/archive directory must not hide the healthy session.
   const brokenDirectory = path.join(root, "broken_archive");
