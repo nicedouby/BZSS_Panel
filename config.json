@@ -562,7 +562,7 @@
   },
   "rcon": {
     "enabled": true,
-    "host": "192.168.0.184",
+    "host": "127.0.0.1",
     "port": 30144,
     "password": "9290dd2aa02b",
     "passwordFromEnv": "9290dd2aa02b",
