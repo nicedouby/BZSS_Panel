@@ -2590,6 +2590,31 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/victim-damage-display")) {
+      const pluginApi = this.getPluginApi("plugin.victimDamageDisplay");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "VictimDamageDisplayUnavailable",
+          message: "Victim damage display plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/victim-damage-display/debug" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getDebugSnapshot?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/victim-damage-display/debug/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearDebugRecords?.() ?? null,
+        });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/welcome-join-warning")) {
       const pluginApi = this.getPluginApi("welcome-join-warning");
       if (!pluginApi) {
