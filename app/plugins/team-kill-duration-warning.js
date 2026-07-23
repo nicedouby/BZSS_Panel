@@ -25,6 +25,7 @@ export function createPlugin(context = {}) {
   const tkCountByPlayer = new Map();
   const handledEventIds = new Map();
   const history = [];
+  const chatHistory = [];
   let timer = null;
   let runtimeConfig = readConfig(config);
   let serial = Promise.resolve();
@@ -139,6 +140,11 @@ export function createPlugin(context = {}) {
   function pushHistory(entry = {}) {
     history.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, at: nowIso(), ...entry });
     if (history.length > MAX_HISTORY) history.splice(0, history.length - MAX_HISTORY);
+  }
+
+  function pushChatHistory(entry = {}) {
+    chatHistory.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, at: nowIso(), ...entry });
+    if (chatHistory.length > MAX_HISTORY) chatHistory.splice(0, chatHistory.length - MAX_HISTORY);
   }
 
   async function warnPlayer(target, message, reason, relatedEventId) {
@@ -260,10 +266,11 @@ export function createPlugin(context = {}) {
   function resolveChatIdentity(event = {}) {
     const record = event?.record ?? event?.payload ?? event?.data ?? event;
     return {
-      name: normalizeText(record?.playerName ?? record?.name ?? record?.player_name),
-      steamId: normalizeIdentity(record?.steamId ?? record?.steamID ?? record?.steamid ?? record?.steam64Id ?? record?.steam64ID),
-      eosId: normalizeIdentity(record?.eosId ?? record?.eosID ?? record?.eosid),
-      playerId: normalizeIdentity(record?.playerId ?? record?.playerID ?? record?.controllerId ?? record?.controllerID),
+      name: normalizeText(record?.playerName ?? record?.player_name ?? record?.name),
+      steamId: normalizeIdentity(record?.steamId ?? record?.steamID ?? record?.steamid ?? record?.steam64Id ?? record?.steam64ID ?? record?.steam),
+      eosId: normalizeIdentity(record?.eosId ?? record?.eosID ?? record?.eosid ?? record?.eos),
+      playerId: normalizeIdentity(record?.playerId ?? record?.playerID ?? record?.controllerId ?? record?.controllerID ?? record?.id),
+      playerKey: normalizeIdentity(record?.playerKey),
     };
   }
 
@@ -299,13 +306,35 @@ export function createPlugin(context = {}) {
 
   async function handleChat(event = {}) {
     const record = event?.record ?? event?.payload ?? event?.data ?? event;
-    const message = normalizeText(record?.message);
-    if (!isActive() || !isApology(message)) return null;
+    const message = normalizeText(record?.message ?? record?.text ?? record?.msg ?? record?.content);
+    if (!isActive()) return null;
     const identity = resolveChatIdentity(event);
     const serverId = normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId);
+    const apology = Boolean(isApology(message));
     const { playerKey, caseItem } = findPendingCase(identity, serverId);
-    if (!caseItem || !playerKey) return null;
-    if (remainingSeconds(caseItem) <= 0) return null;
+    const chatEntry = {
+      serverId,
+      channel: normalizeText(record?.channel ?? record?.chatChannel, "unknown"),
+      playerName: identity.name,
+      steamId: identity.steamId,
+      eosId: identity.eosId,
+      playerId: identity.playerId,
+      message,
+      apology,
+      matched: Boolean(caseItem && playerKey && remainingSeconds(caseItem) > 0),
+      caseId: caseItem?.id ?? "",
+      tkVictim: caseItem?.victim?.name ?? "",
+    };
+    pushChatHistory(chatEntry);
+    if (!apology) return null;
+    if (!caseItem || !playerKey) {
+      pushHistory({ kind: "chat_unmatched", success: false, serverId, player: identity, message, reason: "no_pending_case" });
+      return null;
+    }
+    if (remainingSeconds(caseItem) <= 0) {
+      pushHistory({ kind: "chat_unmatched", success: false, serverId, player: identity, message, reason: "case_expired", eventId: caseItem.id });
+      return null;
+    }
 
     pendingByPlayer.delete(playerKey);
     state.totalApologies += 1;
@@ -424,6 +453,7 @@ export function createPlugin(context = {}) {
     state.totalBroadcasts = 0;
     state.totalWarnings = 0;
     state.lastError = "";
+    chatHistory.length = 0;
     state.lastResetAt = nowIso();
     state.lastResetReason = reason;
     pushHistory({ kind: "match_reset", success: true, reason, pendingCount });
@@ -465,6 +495,7 @@ export function createPlugin(context = {}) {
       pending,
       players,
       history: [...history].reverse(),
+      chats: [...chatHistory].reverse(),
       lastError: state.lastError,
       lastResetAt: state.lastResetAt,
       lastResetReason: state.lastResetReason,

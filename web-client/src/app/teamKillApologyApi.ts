@@ -38,6 +38,21 @@ export interface TeamKillApologyState {
   pending: TeamKillApologyCase[];
   players: Array<{ key: string; count: number; attacker: { name: string; steamId: string }; updatedAt: string }>;
   history: Array<Record<string, unknown>>;
+  chats: Array<{
+    id: string;
+    at: string;
+    serverId: string;
+    channel: string;
+    playerName: string;
+    steamId: string;
+    eosId: string;
+    playerId: string;
+    message: string;
+    apology: boolean;
+    matched: boolean;
+    caseId: string;
+    tkVictim: string;
+  }>;
   lastError: string;
   lastResetAt: string;
   lastResetReason: string;

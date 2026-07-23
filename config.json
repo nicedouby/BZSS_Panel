@@ -770,7 +770,7 @@
       "enabled": false
     },
     "plugin.team-kill-duration-warning": {
-      "enabled": false
+      "enabled": true
     },
     "commander-authorized-playtime-warning": {
       "enabled": false

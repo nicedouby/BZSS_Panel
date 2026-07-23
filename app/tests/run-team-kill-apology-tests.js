@@ -75,6 +75,8 @@ await harness.plugin.api.handleChat({
 });
 assert.equal(harness.plugin.api.getState().summary.pending, 0);
 assert.equal(harness.plugin.api.getState().summary.totalApologies, 1);
+assert.equal(harness.plugin.api.getState().chats.length >= 1, true);
+assert.equal(harness.plugin.api.getState().chats.some((chat) => chat.message === "sry bro" && chat.matched), true);
 
 // The chat feed may only expose EOSID and a changed display name. It must
 // still resolve to the pending TEAM_KILL player, including full-width Sorry.
