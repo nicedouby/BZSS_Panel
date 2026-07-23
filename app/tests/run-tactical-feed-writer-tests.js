@@ -41,6 +41,10 @@ async function main() {
   const replayState = await replay.api.readState(sessions[0].id, { atMs: 60_000 });
   assert.equal(replayState.session.status, "closed");
   assert.equal(replayState.state.session.map, "Jensens Range");
+  assert.ok(replayState.diagnostics.segments >= 1);
+  assert.equal(replayState.state.players.length, 1);
+  assert.equal(replayState.state.players[0].identity.name, "Alpha");
+  assert.deepEqual(replayState.state.players[0].telemetry.position, { x: 100, y: 200, z: 3 });
 
   // A damaged manual/archive directory must not hide the healthy session.
   const brokenDirectory = path.join(root, "broken_archive");
