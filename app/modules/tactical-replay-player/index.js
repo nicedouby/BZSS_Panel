@@ -10,6 +10,8 @@ import path from "node:path";
 const MAGIC = 0x50525a42;
 const VERSION = 1;
 const HEADER_BYTES = 24;
+const MAX_READ_CACHE_SESSIONS = 3;
+const MAX_READ_CACHE_SEGMENTS = 8;
 const RECORD = Object.freeze({
   SESSION_BEGIN: 0x01,
   DICTIONARY_UPDATE: 0x02,
@@ -60,6 +62,7 @@ export function createTacticalReplayPlayerModule({ config, logger }) {
     lastReadAt: "",
     reads: 0,
     invalidRecords: 0,
+    readCache: new Map(),
   };
 
   return {
@@ -89,7 +92,7 @@ export function createTacticalReplayPlayerModule({ config, logger }) {
         state.reads += 1;
         state.lastReadAt = new Date().toISOString();
         try {
-          return await readState(settings, sessionId, options);
+          return await readState(settings, sessionId, options, state.readCache);
         } catch (error) {
           state.lastError = error?.message ?? String(error);
           logger?.warn?.("Tactical replay read failed.", {
@@ -105,6 +108,7 @@ export function createTacticalReplayPlayerModule({ config, logger }) {
     },
     async stop() {
       state.started = false;
+      state.readCache.clear();
     },
   };
 }
@@ -212,29 +216,105 @@ async function hasReplayRecords(directory) {
   return false;
 }
 
-async function readState(settings, sessionId, { atMs = 0 } = {}) {
+async function readState(settings, sessionId, { atMs = 0 } = {}, cacheRegistry = null) {
   const session = await getSession(settings, sessionId);
   if (!session) return null;
 
   const safeId = validateSessionId(sessionId);
   const directory = await resolveSessionDirectory(settings.rootDir, safeId);
   if (!directory) return null;
-  const replay = createReplayState(session);
   const targetMs = Math.max(0, Number.isFinite(Number(atMs)) ? Number(atMs) : 0);
-  const segmentNames = (await fs.readdir(path.join(directory, "segments"), { withFileTypes: true }).catch(() => []))
+  const segmentInfo = await getReplaySegmentInfo(directory, session.status === "recording");
+
+  // A preview normally advances forward through one session. Keep a bounded
+  // cursor for that path instead of scanning every segment from byte zero for
+  // every slider tick. Closed archives are immutable; open archives are reset
+  // when a segment size changes.
+  if (!cacheRegistry) {
+    const entry = createReplayReadCursor(directory, segmentInfo, session);
+    return readStateFromCursor(entry, session, targetMs);
+  }
+
+  let entry = cacheRegistry.get(safeId);
+  if (!entry || entry.directory !== directory || entry.signature !== segmentInfo.signature) {
+    entry = createReplayReadCursor(directory, segmentInfo, session);
+    cacheRegistry.set(safeId, entry);
+  }
+  // Keep the cache bounded when an operator browses many old sessions.
+  cacheRegistry.delete(safeId);
+  cacheRegistry.set(safeId, entry);
+  while (cacheRegistry.size > MAX_READ_CACHE_SESSIONS) {
+    cacheRegistry.delete(cacheRegistry.keys().next().value);
+  }
+
+  // Serialize reads for one session. The browser coalesces requests, but this
+  // also keeps direct callers from mutating the same replay cursor in parallel.
+  const operation = (entry.pending ?? Promise.resolve()).then(() => readStateFromCursor(entry, session, targetMs));
+  entry.pending = operation.catch(() => {});
+  return operation;
+}
+
+async function getReplaySegmentInfo(directory, includeSizes) {
+  const entries = await fs.readdir(path.join(directory, "segments"), { withFileTypes: true }).catch(() => []);
+  const names = entries
     // Keep this expression as a regex literal. The previous double escaping
     // matched a backslash followed by "d", rather than 000000.rps or
     // 000000.open.rps, leaving every reconstructed replay map empty.
     .filter((entry) => entry.isFile() && /^(\d{6})\.((open\.)?rps)$/.test(entry.name))
     .map((entry) => entry.name)
     .sort();
+  const sizes = includeSizes
+    ? await Promise.all(names.map(async (name) => `${name}:${(await fs.stat(path.join(directory, "segments", name)).catch(() => ({ size: 0 }))).size}`))
+    : names;
+  return { names, signature: sizes.join("|") };
+}
 
-  let lastAppliedMs = 0;
-  let stoppedAtTarget = false;
-  for (const segmentName of segmentNames) {
-    if (stoppedAtTarget) break;
-    const bytes = await fs.readFile(path.join(directory, "segments", segmentName));
-    let offset = 0;
+function createReplayReadCursor(directory, segmentInfo, session) {
+  return {
+    directory,
+    segmentNames: segmentInfo.names,
+    signature: segmentInfo.signature,
+    sessionId: session.id,
+    replay: createReplayState(session),
+    segmentIndex: 0,
+    offset: 0,
+    lastAppliedMs: 0,
+    initialized: false,
+    pending: null,
+    buffers: new Map(),
+  };
+}
+
+async function readStateFromCursor(entry, session, targetMs) {
+  if (targetMs < entry.lastAppliedMs || (targetMs === 0 && entry.initialized && entry.lastAppliedMs > 0)) {
+    entry.replay = createReplayState(session);
+    entry.segmentIndex = 0;
+    entry.offset = 0;
+    entry.lastAppliedMs = 0;
+    entry.initialized = false;
+    entry.buffers.clear();
+  }
+
+  await advanceReplayCursor(entry, targetMs);
+  return {
+    session,
+    atMs: targetMs,
+    resolvedAtMs: entry.lastAppliedMs,
+    state: serializeReplayState(entry.replay, session, targetMs),
+    diagnostics: {
+      segments: entry.segmentNames.length,
+      invalidRecords: entry.replay.invalidRecords,
+      lastSequence: entry.replay.lastSequence,
+      cached: entry.initialized,
+    },
+  };
+}
+
+async function advanceReplayCursor(entry, targetMs) {
+  while (entry.segmentIndex < entry.segmentNames.length) {
+    const segmentName = entry.segmentNames[entry.segmentIndex];
+    const bytes = await readReplaySegment(entry, segmentName);
+    let offset = entry.offset;
     while (offset + HEADER_BYTES <= bytes.length) {
       const magic = bytes.readUInt32LE(offset);
       const version = bytes.readUInt8(offset + 4);
@@ -243,42 +323,46 @@ async function readState(settings, sessionId, { atMs = 0 } = {}) {
       const recordEnd = offset + HEADER_BYTES + payloadLength;
 
       if (magic !== MAGIC || version !== VERSION || payloadLength > bytes.length || recordEnd > bytes.length) {
-        stateInvalidRecord(replay);
+        stateInvalidRecord(entry.replay);
+        offset = bytes.length;
         break;
       }
       if (elapsedMs > targetMs) {
-        stoppedAtTarget = true;
-        break;
+        entry.offset = offset;
+        entry.initialized = true;
+        return;
       }
 
       const payload = bytes.subarray(offset + HEADER_BYTES, recordEnd);
       if (crc32(payload) !== bytes.readUInt32LE(offset + 20)) {
-        stateInvalidRecord(replay);
+        stateInvalidRecord(entry.replay);
         offset = recordEnd;
         continue;
       }
 
       try {
-        applyRecord(replay, bytes.readUInt8(offset + 5), decodeMessagePack(payload));
-        lastAppliedMs = elapsedMs;
+        applyRecord(entry.replay, bytes.readUInt8(offset + 5), decodeMessagePack(payload));
+        entry.lastAppliedMs = elapsedMs;
       } catch {
-        stateInvalidRecord(replay);
+        stateInvalidRecord(entry.replay);
       }
       offset = recordEnd;
+      entry.offset = offset;
+      entry.initialized = true;
     }
+    entry.segmentIndex += 1;
+    entry.offset = 0;
   }
+  entry.initialized = true;
+}
 
-  return {
-    session,
-    atMs: targetMs,
-    resolvedAtMs: lastAppliedMs,
-    state: serializeReplayState(replay, session, targetMs),
-    diagnostics: {
-      segments: segmentNames.length,
-      invalidRecords: replay.invalidRecords,
-      lastSequence: replay.lastSequence,
-    },
-  };
+async function readReplaySegment(entry, segmentName) {
+  const cached = entry.buffers.get(segmentName);
+  if (cached) return cached;
+  const bytes = await fs.readFile(path.join(entry.directory, "segments", segmentName));
+  entry.buffers.set(segmentName, bytes);
+  while (entry.buffers.size > MAX_READ_CACHE_SEGMENTS) entry.buffers.delete(entry.buffers.keys().next().value);
+  return bytes;
 }
 
 function createReplayState(session) {

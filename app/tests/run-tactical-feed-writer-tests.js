@@ -51,6 +51,8 @@ async function main() {
   const earlyReplayState = await replay.api.readState(sessions[0].id, { atMs: 50 });
   assert.deepEqual(earlyReplayState.state.players[0].telemetry.position, { x: 100, y: 200, z: 3 });
   assert.ok(replayState.resolvedAtMs > earlyReplayState.resolvedAtMs, "later replay requests must apply later recorded state");
+  const cachedForwardReplayState = await replay.api.readState(sessions[0].id, { atMs: 60_000 });
+  assert.deepEqual(cachedForwardReplayState.state.players[0].telemetry.position, { x: 800, y: 900, z: 3 }, "forward reads must continue from the cached cursor");
 
   // A damaged manual/archive directory must not hide the healthy session.
   const brokenDirectory = path.join(root, "broken_archive");

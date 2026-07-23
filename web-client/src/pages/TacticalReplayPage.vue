@@ -4,7 +4,7 @@
       <div>
         <p class="eyebrow">{{ isPlayerMode ? "TACTICAL REPLAY / PLAYER" : "TACTICAL ARCHIVE / WORKBENCH" }}</p>
         <h1>{{ isPlayerMode ? "战术回放播放器" : "战术回放工作台" }}</h1>
-        <p class="subtitle">{{ isPlayerMode ? "独立读取 .rps 增量记录，使用与实时战术地图一致的图标、缩放和拖动操作。" : "管理已录制的对局；地图仅用于快速预览当前时间点，完整操作在独立播放器中进行。" }}</p>
+        <p class="subtitle">{{ isPlayerMode ? "独立读取 .rps 增量记录，使用与实时战术地图一致的图标、缩放和拖动操作。" : "管理已录制的对局；当前页面是可播放、可互动的战术预览，完整高级页面以后单独设计。" }}</p>
       </div>
       <div class="header-actions">
         <span class="source-chip" :class="{ live: status && status.enabled }"><i></i>{{ status && status.enabled ? "回放读取器在线" : "读取器未启动" }}</span>
@@ -46,7 +46,6 @@
           <span><small>录制时间</small><b>{{ activeSession ? formatDate(activeSession.startedAt) : "--" }}</b></span>
           <span><small>回放时长</small><b>{{ activeSession ? formatDuration(activeSession.durationMs) : "--:--" }}</b></span>
           <span><small>档案状态</small><b :class="{ recording: activeSession && activeSession.status === 'recording' }">{{ activeSession && activeSession.status === "recording" ? "录制中" : "可播放" }}</b></span>
-          <button class="primary-button enter-player-button" type="button" :disabled="!activeSession" @click="openPlayer">进入完整播放 <span>›</span></button>
         </div>
 
         <div
@@ -94,24 +93,25 @@
               />
             </div>
           </div>
-          <div v-if="isPlayerMode" class="map-controls" @pointerdown.stop>
+          <div class="map-controls" @pointerdown.stop>
             <button type="button" title="放大" @click="zoomBy(1.25)">＋</button>
             <button type="button" title="缩小" @click="zoomBy(0.8)">−</button>
             <button type="button" title="重置视角" @click="resetCamera">⌂</button>
           </div>
-          <div class="map-hud map-hud-bottom"><span>{{ activeSession && activeSession.layer || "NO LAYER" }}</span><i>·</i><span>数据点 {{ state ? formatClock(state.resolvedAtMs) : "--:--" }}</span></div>
-          <div v-if="loadingState" class="map-loading">正在重建战场状态…</div>
+          <div class="map-hud map-hud-bottom"><span>{{ activeSession && activeSession.layer || "NO LAYER" }}</span><i>·</i><span>数据点 {{ state ? formatClock(state.resolvedAtMs) : "--:--" }}</span><span v-if="loadingState" class="state-sync">同步中</span></div>
+          <div v-if="loadingState && !state" class="map-loading">正在载入预览状态…</div>
         </div>
 
         <div v-if="isPlayerMode" class="timeline">
           <div class="timeline-topline"><span class="timeline-caption">时间轴</span><span>{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span></div>
-          <input v-model.number="currentMs" class="timeline-range" type="range" min="0" :max="Math.max(1, durationMs)" step="100" :disabled="!activeSession" />
+          <input v-model.number="currentMs" class="timeline-range" type="range" min="0" :max="Math.max(1, durationMs)" step="100" :disabled="!activeSession" @pointerdown="beginTimelineSeek" @pointerup="endTimelineSeek" />
           <div class="timeline-controls"><button class="play-button" type="button" :disabled="!activeSession" @click="togglePlaying">{{ playing ? "Ⅱ" : "▶" }}</button><button class="control-button" type="button" :disabled="!activeSession" @click="jump(-10)">−10s</button><button class="control-button" type="button" :disabled="!activeSession" @click="jump(10)">+10s</button><div class="speed-group"><button v-for="speed in speeds" :key="speed" class="speed-button" :class="{ active: playbackRate === speed }" type="button" @click="playbackRate = speed">{{ speed }}×</button></div><span class="timeline-hint">{{ playing ? "正在播放" : "已暂停" }}</span></div>
         </div>
         <div v-else class="preview-timeline">
           <div><span>预览时间点</span><b>{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</b></div>
-          <input v-model.number="currentMs" class="timeline-range" type="range" min="0" :max="Math.max(1, durationMs)" step="100" :disabled="!activeSession" />
-          <p>拖动时间轴快速查看；预览不加载完整播放控件。</p>
+          <input v-model.number="currentMs" class="timeline-range" type="range" min="0" :max="Math.max(1, durationMs)" step="100" :disabled="!activeSession" @pointerdown="beginTimelineSeek" @pointerup="endTimelineSeek" />
+          <div class="preview-controls"><button class="play-button" type="button" :disabled="!activeSession" @click="togglePlaying">{{ playing ? "Ⅱ" : "▶" }}</button><button class="control-button" type="button" :disabled="!activeSession" @click="jump(-10)">−10s</button><button class="control-button" type="button" :disabled="!activeSession" @click="jump(10)">+10s</button><div class="speed-group"><button v-for="speed in speeds" :key="speed" class="speed-button" :class="{ active: playbackRate === speed }" type="button" @click="playbackRate = speed">{{ speed }}×</button></div><span class="timeline-hint">{{ playing ? "预览播放中" : "预览已暂停" }}</span></div>
+          <p>当前为预览页面：可以播放、拖动、缩放地图和点击玩家；完整高级播放器以后单独设计。</p>
         </div>
       </main>
 
@@ -160,7 +160,7 @@ const playbackRate = ref(1);
 const loadingSessions = ref(false);
 const loadingState = ref(false);
 const errorText = ref("");
-const speeds = [0.5, 1, 2, 4];
+const speeds = [0.5, 1, 2, 4, 10, 20, 40];
 const replayViewportRef = ref<HTMLElement | null>(null);
 const viewportWidth = ref(0);
 const viewportHeight = ref(0);
@@ -169,11 +169,16 @@ const isDragging = camera.isDragging;
 const dragMoved = ref(false);
 let resizeObserver: ResizeObserver | null = null;
 let animationTimer: ReturnType<typeof setInterval> | null = null;
+let playbackLastTickAt = 0;
 let seekTimer: ReturnType<typeof setTimeout> | null = null;
 let stateAbortController: AbortController | null = null;
 let stateRequestSequence = 0;
 let lastStateRequestStartedAt = -Infinity;
-const STATE_LOAD_INTERVAL_MS = 200;
+let stateLoadInFlight = false;
+let stateLoadToken = 0;
+let queuedStateAt: number | null = null;
+const STATE_LOAD_INTERVAL_MS = 260;
+const MANUAL_SEEK_DELAY_MS = 140;
 
 const filteredSessions = computed(() => {
   const query = searchText.value.trim().toLocaleLowerCase();
@@ -250,17 +255,14 @@ function resetCamera() {
   camera.y.value = (viewportHeight.value - mapSize * zoom) / 2;
 }
 function zoomBy(factor: number) {
-  if (!isPlayerMode.value) return;
-  const next = Math.min(8, Math.max(0.35, camera.zoom.value * factor));
+  const next = Math.min(isPlayerMode.value ? 8 : 3.5, Math.max(0.2, camera.zoom.value * factor));
   camera.setZoom(next, viewportWidth.value / 2, viewportHeight.value / 2);
 }
 function onWheel(event: WheelEvent) {
-  if (!isPlayerMode.value) return;
   event.preventDefault();
   zoomBy(event.deltaY < 0 ? 1.12 : 0.89);
 }
 function startDrag(event: PointerEvent) {
-  if (!isPlayerMode.value) return;
   if (event.button !== 0) return;
   dragMoved.value = false;
   (event.currentTarget as HTMLElement)?.setPointerCapture?.(event.pointerId);
@@ -279,21 +281,14 @@ function endDrag(event?: PointerEvent) {
 }
 function selectPlayer(player: ReplayPlayer) {
   if (dragMoved.value) { dragMoved.value = false; return; }
-  if (!isPlayerMode.value) { openPlayer(); return; }
   selectedPlayer.value = player;
 }
 
-function openPlayer() {
-  if (!activeSession.value) return;
-  playing.value = false;
-  if (animationTimer) clearInterval(animationTimer);
-  animationTimer = null;
-  void router.push({ name: "tactical-replay-player", params: { sessionId: activeSession.value.id }, query: { at: String(Math.max(0, Math.round(currentMs.value))) } });
-}
 function backToWorkbench() {
   playing.value = false;
   if (animationTimer) clearInterval(animationTimer);
   animationTimer = null;
+  playbackLastTickAt = 0;
   void router.push({ name: "tactical-replay" });
 }
 
@@ -304,15 +299,38 @@ function getReplayPerspectiveTone(teamId: number | null): "friendly" | "enemy" |
 }
 
 function scheduleStateLoad() {
-  if (!activeSession.value || seekTimer) return;
-  // This must be a throttle, rather than a debounce.  Playback changes the
-  // clock every 100ms; a debounced timer was cancelled forever while playing,
-  // so the time bar moved but the reconstructed battlefield stayed on one frame.
-  const delay = Math.max(0, STATE_LOAD_INTERVAL_MS - (performance.now() - lastStateRequestStartedAt));
+  if (!activeSession.value) return;
+  queuedStateAt = Math.max(0, Math.round(currentMs.value));
+  if (stateLoadInFlight) return;
+  if (!playing.value && seekTimer) {
+    clearTimeout(seekTimer);
+    seekTimer = null;
+  } else if (seekTimer) return;
+  // Playback uses a throttle. Manual timeline dragging uses a short debounce,
+  // so crossing many pixels does not start one reconstruction per pixel.
+  const interval = playing.value ? STATE_LOAD_INTERVAL_MS : MANUAL_SEEK_DELAY_MS;
+  const delay = playing.value
+    ? Math.max(0, interval - (performance.now() - lastStateRequestStartedAt))
+    : interval;
   seekTimer = setTimeout(() => {
     seekTimer = null;
-    void loadState(currentMs.value);
+    void drainStateLoad();
   }, delay);
+}
+async function drainStateLoad() {
+  if (stateLoadInFlight || queuedStateAt == null || !activeSession.value) return;
+  const atMs = queuedStateAt;
+  queuedStateAt = null;
+  const loadToken = ++stateLoadToken;
+  stateLoadInFlight = true;
+  try {
+    await loadState(atMs);
+  } finally {
+    if (loadToken === stateLoadToken) {
+      stateLoadInFlight = false;
+      if (queuedStateAt != null) scheduleStateLoad();
+    }
+  }
 }
 async function loadSessions() {
   loadingSessions.value = true;
@@ -325,7 +343,10 @@ async function loadSessions() {
       || sessions.value.find((item) => item.id === (activeSession.value && activeSession.value.id))
       || sessions.value[0]
       || null;
-    if (selected) await selectSession(selected);
+    // Refreshing the archive list must not reset the currently displayed
+    // scene. Only a genuinely different selection needs a new state read.
+    if (selected && selected.id !== activeSession.value?.id) await selectSession(selected);
+    else if (selected && activeSession.value) activeSession.value = { ...activeSession.value, ...selected };
   } catch (error: any) { errorText.value = error && error.message || "无法读取回放档案"; }
   finally { loadingSessions.value = false; }
 }
@@ -338,15 +359,27 @@ async function selectSession(session: ReplaySession) {
   stateRequestSequence += 1;
   stateAbortController?.abort();
   stateAbortController = null;
+  state.value = null;
+  queuedStateAt = null;
+  if (seekTimer) { clearTimeout(seekTimer); seekTimer = null; }
   lastStateRequestStartedAt = -Infinity;
   selectedPlayer.value = null;
-  await loadState(currentMs.value);
+  const loadToken = ++stateLoadToken;
+  stateLoadInFlight = true;
+  try {
+    await loadState(currentMs.value);
+  } finally {
+    if (loadToken === stateLoadToken) {
+      stateLoadInFlight = false;
+      queuedStateAt = null;
+      if (seekTimer) { clearTimeout(seekTimer); seekTimer = null; }
+    }
+  }
 }
 async function loadState(atMs: number) {
   if (!activeSession.value) return;
   const sessionId = activeSession.value.id;
   const requestSequence = ++stateRequestSequence;
-  stateAbortController?.abort();
   const controller = new AbortController();
   stateAbortController = controller;
   lastStateRequestStartedAt = performance.now();
@@ -365,12 +398,33 @@ async function loadState(atMs: number) {
 function togglePlaying() {
   if (!activeSession.value) return;
   playing.value = !playing.value;
-  if (!playing.value) { if (animationTimer) clearInterval(animationTimer); animationTimer = null; return; }
+  if (!playing.value) { if (animationTimer) clearInterval(animationTimer); animationTimer = null; playbackLastTickAt = 0; return; }
   if (currentMs.value >= durationMs.value) currentMs.value = 0;
   if (animationTimer) clearInterval(animationTimer);
-  animationTimer = setInterval(() => { const next = currentMs.value + 100 * playbackRate.value; if (next >= durationMs.value) { currentMs.value = durationMs.value; playing.value = false; if (animationTimer) clearInterval(animationTimer); animationTimer = null; } else currentMs.value = next; }, 100);
+  playbackLastTickAt = performance.now();
+  animationTimer = setInterval(() => {
+    const now = performance.now();
+    const elapsedMs = Math.min(500, Math.max(0, now - playbackLastTickAt || 100));
+    playbackLastTickAt = now;
+    const next = currentMs.value + elapsedMs * playbackRate.value;
+    if (next >= durationMs.value) {
+      currentMs.value = durationMs.value;
+      playing.value = false;
+      if (animationTimer) clearInterval(animationTimer);
+      animationTimer = null;
+      playbackLastTickAt = 0;
+    } else currentMs.value = next;
+  }, 100);
 }
 function jump(seconds: number) { currentMs.value = Math.min(durationMs.value, Math.max(0, currentMs.value + seconds * 1000)); }
+function beginTimelineSeek() {
+  if (playing.value) playing.value = false;
+  if (animationTimer) { clearInterval(animationTimer); animationTimer = null; }
+  playbackLastTickAt = 0;
+}
+function endTimelineSeek() {
+  scheduleStateLoad();
+}
 watch(currentMs, scheduleStateLoad);
 watch(activeMapConfig, () => { void nextTick(updateViewportSize); });
 watch(isPlayerMode, () => { void nextTick(resetCamera); });
@@ -385,7 +439,7 @@ onMounted(async () => {
   try { const response = await apiGet<any>("/api/tactical-replay/status"); status.value = response && response.status || null; } catch { status.value = null; }
   await loadSessions();
 });
-onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (seekTimer) clearTimeout(seekTimer); stateAbortController?.abort(); stateAbortController = null; resizeObserver?.disconnect(); resizeObserver = null; });
+onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animationTimer) clearInterval(animationTimer); if (seekTimer) clearTimeout(seekTimer); stateAbortController?.abort(); stateAbortController = null; resizeObserver?.disconnect(); resizeObserver = null; });
 </script>
 
 <style scoped>
@@ -439,11 +493,9 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .session-overview small { color: #6e8c9e; font-size: 10px; }
 .session-overview b { overflow: hidden; color: #dcecf2; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .session-overview b.recording { color: #72e5b6; }
-.enter-player-button { align-self: center; white-space: nowrap; }
-.enter-player-button span { margin-left: 6px; font-size: 16px; line-height: 0; }
 .map-shell { position: relative; min-height: 355px; margin-top: 15px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 12px; background: #081827; cursor: grab; touch-action: none; user-select: none; }
 .is-player-mode .map-shell { min-height: 540px; }
-.map-shell.is-preview { cursor: default; touch-action: auto; background: #061420; }
+.map-shell.is-preview { cursor: grab; touch-action: none; background: #061420; }
 .map-shell.is-dragging { cursor: grabbing; }
 .replay-map-transform { position: absolute; top: 0; left: 0; width: 1000px; height: 1000px; transform-origin: 0 0; will-change: transform; z-index: 2; background: #020205; }
 .map-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(120,183,203,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(120,183,203,.12) 1px, transparent 1px); background-size: 64px 64px; }
@@ -455,6 +507,7 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .map-hud-bottom { right: 12px; bottom: 12px; border-radius: 7px; }
 .map-hud b, .timeline-caption { color: #55ddb6; letter-spacing: .12em; }
 .map-hud i { color: #507080; font-style: normal; }
+.state-sync { color: #f6c76a; }
 .player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 12px; }
 .map-controls { position: absolute; z-index: 12; right: 12px; top: 12px; display: grid; gap: 5px; }
@@ -464,6 +517,7 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .timeline-topline { color: #9ab4c0; font-size: 11px; }
 .timeline-range { width: 100%; margin: 13px 0 11px; accent-color: #3ed9a1; cursor: pointer; }
 .timeline-controls { justify-content: flex-start; }
+.preview-controls { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .play-button { width: 34px; height: 32px; padding: 0; color: #062117; background: #43dca5; border-color: #43dca5; font-weight: 800; cursor: pointer; }
 .control-button, .speed-button { color: #9db9c6; background: rgba(6,19,32,.72); font-size: 11px; }
 .speed-group { display: flex; gap: 4px; margin-left: auto; }
@@ -496,6 +550,6 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .empty-icon { color: #55ddb6; font-size: 48px; }
 .empty-state h2 { margin: 0; font-size: 20px; }
 .empty-state p { margin: 0 0 8px; color: #7897a7; font-size: 13px; }
-@media (max-width: 1200px) { .is-player-mode .replay-grid { grid-template-columns: 210px minmax(0,1fr); } .is-player-mode .inspector { grid-column: 1 / -1; min-height: auto; } .inspector-placeholder { min-height: 100px; } .session-overview { grid-template-columns: repeat(3, minmax(0,1fr)); } .enter-player-button { grid-column: 1 / -1; justify-self: stretch; } }
+@media (max-width: 1200px) { .is-player-mode .replay-grid { grid-template-columns: 210px minmax(0,1fr); } .is-player-mode .inspector { grid-column: 1 / -1; min-height: auto; } .inspector-placeholder { min-height: 100px; } .session-overview { grid-template-columns: repeat(3, minmax(0,1fr)); } }
 @media (max-width: 800px) { .replay-workbench { padding: 18px 12px 24px; } .replay-header { display: grid; } .header-actions { justify-content: space-between; } .replay-grid, .is-player-mode .replay-grid { display: block; } .session-rail { position: static; } .session-rail, .stage, .inspector { min-height: auto; margin-bottom: 12px; } .session-list { max-height: 260px; } .map-shell, .is-player-mode .map-shell { min-height: 350px; } .stage-metrics { gap: 8px; } .session-overview { grid-template-columns: 1fr 1fr; } .session-overview > span:last-of-type { grid-column: 1 / -1; } }
 </style>
