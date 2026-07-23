@@ -60,8 +60,10 @@
             </div>
             <div v-if="!hasMapResource" class="map-placeholder"><span>MAP DATA UNAVAILABLE</span><small>当前录制没有匹配的地图资源</small></div>
             <div class="asset-layer">
+              <span v-for="zone in replayMainZones" :key="zone.id" class="asset-marker main-zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">⚑ {{ zone.name || "MAIN" }}</span>
               <span v-for="zone in replayZones" :key="zone.id" class="asset-marker zone-marker" :class="'team-' + (zone.teamId || 0)" :style="markerStyle(zone)" :title="zone.name">{{ zone.name || "ZONE" }}</span>
               <span v-for="fob in replayFobs" :key="fob.id" class="asset-marker fob-marker" :class="'team-' + (fob.teamId || 0)" :style="markerStyle(fob)" :title="fob.name">⌂</span>
+              <span v-for="vehicle in replayVehicles" :key="vehicle.id" class="asset-marker vehicle-marker" :class="'team-' + (vehicle.teamId || 0)" :style="markerStyle(vehicle)" :title="vehicle.name">◆</span>
             </div>
             <div class="player-layer">
               <button v-for="player in visiblePlayers" :key="player.key" type="button" class="replay-player" :class="{ selected: player.key === (selectedPlayer && selectedPlayer.key) }" :style="markerStyle(player)" @click.stop="selectPlayer(player)">
@@ -87,11 +89,11 @@
 
       <aside class="inspector panel">
         <div class="panel-heading"><div><span class="panel-kicker">AT THIS MOMENT</span><h2>现场摘要</h2></div></div>
-        <div class="summary-grid"><div><strong>{{ teamOneCount }}</strong><span>Team 1</span></div><div><strong>{{ teamTwoCount }}</strong><span>Team 2</span></div><div><strong>{{ replayZones.length }}</strong><span>点位</span></div><div><strong>{{ replayFobs.length }}</strong><span>FOB</span></div></div>
+        <div class="summary-grid"><div><strong>{{ teamOneCount }}</strong><span>Team 1</span></div><div><strong>{{ teamTwoCount }}</strong><span>Team 2</span></div><div><strong>{{ replayZones.length }}</strong><span>点位</span></div><div><strong>{{ replayFobs.length }}</strong><span>FOB</span></div><div><strong>{{ replayVehicles.length }}</strong><span>载具</span></div><div><strong>{{ replayMainZones.length }}</strong><span>主基地</span></div></div>
         <div class="inspector-divider"></div>
         <div v-if="selectedPlayer" class="selected-player">
           <div class="selected-top"><span class="large-pip" :class="'team-' + (selectedPlayer.teamId || 0)"></span><div><span class="panel-kicker">SELECTED UNIT</span><h3>{{ selectedPlayer.name }}</h3></div></div>
-          <dl class="detail-list"><div><dt>阵营</dt><dd>Team {{ selectedPlayer.teamId || "--" }}</dd></div><div><dt>小队</dt><dd>{{ selectedPlayer.squadId || "--" }}</dd></div><div><dt>职业</dt><dd>{{ selectedPlayer.role || "未记录" }}</dd></div><div><dt>生命</dt><dd>{{ selectedPlayer.health == null ? "--" : Math.round(selectedPlayer.health * 100) + "%" }}</dd></div><div><dt>延迟</dt><dd>{{ selectedPlayer.ping == null ? "--" : selectedPlayer.ping + " ms" }}</dd></div><div><dt>坐标</dt><dd>{{ selectedPlayer.positionText }}</dd></div></dl>
+          <dl class="detail-list"><div><dt>阵营</dt><dd>Team {{ selectedPlayer.teamId || "--" }}</dd></div><div><dt>小队</dt><dd>{{ selectedPlayer.squadId || "--" }}</dd></div><div><dt>职业</dt><dd>{{ selectedPlayer.role || "未记录" }}</dd></div><div><dt>生命</dt><dd>{{ selectedPlayer.health == null ? "--" : Math.round(selectedPlayer.health * 100) + "%" }}</dd></div><div><dt>延迟</dt><dd>{{ selectedPlayer.ping == null ? "--" : selectedPlayer.ping + " ms" }}</dd></div><div><dt>K / W / D</dt><dd>{{ selectedPlayer.kills ?? "--" }} / {{ selectedPlayer.wounds ?? "--" }} / {{ selectedPlayer.deaths ?? "--" }}</dd></div><div><dt>坐标</dt><dd>{{ selectedPlayer.positionText }}</dd></div></dl>
         </div>
         <div v-else class="inspector-placeholder"><span>◎</span><p>点击地图上的单位</p><small>查看该时刻的玩家状态</small></div>
         <div class="inspector-footer"><span class="health-dot"></span><span>状态来自 .rps 增量记录</span></div>
@@ -110,7 +112,7 @@ import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey 
 
 interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; isPlayable?: boolean; archiveError?: string; }
 interface ReplayPosition { x: number; y: number; z?: number; }
-interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; health: number | null; ping: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; hasPosition: boolean; }
+interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; hasPosition: boolean; }
 interface ReplayAsset { id: string; name: string; teamId: number | null; position: ReplayPosition; hasPosition: boolean; [key: string]: unknown; }
 
 const sessions = ref<ReplaySession[]>([]);
@@ -154,7 +156,9 @@ const rawPlayers = computed<any[]>(() => Array.isArray(currentSnapshot.value && 
 const visiblePlayers = computed<ReplayPlayer[]>(() => rawPlayers.value.map(normalizePlayer).filter((item: ReplayPlayer) => item.hasPosition));
 const replayZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.captureZones));
 const replayFobs = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.fobs));
-const assetCount = computed(() => replayZones.value.length + replayFobs.value.length + normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.mainZones).length);
+const replayMainZones = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.mainZones));
+const replayVehicles = computed(() => normalizeAssets(currentSnapshot.value && currentSnapshot.value.assets && currentSnapshot.value.assets.vehicles));
+const assetCount = computed(() => replayZones.value.length + replayFobs.value.length + replayMainZones.value.length + replayVehicles.value.length);
 const teamOneCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 1).length);
 const teamTwoCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 2).length);
 
@@ -162,7 +166,7 @@ provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y }
 
 function normalizePlayer(source: any): ReplayPlayer {
   const position = source && source.telemetry && source.telemetry.position || source && source.position;
-  return { key: String(source && source.identity && (source.identity.key || source.identity.name) || Math.random()), name: String(source && source.identity && source.identity.name || "Unknown"), teamId: numberOrNull(source && source.match && source.match.teamId), squadId: numberOrNull(source && source.match && source.match.squadId), role: String(source && source.match && source.match.role || ""), health: numberOrNull(source && source.telemetry && source.telemetry.health), ping: numberOrNull(source && source.network && source.network.gamePing), yaw: numberOrNull(source && source.telemetry && source.telemetry.yaw), position, positionText: position ? round(position.x) + ", " + round(position.y) : "--", hasPosition: Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) };
+  return { key: String(source && source.identity && (source.identity.key || source.identity.name) || Math.random()), name: String(source && source.identity && source.identity.name || "Unknown"), teamId: numberOrNull(source && source.match && source.match.teamId), squadId: numberOrNull(source && source.match && source.match.squadId), role: String(source && source.match && source.match.role || ""), health: numberOrNull(source && source.telemetry && source.telemetry.health), ping: numberOrNull(source && source.network && source.network.gamePing), kills: numberOrNull(source && source.combat && source.combat.kills), wounds: numberOrNull(source && source.combat && source.combat.wounds), deaths: numberOrNull(source && source.combat && source.combat.deaths), yaw: numberOrNull(source && source.telemetry && source.telemetry.yaw), position, positionText: position ? round(position.x) + ", " + round(position.y) : "--", hasPosition: Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y))) };
 }
 function normalizeAssets(values: any): ReplayAsset[] {
   return (Array.isArray(values) ? values : []).map((item, index) => {
@@ -346,6 +350,11 @@ onBeforeUnmount(() => { if (animationTimer) clearInterval(animationTimer); if (s
 .asset-marker { padding: 3px 5px; border: 1px solid rgba(255,255,255,.55); border-radius: 5px; color: #fff; background: rgba(12,85,95,.75); font-size: 9px; }
 .fob-marker { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; border-radius: 50%; color: #8debd1; background: rgba(4,53,54,.86); font-size: 14px; }
 .fob-marker.team-2 { color: #ff9ca5; background: rgba(90,30,43,.86); }
+.main-zone-marker { border-color: rgba(255,255,255,.76); color: #f8fafc; background: rgba(30,41,59,.88); font-weight: 700; }
+.main-zone-marker.team-1 { border-color: #52d7ff; color: #b8eeff; }
+.main-zone-marker.team-2 { border-color: #ff7882; color: #ffd0d5; }
+.vehicle-marker { width: 19px; height: 19px; display: grid; place-items: center; padding: 0; border-radius: 4px; color: #aeeeff; background: rgba(8,74,98,.9); font-size: 11px; }
+.vehicle-marker.team-2 { color: #ffd0d5; background: rgba(105,35,48,.9); }
 .zone-marker.team-1 { border-color: #52d7ff; background: rgba(16,91,118,.75); }
 .zone-marker.team-2 { border-color: #ff7882; background: rgba(113,43,57,.75); }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 12px; }
