@@ -241,7 +241,7 @@ function buildTeams(payload) {
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
-      commanderName: firstText(commander?.name, "Pending"),
+      commanderName: firstText(commander?.name, "—"),
       commanderPlayer: commander,
       groups,
     };
@@ -765,7 +765,7 @@ function emptyTeam(teamID) {
     playerCount: 0,
     squadCount: 0,
     averagePing: null,
-    commanderName: "Pending",
+    commanderName: "—",
     groups: [],
   };
 }
