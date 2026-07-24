@@ -233,15 +233,11 @@ function buildTeams(payload) {
       teamID,
       teamName,
       accent: TEAM_ACCENTS[teamID] ?? "#60a5fa",
-      factionCode: resolveFactionCode(
-        teamSquads.map((squad) => firstText(squad?.factionCode, squad?.faction, squad?.teamName)),
-        teamPlayers.map((player) => firstText(player?.factionCode, player?.faction, player?.squadInfo?.factionCode, player?.squadInfo?.teamName)),
-        teamName,
-      ),
+      factionCode: firstText(teamSquads.find((squad) => firstText(squad?.factionCode, squad?.faction))?.factionCode, teamSquads.find((squad) => firstText(squad?.faction))?.faction, teamPlayers.find((player) => firstText(player?.factionCode, player?.faction))?.factionCode, teamPlayers.find((player) => firstText(player?.faction))?.faction, ""),
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
-      commanderName: firstText(commander?.name, "—"),
+      commanderName: firstText(commander?.name, "Pending"),
       commanderPlayer: commander,
       groups,
     };
@@ -349,8 +345,6 @@ async function attachRoleIconData(model) {
     if (!fileName) return;
     const candidates = [
       path.resolve(process.cwd(), "web-client", "public", "assets", "icons", fileName),
-      path.resolve(process.cwd(), "web-client", "public", "assets", "roles", fileName),
-      path.resolve(process.cwd(), "web-client", "public", "icons", fileName),
       path.resolve(process.cwd(), "web-client", "public", "Icon", fileName),
       path.resolve(process.cwd(), "web-client", "src", "assets", "icons", fileName),
       path.resolve(process.cwd(), "assets", "icons", fileName),
@@ -378,7 +372,7 @@ function roleIconFileName(label) {
 async function attachTeamVisuals(model) {
   const flagFiles = { ADF: "ADF.PNG", AFU: "AFU.PNG", BAF: "BAF.PNG", CAF: "CAF.PNG", CRF: "CRF.PNG", GFI: "GFI.PNG", IMF: "IMF.PNG", MEA: "MEA.PNG", MEI: "MEI.PNG", PLA: "PLA.PNG", PLAAGF: "PLAAGF.PNG", PLANMC: "PLANMC.png", RGF: "RGF.PNG", TLF: "TLF.PNG", USA: "USA.PNG", USMC: "USMC.PNG", VDV: "VDV.png", WPMC: "WPMC.PNG" };
   for (const team of model.teams ?? []) {
-    const code = resolveFactionCode(team.factionCode, team.teamName);
+    const code = String(team.factionCode ?? team.teamName ?? "").toUpperCase().match(/ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|PLAAGF|PLANMC|PLA|RGF|TLF|USA|USMC|VDV|WPMC/)?.[0];
     const file = flagFiles[code];
     if (file) {
       const candidate = path.resolve(process.cwd(), "web-client", "public", "assets", "flags", file);
@@ -473,12 +467,12 @@ function renderTeamColumn(team) {
   const y = 158;
   const headerHeight = 58;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".018" stroke="${team.accent}" stroke-opacity=".46"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".10" stroke="${team.accent}" stroke-opacity=".46"/>`);
   if (team.flagData) {
-    svg.push(`<image href="${team.flagData}" x="${x + 34}" y="${y + 68}" width="${team.width - 68}" height="${TEAM_CONTENT_BOTTOM - y - 84}" opacity=".34" preserveAspectRatio="xMidYMid meet"/>`);
-    svg.push(`<rect x="${x + 12}" y="${y + 64}" width="${team.width - 24}" height="${TEAM_CONTENT_BOTTOM - y - 72}" fill="${team.accent}" fill-opacity=".018"/>`);
+    svg.push(`<image href="${team.flagData}" x="${x + 34}" y="${y + 68}" width="${team.width - 68}" height="${TEAM_CONTENT_BOTTOM - y - 84}" opacity=".28" preserveAspectRatio="xMidYMid meet"/>`);
+    svg.push(`<rect x="${x + 12}" y="${y + 64}" width="${team.width - 24}" height="${TEAM_CONTENT_BOTTOM - y - 72}" fill="${team.accent}" fill-opacity=".045"/>`);
   }
-  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".055" stroke="${team.accent}" stroke-opacity=".50"/>`);
+  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".50"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
@@ -540,8 +534,8 @@ function renderSquadCard(team, group, x, y) {
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
   const creator = firstText(group.creatorName, "-");
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".025" stroke="#ffffff" stroke-opacity=".13"/>`);
-  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".045" stroke="${team.accent}" stroke-opacity=".48"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".12" stroke="#ffffff" stroke-opacity=".13"/>`);
+  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".12" stroke="${team.accent}" stroke-opacity=".48"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
   svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}</text>`);
   svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
@@ -567,7 +561,7 @@ function renderPlayerRow(team, player, x, y, index) {
     stats.teamworkScore, ping == null ? "--" : String(ping),
   ];
   const { infoWidth, stats: columns } = COMPACT_PLAYER_LAYOUT;
-  const backgroundOpacity = index % 2 === 0 ? ".035" : ".018";
+  const backgroundOpacity = index % 2 === 0 ? ".16" : ".07";
   let cursor = x + infoWidth;
   const parts = [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".07"/>`,
@@ -593,28 +587,6 @@ function comparePlayers(left, right) {
     || Number(Boolean(right?.isLeader)) - Number(Boolean(left?.isLeader))
     || String(left?.name ?? "").localeCompare(String(right?.name ?? ""), "zh-CN", { numeric: true })
     || compareNullableNumbers(left?.playerID, right?.playerID);
-}
-
-function resolveFactionCode(...values) {
-  const text = values.flat(Infinity).map((value) => String(value ?? "").toUpperCase()).join(" | ");
-  const direct = text.match(/PLAAGF|PLANMC|USMC|WPMC|ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|RGF|TLF|USA|VDV|PLA/);
-  if (direct) return direct[0];
-  if (/UNITED STATES.*MARINE|U\.?S\.?\s*MARINE/.test(text)) return "USMC";
-  if (/UNITED STATES|US ARMY|U\.?S\.?\s*ARMY/.test(text)) return "USA";
-  if (/RUSSIAN.*AIRBORNE|RUSSIAN.*VDV/.test(text)) return "VDV";
-  if (/RUSSIAN|RUSSIAN GROUND/.test(text)) return "RGF";
-  if (/PEOPLE.S LIBERATION ARMY.*MARINE|CHINESE.*MARINE/.test(text)) return "PLANMC";
-  if (/PEOPLE.S LIBERATION ARMY.*GROUND|CHINESE.*GROUND/.test(text)) return "PLAAGF";
-  if (/PEOPLE.S LIBERATION ARMY|CHINESE/.test(text)) return "PLA";
-  if (/BRITISH|UNITED KINGDOM/.test(text)) return "BAF";
-  if (/CANADIAN|CANADA/.test(text)) return "CAF";
-  if (/AUSTRALIAN|AUSTRALIA/.test(text)) return "ADF";
-  if (/UKRAINIAN|UKRAINE/.test(text)) return "AFU";
-  if (/MIDDLE EASTERN ALLIANCE/.test(text)) return "MEA";
-  if (/MIDDLE EASTERN INSURGENT/.test(text)) return "MEI";
-  if (/INSURGENT/.test(text)) return "IMF";
-  if (/IRREGULAR MILITIA|MILITIA/.test(text)) return "GFI";
-  return "";
 }
 
 function resolveRoleMeta(value) {
@@ -713,14 +685,14 @@ function resolveMapKey(value) {
 function renderDefs() {
   return `<defs>
     <linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#020611" stop-opacity=".02"/>
-      <stop offset="42%" stop-color="#020611" stop-opacity=".08"/>
-      <stop offset="100%" stop-color="#020611" stop-opacity=".18"/>
+      <stop offset="0%" stop-color="#020611" stop-opacity=".08"/>
+      <stop offset="42%" stop-color="#020611" stop-opacity=".22"/>
+      <stop offset="100%" stop-color="#020611" stop-opacity=".46"/>
     </linearGradient>
     <linearGradient id="headerPlate" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#061426" stop-opacity=".16"/>
-      <stop offset="55%" stop-color="#10243c" stop-opacity=".10"/>
-      <stop offset="100%" stop-color="#061020" stop-opacity=".16"/>
+      <stop offset="0%" stop-color="#061426" stop-opacity=".46"/>
+      <stop offset="55%" stop-color="#10243c" stop-opacity=".34"/>
+      <stop offset="100%" stop-color="#061020" stop-opacity=".44"/>
     </linearGradient>
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
@@ -765,7 +737,7 @@ function emptyTeam(teamID) {
     playerCount: 0,
     squadCount: 0,
     averagePing: null,
-    commanderName: "—",
+    commanderName: "Pending",
     groups: [],
   };
 }
