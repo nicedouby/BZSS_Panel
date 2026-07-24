@@ -194,7 +194,7 @@ export function createPlugin(context = {}) {
     return `[TK] ${caseItem.attacker.name || "未知玩家"} 攻击了队友 ${caseItem.victim.name || "未知玩家"}，本局已 TK ${tkCount} 名队友。`;
   }
 
-  function makeApologyBroadcast(caseItem, message) {
+  function makeApologyBroadcast(caseItem) {
     return `[TK] ${caseItem.attacker.name || "未知玩家"} 已为误伤队友 ${caseItem.victim.name || "未知玩家"} 道歉，本次 TK 处理已解除。`;
   }
 
@@ -346,7 +346,7 @@ export function createPlugin(context = {}) {
       try {
         await warnPlayer(caseItem.attacker, `[TK处理] 已收到你的道歉。`, "tk_apology_received", caseItem.id);
         if (runtimeConfig.broadcastOnApology) {
-          await broadcast(makeApologyBroadcast(caseItem, message), "tk_apology_success_broadcast", caseItem.id);
+          await broadcast(makeApologyBroadcast(caseItem), "tk_apology_success_broadcast", caseItem.id);
         }
         pushHistory({ kind: "apology", success: true, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, message, tkCount: caseItem.tkCount });
       } catch (error) {
