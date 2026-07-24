@@ -1,6 +1,8 @@
 // -*- coding: utf-8 -*-
 
 import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import path from "node:path";
 import EventEmitter from "node:events";
 
 const DEFAULT_MAX_HISTORY = 300;
@@ -8,10 +10,14 @@ const DEFAULT_SPAM_WINDOW_MS = 10_000;
 const DEFAULT_SPAM_THRESHOLD = 5;
 const DEFAULT_FREQUENCY_WINDOW_MS = 60_000;
 const DEFAULT_STATS_MINUTES = 60;
+const DEFAULT_DATA_DIRECTORY = "./data/chat";
 
 export function createChatManagerService({ core, config, logger }) {
   const eventEmitter = new EventEmitter();
   const chatHistory = [];
+  const dataDirectory = path.resolve(process.cwd(), String(config?.get?.("modules.chatManager.dataDirectory", DEFAULT_DATA_DIRECTORY)));
+  let activeDate = localDateKey(Date.now());
+  let persistenceChain = Promise.resolve();
 
   const maxHistory = normalizePositiveInteger(
     config?.get?.("modules.chatManager.maxRecentMessages", DEFAULT_MAX_HISTORY),
@@ -51,6 +57,7 @@ export function createChatManagerService({ core, config, logger }) {
 
   const api = {
     getHistory(limit = maxHistory) {
+      ensureCurrentDate();
       const recent = chatHistory.slice(-normalizePositiveInteger(limit, maxHistory));
       return recent.map((entry) => cloneChatEntry(entry, { exposeRawLog }));
     },
@@ -120,6 +127,7 @@ export function createChatManagerService({ core, config, logger }) {
   };
 
   async function start() {
+    await loadDailyHistory();
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(
         core.eventBus.onCoreEvent("CHAT_MESSAGE", (event) => {
@@ -143,6 +151,7 @@ export function createChatManagerService({ core, config, logger }) {
   }
 
   async function stop() {
+    await persistenceChain.catch(() => {});
     for (const un of unsubscribers.splice(0)) {
       try {
         un();
@@ -157,6 +166,7 @@ export function createChatManagerService({ core, config, logger }) {
   }
 
   function handleChatMessage(payload, time) {
+    ensureCurrentDate();
     const timestamp = normalizeTimestamp(time ?? payload?.timestamp ?? payload?.time);
     const playerName = normalizeText(payload?.playerName ?? payload?.name ?? payload?.player_name);
     const steamId = normalizeText(payload?.steamId ?? payload?.steamID ?? payload?.steamid);
@@ -199,6 +209,7 @@ export function createChatManagerService({ core, config, logger }) {
 
     chatHistory.push(entry);
     trimHistory(chatHistory, maxHistory);
+    persistDailyHistory();
 
     const currentMinute = Math.floor(timestamp / 60_000);
     minuteStats.set(currentMinute, (minuteStats.get(currentMinute) || 0) + 1);
@@ -237,11 +248,72 @@ export function createChatManagerService({ core, config, logger }) {
     }
   }
 
+  async function loadDailyHistory() {
+    activeDate = localDateKey(Date.now());
+    try {
+      const raw = await fs.readFile(dailyFilePath(), "utf8");
+      const parsed = JSON.parse(raw);
+      const entries = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.history) ? parsed.history : [];
+      chatHistory.splice(0, chatHistory.length, ...entries.slice(-maxHistory));
+      rebuildLoadedStats();
+    } catch (error) {
+      if (error?.code !== "ENOENT") logger?.warn?.("[ChatMonitor] daily history load failed: " + error.message);
+    }
+  }
+
+  function dailyFilePath() {
+    return path.join(dataDirectory, activeDate + ".json");
+  }
+
+  function ensureCurrentDate() {
+    const nextDate = localDateKey(Date.now());
+    if (nextDate === activeDate) return;
+    activeDate = nextDate;
+    chatHistory.splice(0);
+    minuteStats.clear();
+    playerStats.clear();
+  }
+
+  function persistDailyHistory() {
+    const payload = JSON.stringify({ version: 1, date: activeDate, history: chatHistory }, null, 2);
+    persistenceChain = persistenceChain.catch(() => {}).then(async () => {
+      await fs.mkdir(dataDirectory, { recursive: true });
+      const target = dailyFilePath();
+      const temp = target + ".tmp";
+      await fs.writeFile(temp, payload, "utf8");
+      await fs.rename(temp, target);
+    });
+  }
+
+  function rebuildLoadedStats() {
+    minuteStats.clear();
+    playerStats.clear();
+    for (const entry of chatHistory) {
+      const timestamp = normalizeTimestamp(entry.timestamp ?? entry.time);
+      const minute = Math.floor(timestamp / 60000);
+      minuteStats.set(minute, (minuteStats.get(minute) || 0) + 1);
+      updatePlayerStats(playerStats, {
+        now: timestamp,
+        steamId: entry.steamId ?? entry.steamID ?? "",
+        eosId: entry.eosId ?? entry.eosID ?? "",
+        playerName: entry.playerName ?? entry.name ?? "",
+        spamWindowMs,
+        frequencyWindowMs,
+      });
+    }
+  }
+
   return {
     api,
     start,
     stop,
   };
+}
+
+function localDateKey(value) {
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, "0");
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
 }
 
 function updatePlayerStats(playerStats, { now, steamId, eosId, playerName, spamWindowMs, frequencyWindowMs }) {
