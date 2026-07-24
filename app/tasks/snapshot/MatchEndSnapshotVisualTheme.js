@@ -46,7 +46,7 @@ function buildModel(payload) {
     map: text(payload?.match?.map, payload?.match?.layer, "UNKNOWN SECTOR"),
     layer: text(payload?.match?.layer, "UNSPECIFIED LAYER"),
     mode: text(payload?.match?.mode, "UNKNOWN MODE"),
-    next: text(payload?.match?.nextLayer, payload?.match?.nextMap, "PENDING"),
+    next: text(payload?.match?.nextLayer, payload?.match?.nextMap, "—"),
     server: text(payload?.server?.serverName, payload?.server?.serverId, "BZSS SERVER"),
     time: formatDate(payload?.capturedAt),
     players: Number(payload?.summary?.recordedPlayerCount ?? players.length ?? 0),
@@ -79,7 +79,7 @@ function buildTeam(style, players, squads) {
   const name = text(
     teamSquads.find((squad) => text(squad?.teamName))?.teamName,
     teamPlayers.find((player) => text(player?.squadInfo?.teamName))?.squadInfo?.teamName,
-    `TEAM ${style.id}`,
+    "",
   );
 
   return {
@@ -98,7 +98,7 @@ function buildTeam(style, players, squads) {
     playerCount: teamPlayers.length,
     squadCount: squadIds.size,
     ping: pings.length ? Math.round(pings.reduce((sum, value) => sum + value, 0) / pings.length) : null,
-    commander: text(commander?.name, "PENDING"),
+    commander: text(commander?.name, "—"),
   };
 }
 
@@ -121,6 +121,11 @@ function buildSvg(model, width, height) {
       <stop stop-color="#050b12" stop-opacity=".985"/>
       <stop offset=".58" stop-color="#07111d" stop-opacity=".965"/>
       <stop offset="1" stop-color="#090711" stop-opacity=".98"/>
+    </linearGradient>
+    <linearGradient id="teamGlass" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#071426" stop-opacity=".055"/>
+      <stop offset=".52" stop-color="#10243c" stop-opacity=".025"/>
+      <stop offset="1" stop-color="#061020" stop-opacity=".065"/>
     </linearGradient>
     <linearGradient id="fog" x1="0" y1="0" x2="1" y2="0">
       <stop stop-color="#28d7ff" stop-opacity="0"/>
@@ -202,20 +207,20 @@ function teamFrame(team) {
   const flagH = 52;
 
   return `<g>
-    <rect x="${x - 8}" y="${y - 8}" width="${w + 16}" height="${h + 16}" fill="none" stroke="#02050a" stroke-opacity=".90" stroke-width="20"/>
+    <rect x="${x - 8}" y="${y - 8}" width="${w + 16}" height="${h + 16}" fill="none" stroke="#02050a" stroke-opacity=".34" stroke-width="20"/>
     <rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${team.accent}" stroke-opacity=".30" stroke-width="2"/>
     <path d="M${x} ${y + 100}V${y}H${x + 250}" fill="none" stroke="${team.accent}" stroke-width="5"/>
     <path d="M${x + w - 250} ${y}H${x + w}V${y + 100}" fill="none" stroke="${team.secondary}" stroke-width="5"/>
 
-    <path fill="url(#plate)" fill-rule="evenodd" d="M${x + 12} ${y + 12}H${x + w - 12}V${y + headerH}H${x + 12}Z
+    <path fill="url(#teamGlass)" fill-rule="evenodd" d="M${x + 12} ${y + 12}H${x + w - 12}V${y + headerH}H${x + 12}Z
       M${avatarX - 5} ${avatarY - 5}H${avatarX + avatarSize + 5}V${avatarY + avatarSize + 5}H${avatarX - 5}Z"/>
     <rect x="${x + 12}" y="${y + 12}" width="${w - 24}" height="${headerH - 12}" fill="none" stroke="${team.accent}" stroke-opacity=".28" stroke-width="2"/>
     ${renderFlag(team.factionCode, flagX, flagY, flagW, flagH)}
-    ${renderFlagWatermark(team.factionCode, x + 820, y + 24, 430, 118)}
+    ${renderFlagWatermark(team.factionCode, x + 760, y + 22, 520, 124)}
 
     <rect x="${x + 126}" y="${y + 34}" width="122" height="3" fill="${team.secondary}" opacity=".72"/>
-    <text x="${x + 126}" y="${y + 62}" class="display team-code">TACTICAL GROUP ${String(team.id).padStart(2, "0")} · ${xml(team.factionCode || "UNKNOWN")}</text>
-    <text x="${x + 124}" y="${y + 103}" class="display team-title" fill="${team.accent}">TEAM ${team.id} · ${xml(clip(team.name.toUpperCase(), 31))}</text>
+    <text x="${x + 126}" y="${y + 62}" class="display team-code">TACTICAL GROUP ${String(team.id).padStart(2, "0")} · ${xml(team.factionCode || "—")}</text>
+    <text x="${x + 124}" y="${y + 103}" class="display team-title" fill="${team.accent}">TEAM ${team.id}${team.name ? ` · ${xml(clip(team.name.toUpperCase(), 31))}` : ""}</text>
     <text x="${x + 126}" y="${y + 132}" class="tech team-meta">${team.playerCount} PLAYERS / ${team.squadCount} SQUADS / AVG ${ping}</text>
 
     <text x="${avatarX - 24}" y="${y + 58}" text-anchor="end" class="tech label">COMMANDER</text>
@@ -278,7 +283,7 @@ function renderFlag(code, x, y, w, h) {
 }
 
 function renderFlagWatermark(code, x, y, w, h) {
-  return `<g opacity=".055">${renderFlag(code, x, y, w, h)}</g>`;
+  return `<g opacity=".14">${renderFlag(code, x, y, w, h)}</g>`;
 }
 
 function resolveFactionCode(...values) {
