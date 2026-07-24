@@ -738,7 +738,7 @@
       "reminderEveryMinutes": 5,
       "maxEligiblePlayers": 50,
       "requireWarmupMode": true,
-      "requireSquad": true,
+      "requireSquad": false,
       "requireUnlockedSquad": true,
       "group": "BZSSVIP",
       "countMode": "accumulate_eligible_squad_member_time",
@@ -1003,8 +1003,7 @@
       "enabled": true,
       "deadlineSeconds": 600,
       "reminderSeconds": 60,
-      "timeoutAction": "remove_from_squad",
-      "broadcastOnApology": true
+      "timeoutAction": "remove_from_squad"
     },
     "victimDamageDisplay": {
       "enabled": true,
@@ -1016,7 +1015,7 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
