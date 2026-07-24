@@ -277,11 +277,11 @@ function resolveReplayPlayerName(source: any, identity: any, key: string) {
 
 function firstReplayText(value: any) {
   const result = String(value ?? "").trim();
-  return result && !/^(undefined|null|n\\/a)$/i.test(result) ? result : "";
+  return result && !/^(undefined|null|n\/a)$/i.test(result) ? result : "";
 }
 
 function isGenericReplayName(value: string) {
-  return /^(unknown(?:\\s+player)?|player\\s+unknown)$/i.test(value.trim());
+  return /^(unknown(?:\s+player)?|player\s+unknown)$/i.test(value.trim());
 }
 function project(value: number, min: number, max: number) { if (!Number.isFinite(value) || max <= min) return 50; return Math.min(98, Math.max(2, ((value - min) / (max - min)) * 100)); }
 function numberOrNull(value: any) { const n = Number(value); return Number.isFinite(n) ? n : null; }
