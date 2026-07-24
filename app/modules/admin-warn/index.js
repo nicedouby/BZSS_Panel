@@ -318,17 +318,7 @@ class AdminWarnMemoryStore {
     const payload = JSON.stringify({ version: 1, date: this.activeDate, records: this.records }, null, 2);
     this.saveChain = this.saveChain.catch(() => {}).then(async () => {
       await fs.mkdir(this.dataDirectory, { recursive: true });
-      const target = this.filePath();
-      const temp = target + ".tmp";
-      await fs.writeFile(temp, payload, "utf8");
-      await fs.rename(temp, target).catch(async (error) => {
-        if (error?.code === "ENOENT") {
-          await fs.mkdir(this.dataDirectory, { recursive: true });
-          await fs.rename(temp, target);
-          return;
-        }
-        throw error;
-      });
+      await fs.writeFile(this.filePath(), payload, "utf8");
     });
   }
 
