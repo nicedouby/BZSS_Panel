@@ -194,6 +194,11 @@ export function createPlugin(context = {}) {
     return `[TK] ${caseItem.attacker.name || "未知玩家"} 攻击了队友 ${caseItem.victim.name || "未知玩家"}，本局已 TK ${tkCount} 名队友。`;
   }
 
+  function makeApologyBroadcast(caseItem, message) {
+    const apology = normalizeText(message).replaceAll("\\n", " ").slice(0, 80);
+    return `[TK] ${caseItem.attacker.name || "未知玩家"} 已为误伤队友 ${caseItem.victim.name || "未知玩家"} 道歉，本次 TK 处理已解除。`;
+  }
+
   function makeFinalWarning() {
     return "[TK处理] 你未在规定时间内完成道歉，现已开始执行处理。";
   }
@@ -341,6 +346,9 @@ export function createPlugin(context = {}) {
     await enqueue(async () => {
       try {
         await warnPlayer(caseItem.attacker, `[TK处理] 已收到你的道歉。`, "tk_apology_received", caseItem.id);
+        if (runtimeConfig.broadcastOnApology) {
+          await broadcast(makeApologyBroadcast(caseItem, message), "tk_apology_success_broadcast", caseItem.id);
+        }
         pushHistory({ kind: "apology", success: true, eventId: caseItem.id, attacker: caseItem.attacker, victim: caseItem.victim, message, tkCount: caseItem.tkCount });
       } catch (error) {
         state.lastError = error instanceof Error ? error.message : String(error);
@@ -561,6 +569,7 @@ function readConfig(config) {
     deadlineSeconds: DEFAULT_DEADLINE_SECONDS,
     reminderSeconds: DEFAULT_REMINDER_SECONDS,
     timeoutAction: "remove_from_squad",
+    broadcastOnApology: true,
   });
 }
 
@@ -573,6 +582,9 @@ function normalizeConfig(raw = {}, fallback = {}) {
     deadlineSeconds,
     reminderSeconds,
     timeoutAction: ["remove_from_squad", "kill_player", "kick_player"].includes(action) ? action : "remove_from_squad",
+    broadcastOnApology: raw.broadcastOnApology === undefined
+      ? Boolean(fallback.broadcastOnApology ?? true)
+      : Boolean(raw.broadcastOnApology),
   };
 }
 
