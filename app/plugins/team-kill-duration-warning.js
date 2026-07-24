@@ -195,7 +195,6 @@ export function createPlugin(context = {}) {
   }
 
   function makeApologyBroadcast(caseItem, message) {
-    const apology = normalizeText(message).replaceAll("\\n", " ").slice(0, 80);
     return `[TK] ${caseItem.attacker.name || "未知玩家"} 已为误伤队友 ${caseItem.victim.name || "未知玩家"} 道歉，本次 TK 处理已解除。`;
   }
 
