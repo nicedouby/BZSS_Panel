@@ -86,7 +86,7 @@
                 :show-coords="false"
                 :game-x="player.position && player.position.x"
                 :game-y="player.position && player.position.y"
-                :scale="1"
+                :scale="playerMarkerScale"
                 :compact="true"
                 :tone="getReplayPerspectiveTone(player.teamId)"
                 @click.stop="selectPlayer(player)"
@@ -97,6 +97,23 @@
             <button type="button" title="放大" @click="zoomBy(1.25)">＋</button>
             <button type="button" title="缩小" @click="zoomBy(0.8)">−</button>
             <button type="button" title="重置视角" @click="resetCamera">⌂</button>
+            <div class="marker-size-control" @pointerdown.stop>
+              <div class="marker-size-heading"><span>玩家图标</span><output>{{ Math.round(playerMarkerScale * 100) }}%</output></div>
+              <input
+                v-model.number="playerMarkerScale"
+                type="range"
+                min="0.4"
+                max="1"
+                step="0.05"
+                aria-label="玩家图标大小"
+                title="调整玩家图标大小"
+              />
+              <div class="marker-size-actions">
+                <button type="button" title="缩小玩家图标" @click.stop="adjustPlayerMarkerScale(-0.05)">−</button>
+                <button type="button" title="恢复玩家图标大小" @click.stop="resetPlayerMarkerScale">↺</button>
+                <button type="button" title="放大玩家图标" @click.stop="adjustPlayerMarkerScale(0.05)">＋</button>
+              </div>
+            </div>
           </div>
           <div class="map-hud map-hud-bottom"><span>{{ activeSession && activeSession.layer || "NO LAYER" }}</span><i>·</i><span>数据点 {{ state ? formatClock(state.resolvedAtMs) : "--:--" }}</span><span v-if="loadingState" class="state-sync">同步中</span></div>
           <div v-if="loadingState && !state" class="map-loading">正在载入预览状态…</div>
@@ -157,6 +174,8 @@ const searchText = ref("");
 const currentMs = ref(0);
 const playing = ref(false);
 const playbackRate = ref(1);
+const DEFAULT_PLAYER_MARKER_SCALE = 0.8;
+const playerMarkerScale = ref(DEFAULT_PLAYER_MARKER_SCALE);
 const loadingSessions = ref(false);
 const loadingState = ref(false);
 const errorText = ref("");
@@ -194,6 +213,7 @@ const activeMapConfig = computed(() => {
 const hasMapResource = computed(() => Boolean(activeMapConfig.value.tileBasePath || activeMapConfig.value.image));
 const currentSnapshot = computed(() => state.value && state.value.state || null);
 const rawPlayers = computed<any[]>(() => Array.isArray(currentSnapshot.value && currentSnapshot.value.players) ? currentSnapshot.value.players : []);
+const replayNameCache = new Map<string, string>();
 const visiblePlayers = computed<ReplayPlayer[]>(() => rawPlayers.value.map(normalizePlayer).filter((item: ReplayPlayer) => item.hasPosition));
 const teamOneCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 1).length);
 const teamTwoCount = computed(() => visiblePlayers.value.filter((item: ReplayPlayer) => item.teamId === 2).length);
@@ -201,6 +221,7 @@ const teamTwoCount = computed(() => visiblePlayers.value.filter((item: ReplayPla
 provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y });
 
 function normalizePlayer(source: any): ReplayPlayer {
+  const identity = source && source.identity || {};
   const position = source && source.telemetry && source.telemetry.position || source && source.position;
   const health = numberOrNull(source && source.telemetry && source.telemetry.health);
   const role = String(source && source.match && source.match.role || source && source.telemetry && source.telemetry.soldierClass || "");
@@ -210,9 +231,10 @@ function normalizePlayer(source: any): ReplayPlayer {
     : resolveRoleIcon(role);
   const hasPosition = Boolean(position && Number.isFinite(Number(position.x)) && Number.isFinite(Number(position.y)));
   const bounds = activeMapConfig.value.bounds;
+  const key = resolveReplayPlayerKey(source, identity);
   return {
-    key: String(source && source.identity && (source.identity.key || source.identity.name) || Math.random()),
-    name: String(source && source.identity && source.identity.name || "Unknown"),
+    key,
+    name: resolveReplayPlayerName(source, identity, key),
     teamId: numberOrNull(source && source.match && source.match.teamId),
     squadId: numberOrNull(source && source.match && source.match.squadId),
     role,
@@ -230,6 +252,36 @@ function normalizePlayer(source: any): ReplayPlayer {
     mapY: project(Number(position && position.y), bounds.minY, bounds.maxY),
     hasPosition,
   };
+}
+
+function resolveReplayPlayerKey(source: any, identity: any) {
+  return firstReplayText(
+    identity && (identity.key || identity.steamID || identity.eosID || identity.playerID)
+      || source && (source.key || source.playerID || source.id)
+  ) || "anonymous-player";
+}
+
+function resolveReplayPlayerName(source: any, identity: any, key: string) {
+  const candidates = [
+    identity && (identity.name || identity.displayName || identity.playerName),
+    source && (source.name || source.displayName || source.playerName),
+    identity && (identity.steamID || identity.eosID),
+  ];
+  const name = candidates.map(firstReplayText).find(Boolean);
+  if (name && !isGenericReplayName(name)) {
+    replayNameCache.set(key, name);
+    return name;
+  }
+  return replayNameCache.get(key) || "Player " + key;
+}
+
+function firstReplayText(value: any) {
+  const result = String(value ?? "").trim();
+  return result && !/^(undefined|null|n\\/a)$/i.test(result) ? result : "";
+}
+
+function isGenericReplayName(value: string) {
+  return /^(unknown(?:\\s+player)?|player\\s+unknown)$/i.test(value.trim());
 }
 function project(value: number, min: number, max: number) { if (!Number.isFinite(value) || max <= min) return 50; return Math.min(98, Math.max(2, ((value - min) / (max - min)) * 100)); }
 function numberOrNull(value: any) { const n = Number(value); return Number.isFinite(n) ? n : null; }
@@ -257,6 +309,13 @@ function resetCamera() {
 function zoomBy(factor: number) {
   const next = Math.min(isPlayerMode.value ? 8 : 3.5, Math.max(0.2, camera.zoom.value * factor));
   camera.setZoom(next, viewportWidth.value / 2, viewportHeight.value / 2);
+}
+function adjustPlayerMarkerScale(delta: number) {
+  const next = Math.round((playerMarkerScale.value + delta) * 20) / 20;
+  playerMarkerScale.value = Math.min(1, Math.max(0.4, next));
+}
+function resetPlayerMarkerScale() {
+  playerMarkerScale.value = DEFAULT_PLAYER_MARKER_SCALE;
 }
 function onWheel(event: WheelEvent) {
   event.preventDefault();
@@ -364,6 +423,7 @@ async function selectSession(session: ReplaySession) {
   if (seekTimer) { clearTimeout(seekTimer); seekTimer = null; }
   lastStateRequestStartedAt = -Infinity;
   selectedPlayer.value = null;
+  replayNameCache.clear();
   const loadToken = ++stateLoadToken;
   stateLoadInFlight = true;
   try {
@@ -513,6 +573,12 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .map-controls { position: absolute; z-index: 12; right: 12px; top: 12px; display: grid; gap: 5px; }
 .map-controls button { width: 30px; height: 30px; border: 1px solid rgba(159,210,224,.2); border-radius: 7px; color: #bfeaf0; background: rgba(4,16,28,.78); cursor: pointer; font-size: 16px; }
 .map-controls button:hover { color: #fff; border-color: rgba(85,221,182,.7); background: rgba(24,92,83,.75); }
+.marker-size-control { width: 86px; padding: 7px; border: 1px solid rgba(159,210,224,.2); border-radius: 7px; color: #91adba; background: rgba(4,16,28,.88); box-shadow: 0 8px 18px rgba(0,0,0,.22); }
+.marker-size-heading { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 5px; font-size: 9px; }
+.marker-size-heading output { color: #bfeaf0; font-family: monospace; }
+.marker-size-control input[type="range"] { display: block; width: 100%; height: 12px; margin: 0; accent-color: #40dfa0; cursor: pointer; }
+.marker-size-actions { display: flex; justify-content: space-between; gap: 4px; margin-top: 4px; }
+.marker-size-actions button { width: 22px; height: 20px; min-height: 20px; padding: 0; font-size: 12px; }
 .timeline { margin-top: 15px; padding: 13px 3px 2px; }
 .timeline-topline { color: #9ab4c0; font-size: 11px; }
 .timeline-range { width: 100%; margin: 13px 0 11px; accent-color: #3ed9a1; cursor: pointer; }
