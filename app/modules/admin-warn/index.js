@@ -2,6 +2,7 @@
 
 const DEFAULT_MAX_RECORDS = 3000;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_DATA_DIRECTORY = "./data/admin-warns";
 
 export function createAdminWarnModule({ core, config, logger }) {
   const moduleLogger =
@@ -17,8 +18,9 @@ export function createAdminWarnModule({ core, config, logger }) {
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const maxRecords = Math.max(1, Number(moduleConfig.maxRecords ?? DEFAULT_MAX_RECORDS));
   const ttlMs = Math.max(1000, Number(moduleConfig.ttlMs ?? DEFAULT_TTL_MS));
+  const dataDirectory = path.resolve(process.cwd(), String(moduleConfig.dataDirectory ?? DEFAULT_DATA_DIRECTORY));
 
-  const memoryStore = new AdminWarnMemoryStore({ maxRecords, ttlMs });
+  const memoryStore = new AdminWarnMemoryStore({ maxRecords, ttlMs, dataDirectory, logger: moduleLogger });
 
   const api = {
     async warnPlayer(req) {
@@ -61,6 +63,7 @@ export function createAdminWarnModule({ core, config, logger }) {
     const relatedEventId = optionalText(req?.relatedEventId);
     const actor = req?.actor ?? req?.viewer ?? null;
     const system = Boolean(req?.system);
+    const actorRecord = normalizeActorRecord(actor, system);
 
     const message = normalizedKind === "broadcast"
       ? sanitizeBroadcastMessage(req?.message)
@@ -83,6 +86,7 @@ export function createAdminWarnModule({ core, config, logger }) {
 
     if (!enabled) {
       memoryStore.push({
+        ...actorRecord,
         id: makeRecordId("disabled"),
         kind: normalizedKind,
         createdAt: Date.now(),
@@ -111,6 +115,7 @@ export function createAdminWarnModule({ core, config, logger }) {
         ? "missing_target_player_id"
         : "invalid_request";
       const record = memoryStore.push({
+        ...actorRecord,
         id: makeRecordId("invalid"),
         kind: normalizedKind,
         createdAt: Date.now(),
@@ -173,6 +178,7 @@ export function createAdminWarnModule({ core, config, logger }) {
       }
 
       memoryStore.push({
+        ...actorRecord,
         id: makeRecordId("ok"),
         kind: normalizedKind,
         createdAt: Date.now(),
@@ -197,6 +203,7 @@ export function createAdminWarnModule({ core, config, logger }) {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       memoryStore.push({
+        ...actorRecord,
         id: makeRecordId("error"),
         kind: normalizedKind,
         createdAt: Date.now(),
@@ -236,6 +243,10 @@ export function createAdminWarnModule({ core, config, logger }) {
     apiName: "adminWarn",
     api,
 
+    async init() {
+      await memoryStore.load();
+    },
+
     async start() {
       core.webRegistry?.registerPage?.({
         id: "web.adminWarn",
@@ -253,20 +264,73 @@ export function createAdminWarnModule({ core, config, logger }) {
     },
 
     async stop() {
-      memoryStore.clear();
+      await memoryStore.flush();
+      memoryStore.clear({ persist: false });
       moduleLogger?.info?.("Broadcast module stopped.");
     },
   };
 }
 
 class AdminWarnMemoryStore {
-  constructor({ maxRecords, ttlMs }) {
+  constructor({ maxRecords, ttlMs, dataDirectory, logger }) {
     this.maxRecords = maxRecords;
     this.ttlMs = ttlMs;
+    this.dataDirectory = dataDirectory;
+    this.logger = logger;
     this.records = [];
+    this.activeDate = localDateKey(Date.now());
+    this.saveChain = Promise.resolve();
+  }
+
+  async load() {
+    this.ensureCurrentDate();
+    try {
+      const raw = await fs.readFile(this.filePath(), "utf8");
+      const parsed = JSON.parse(raw);
+      const records = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.records) ? parsed.records : [];
+      this.records = records.slice(-this.maxRecords).map(cloneJsonSafe);
+    } catch (error) {
+      if (error?.code !== "ENOENT") this.logger?.warn?.("[BroadcastModule] daily history load failed: " + error.message);
+      this.records = [];
+    }
+  }
+
+  async flush() {
+    await this.saveChain.catch(() => {});
+  }
+
+  filePath() {
+    return path.join(this.dataDirectory, this.activeDate + ".json");
+  }
+
+  ensureCurrentDate() {
+    const nextDate = localDateKey(Date.now());
+    if (nextDate !== this.activeDate) {
+      this.activeDate = nextDate;
+      this.records = [];
+    }
+  }
+
+  persist() {
+    const payload = JSON.stringify({ version: 1, date: this.activeDate, records: this.records }, null, 2);
+    this.saveChain = this.saveChain.catch(() => {}).then(async () => {
+      await fs.mkdir(this.dataDirectory, { recursive: true });
+      const target = this.filePath();
+      const temp = target + ".tmp";
+      await fs.writeFile(temp, payload, "utf8");
+      await fs.rename(temp, target).catch(async (error) => {
+        if (error?.code === "ENOENT") {
+          await fs.mkdir(this.dataDirectory, { recursive: true });
+          await fs.rename(temp, target);
+          return;
+        }
+        throw error;
+      });
+    });
   }
 
   push(record) {
+    this.ensureCurrentDate();
     this.prune(Date.now());
     this.records.push({
       ...record,
@@ -281,14 +345,20 @@ class AdminWarnMemoryStore {
       relatedEventId: optionalText(record?.relatedEventId),
       sourceModule: String(record?.sourceModule ?? "unknown"),
       reason: String(record?.reason ?? "unknown"),
+      actorUsername: String(record?.actorUsername ?? "").trim(),
+      actorUserId: optionalText(record?.actorUserId),
+      actorRole: optionalText(record?.actorRole),
+      system: Boolean(record?.system),
     });
     if (this.records.length > this.maxRecords) {
       this.records.splice(0, this.records.length - this.maxRecords);
     }
+    this.persist();
     return this.records[this.records.length - 1];
   }
 
   query(filter = {}) {
+    this.ensureCurrentDate();
     this.prune(Date.now());
     const limit = clampLimit(filter.limit, 200, this.maxRecords);
     const kind = normalizeKind(filter.kind);
@@ -299,6 +369,8 @@ class AdminWarnMemoryStore {
     const reason = normalizeSearch(filter.reason);
     const success = normalizeBooleanFilter(filter.success);
     const skipped = normalizeBooleanFilter(filter.skipped);
+    const search = normalizeSearch(filter.search);
+    const actorUsername = normalizeSearch(filter.actorUsername);
 
     return this.records
       .slice()
@@ -312,27 +384,45 @@ class AdminWarnMemoryStore {
         if (reason && normalizeSearch(item.reason) !== reason) return false;
         if (success != null && Boolean(item.success) !== success) return false;
         if (skipped != null && Boolean(item.skipped) !== skipped) return false;
+        if (actorUsername && !normalizeSearch(item.actorUsername).includes(actorUsername)) return false;
+        if (search) {
+          const haystack = normalizeSearch([item.actorUsername, item.sourceModule, item.reason, item.targetName, item.message, item.errorMessage].join(" "));
+          if (!haystack.includes(search)) return false;
+        }
         return true;
       })
       .slice(0, limit)
       .map(cloneJsonSafe);
   }
 
-  clear() {
+  clear({ persist = true } = {}) {
     const cleared = this.records.length;
     this.records.splice(0);
+    if (persist) this.persist();
     return { ok: true, cleared };
   }
 
   prune(now) {
-    const cutoff = now - this.ttlMs;
-    while (this.records.length && Number(this.records[0]?.createdAt ?? 0) < cutoff) {
-      this.records.shift();
-    }
+    this.ensureCurrentDate();
     if (this.records.length > this.maxRecords) {
       this.records.splice(0, this.records.length - this.maxRecords);
     }
   }
+}
+
+function normalizeActorRecord(actor, system) {
+  return {
+    actorUsername: String(actor?.username ?? actor?.name ?? actor?.displayName ?? (system ? "system" : "")).trim(),
+    actorUserId: actor?.id ?? actor?.userId ?? actor?.username ?? "",
+    actorRole: actor?.role ?? "",
+    system: Boolean(system),
+  };
+}
+
+function localDateKey(value) {
+  const date = new Date(value);
+  const pad = (number) => String(number).padStart(2, "0");
+  return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate());
 }
 
 function buildCommandText(kind, { targetName = "", targetPlayerId = "", message = "" } = {}) {
