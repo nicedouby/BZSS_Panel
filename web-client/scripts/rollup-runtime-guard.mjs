@@ -55,11 +55,10 @@ function createCompat(prototype, descriptors) {
     throw new TypeError("Object prototype may only be an Object or null");
   }
 
-  // The object literal avoids calling a polluted two-argument Object.create
-  // for Rollup's null-prototype tracker case.
-  const target = prototype === null
-    ? { __proto__: null }
-    : capturedCreate(prototype);
+  // Avoid calling a possibly polluted Object.create.  The literal gives us
+  // a normal object and Reflect.setPrototypeOf handles the non-null case.
+  const target = { __proto__: null };
+  if (prototype !== null) Reflect.setPrototypeOf(target, prototype);
 
   if (descriptors !== undefined) {
     definePropertiesCompat(target, descriptors);
@@ -80,17 +79,17 @@ function supportsRollupPathTracker(create, getPrototypeOf) {
   }
 }
 
-const canonical = supportsRollupPathTracker(capturedCreate, capturedGetPrototypeOf)
-  ? {
-      create: capturedCreate,
-      defineProperty: capturedDefineProperty,
-      defineProperties: capturedDefineProperties,
-    }
-  : {
-      create: createCompat,
-      defineProperty: definePropertyCompat,
-      defineProperties: definePropertiesCompat,
-    };
+// Do not restore captured methods merely because Object.create(null) happens
+// to work.  The failure seen in Rollup is specifically caused by a partially
+// patched intrinsic set: Object.create can pass the probe while
+// Object.defineProperties still rejects Rollup's null-prototype tracker.
+// The compatibility implementations below use Reflect primitives and are
+// deliberately used as the canonical set for the complete build.
+const canonical = {
+  create: createCompat,
+  defineProperty: definePropertyCompat,
+  defineProperties: definePropertiesCompat,
+};
 
 let viteLogger = null;
 let repairNoticeEmitted = false;
