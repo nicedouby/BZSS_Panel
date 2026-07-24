@@ -494,7 +494,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "弹劾队长",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "moderation", label: "弹劾队长", icon: "⚖️", order: 84 },
+    nav: { section: "players", label: "弹劾队长", icon: "⚖️", order: 84 },
     superAdminOnly: true,
     ...documentPage,
   },
