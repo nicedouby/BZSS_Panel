@@ -592,7 +592,7 @@ function resolveReplayPlayerName(id, identity) {
 }
 
 function isGenericReplayName(value) {
-  return /^(unknown(?:\\s+player)?|player\\s+unknown|undefined|null|n\\/a)$/i.test(text(value));
+  return /^(unknown(?:\s+player)?|player\s+unknown|undefined|null|n\/a)$/i.test(text(value));
 }
 
 function statsToObject(values) {
