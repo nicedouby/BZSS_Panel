@@ -349,6 +349,8 @@ async function attachRoleIconData(model) {
     if (!fileName) return;
     const candidates = [
       path.resolve(process.cwd(), "web-client", "public", "assets", "icons", fileName),
+      path.resolve(process.cwd(), "web-client", "public", "assets", "roles", fileName),
+      path.resolve(process.cwd(), "web-client", "public", "icons", fileName),
       path.resolve(process.cwd(), "web-client", "public", "Icon", fileName),
       path.resolve(process.cwd(), "web-client", "src", "assets", "icons", fileName),
       path.resolve(process.cwd(), "assets", "icons", fileName),
@@ -471,12 +473,12 @@ function renderTeamColumn(team) {
   const y = 158;
   const headerHeight = 58;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".10" stroke="${team.accent}" stroke-opacity=".46"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".018" stroke="${team.accent}" stroke-opacity=".46"/>`);
   if (team.flagData) {
-    svg.push(`<image href="${team.flagData}" x="${x + 34}" y="${y + 68}" width="${team.width - 68}" height="${TEAM_CONTENT_BOTTOM - y - 84}" opacity=".28" preserveAspectRatio="xMidYMid meet"/>`);
-    svg.push(`<rect x="${x + 12}" y="${y + 64}" width="${team.width - 24}" height="${TEAM_CONTENT_BOTTOM - y - 72}" fill="${team.accent}" fill-opacity=".045"/>`);
+    svg.push(`<image href="${team.flagData}" x="${x + 34}" y="${y + 68}" width="${team.width - 68}" height="${TEAM_CONTENT_BOTTOM - y - 84}" opacity=".34" preserveAspectRatio="xMidYMid meet"/>`);
+    svg.push(`<rect x="${x + 12}" y="${y + 64}" width="${team.width - 24}" height="${TEAM_CONTENT_BOTTOM - y - 72}" fill="${team.accent}" fill-opacity=".018"/>`);
   }
-  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".50"/>`);
+  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".055" stroke="${team.accent}" stroke-opacity=".50"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
@@ -538,8 +540,8 @@ function renderSquadCard(team, group, x, y) {
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
   const creator = firstText(group.creatorName, "-");
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".12" stroke="#ffffff" stroke-opacity=".13"/>`);
-  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".12" stroke="${team.accent}" stroke-opacity=".48"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".025" stroke="#ffffff" stroke-opacity=".13"/>`);
+  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".045" stroke="${team.accent}" stroke-opacity=".48"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
   svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}</text>`);
   svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
@@ -565,7 +567,7 @@ function renderPlayerRow(team, player, x, y, index) {
     stats.teamworkScore, ping == null ? "--" : String(ping),
   ];
   const { infoWidth, stats: columns } = COMPACT_PLAYER_LAYOUT;
-  const backgroundOpacity = index % 2 === 0 ? ".16" : ".07";
+  const backgroundOpacity = index % 2 === 0 ? ".035" : ".018";
   let cursor = x + infoWidth;
   const parts = [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".07"/>`,
@@ -711,14 +713,14 @@ function resolveMapKey(value) {
 function renderDefs() {
   return `<defs>
     <linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#020611" stop-opacity=".08"/>
-      <stop offset="42%" stop-color="#020611" stop-opacity=".22"/>
-      <stop offset="100%" stop-color="#020611" stop-opacity=".46"/>
+      <stop offset="0%" stop-color="#020611" stop-opacity=".02"/>
+      <stop offset="42%" stop-color="#020611" stop-opacity=".08"/>
+      <stop offset="100%" stop-color="#020611" stop-opacity=".18"/>
     </linearGradient>
     <linearGradient id="headerPlate" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#061426" stop-opacity=".46"/>
-      <stop offset="55%" stop-color="#10243c" stop-opacity=".34"/>
-      <stop offset="100%" stop-color="#061020" stop-opacity=".44"/>
+      <stop offset="0%" stop-color="#061426" stop-opacity=".16"/>
+      <stop offset="55%" stop-color="#10243c" stop-opacity=".10"/>
+      <stop offset="100%" stop-color="#061020" stop-opacity=".16"/>
     </linearGradient>
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
