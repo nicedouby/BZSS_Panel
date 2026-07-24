@@ -278,10 +278,7 @@ export function createChatManagerService({ core, config, logger }) {
     const payload = JSON.stringify({ version: 1, date: activeDate, history: chatHistory }, null, 2);
     persistenceChain = persistenceChain.catch(() => {}).then(async () => {
       await fs.mkdir(dataDirectory, { recursive: true });
-      const target = dailyFilePath();
-      const temp = target + ".tmp";
-      await fs.writeFile(temp, payload, "utf8");
-      await fs.rename(temp, target);
+      await fs.writeFile(dailyFilePath(), payload, "utf8");
     });
   }
 
