@@ -1003,7 +1003,8 @@
       "enabled": true,
       "deadlineSeconds": 600,
       "reminderSeconds": 60,
-      "timeoutAction": "remove_from_squad"
+      "timeoutAction": "remove_from_squad",
+      "broadcastOnApology": true
     },
     "victimDamageDisplay": {
       "enabled": true,
