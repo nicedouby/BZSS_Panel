@@ -498,7 +498,7 @@ function applyAssetUpsert(target, values) {
 function serializeReplayState(replay, session, atMs) {
   const players = [...replay.players.entries()]
     .map(([id, value]) => {
-      const identity = replay.dictionary.get(id) ?? {};
+      const identity = resolveReplayIdentity(id, replay.dictionary.get(id));
       const stats = replay.stats.get(id);
       const position = vectorObject(value.position);
       const player = {
@@ -565,6 +565,34 @@ function mapAssets(map) {
     ...(value && typeof value === "object" ? value : {}),
     id,
   }));
+}
+
+function resolveReplayIdentity(id, value) {
+  const source = value && typeof value === "object" ? value : {};
+  return {
+    ...source,
+    key: text(source.key || id),
+    name: resolveReplayPlayerName(id, source),
+  };
+}
+
+function resolveReplayPlayerName(id, identity) {
+  const source = identity && typeof identity === "object" ? identity : {};
+  const candidates = [
+    source.name,
+    source.displayName,
+    source.playerName,
+    source.steamName,
+    source.steamID,
+    source.eosID,
+    source.playerID,
+  ];
+  const name = candidates.map(text).find((candidate) => candidate && !isGenericReplayName(candidate));
+  return name || "Player " + text(id || "unknown");
+}
+
+function isGenericReplayName(value) {
+  return /^(unknown(?:\\s+player)?|player\\s+unknown|undefined|null|n\\/a)$/i.test(text(value));
 }
 
 function statsToObject(values) {
@@ -728,4 +756,5 @@ export const TacticalReplayPlayerFormat = Object.freeze({
   HEADER_BYTES,
   crc32,
   decodeMessagePack,
+  resolvePlayerName: resolveReplayPlayerName,
 });
