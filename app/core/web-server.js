@@ -3899,10 +3899,22 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/remote-telemetry/adjust-tickets" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const ticketAuditContext = {
+        action: AUDIT_ACTIONS.TICKET_ADJUST,
+        category: AUDIT_CATEGORIES.SERVER_MANAGEMENT,
+        actor: user,
+        request: req,
+        sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+        serverId: body.serverId ?? this.getCurrentServerId(""),
+        target: { type: "server", id: body.serverId ?? this.getCurrentServerId(""), name: this.getServerName(body.serverId ?? this.getCurrentServerId("")) },
+        parameters: { ...body },
+      };
       const hasPerm = this.core.authManager?.hasPermission
         ? this.core.authManager.hasPermission(user, "rcon.settickets")
         : this.core.authManager?.hasEverything?.(user);
       if (!hasPerm) {
+        await this.auditForbidden(ticketAuditContext, "rcon.settickets permission is required.");
         return this.json(res, 403, { error: "Forbidden", message: "rcon.settickets permission is required." });
       }
       const api = this.modules.remoteTelemetry;
@@ -3914,7 +3926,6 @@ export class WebServer {
       }
 
       try {
-        const body = await this.readJsonBody(req);
         const auditContext = {
           action: AUDIT_ACTIONS.TICKET_ADJUST,
           category: AUDIT_CATEGORIES.SERVER_MANAGEMENT,
