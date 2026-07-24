@@ -75,8 +75,12 @@ await harness.plugin.api.handleChat({
 });
 assert.equal(harness.plugin.api.getState().summary.pending, 0);
 assert.equal(harness.plugin.api.getState().summary.totalApologies, 1);
+assert.equal(harness.broadcasts.length, 2);
+assert.match(harness.broadcasts[1].message, /已为误伤队友 Victim 道歉/);
 assert.equal(harness.plugin.api.getState().chats.length >= 1, true);
 assert.equal(harness.plugin.api.getState().chats.some((chat) => chat.message === "sry bro" && chat.matched), true);
+
+harness.plugin.api.updateConfig({ broadcastOnApology: false });
 
 // The chat feed may only expose EOSID and a changed display name. It must
 // still resolve to the pending TEAM_KILL player, including full-width Sorry.
@@ -93,6 +97,7 @@ await harness.plugin.api.handleChat({
 });
 assert.equal(harness.plugin.api.getState().summary.pending, 0);
 assert.equal(harness.plugin.api.getState().summary.totalApologies, 2);
+assert.equal(harness.broadcasts.length, 2);
 
 await harness.plugin.api.handleTeamKill({
   eventName: "TEAM_KILL",
