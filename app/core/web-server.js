@@ -2001,6 +2001,8 @@ export class WebServer {
         reason: url.searchParams.get("reason") ?? "",
         success: parseOptionalBoolean(url.searchParams.get("success")),
         skipped: parseOptionalBoolean(url.searchParams.get("skipped")),
+        search: url.searchParams.get("search") ?? "",
+        actorUsername: url.searchParams.get("actorUsername") ?? "",
       });
       return this.json(res, 200, {
         records,
@@ -3913,7 +3915,18 @@ export class WebServer {
 
       try {
         const body = await this.readJsonBody(req);
-        const result = await api.adjustTickets(body);
+        const auditContext = {
+          action: AUDIT_ACTIONS.TICKET_ADJUST,
+          category: AUDIT_CATEGORIES.SERVER_MANAGEMENT,
+          actor: user,
+          request: req,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+          serverId: body.serverId ?? this.getCurrentServerId(""),
+          target: { type: "server", id: body.serverId ?? this.getCurrentServerId(""), name: this.getServerName(body.serverId ?? this.getCurrentServerId("")) },
+          parameters: { ...body },
+          resultResolver: (payload) => payload?.ok === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
+        };
+        const result = await this.executeAudited(auditContext, () => api.adjustTickets({ ...body, actor: user, system: false }));
         return this.json(res, result?.ok ? 200 : 502, {
           ok: Boolean(result?.ok),
           source: "module.remoteTelemetry",
