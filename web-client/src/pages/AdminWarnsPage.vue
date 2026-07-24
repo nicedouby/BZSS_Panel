@@ -57,8 +57,8 @@
 
         <div class="log-area">
           <div class="log-toolbar">
-            <span>警告审计记录</span>
-            <input v-model="warningFilters.targetName" placeholder="筛选..." />
+            <span>警告审计记录（当天）</span>
+            <input v-model="warningFilters.search" placeholder="搜索玩家、消息、原因、管理员..." />
           </div>
           <div class="log-viewport">
             <DataState :loading="warningQuery.isLoading.value && !warningRecords.length" :empty="!warningRecords.length" mode="fill">
@@ -67,7 +67,7 @@
                   <div class="line-status"></div>
                   <div class="line-time">{{ formatTimeOnly(item.createdAt) }}</div>
                   <div class="line-body">
-                    <div class="line-id"><strong>{{ item.targetName }}</strong> <span>{{ item.reason }}</span></div>
+                    <div class="line-id"><strong>{{ item.targetName }}</strong> <span>{{ item.reason }}</span><em v-if="item.actorUsername">管理员：{{ item.actorUsername }}</em></div>
                     <div class="line-msg">{{ item.message }}</div>
                   </div>
                 </div>
@@ -121,8 +121,8 @@
 
         <div class="log-area">
           <div class="log-toolbar">
-            <span>广播审计记录</span>
-            <input v-model="broadcastFilters.sourceModule" placeholder="筛选..." />
+            <span>广播审计记录（当天）</span>
+            <input v-model="broadcastFilters.search" placeholder="搜索广播、来源、原因、管理员..." />
           </div>
           <div class="log-viewport">
             <DataState :loading="broadcastQuery.isLoading.value && !broadcastRecords.length" :empty="!broadcastRecords.length" mode="fill">
@@ -131,7 +131,7 @@
                   <div class="line-status"></div>
                   <div class="line-time">{{ formatTimeOnly(item.createdAt) }}</div>
                   <div class="line-body">
-                    <div class="line-id"><span class="src">{{ item.sourceModule }}</span> <span>{{ item.reason }}</span></div>
+                    <div class="line-id"><span class="src">{{ item.sourceModule }}</span> <span>{{ item.reason }}</span><em v-if="item.actorUsername">管理员：{{ item.actorUsername }}</em></div>
                     <div class="line-msg">{{ item.message }}</div>
                   </div>
                 </div>
@@ -162,6 +162,8 @@ interface ModuleRecord {
   message?: string;
   success?: boolean;
   skipped?: boolean;
+  actorUsername?: string;
+  system?: boolean;
 }
 
 interface ModuleRecentResponse {
@@ -192,14 +194,15 @@ const templates = {
 const warningForm = reactive({ targetName: "", targetSteamId: "", targetEosId: "", message: "", reason: "manual_warn", sourceModule: "web.broadcastModule" });
 const broadcastForm = reactive({ message: "", reason: "manual_broadcast", sourceModule: "web.broadcastModule" });
 
-const warningFilters = reactive({ targetName: "", sourceModule: "", reason: "", success: "", skipped: "", limit: 50 });
-const broadcastFilters = reactive({ sourceModule: "", reason: "", success: "", skipped: "", limit: 50 });
+const warningFilters = reactive({ targetName: "", sourceModule: "", reason: "", success: "", skipped: "", search: "", actorUsername: "", limit: 100 });
+const broadcastFilters = reactive({ sourceModule: "", reason: "", success: "", skipped: "", search: "", actorUsername: "", limit: 100 });
 
 const REFRESH_INTERVAL_MS = 8000;
 const timeCache = new Map<number, string>();
 const { canAutoRefresh } = useAutoRefreshGate();
 
 const debouncedWarningTargetName = ref(warningFilters.targetName);
+const debouncedWarningSearch = ref(warningFilters.search);
 let warningTimer: number | null = null;
 watch(
   () => warningFilters.targetName,
@@ -212,6 +215,7 @@ watch(
 );
 
 const debouncedBroadcastSourceModule = ref(broadcastFilters.sourceModule);
+const debouncedBroadcastSearch = ref(broadcastFilters.search);
 let broadcastTimer: number | null = null;
 watch(
   () => broadcastFilters.sourceModule,
@@ -224,15 +228,15 @@ watch(
 );
 
 const warningQuery = useQuery({
-  queryKey: computed(() => ["admin-warns", "warning", debouncedWarningTargetName.value, warningFilters.sourceModule, warningFilters.success]),
-  queryFn: () => fetchRecords("warning", { ...warningFilters, targetName: debouncedWarningTargetName.value }),
+  queryKey: computed(() => ["admin-warns", "warning", debouncedWarningTargetName.value, debouncedWarningSearch.value, warningFilters.sourceModule, warningFilters.success]),
+  queryFn: () => fetchRecords("warning", { ...warningFilters, targetName: debouncedWarningTargetName.value, search: debouncedWarningSearch.value }),
   refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
   placeholderData: (previousData) => previousData,
 });
 
 const broadcastQuery = useQuery({
-  queryKey: computed(() => ["admin-warns", "broadcast", debouncedBroadcastSourceModule.value, broadcastFilters.success]),
-  queryFn: () => fetchRecords("broadcast", { ...broadcastFilters, sourceModule: debouncedBroadcastSourceModule.value }),
+  queryKey: computed(() => ["admin-warns", "broadcast", debouncedBroadcastSourceModule.value, debouncedBroadcastSearch.value, broadcastFilters.success]),
+  queryFn: () => fetchRecords("broadcast", { ...broadcastFilters, sourceModule: debouncedBroadcastSourceModule.value, search: debouncedBroadcastSearch.value }),
   refetchInterval: computed(() => (canAutoRefresh.value ? REFRESH_INTERVAL_MS : false)),
   placeholderData: (previousData) => previousData,
 });
@@ -242,6 +246,8 @@ async function fetchRecords(kind: string, filters: any) {
   if (filters.targetName?.trim()) params.set("targetName", filters.targetName.trim());
   if (filters.sourceModule?.trim()) params.set("sourceModule", filters.sourceModule.trim());
   if (filters.success) params.set("success", filters.success);
+  if (filters.search?.trim()) params.set("search", filters.search.trim());
+  if (filters.actorUsername?.trim()) params.set("actorUsername", filters.actorUsername.trim());
   return apiGet<ModuleRecentResponse>(`/api/admin-warns/recent?${params.toString()}`);
 }
 
