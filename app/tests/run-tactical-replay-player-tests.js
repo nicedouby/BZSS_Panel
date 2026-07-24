@@ -11,3 +11,7 @@ assert.deepEqual(TacticalReplayPlayerFormat.decodeMessagePack(payload), {
 assert.equal(TacticalReplayPlayerFormat.crc32(Buffer.from("123456789")), 0xcbf43926);
 assert.equal(TacticalReplayPlayerFormat.MAGIC, 0x50525a42);
 console.log("run-tactical-replay-player-tests: ok");
+
+assert.equal(TacticalReplayPlayerFormat.resolvePlayerName(7, { name: "Alpha" }), "Alpha");
+assert.equal(TacticalReplayPlayerFormat.resolvePlayerName(7, { name: "Unknown Player", steamID: "76561198000000000" }), "76561198000000000");
+assert.equal(TacticalReplayPlayerFormat.resolvePlayerName(7, {}), "Player 7");
