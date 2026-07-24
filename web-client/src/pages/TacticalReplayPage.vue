@@ -267,7 +267,7 @@ function resolveReplayPlayerName(source: any, identity: any, key: string) {
     source && (source.name || source.displayName || source.playerName),
     identity && (identity.steamID || identity.eosID),
   ];
-  const name = candidates.map(firstReplayText).find(Boolean);
+  const name = candidates.map(firstReplayText).find((candidate) => candidate && !isGenericReplayName(candidate));
   if (name && !isGenericReplayName(name)) {
     replayNameCache.set(key, name);
     return name;
