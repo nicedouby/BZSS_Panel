@@ -1,5 +1,8 @@
 // -*- coding: utf-8 -*-
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 const DEFAULT_MAX_RECORDS = 3000;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_DATA_DIRECTORY = "./data/admin-warns";
