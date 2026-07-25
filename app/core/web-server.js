@@ -3582,6 +3582,40 @@ export class WebServer {
       return this.json(res, 200, { ok: true, snapshot });
     }
 
+    if (url.pathname === "/api/match-end-snapshot/regenerate" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const id = String(body?.id ?? "").trim();
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.readSnapshotImage) return this.json(res, 404, { error: "PluginNotLoaded" });
+
+      try {
+        const artifact = await pluginApi.readSnapshotImage(id, { force: true });
+        return this.json(res, 200, {
+          ok: true,
+          id,
+          fileName: artifact.fileName,
+          generatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        if (error?.statusCode === 400) {
+          return this.json(res, 400, {
+            error: error.code ?? "InvalidSnapshotId",
+            message: error.message,
+          });
+        }
+        if (error?.code === "ENOENT") {
+          return this.json(res, 404, { error: "SnapshotNotFound" });
+        }
+        this.core?.logger?.error?.("[MatchEndSnapshot] regenerate request failed: " + (error?.stack || error));
+        return this.json(res, 500, {
+          error: "SnapshotImageGenerationFailed",
+          message: "The snapshot image could not be regenerated. Check the server log for details.",
+        });
+      }
+    }
+
     if (url.pathname === "/api/match-end-snapshot/delete" && req.method === "DELETE") {
       if (!this.requireSuperAdmin(user, res)) return;
       const id = url.searchParams.get("id");
@@ -3606,7 +3640,7 @@ export class WebServer {
         });
         const headers = {
           "Content-Type": artifact.contentType,
-          "Cache-Control": "private, max-age=300",
+          "Cache-Control": "no-store, max-age=0, must-revalidate",
         };
         if (url.searchParams.get("download") === "1") {
           headers["Content-Disposition"] = `attachment; filename="${safeHeaderFileName(artifact.fileName)}"`;
