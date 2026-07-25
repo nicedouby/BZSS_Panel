@@ -107,7 +107,7 @@ const error = ref("");
 const player = computed(() => result.value?.player ?? {});
 const initials = computed(() => String(player.value.displayName || "?").trim().slice(0, 1).toUpperCase());
 const statEntries = computed(() => Object.entries(player.value.stats || {}));
-const profileEntries = computed(() => Object.entries(player.value || {}).filter(([key]) => !["steamAvatar", "stats", "currentServer", "topServer", "favoriteServers"].includes(key)));
+const profileEntries = computed(() => Object.entries(player.value || {}).filter(([key]) => !["steamAvatar", "stats"].includes(key)));
 const metrics = computed(() => [
   { label: "总游玩时长", value: minutes(player.value.stats?.totalPlaytimeMinutes) },
   { label: "总场次", value: number(player.value.stats?.totalSessions) },
@@ -160,7 +160,7 @@ async function lookup() {
 }
 function number(value: unknown) { const n = Number(value); return Number.isFinite(n) ? n.toLocaleString() : "—"; }
 function minutes(value: unknown) { const n = Number(value); return Number.isFinite(n) ? `${Math.floor(n / 60)} 小时 ${Math.round(n % 60)} 分钟` : "—"; }
-function formatDate(value: unknown) { if (!value) return "—"; const date = new Date(String(value)); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false }); }
+function formatDate(value: unknown) { if (!value) return "—"; const date = new Date(typeof value === "number" ? value : String(value)); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false }); }
 function cleanServerName(value: unknown) { return String(value ?? "未知服务器").replace(/^\s+/, "").replace(/\s+/g, " ").trim() || "未知服务器"; }
 function formatDetailValue(value: unknown) { if (value == null || value === "") return "—"; if (typeof value === "object") { try { return JSON.stringify(value); } catch { return String(value); } } return String(value); }
 function extraSessionFields(session: any) { const known = new Set(["id", "serverId", "serverName", "joinedAt", "leftAt", "durationMinutes"]); return Object.entries(session || {}).filter(([key]) => !known.has(key)); }
