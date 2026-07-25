@@ -53,6 +53,14 @@
             </button>
             <button
               type="button"
+              class="action-btn sm accent"
+              :disabled="!selectedSnapshot || regenerating"
+              @click="regenerateImage"
+            >
+              {{ regenerating ? "重新生成中..." : "重新生成图片" }}
+            </button>
+            <button
+              type="button"
               class="action-btn sm"
               :disabled="!selectedSnapshot"
               @click="downloadImage"
@@ -180,7 +188,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { apiDelete, apiGet } from "../app/apiClient";
+import { apiDelete, apiGet, apiPost } from "../app/apiClient";
 import AppCard from "../components/common/AppCard.vue";
 import AppPage from "../components/common/AppPage.vue";
 import AppPageHeader from "../components/common/AppPageHeader.vue";
@@ -253,7 +261,9 @@ const detail = ref<SnapshotDetail | null>(null);
 const loading = ref(true);
 const detailLoading = ref(false);
 const busy = ref(false);
+const regenerating = ref(false);
 const imagePreviewOpen = ref(false);
+const imageVersion = ref(String(Date.now()));
 const errorMessage = ref("");
 const loadedAt = ref("");
 
@@ -263,7 +273,7 @@ const selectedSnapshot = computed(() =>
 
 const reportImageUrl = computed(() =>
   selectedId.value
-    ? "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value) + "&refresh=1&layout=compact-v2"
+    ? "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value) + "&v=" + encodeURIComponent(imageVersion.value)
     : "",
 );
 
@@ -319,10 +329,35 @@ async function loadDetail(id: string) {
 function downloadImage() {
   if (!selectedId.value) return;
   window.open(
-    "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value) + "&download=1",
+    "/api/match-end-snapshot/image?id=" + encodeURIComponent(selectedId.value) + "&download=1&v=" + encodeURIComponent(imageVersion.value),
     "_blank",
     "noopener,noreferrer",
   );
+}
+
+async function regenerateImage() {
+  if (!selectedId.value || regenerating.value) return;
+  regenerating.value = true;
+  try {
+    await apiPost(
+      "/api/match-end-snapshot/regenerate",
+      { id: selectedId.value },
+      {},
+      { timeoutMs: 120_000 },
+    );
+    imageVersion.value = String(Date.now());
+    imagePreviewOpen.value = true;
+    await loadSnapshots();
+    ui.pushToast({ title: "图片已重新生成", message: "已加载最新结束快照图片。", tone: "ok" });
+  } catch (error) {
+    ui.pushToast({
+      title: "重新生成失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    regenerating.value = false;
+  }
 }
 
 function downloadSelected() {
@@ -403,6 +438,7 @@ function pingLabel(value: number | null | undefined) {
 
 watch(selectedId, (id) => {
   imagePreviewOpen.value = false;
+  imageVersion.value = String(Date.now());
   void loadDetail(id);
 });
 
