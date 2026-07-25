@@ -96,6 +96,8 @@ async function callServerAction(action, steam64) {
 
 function normalizeProfile(profile, steam64) {
   return {
+    // 保留上游返回的全部字段，页面可展示完整资料，新增字段无需再次改后端。
+    ...(profile && typeof profile === "object" ? profile : {}),
     steamId: profile?.steamId ?? steam64,
     eosId: profile?.eosId ?? null,
     displayName: profile?.displayName ?? null,
@@ -114,6 +116,8 @@ function normalizeProfile(profile, steam64) {
 
 function normalizeSessions(sessions) {
   return (Array.isArray(sessions) ? sessions : []).map((session) => ({
+    // 保留每条记录的全部上游字段，兼容站点后续增加地图、阵营等字段。
+    ...(session && typeof session === "object" ? session : {}),
     id: session?.id ?? null,
     serverId: session?.serverId ?? null,
     serverName: session?.serverName ?? null,
