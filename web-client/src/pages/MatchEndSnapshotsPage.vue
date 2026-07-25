@@ -49,7 +49,7 @@
               :disabled="!selectedSnapshot"
               @click="imagePreviewOpen = !imagePreviewOpen"
             >
-              {{ imagePreviewOpen ? "收起战绩图" : "预览 / 生成战绩图" }}
+              {{ imagePreviewOpen ? "收起战绩图" : "预览战绩图" }}
             </button>
             <button
               type="button"
@@ -113,7 +113,7 @@
             <section v-if="imagePreviewOpen" class="report-preview">
               <header>
                 <strong>全员战绩长图</strong>
-                <span>旧记录会在首次打开时自动补生成。</span>
+                <span>页面只显示已生成文件；需要更新图片时请点击“重新生成图片”。</span>
               </header>
               <div class="report-preview-frame">
                 <img :src="reportImageUrl" alt="对局结束全员战绩长图">
