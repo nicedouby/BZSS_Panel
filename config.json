@@ -1012,6 +1012,13 @@
       "showFriendlyFireLabel": true,
       "adminPunishmentDamage": 1000000,
       "weaponAliasFile": "./config/victim-damage-display-weapons.json"
+    },
+    "squad-members-playtime-warning": {
+      "enabled": true,
+      "firstWarningSeconds": 300,
+      "leaderWarningSeconds": 450,
+      "pollIntervalMs": 1000,
+      "liveLookupWhenMissing": false
     }
   },
   "warmup": {
