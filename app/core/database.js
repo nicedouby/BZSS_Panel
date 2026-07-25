@@ -348,6 +348,26 @@ CREATE TABLE IF NOT EXISTS steam_profiles (
 );
 CREATE INDEX IF NOT EXISTS idx_steam_profiles_updated ON steam_profiles(updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS squadbrowser_player_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    external_session_id TEXT NOT NULL,
+    server_id TEXT,
+    server_name TEXT,
+    joined_at INTEGER,
+    left_at INTEGER,
+    duration_minutes INTEGER,
+    fetched_at INTEGER NOT NULL,
+    source TEXT NOT NULL DEFAULT 'SquadBrowser',
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    UNIQUE(player_id, external_session_id),
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_squadbrowser_player_sessions_player_time
+ON squadbrowser_player_sessions(player_id, joined_at DESC);
+CREATE INDEX IF NOT EXISTS idx_squadbrowser_player_sessions_server
+ON squadbrowser_player_sessions(server_id, joined_at DESC);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
