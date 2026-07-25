@@ -86,7 +86,7 @@ const noteEntries = computed(() => Object.entries(props.detail?.summary?.notes |
 
 const containerMeta: Record<string, { title: string; icon: string }> = {
   "steam-friends": { title: "Steam 好友", icon: "♟" }, aliases: { title: "历史名称", icon: "A" }, ips: { title: "IP 历史", icon: "◎" }, sessions: { title: "进退服记录", icon: "↔" },
-  tags: { title: "标签", icon: "#" }, violations: { title: "违规记录", icon: "!" }, reports: { title: "举报记录", icon: "⚑" }, commands: { title: "管理命令", icon: ">_" },
+  "squadbrowser-sessions": { title: "SquadBrowser 游玩记录", icon: "◈" },  tags: { title: "标签", icon: "#" }, violations: { title: "违规记录", icon: "!" }, reports: { title: "举报记录", icon: "⚑" }, commands: { title: "管理命令", icon: ">_" },
   matches: { title: "对局历史", icon: "▣" }, "ladder-history": { title: "天梯变动", icon: "↕" }, "squad-records": { title: "小队记录", icon: "⌘" }, audit: { title: "网页操作审计", icon: "◷" },
 };
 const containers = computed(() => (props.detail?.containers || []).map((row: any) => ({ ...row, ...(containerMeta[row.key] || { title: row.key, icon: "•" }) })));

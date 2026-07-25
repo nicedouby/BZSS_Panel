@@ -795,6 +795,71 @@ export class PlayerRepository {
     );
   }
 
+  async upsertSquadBrowserSessions(playerId, sessions = [], fetchedAt = now()) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return { inserted: 0, updated: 0 };
+
+    let inserted = 0;
+    let updated = 0;
+    for (const session of Array.isArray(sessions) ? sessions : []) {
+      const externalId = cleanText(session?.id)
+        ?? [session?.serverId, session?.joinedAt, session?.serverName].map((value) => String(value ?? "")).join("|");
+      if (!externalId || externalId === "||") continue;
+
+      const joinedAt = Number(session?.joinedAt ?? 0);
+      const leftAt = Number(session?.leftAt ?? 0);
+      const durationMinutes = session?.durationMinutes == null ? null : Number(session.durationMinutes);
+      const existing = await this.db.get(
+        "SELECT id FROM squadbrowser_player_sessions WHERE player_id = ? AND external_session_id = ?",
+        id,
+        externalId,
+      );
+      await this.db.run(
+        `INSERT INTO squadbrowser_player_sessions (
+           player_id, external_session_id, server_id, server_name, joined_at, left_at,
+           duration_minutes, fetched_at, source, raw_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SquadBrowser', ?)
+         ON CONFLICT(player_id, external_session_id) DO UPDATE SET
+           server_id = excluded.server_id,
+           server_name = excluded.server_name,
+           joined_at = excluded.joined_at,
+           left_at = excluded.left_at,
+           duration_minutes = excluded.duration_minutes,
+           fetched_at = excluded.fetched_at,
+           raw_json = excluded.raw_json`,
+        id,
+        externalId,
+        cleanText(session?.serverId),
+        cleanText(session?.serverName),
+        Number.isFinite(joinedAt) && joinedAt > 0 ? joinedAt : null,
+        Number.isFinite(leftAt) && leftAt > 0 ? leftAt : null,
+        Number.isFinite(durationMinutes) ? Math.max(0, Math.floor(durationMinutes)) : null,
+        Number(fetchedAt) || now(),
+        JSON.stringify(session ?? {}),
+      );
+      if (existing) updated += 1;
+      else inserted += 1;
+    }
+    return { inserted, updated };
+  }
+
+  async listSquadBrowserSessions(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const { limit, offset } = this.normalizePaging(options);
+    return this.db.all(
+      `SELECT id, external_session_id, server_id, server_name, joined_at, left_at,
+              duration_minutes, fetched_at, source
+       FROM squadbrowser_player_sessions
+       WHERE player_id = ?
+       ORDER BY joined_at DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      id,
+      limit,
+      offset,
+    );
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -815,6 +880,7 @@ export class PlayerRepository {
       aliases,
       ips,
       sessionHistory: sessions,
+      squadBrowserSessions: await this.listSquadBrowserSessions(id, { limit: 20 }),
       steamProfile,
       containers,
       summary: {
@@ -870,6 +936,7 @@ export class PlayerRepository {
       this.db.get("SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM command_logs WHERE player_id = ?", id),
       this.db.get("SELECT COUNT(*) AS count, MAX(mr.started_at) AS last_at FROM player_match_records pmr JOIN match_records mr ON mr.id = pmr.match_id WHERE pmr.player_id = ?", id),
       this.db.get("SELECT COUNT(*) AS count, MAX(changed_at) AS last_at FROM ladder_rating_history WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(joined_at) AS last_at FROM squadbrowser_player_sessions WHERE player_id = ?", id),
       this.db.get(`SELECT COUNT(*) AS count, MAX(time_ms) AS last_at FROM squad_management_records
                    WHERE (creator_steam_id = ? AND ? <> '') OR (player_steam_id = ? AND ? <> '')
                       OR (steam_id = ? AND ? <> '') OR (creator_eos_id = ? AND ? <> '')
@@ -899,6 +966,7 @@ export class PlayerRepository {
       case "aliases": items = await this.listPlayerAliases(id, { limit: take, offset }); break;
       case "ips": items = await this.listPlayerIps(id, { limit: take, offset }); break;
       case "sessions": items = await this.listPlayerSessionHistory(id, { limit: take, offset }); break;
+      case "squadbrowser-sessions": items = await this.listSquadBrowserSessions(id, { limit: take, offset }); break;
       case "steam-friends": {
         const friends = await this.listSteamFriends(id);
         items = friends.slice(offset, offset + take);

@@ -96,6 +96,8 @@ async function callServerAction(action, steam64) {
 
 function normalizeProfile(profile, steam64) {
   return {
+    // 保留上游返回的全部字段，页面可展示完整资料，新增字段无需再次改后端。
+    ...(profile && typeof profile === "object" ? profile : {}),
     steamId: profile?.steamId ?? steam64,
     eosId: profile?.eosId ?? null,
     displayName: profile?.displayName ?? null,
@@ -114,6 +116,8 @@ function normalizeProfile(profile, steam64) {
 
 function normalizeSessions(sessions) {
   return (Array.isArray(sessions) ? sessions : []).map((session) => ({
+    // 保留每条记录的全部上游字段，兼容站点后续增加地图、阵营等字段。
+    ...(session && typeof session === "object" ? session : {}),
     id: session?.id ?? null,
     serverId: session?.serverId ?? null,
     serverName: session?.serverName ?? null,
@@ -125,7 +129,47 @@ function normalizeSessions(sessions) {
   }));
 }
 
-export function createSquadBrowserPlayerLookupModule({ logger }) {
+async function fetchLookupResult(steam64) {
+  const [profile, sessionData] = await Promise.all([
+    callServerAction(PROFILE_ACTION, steam64),
+    callServerAction(SESSIONS_ACTION, steam64),
+  ]);
+  return {
+    ok: true,
+    source: "SquadBrowser",
+    sourceUrl: `${SOURCE_URL}/${steam64}`,
+    fetchedAt: new Date().toISOString(),
+    player: normalizeProfile(profile, steam64),
+    sessions: normalizeSessions(sessionData?.sessions),
+    sessionLimit: 50,
+  };
+}
+
+async function persistLookupResult(playerDatabase, result) {
+  if (!playerDatabase?.upsertFromPresence) return null;
+  const player = result?.player ?? {};
+  const dbPlayer = await playerDatabase.upsertFromPresence({
+    name: player.displayName,
+    steamID: player.steamId,
+    eosID: player.eosId,
+  });
+  if (!dbPlayer?.id) return null;
+
+  const saved = await playerDatabase.upsertSquadBrowserSessions?.(
+    dbPlayer.id,
+    result.sessions,
+    Date.parse(result.fetchedAt) || Date.now(),
+  );
+  const detail = await playerDatabase.getPlayerDetail?.(dbPlayer.id);
+  const profile = detail?.steamProfile ?? {};
+  return {
+    playerId: dbPlayer.id,
+    avatar: profile.avatar_medium ?? profile.avatar_full ?? dbPlayer.steam_avatar ?? null,
+    savedSessions: Number(saved?.inserted ?? 0) + Number(saved?.updated ?? 0),
+  };
+}
+
+export function createSquadBrowserPlayerLookupModule({ logger, modules }) {
   const cache = new Map();
 
   return {
@@ -141,28 +185,26 @@ export function createSquadBrowserPlayerLookupModule({ logger }) {
       async lookup(value) {
         const steam64 = normalizeSteam64(value);
         const cached = cache.get(steam64);
-        if (cached && cached.expiresAt > Date.now()) return cached.value;
+        const result = cached && cached.expiresAt > Date.now()
+          ? cached.value
+          : await fetchLookupResult(steam64);
 
-        const [profile, sessionData] = await Promise.all([
-          callServerAction(PROFILE_ACTION, steam64),
-          callServerAction(SESSIONS_ACTION, steam64),
-        ]);
-        const result = {
-          ok: true,
-          source: "SquadBrowser",
-          sourceUrl: `${SOURCE_URL}/${steam64}`,
-          fetchedAt: new Date().toISOString(),
-          player: normalizeProfile(profile, steam64),
-          sessions: normalizeSessions(sessionData?.sessions),
-          sessionLimit: 50,
+        const database = await persistLookupResult(modules?.playerDatabase, result);
+        const enriched = {
+          ...result,
+          database,
+          player: {
+            ...result.player,
+            steamAvatar: database?.avatar ?? null,
+          },
         };
-        cache.set(steam64, { expiresAt: Date.now() + CACHE_TTL_MS, value: result });
+        cache.set(steam64, { expiresAt: Date.now() + CACHE_TTL_MS, value: enriched });
         if (cache.size > 100) {
           const oldest = cache.keys().next().value;
           if (oldest) cache.delete(oldest);
         }
-        logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${result.sessions.length}`);
-        return result;
+        logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${enriched.sessions.length} saved=${database?.savedSessions ?? 0}`);
+        return enriched;
       },
       clearCache() {
         cache.clear();

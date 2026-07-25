@@ -264,6 +264,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.closeOpenSessionHistory(playerId, session);
     },
 
+    async upsertSquadBrowserSessions(playerId, sessions = [], fetchedAt = Date.now()) {
+      return repo.upsertSquadBrowserSessions(playerId, sessions, fetchedAt);
+    },
+
+    async listSquadBrowserSessions(playerId, options = {}) {
+      return repo.listSquadBrowserSessions(playerId, options);
+    },
+
     async listSteamFriends(playerId) {
       return repo.listSteamFriends(playerId);
     },
