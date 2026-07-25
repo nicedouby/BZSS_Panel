@@ -128,6 +128,16 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "squadbrowser-player-lookup",
+    path: "/squadbrowser-player-lookup",
+    component: () => import("../pages/SquadBrowserPlayerLookupPage.vue"),
+    title: "查成分",
+    category: "core",
+    refreshPolicy: "manual",
+    nav: { section: "players", label: "查成分", icon: "🔍", order: 15 },
+    ...workspacePage,
+  },
+  {
     name: "reserve-slots",
     path: "/reserve-slots",
     component: () => import("../pages/ReserveSlotsPage.vue"),

@@ -49,6 +49,7 @@ import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer/
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
+import { createSquadBrowserPlayerLookupModule } from "../modules/squadbrowser-player-lookup/index.js";
 
 /**
  * Core: ModuleManager
@@ -114,6 +115,7 @@ export class ModuleManager {
       createTacticalStateV2Module,
       createTacticalFeedWriterModule,
       createNetworkStatsModule,
+      createSquadBrowserPlayerLookupModule,
     ];
 
     for (const factory of factories) {
