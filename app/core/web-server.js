@@ -3025,6 +3025,21 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
+    if (url.pathname === "/api/squadbrowser/player" && req.method === "GET") {
+      const lookup = this.modules.squadBrowserPlayerLookup;
+      if (!lookup?.lookup) {
+        return this.json(res, 503, { error: "SquadBrowserLookupUnavailable" });
+      }
+      try {
+        return this.json(res, 200, await lookup.lookup(url.searchParams.get("steam64") ?? ""));
+      } catch (error) {
+        return this.json(res, Number(error?.statusCode ?? 502), {
+          error: error?.code ?? "SquadBrowserLookupFailed",
+          message: error?.message ?? "SquadBrowser 查询失败。",
+        });
+      }
+    }
+
     if (url.pathname === "/api/player-database/detail") {
       const playerId = url.searchParams.get("id");
       return this.runTimedPlayerDatabaseQuery("/api/player-database/detail", playerId, async () => {
