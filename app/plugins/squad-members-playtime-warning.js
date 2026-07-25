@@ -82,9 +82,7 @@ function getSquadName(squad) {
     squad?.displayName,
     squad?.squad_name,
     squad?.squad,
-    squad?.squadID,
-    squad?.squadId,
-    "未知小队",
+    "未命名小队",
   );
 }
 
