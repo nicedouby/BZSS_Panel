@@ -4,6 +4,7 @@ import { createPlugin, __test } from "../plugins/round-playtime-roster-warning.j
 function createHarness() {
   const warnings = [];
   const clock = { seconds: 0, key: "round-a" };
+  let worldBringUpHandler = null;
   const players = [
     { playerID: 1, name: "Alpha", steamID: "1001", eosID: "e1", teamID: 1, squadID: 1, isLeader: true, role: "BP_SquadLeader_C", online: true },
     { playerID: 2, name: "Bravo", steamID: "1002", eosID: "e2", teamID: 1, squadID: 1, isLeader: false, role: "BP_Rifleman_C", online: true },
@@ -42,7 +43,12 @@ function createHarness() {
       },
     },
     pluginSubscriptions: { isSubscribed() { return true; } },
-    eventBus: { onCoreEvent() { return () => {}; } },
+    eventBus: {
+      onCoreEvent(name, handler) {
+        if (name === "round.world_bring_up") worldBringUpHandler = handler;
+        return () => {};
+      },
+    },
     logger: { info() {}, warn() {}, debug() {}, error() {} },
   };
   const matchState = {
@@ -77,7 +83,12 @@ function createHarness() {
     },
   };
   const plugin = createPlugin({ core, modules, config });
-  return { plugin, clock, warnings };
+  return {
+    plugin,
+    clock,
+    warnings,
+    emitWorldBringUp() { worldBringUpHandler?.(); },
+  };
 }
 
 async function testClockThresholdsAndOneShot() {
@@ -129,6 +140,25 @@ async function testNewRoundResetsDispatch() {
   assert.equal(h.warnings.length, 8);
 }
 
+async function testRoundTransitionBlocksOldClock() {
+  const h = createHarness();
+  await h.plugin.init();
+  await h.plugin.start();
+  h.clock.seconds = 450;
+  await h.plugin.api.evaluateNow();
+  assert.equal(h.warnings.length, 8);
+
+  h.emitWorldBringUp();
+  await h.plugin.api.evaluateNow();
+  assert.equal(h.warnings.length, 8);
+
+  h.clock.key = "round-b";
+  h.clock.seconds = 300;
+  await h.plugin.api.evaluateNow();
+  assert.equal(h.warnings.length, 12);
+  await h.plugin.stop();
+}
+
 function testLongMessagePreservesLines() {
   const players = Array.from({ length: 9 }, (_, index) => ({
     fireTeam: ["A", "B", "C"][index % 3],
@@ -153,6 +183,7 @@ function testLongMessagePreservesLines() {
 try {
   await testClockThresholdsAndOneShot();
   await testNewRoundResetsDispatch();
+  await testRoundTransitionBlocksOldClock();
   testLongMessagePreservesLines();
   console.log("Round playtime roster warning tests passed successfully!");
 } catch (error) {
