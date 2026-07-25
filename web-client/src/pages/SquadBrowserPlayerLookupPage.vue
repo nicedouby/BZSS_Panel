@@ -154,13 +154,24 @@ function selectPlayer(candidate: any) {
 async function lookup() {
   if (!/^\d{17}$/.test(steam64.value)) { error.value = "请输入正确的 17 位 Steam64。"; return; }
   loading.value = true; error.value = "";
-  try {\n    const response = await apiGet<LookupResult>(`/api/squadbrowser/player?steam64=${encodeURIComponent(steam64.value)}`, {}, { timeoutMs: 15_000 });\n    result.value = normalizeLookupResponse(response);\n  }
+  try {
+    const response = await apiGet<LookupResult>(`/api/squadbrowser/player?steam64=${encodeURIComponent(steam64.value)}`, {}, { timeoutMs: 15_000 });
+    result.value = normalizeLookupResponse(response);
+  }
   catch (err) { result.value = null; error.value = renderApiError(err, "查询 SquadBrowser 失败，请稍后重试。"); }
   finally { loading.value = false; }
 }
-function normalizeLookupResponse(value: any): LookupResult {\n  const candidate = value?.data?.player ? value.data : (value?.result?.player ? value.result : value);\n  return {\n    ...candidate,\n    player: candidate?.player ?? {},\n    sessions: Array.isArray(candidate?.sessions) ? candidate.sessions : (Array.isArray(candidate?.records) ? candidate.records : []),\n  };\n}\nfunction number(value: unknown) { const n = Number(value); return Number.isFinite(n) ? n.toLocaleString() : "—"; }
+function normalizeLookupResponse(value: any): LookupResult {
+  const candidate = value?.data?.player ? value.data : (value?.result?.player ? value.result : value);
+  return {
+    ...candidate,
+    player: candidate?.player ?? {},
+    sessions: Array.isArray(candidate?.sessions) ? candidate.sessions : (Array.isArray(candidate?.records) ? candidate.records : []),
+  };
+}
+function number(value: unknown) { const n = Number(value); return Number.isFinite(n) ? n.toLocaleString() : "—"; }
 function minutes(value: unknown) { const n = Number(value); return Number.isFinite(n) ? `${Math.floor(n / 60)} 小时 ${Math.round(n % 60)} 分钟` : "—"; }
-function formatDate(value: unknown) { if (!value) return "—"; const numeric = typeof value === "number" ? value : (typeof value === "string" && /^\\d+$/.test(value) ? Number(value) : null); const date = new Date(numeric != null ? (numeric < 1e12 ? numeric * 1000 : numeric) : String(value)); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false }); }
+function formatDate(value: unknown) { if (!value) return "—"; const numeric = typeof value === "number" ? value : (typeof value === "string" && /^\d+$/.test(value) ? Number(value) : null); const date = new Date(numeric != null ? (numeric < 1e12 ? numeric * 1000 : numeric) : String(value)); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false }); }
 function cleanServerName(value: unknown) { return String(value ?? "未知服务器").replace(/^\s+/, "").replace(/\s+/g, " ").trim() || "未知服务器"; }
 function formatDetailValue(value: unknown) { if (value == null || value === "") return "—"; if (typeof value === "object") { try { return JSON.stringify(value); } catch { return String(value); } } return String(value); }
 function extraSessionFields(session: any) { const known = new Set(["id", "serverId", "serverName", "joinedAt", "leftAt", "durationMinutes"]); return Object.entries(session || {}).filter(([key]) => !known.has(key)); }
