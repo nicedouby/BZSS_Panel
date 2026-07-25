@@ -37,6 +37,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     squadSentAt: "",
     leaderSentAt: "",
     lastClockSeconds: 0,
+    blockedRoundKey: "",
     lastError: "",
   };
 
@@ -59,6 +60,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       state.leaderSent = Boolean(saved.leaderSent);
       state.squadSentAt = text(saved.squadSentAt);
       state.leaderSentAt = text(saved.leaderSentAt);
+      state.blockedRoundKey = text(saved.blockedRoundKey);
     } catch (error) {
       if (error?.code !== "ENOENT") log?.warn?.(`[RoundPlaytimeRosterWarning] load state failed: ${error.message}`);
     }
@@ -102,6 +104,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const current = clock();
     state.lastClockSeconds = current.seconds;
     if (!current.trusted) return publicState();
+    if (state.blockedRoundKey) {
+      if (current.roundKey === state.blockedRoundKey) return publicState();
+      state.blockedRoundKey = "";
+    }
     if (state.roundKey !== current.roundKey) {
       resetRound(current.roundKey);
       await saveState();
@@ -265,7 +271,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       if (!active()) return;
       if (core?.eventBus?.onCoreEvent) {
         unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
-          void enqueue(async () => { resetRound(""); await saveState(); });
+          void enqueue(async () => {
+            const oldRoundKey = state.roundKey || clock().roundKey;
+            resetRound("");
+            state.blockedRoundKey = oldRoundKey;
+            await saveState();
+          });
         }));
       }
       timer = setInterval(() => void enqueue(() => evaluate("poll")), cfg.pollIntervalMs);
