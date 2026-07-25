@@ -10,12 +10,21 @@
     </header>
 
     <form class="lookup-form" @submit.prevent="lookup">
-      <label for="steam64">Steam64</label>
-      <div class="form-row">
-        <input id="steam64" v-model.trim="steam64" inputmode="numeric" autocomplete="off" placeholder="例如 76561199047265478" :disabled="loading" />
+      <label for="player-query">玩家名称或 Steam64</label>
+      <div class="form-row search-row">
+        <div class="query-box">
+          <input id="player-query" v-model.trim="queryInput" inputmode="search" autocomplete="off" placeholder="输入玩家名称，或 17 位 Steam64" :disabled="loading" @input="onQueryInput" @keydown.esc="suggestions = []" />
+          <div v-if="suggestions.length" class="suggestions" role="listbox">
+            <button v-for="candidate in suggestions" :key="candidate.id" type="button" class="suggestion" @click="selectPlayer(candidate)">
+              <span class="suggestion-avatar">{{ String(candidate.name || "?").slice(0, 1).toUpperCase() }}</span>
+              <span class="suggestion-main"><strong>{{ candidate.name || "未命名玩家" }}</strong><small>{{ candidate.steam64 || "无 Steam64" }}<span v-if="candidate.eos"> · {{ candidate.eos }}</span></small></span>
+              <span class="suggestion-time">{{ formatDate(candidate.updatedAt) }}</span>
+            </button>
+          </div>
+        </div>
         <button type="submit" :disabled="loading || !/^\d{17}$/.test(steam64)">{{ loading ? "查询中…" : "查询" }}</button>
       </div>
-      <p class="hint">只接受 17 位 Steam64 数字。数据来源：SquadBrowser，通常最多返回最近 50 条记录。</p>
+      <p class="hint">输入名称后从玩家数据库选择，系统会自动填写 Steam64；也可以直接输入 Steam64。数据来源：SquadBrowser。</p>
     </form>
 
     <div v-if="error" class="state error-state">{{ error }}</div>
@@ -56,9 +65,24 @@
         </article>
       </section>
 
+      <details class="panel complete-info" open>
+        <summary><strong>完整玩家资料</strong><span>已保留上游返回的全部字段，点击可收起</span></summary>
+        <div class="detail-groups">
+          <div>
+            <h4>统计资料</h4>
+            <div class="detail-grid"><div v-for="[key, value] in statEntries" :key="`stat-${key}`" class="detail-item"><span>{{ key }}</span><strong>{{ formatDetailValue(value) }}</strong></div></div>
+          </div>
+          <div>
+            <h4>其他字段</h4>
+            <div v-if="profileEntries.length" class="detail-grid"><div v-for="[key, value] in profileEntries" :key="key" class="detail-item"><span>{{ key }}</span><strong>{{ formatDetailValue(value) }}</strong></div></div>
+            <div v-else class="empty">没有额外字段</div>
+          </div>
+        </div>
+      </details>
+
       <section class="panel records-panel">
         <header><div><h3>最近游玩记录</h3><p>已返回 {{ result.sessions.length }} 条{{ result.sessionLimit ? `，上游限制 ${result.sessionLimit} 条` : "" }}</p></div><button class="secondary" type="button" @click="lookup">刷新</button></header>
-        <div v-if="result.sessions.length" class="table-wrap"><table><thead><tr><th>进入时间</th><th>离开时间</th><th>服务器</th><th>服务器 ID</th><th>时长</th></tr></thead><tbody><tr v-for="session in result.sessions" :key="session.id"><td>{{ formatDate(session.joinedAt) }}</td><td>{{ session.leftAt ? formatDate(session.leftAt) : "仍在游玩" }}</td><td class="server-cell">{{ cleanServerName(session.serverName) }}</td><td><code>{{ session.serverId || "—" }}</code></td><td>{{ session.durationMinutes == null ? "—" : `${session.durationMinutes} 分钟` }}</td></tr></tbody></table></div>
+        <div v-if="result.sessions.length" class="table-wrap"><table><thead><tr><th>进入时间</th><th>离开时间</th><th>服务器</th><th>服务器 ID</th><th>时长</th><th>其他资料</th></tr></thead><tbody><tr v-for="session in result.sessions" :key="session.id"><td>{{ formatDate(session.joinedAt) }}</td><td>{{ session.leftAt ? formatDate(session.leftAt) : "仍在游玩" }}</td><td class="server-cell">{{ cleanServerName(session.serverName) }}</td><td><code>{{ session.serverId || "—" }}</code></td><td>{{ session.durationMinutes == null ? "—" : `${session.durationMinutes} 分钟` }}</td><td><span v-if="extraSessionFields(session).length" class="session-extra">{{ extraSessionFields(session).map(([key, value]) => `${key}: ${formatDetailValue(value)}`).join(" · ") }}</span><span v-else>—</span></td></tr></tbody></table></div>
         <div v-else class="empty">没有找到游玩记录</div>
       </section>
     </template>
@@ -66,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
@@ -74,11 +98,16 @@ import { renderApiError } from "../app/errors";
 type LookupResult = { sourceUrl: string; sessionLimit?: number; player: any; sessions: Array<any>; database?: { playerId?: number; avatar?: string | null; savedSessions?: number } | null };
 const route = useRoute();
 const steam64 = ref(String(route.query.steam64 ?? ""));
+const queryInput = ref(steam64.value);
+const suggestions = ref<Array<any>>([]);
+let suggestionTimer: ReturnType<typeof setTimeout> | null = null;
 const result = ref<LookupResult | null>(null);
 const loading = ref(false);
 const error = ref("");
 const player = computed(() => result.value?.player ?? {});
 const initials = computed(() => String(player.value.displayName || "?").trim().slice(0, 1).toUpperCase());
+const statEntries = computed(() => Object.entries(player.value.stats || {}));
+const profileEntries = computed(() => Object.entries(player.value || {}).filter(([key]) => !["steamAvatar", "stats", "currentServer", "topServer", "favoriteServers"].includes(key)));
 const metrics = computed(() => [
   { label: "总游玩时长", value: minutes(player.value.stats?.totalPlaytimeMinutes) },
   { label: "总场次", value: number(player.value.stats?.totalSessions) },
@@ -88,6 +117,39 @@ const metrics = computed(() => [
 ]);
 
 onMounted(() => { if (/^\d{17}$/.test(steam64.value)) void lookup(); });
+onBeforeUnmount(() => { if (suggestionTimer) clearTimeout(suggestionTimer); });
+
+function onQueryInput() {
+  const value = queryInput.value.trim();
+  steam64.value = /^\d{17}$/.test(value) ? value : "";
+  suggestions.value = [];
+  if (suggestionTimer) clearTimeout(suggestionTimer);
+  if (!value || /^\d{17}$/.test(value)) return;
+  suggestionTimer = setTimeout(() => void searchPlayers(value), 220);
+}
+
+async function searchPlayers(value: string) {
+  try {
+    const response = await apiGet<any>(`/api/player-database/list?q=${encodeURIComponent(value)}&limit=12&offset=0&sort=name_asc`, {}, { timeoutMs: 5_000 });
+    const rows = Array.isArray(response?.players) ? response.players : (Array.isArray(response?.items) ? response.items : []);
+    suggestions.value = rows.filter((row: any) => row?.steam64 || row?.steamID).slice(0, 12).map((row: any) => ({
+      id: row.id,
+      name: row.name ?? row.current_name,
+      steam64: row.steam64 ?? row.steamID ?? row.steam_id,
+      eos: row.eos ?? row.eosID ?? row.eos_id,
+      updatedAt: row.updatedAt ?? row.updated_at,
+    }));
+  } catch { suggestions.value = []; }
+}
+
+function selectPlayer(candidate: any) {
+  const id = String(candidate.steam64 ?? "").trim();
+  if (!/^\d{17}$/.test(id)) return;
+  queryInput.value = candidate.name || id;
+  steam64.value = id;
+  suggestions.value = [];
+  void lookup();
+}
 
 async function lookup() {
   if (!/^\d{17}$/.test(steam64.value)) { error.value = "请输入正确的 17 位 Steam64。"; return; }
@@ -100,6 +162,8 @@ function number(value: unknown) { const n = Number(value); return Number.isFinit
 function minutes(value: unknown) { const n = Number(value); return Number.isFinite(n) ? `${Math.floor(n / 60)} 小时 ${Math.round(n % 60)} 分钟` : "—"; }
 function formatDate(value: unknown) { if (!value) return "—"; const date = new Date(String(value)); return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false }); }
 function cleanServerName(value: unknown) { return String(value ?? "未知服务器").replace(/^\s+/, "").replace(/\s+/g, " ").trim() || "未知服务器"; }
+function formatDetailValue(value: unknown) { if (value == null || value === "") return "—"; if (typeof value === "object") { try { return JSON.stringify(value); } catch { return String(value); } } return String(value); }
+function extraSessionFields(session: any) { const known = new Set(["id", "serverId", "serverName", "joinedAt", "leftAt", "durationMinutes"]); return Object.entries(session || {}).filter(([key]) => !known.has(key)); }
 </script>
 
 <style scoped>
@@ -111,7 +175,7 @@ function cleanServerName(value: unknown) { return String(value ?? "未知服务�
 .source-link{padding:9px 12px;border:1px solid rgba(119,196,255,.28);border-radius:9px;color:#8cddff;text-decoration:none;background:rgba(18,47,72,.45);white-space:nowrap}
 .source-link:hover{background:rgba(35,102,145,.42)}
 .lookup-form,.panel,.profile-card,.metric-card{border:1px solid rgba(148,163,184,.17);background:linear-gradient(145deg,rgba(18,31,52,.9),rgba(10,18,32,.88));border-radius:14px;box-shadow:0 18px 46px rgba(0,0,0,.16)}
-.lookup-form{padding:20px 22px;margin-bottom:20px}
+.lookup-form{padding:20px 22px;margin-bottom:20px}.query-box{position:relative;flex:1;min-width:0}.query-box input{width:100%;box-sizing:border-box}.suggestions{position:absolute;z-index:10;top:calc(100% + 8px);left:0;right:0;padding:6px;border:1px solid #40546e;border-radius:10px;background:#0b1626;box-shadow:0 18px 36px rgba(0,0,0,.35)}.suggestion{width:100%;display:flex;align-items:center;gap:10px;padding:9px;border:0;border-radius:7px;background:transparent;color:#e8f2fc;text-align:left;cursor:pointer}.suggestion:hover{background:rgba(66,199,255,.12)}.suggestion-avatar{display:grid;place-items:center;width:32px;height:32px;border-radius:9px;background:#1b6f98;font-weight:800}.suggestion-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}.suggestion-main strong,.suggestion-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.suggestion-main small,.suggestion-time{color:#8196ab;font-size:11px}.suggestion-time{white-space:nowrap}
 .lookup-form label{display:block;margin-bottom:9px;color:#9fb1c5;font-size:12px;font-weight:650}
 .form-row{display:flex;gap:10px}.form-row input{flex:1;min-width:0;border:1px solid #40546e;border-radius:9px;background:#091321;color:#f5f9ff;padding:12px 14px;font:14px ui-monospace,monospace;outline:none}.form-row input:focus{border-color:#42c7ff;box-shadow:0 0 0 3px rgba(66,199,255,.13)}
 .form-row button,.secondary{border:0;border-radius:9px;background:linear-gradient(135deg,#159dd6,#2872db);color:#fff;padding:0 22px;font-weight:750;cursor:pointer;box-shadow:0 7px 18px rgba(21,157,214,.2)}.form-row button:hover,.secondary:hover{filter:brightness(1.1)}.form-row button:disabled{opacity:.45;cursor:not-allowed}
@@ -123,8 +187,8 @@ function cleanServerName(value: unknown) { return String(value ?? "未知服务�
 .metric-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}.metric-card{padding:17px 18px}.metric-card strong{margin-top:8px;color:#e9f7ff;font-size:20px}
 .two-column{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.panel{padding:20px}.panel header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(148,163,184,.12);padding-bottom:14px;margin-bottom:15px}.panel h3{margin:0;font-size:16px}.panel header span,.panel header p{margin:4px 0 0;color:#8292a7;font-size:12px}
 .server-highlight{display:flex;gap:11px;align-items:flex-start}.server-highlight strong,.top-server strong{display:block;font-size:14px;line-height:1.45}.server-highlight small,.top-server small{display:block;color:#8292a7;margin-top:5px}.dot{width:9px;height:9px;border-radius:50%;margin-top:6px}.online-dot{background:#45dc9a;box-shadow:0 0 12px #45dc9a}.top-server{margin-top:18px;padding-top:14px;border-top:1px solid rgba(148,163,184,.12)}.top-server span{font-size:12px;color:#8292a7}.server-list{display:grid;gap:4px}.server-row{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;padding:9px;border-radius:8px}.server-row:hover{background:rgba(148,163,184,.08)}.server-row strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.server-row em{color:#8edbff;font-size:12px;font-style:normal}.rank{color:#6f8299;font:12px ui-monospace,monospace}
-.records-panel header{align-items:center}.secondary{padding:8px 15px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:12px 10px;text-align:left;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap}th{color:#8292a7;font-weight:650}td{color:#d9e4f0}td code{color:#8edbff}.server-cell{max-width:400px;overflow:hidden;text-overflow:ellipsis}.empty{padding:18px 0;color:#718299;text-align:center}
+.records-panel header{align-items:center}.complete-info{margin-bottom:16px}.complete-info summary{display:flex;justify-content:space-between;gap:16px;cursor:pointer;list-style:none}.complete-info summary::-webkit-details-marker{display:none}.complete-info summary span{color:#8292a7;font-size:12px;font-weight:400}.detail-groups{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px}.detail-groups h4{margin:0 0 12px;color:#8edbff;font-size:13px}.detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.detail-item{min-width:0;padding:9px 10px;border:1px solid rgba(148,163,184,.12);border-radius:8px;background:rgba(7,15,27,.35)}.detail-item span{display:block;color:#8292a7;font-size:11px}.detail-item strong{display:block;margin-top:4px;color:#e2edf7;overflow-wrap:anywhere;font-size:12px;font-weight:500}.secondary{padding:8px 15px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:12px 10px;text-align:left;border-bottom:1px solid rgba(148,163,184,.1);white-space:nowrap}th{color:#8292a7;font-weight:650}td{color:#d9e4f0}td code{color:#8edbff}.server-cell{min-width:260px;max-width:680px;white-space:normal;word-break:break-word}.session-extra{display:block;max-width:420px;white-space:normal;word-break:break-word;color:#9fb6cc}.empty{padding:18px 0;color:#718299;text-align:center}
 @media(max-width:1050px){.profile-card,.lookup-header{align-items:flex-start;flex-direction:column}.profile-meta{width:100%;justify-content:space-between;gap:12px}.metric-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:900px){.two-column{grid-template-columns:1fr}.lookup-page{padding:22px 18px 45px}}
-@media(max-width:600px){.form-row{flex-direction:column}.form-row button{height:42px}.profile-meta{display:grid;grid-template-columns:1fr 1fr}.metric-grid{grid-template-columns:repeat(2,1fr)}.metric-card strong{font-size:17px}.profile-card,.panel{padding:16px}.name-line{align-items:flex-start;flex-direction:column;gap:6px}}
+@media(max-width:900px){.detail-groups{grid-template-columns:1fr}.two-column{grid-template-columns:1fr}.lookup-page{padding:22px 18px 45px}}
+@media(max-width:600px){.detail-grid{grid-template-columns:1fr}.form-row{flex-direction:column}.form-row button{height:42px}.profile-meta{display:grid;grid-template-columns:1fr 1fr}.metric-grid{grid-template-columns:repeat(2,1fr)}.metric-card strong{font-size:17px}.profile-card,.panel{padding:16px}.name-line{align-items:flex-start;flex-direction:column;gap:6px}}
 </style>
