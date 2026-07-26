@@ -428,7 +428,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         warningMessages: shouldWarn(record, decision) ? [buildWarnMessage(record, decision)] : [],
         broadcastMessage: shouldBroadcastViolation(record, decision) ? buildViolationBroadcastMessage(record, decision) : "",
         disbandReason: buildDisbandReason(record, decision),
-      });
+      };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
       if (typeof ruleChain?.submitViolation === "function") {
         const actionRecord = await ruleChain.submitViolation(violationEvent);
