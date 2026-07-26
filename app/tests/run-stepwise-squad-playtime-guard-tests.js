@@ -318,7 +318,7 @@ async function testInfantryLowHoursDisbands() {
 
 async function testInfantryPassBroadcasts() {
   const harness = await createHarness({
-    playtimeRows: [["steam-1", { game_seconds: 401 * 3600 }]],
+    playtimeRows: [["steam-1", { game_seconds: 801 * 3600 }]],
   });
   try {
     const result = await harness.plugin.api.simulateCreation(creation());
@@ -343,7 +343,7 @@ async function testLogTime10BroadcastsRuleReminder() {
     await waitFor(() => harness.broadcasts.length >= 1, 2000);
     assert.equal(harness.broadcasts.length, 1);
     assert.equal(harness.broadcasts[0].message.includes("阶梯式建队时长检测"), true);
-    assert.equal(harness.broadcasts[0].message.includes("0-25"), true);
+    assert.equal(harness.broadcasts[0].message.includes("0-30"), true);
   } finally {
     await harness.stop();
   }
@@ -413,8 +413,8 @@ async function testInfantrySecondWindowAndOpenWindow() {
   const harness = await createHarness({
     webStatus: { logClockSeconds: 30 },
     playtimeRows: [
-      ["steam-1", { game_seconds: 250 * 3600 }],
-      ["steam-2", { game_seconds: 150 * 3600 }],
+      ["steam-1", { game_seconds: 650 * 3600 }],
+      ["steam-2", { game_seconds: 550 * 3600 }],
     ],
   });
   try {
@@ -434,7 +434,7 @@ async function testInfantrySecondWindowAndOpenWindow() {
     assert.equal(failed.violation, true);
     assert.equal(harness.disbands.length, 1);
 
-    harness.webStatus.logClockSeconds = 45;
+    harness.webStatus.logClockSeconds = 50;
     const open = await harness.plugin.api.simulateCreation(creation({
       squadId: 23,
       squadName: "INF 23",
