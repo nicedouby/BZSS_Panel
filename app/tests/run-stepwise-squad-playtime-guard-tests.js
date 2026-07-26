@@ -451,9 +451,9 @@ async function testVehicleSecondThirdAndOpenWindows() {
   const harness = await createHarness({
     webStatus: { logClockSeconds: 65 },
     playtimeRows: [
-      ["steam-1", { game_seconds: 650 * 3600 }],
+      ["steam-1", { game_seconds: 801 * 3600 }],
       ["steam-2", { game_seconds: 450 * 3600 }],
-      ["steam-3", { game_seconds: 500 * 3600 }],
+      ["steam-3", { game_seconds: 799 * 3600 }],
     ],
   });
   try {
@@ -470,7 +470,7 @@ async function testVehicleSecondThirdAndOpenWindows() {
     }));
     assert.equal(secondWindowFail.violation, true);
 
-    harness.webStatus.logClockSeconds = 80;
+    harness.webStatus.logClockSeconds = 95;
     const thirdWindow = await harness.plugin.api.simulateCreation(creation({
       squadId: 33,
       squadName: "Armor 33",
@@ -478,15 +478,15 @@ async function testVehicleSecondThirdAndOpenWindows() {
     }));
     assert.equal(thirdWindow.approved, true);
 
-    harness.webStatus.logClockSeconds = 95;
+    harness.webStatus.logClockSeconds = 125;
     const open = await harness.plugin.api.simulateCreation(creation({
       squadId: 34,
       squadName: "Armor 34",
       creatorSteamId: "steam-open-vehicle",
     }));
     assert.equal(open.approved, true);
-    assert.equal(harness.broadcasts.length, 1);
-    assert.equal(harness.disbands.length, 1);
+    assert.equal(harness.broadcasts.length, 2);
+    assert.equal(harness.disbands.length, 2);
   } finally {
     await harness.stop();
   }
