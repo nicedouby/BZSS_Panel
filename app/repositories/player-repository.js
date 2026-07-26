@@ -952,7 +952,14 @@ export class PlayerRepository {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
     const profile = await this.db.get("SELECT * FROM steam_profiles WHERE player_id = ?", id);
-    if (profile) return profile;
+    if (profile) {
+      return {
+        ...profile,
+        avatar_small: normalizeSteamAvatarUrl(profile.avatar_small),
+        avatar_medium: normalizeSteamAvatarUrl(profile.avatar_medium),
+        avatar_full: normalizeSteamAvatarUrl(profile.avatar_full),
+      };
+    }
     const steamID = cleanId(player?.steam_id);
     if (!steamID) return null;
     return {
