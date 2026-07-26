@@ -32,27 +32,19 @@ function formatHours(gameSeconds) {
 }
 
 function normalizeFireTeam(player) {
+  const corePlayer = player?.bzssCore;
+  if (!corePlayer || typeof corePlayer !== "object") return "";
+
   const sources = [
-    player,
-    player?.bzssCore,
-    player?.bzssCore?.soldierInfo,
-    player?.playerScoreboard,
+    corePlayer,
+    corePlayer?.soldierInfo,
+    corePlayer?.playerScoreboard,
   ];
 
   for (const source of sources) {
-    const resolved = resolvePlayerFireTeam(source, source?.bzssCore ?? source);
+    const resolved = resolvePlayerFireTeam(source, source);
     if (resolved.fireTeam) return resolved.fireTeam;
   }
-
-  // 兼容 playerState 中常见的嵌套火力组字段。
-  const nestedIndex = player?.playerScoreboard?.fireTeamIndex
-    ?? player?.playerScoreboard?.ftIndex
-    ?? player?.fireTeamIndex
-    ?? player?.ftIndex;
-  const numericIndex = Number(nestedIndex);
-  if (numericIndex === 0) return "A";
-  if (numericIndex === 1) return "B";
-  if (numericIndex === 2) return "C";
 
   return "";
 }
@@ -163,7 +155,35 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   function getPlayers(serverId) {
     const playerState = modules?.playerState;
     if (typeof playerState?.getPlayerList !== "function") return [];
-    return playerState.getPlayerList(serverId) ?? [];
+
+    const players = playerState.getPlayerList(serverId) ?? [];
+    const corePlayers = modules?.bzssCoreMonitor?.getPlayers?.()
+      ?? modules?.bzssCoreMonitor?.getTelemetryPlayers?.()
+      ?? [];
+    if (!Array.isArray(corePlayers) || !corePlayers.length) return players;
+
+    const identity = (player) => [
+      player?.steamID,
+      player?.steamId,
+      player?.steam64ID,
+      player?.eosID,
+      player?.eosId,
+      player?.playerID,
+      player?.playerId,
+      player?.name,
+      player?.playerName,
+    ].map((value) => text(value).toLowerCase()).find(Boolean) || "";
+
+    const coreByIdentity = new Map();
+    for (const corePlayer of corePlayers) {
+      const key = identity(corePlayer);
+      if (key) coreByIdentity.set(key, corePlayer);
+    }
+
+    return players.map((player) => {
+      const corePlayer = coreByIdentity.get(identity(player));
+      return corePlayer ? { ...player, bzssCore: corePlayer } : player;
+    });
   }
 
   function getWarnApi() {
@@ -202,7 +222,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const name = getPlayerName(player);
     const role = getRole(player);
     const seconds = await getPlaytimeSeconds(player);
-    return `（${fireTeam || "未分"}组）${name} ${role} 游戏时长 ${formatHours(seconds)}`;
+    return `${fireTeam ? `（${fireTeam}组）` : ""}${name} ${role} 游戏时长 ${formatHours(seconds)}`;
   }
 
   async function buildLeaderLine(player, squadName) {
