@@ -228,10 +228,38 @@
         <button
           type="button"
           class="danger-btn execute-btn"
-          :disabled="executing || movingPlayers.length === 0"
+          :disabled="executing || planExecutionLocked || movingPlayers.length === 0"
           @click="executePlan"
         >
-          {{ executing ? "执行中..." : "执行当前打乱" }}
+          {{ executing ? "提交中..." : planExecutionLocked ? `打乱执行中 ${shuffleBatch?.completed ?? 0} / ${shuffleBatch?.total ?? 0}` : "执行当前打乱" }}
+        </button>
+      </div>
+    </section>
+
+    <section v-if="shuffleBatch" class="shuffle-batch-card">
+      <div class="shuffle-batch-card__header">
+        <strong>{{ shuffleBatchStatusText }}</strong>
+        <span v-if="shuffleBatch.id">{{ shuffleBatch.id }}</span>
+      </div>
+      <div class="shuffle-batch-card__stats">
+        <span>总数：{{ shuffleBatch.total }}</span>
+        <span>成功：{{ shuffleBatch.succeeded }}</span>
+        <span>失败：{{ shuffleBatch.failed }}</span>
+        <span>跳过：{{ shuffleBatch.skipped }}</span>
+        <span>剩余：{{ Math.max(0, shuffleBatch.total - shuffleBatch.completed) }}</span>
+      </div>
+      <div v-if="shuffleBatch.currentPlayer" class="shuffle-batch-card__current">
+        当前：{{ shuffleBatch.currentPlayer.playerName || shuffleBatch.currentPlayer.steamId }}
+      </div>
+      <div class="shuffle-batch-card__actions">
+        <button
+          v-if="shuffleBatch.status === 'queued' || shuffleBatch.status === 'running'"
+          type="button"
+          class="ghost-btn"
+          :disabled="shuffleBatch.cancelRequested === true"
+          @click="cancelShuffleBatch"
+        >
+          {{ shuffleBatch.cancelRequested ? "取消中..." : "停止剩余跳边" }}
         </button>
       </div>
     </section>
@@ -243,11 +271,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { apiGet } from "../app/apiClient";
 import {
   createPlaytimeShufflePlan,
   executeTeamShufflePlan,
+  getForceTeamChangeBatch,
+  listForceTeamChangeBatches,
+  cancelForceTeamChangeBatch,
+  type TeamBalanceBatch,
   type TeamShuffleExecuteResponse,
   type TeamShufflePlanPlayer,
 } from "../app/teamBalanceApi";
@@ -283,6 +315,11 @@ const executing = ref(false);
 const error = ref("");
 const executeResult = ref<TeamShuffleExecuteResponse | null>(null);
 const autoPlanAttempted = ref(false);
+const currentPlanId = ref("");
+const currentRoundKey = ref("");
+const submittedBatchId = ref("");
+const shuffleBatch = ref<TeamBalanceBatch | null>(null);
+let shuffleBatchPollTimer: ReturnType<typeof setInterval> | null = null;
 
 // Interactive UI elements
 const searchQuery = ref("");
@@ -389,9 +426,36 @@ const executeHint = computed(() => {
   if (plannedMoveCount.value === 0) return "当前列表没有需要跳边的玩家。";
   return `将执行 ${plannedMoveCount.value} 名玩家的跳边。`;
 });
+const planExecutionLocked = computed(() => {
+  if (!submittedBatchId.value) return false;
+  const status = shuffleBatch.value?.status;
+  return status === "queued" || status === "running" || status == null;
+});
 
-onMounted(() => {
+const shuffleBatchStatusText = computed(() => {
+  const batch = shuffleBatch.value;
+  if (!batch) return "";
+  if (batch.status === "queued") return "随机打乱已排队";
+  if (batch.status === "running") return "随机打乱执行中";
+  if (batch.status === "completed") return "随机打乱完成";
+  if (batch.status === "partial") return batch.cancelRequested ? "随机打乱已停止" : "随机打乱部分完成";
+  if (batch.status === "cancelled") return `随机打乱已停止（${batch.cancelReason || "已取消"}）`;
+  return "随机打乱任务";
+});
+
+
+
+onMounted(async () => {
+  await restoreShuffleBatch();
   void refreshData();
+  shuffleBatchPollTimer = setInterval(() => {
+    if (submittedBatchId.value) void refreshShuffleBatch();
+  }, 1_000);
+});
+
+onBeforeUnmount(() => {
+  if (shuffleBatchPollTimer) clearInterval(shuffleBatchPollTimer);
+  shuffleBatchPollTimer = null;
 });
 
 async function refreshData() {
@@ -429,7 +493,7 @@ async function loadGroups() {
 }
 
 async function createPlan(confirmAction = true) {
-  if (!canPlan.value || creating.value) return;
+  if (!canPlan.value || creating.value || planExecutionLocked.value) return;
   if (confirmAction) {
     const confirmed = await ui.openConfirm({
       title: "重新生成打乱方案",
@@ -464,6 +528,8 @@ async function createPlan(confirmAction = true) {
     });
     if (!result.ok || !result.plan?.players) throw new Error(result.message || "生成打乱失败");
     
+    currentPlanId.value = String(result.plan.planId ?? "");
+    currentRoundKey.value = String(result.plan.roundKey ?? "");
     planPlayers.value = result.plan.players.map((player) => {
       const rosterPlayer = roster.value.find(r => r.steamId === player.steamId || r.playerId === player.playerId);
       return {
@@ -498,11 +564,15 @@ function resetManualAdjustments() {
 }
 
 async function executePlan() {
-  if (executing.value || plannedMoveCount.value === 0) return;
-  
+  if (executing.value || planExecutionLocked.value || plannedMoveCount.value === 0) return;
+  if (!currentPlanId.value || !currentRoundKey.value) {
+    error.value = "当前方案缺少对局标识，请重新生成方案。";
+    return;
+  }
+
   const confirmed = await ui.openConfirm({
     title: "执行跳边计划",
-    message: `确认执行当前打乱？将对 ${plannedMoveCount.value} 名玩家发送跳边指令。`,
+    message: `确认执行当前打乱？将创建一个后台任务，处理 ${plannedMoveCount.value} 名玩家。`,
     confirmText: "执行",
     cancelText: "取消",
     tone: "error",
@@ -514,6 +584,9 @@ async function executePlan() {
   executeResult.value = null;
   try {
     const result = await executeTeamShufflePlan({
+      planId: currentPlanId.value,
+      roundKey: currentRoundKey.value,
+      clientRequestId: `shuffle:${currentPlanId.value}`,
       source: "web.teamShuffle",
       reason: "team_shuffle_execute",
       algorithm: algorithm.value,
@@ -531,20 +604,102 @@ async function executePlan() {
       })),
     });
     executeResult.value = result;
-    if (!result.ok) throw new Error(result.message || "执行打乱失败");
-    
+    if (!result.ok || !result.batch) throw new Error(result.message || "提交打乱失败");
+
+    submittedBatchId.value = result.batch.id;
+    shuffleBatch.value = result.batch;
     ui.pushToast({
-      message: `打乱成功！已发送 ${result.summary?.executedCount ?? 0} 名玩家的跳边指令。`,
+      message: result.duplicate ? "该打乱方案已经提交过。" : "随机打乱任务已提交，页面不会被阻塞。",
       tone: "ok",
     });
   } catch (err: any) {
-    error.value = String(err?.message || err || "执行打乱失败");
+    error.value = String(err?.message || err || "提交打乱失败");
     ui.pushToast({
-      message: "执行打乱失败: " + error.value,
+      message: "提交打乱失败: " + error.value,
       tone: "error",
     });
   } finally {
     executing.value = false;
+  }
+}
+
+function isTerminalShuffleBatch(batch: TeamBalanceBatch | null | undefined) {
+  return Boolean(batch && ["completed", "partial", "cancelled"].includes(batch.status));
+}
+
+async function refreshShuffleBatch() {
+  const batchId = submittedBatchId.value;
+  if (!batchId) return;
+  try {
+    const response = await getForceTeamChangeBatch(batchId);
+    if (!response?.ok || !response.batch) return;
+    shuffleBatch.value = response.batch;
+    if (!isTerminalShuffleBatch(response.batch)) return;
+
+    const finalBatch = response.batch;
+    submittedBatchId.value = "";
+    planPlayers.value = [];
+    originalPlayersCopy.value = [];
+    currentPlanId.value = "";
+    currentRoundKey.value = "";
+    executeResult.value = {
+      ok: finalBatch.status === "completed",
+      accepted: true,
+      planId: finalBatch.planId,
+      roundKey: finalBatch.roundKey,
+      batch: finalBatch,
+      message: `随机打乱结束：成功 ${finalBatch.succeeded}，失败 ${finalBatch.failed}，跳过 ${finalBatch.skipped}。`,
+      type: "shuffle_execute",
+      action: "shuffle_execute",
+      source: "web.teamShuffle",
+      reason: "team_shuffle_execute",
+      operator: null,
+      system: false,
+      error: finalBatch.status === "completed" ? "" : finalBatch.cancelReason || "partial",
+      command: "",
+      rconExecuted: finalBatch.succeeded > 0,
+      rconResponse: "",
+      summary: {
+        plannedMoveCount: finalBatch.total,
+        executedCount: finalBatch.succeeded,
+        failedCount: finalBatch.failed,
+      },
+      plan: null,
+    };
+    await refreshData();
+  } catch {
+    // Keep the last batch snapshot and retry on the next interval.
+  }
+}
+
+async function restoreShuffleBatch() {
+  try {
+    const response = await listForceTeamChangeBatches();
+    const batches = Array.isArray(response?.batches) ? response.batches : [];
+    const active = batches.find((batch) => (
+      batch.type === "shuffle"
+      && (batch.status === "queued" || batch.status === "running")
+    ));
+    if (!active) return;
+    submittedBatchId.value = active.id;
+    shuffleBatch.value = active;
+    currentPlanId.value = active.planId || "";
+    currentRoundKey.value = active.roundKey || "";
+    autoPlanAttempted.value = true;
+  } catch {
+    // The page can still be used if the status endpoint is temporarily unavailable.
+  }
+}
+
+async function cancelShuffleBatch() {
+  const batchId = submittedBatchId.value;
+  if (!batchId || shuffleBatch.value?.cancelRequested) return;
+  try {
+    const response = await cancelForceTeamChangeBatch(batchId);
+    if (response?.batch) shuffleBatch.value = response.batch;
+    else if (shuffleBatch.value) shuffleBatch.value = { ...shuffleBatch.value, cancelRequested: true };
+  } catch (err: any) {
+    error.value = String(err?.message || err || "停止打乱失败");
   }
 }
 
