@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { createPlaytimeAvatarRefreshModule } from "../modules/playtime-avatar-refresh/index.js";
+import { SteamGameDurationService } from "../modules/playtime/index.js";
 
 function createBaseModuleFactory() {
   const jobs = new Map();
@@ -97,6 +98,33 @@ async function main() {
   const lookupCompleted = await module.api.waitForJob(lookup.id, 500);
   assert.equal(lookupCompleted.status, "completed");
   assert.equal(lookupCompleted.result.avatarPersisted, true);
+
+  let missingAvatarQueries = 0;
+  const persistedAvatars = [];
+  const service = new SteamGameDurationService({
+    apiKey: "test-key",
+    playerDatabase: {
+      async listPlayersWithSteamID({ missingAvatarOnly, limit }) {
+        assert.equal(missingAvatarOnly, true);
+        assert.equal(limit, 100);
+        missingAvatarQueries += 1;
+        return missingAvatarQueries === 1 ? [{ steam_id: "76561198000000002" }, { steam_id: "76561198000000003" }] : [];
+      },
+      async updateSteamAvatarBySteamID(id, avatar) {
+        persistedAvatars.push({ id, avatar });
+        return { id };
+      },
+    },
+  });
+  service.fetchSteamPlayerSummaries = async (ids) => ids.map((id) => ({
+    steamid: id,
+    avatarmedium: `https://avatars.steamstatic.com/${id}_medium.jpg`,
+  }));
+
+  const backfill = await service.backfillMissingSteamAvatars();
+  assert.deepEqual(backfill, { requested: 2, updated: 2, skipped: false });
+  assert.equal(persistedAvatars.length, 2);
+  assert.equal(missingAvatarQueries, 2);
 
   console.log("run-playtime-avatar-refresh-tests: ok");
 }
