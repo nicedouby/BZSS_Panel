@@ -52,6 +52,14 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   };
 
   const api = {
+    async submitViolation(input = {}) {
+      return await handleViolation(input);
+    },
+
+    async submitFinalPass(input = {}) {
+      return await handleFinalPass(input);
+    },
+
     getState() {
       maybeRestoreFinalPassCacheForCurrentMatch();
       const enforcement = resolveEnforcementState();
@@ -190,7 +198,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         threshold: enforcement.threshold,
       });
       remember(recent, record, recentLimit());
-      return;
+      return record;
     }
 
     try {
@@ -242,6 +250,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     }
 
     remember(recent, record, recentLimit());
+    return record;
   }
 
   async function handleFinalPass(input = {}) {
@@ -320,6 +329,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
     remember(finalPassRecords, record, recentLimit());
     persistFinalPassCacheLater();
+    return record;
   }
 
   async function handleRoundWorldBringUp(input = {}) {
