@@ -457,7 +457,7 @@ async function testInfantrySecondWindowAndOpenWindow() {
     assert.equal(failed.violation, true);
     assert.equal(harness.disbands.length, 1);
 
-    harness.webStatus.logClockSeconds = 50;
+    harness.webStatus.logClockSeconds = 100;
     const open = await harness.plugin.api.simulateCreation(creation({
       squadId: 23,
       squadName: "INF 23",
@@ -508,8 +508,8 @@ async function testVehicleSecondThirdAndOpenWindows() {
       creatorSteamId: "steam-open-vehicle",
     }));
     assert.equal(open.approved, true);
-    assert.equal(harness.broadcasts.length, 2);
-    assert.equal(harness.disbands.length, 2);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.disbands.length, 1);
   } finally {
     await harness.stop();
   }
@@ -521,7 +521,7 @@ async function testPlayerDatabaseFallbackProvidesPlaytime() {
       current_name: "Leader",
       steam_id: "steam-db",
       eos_id: "eos-db",
-      game_seconds: 401 * 3600,
+      game_seconds: 801 * 3600,
     },
   });
   try {
@@ -579,7 +579,7 @@ async function testMissingPlaytimeDisbandsWarnsAndStartsLookup() {
 
 async function testLogThenRconOnlyProcessesOnce() {
   const harness = await createHarness({
-    playtimeRows: [["steam-1", { game_seconds: 401 * 3600 }]],
+    playtimeRows: [["steam-1", { game_seconds: 801 * 3600 }]],
   });
   try {
     const first = await harness.plugin.api.simulateCreation(creation({

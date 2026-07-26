@@ -481,7 +481,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function broadcastViolation(record, decision) {
-    const adminWarn = getAdminWarnApi();
+    const adminWarn = getAdminWarnApi(modules);
     const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") {
       record.actions.push({
@@ -522,7 +522,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
     if (state.ruleReminderBroadcastKeys.has(matchKey)) return;
 
-    const adminWarn = getAdminWarnApi();
+    const adminWarn = getAdminWarnApi(modules);
     const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") return;
 
@@ -740,7 +740,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   };
 }
 
-function getAdminWarnApi() {
+function getAdminWarnApi(modules) {
   return modules?.adminWarn?.api ?? modules?.adminWarn ?? null;
 }
 

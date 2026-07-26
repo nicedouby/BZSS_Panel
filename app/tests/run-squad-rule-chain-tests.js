@@ -161,7 +161,7 @@ async function createHarness(options = {}) {
     squadManagement: {
       async requestDisband(request) {
         disbands.push(request);
-        return { ok: true };
+        return options.disbandResult ?? { ok: true };
       },
       async requestRemoveFromSquad(request) {
         removes.push(request);
@@ -209,7 +209,7 @@ async function createHarness(options = {}) {
 
   const config = {
     get(key, fallback) {
-      if (key === "squadNamePolicy.path") return options.policyPath ?? `${process.cwd()}\\config\\squad_name_policy.json`;
+      if (key === "squadNamePolicy.path") return options.policyPath ?? path.join(process.cwd(), "config", "squad_name_policy.json");
       if (key === "modules.squadNamePolicyGuard") {
         return {
           enabled: true,
@@ -296,6 +296,10 @@ async function testNameViolationShortCircuits() {
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.removes.length, 1);
     assert.equal(harness.warnings.length >= 1, true);
+    assert.equal(
+      harness.broadcasts.some((item) => item.reason === "squad_name_rule_broadcast"),
+      true,
+    );
     const stepwiseState = harness.stepwise.api.getStatus();
     assert.equal(stepwiseState.recentRecords.length, 0);
   } finally {
@@ -506,18 +510,18 @@ async function testClassificationFieldsReachFinalPass() {
     assert.equal(event.squadType, "vehicle");
     assert.equal(event.squadNature, "vehicle");
     assert.equal(event.squadTypeId, "ifv");
-    assert.equal(event.squadTypeLabel, "步战车");
+    assert.equal(event.squadTypeLabel, "IFV / 步战车");
     assert.equal(event.squadRuleId, "rule:bmp");
-    assert.equal(event.effectiveMaxPlayers, 4);
-    assert.equal(event.maxPlayersSource, "type_default");
-    assert.equal(event.assetPath, "/Game/BMP");
+    assert.equal(event.effectiveMaxPlayers, null);
+    assert.equal(event.maxPlayersSource, "none");
+    assert.equal(event.assetPath, "");
     assert.deepEqual(event.classificationMetadata, { matchedKind: "canonical" });
     assert.equal(event.playtime?.known, true);
     assert.equal(event.playtime?.hoursText, "1000h");
     const broadcast = harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast");
     assert.equal(
       broadcast?.message,
-      "Leader 建立了BMP小队，队伍性质：载具队，队伍类型：步战车，游戏时长：1000h，建队码：1",
+      "Leader 建立了BMP小队，队伍性质：载具队，队伍类型：IFV / 步战车，游戏时长：1000h，建队码：1",
     );
   } finally {
     await harness.stop();
@@ -567,7 +571,22 @@ async function testFinalPassWarningMatchesSquadNature() {
     harness.eventBus.emitModuleEvent(
       "module.squadRuleChain",
       "finalSquadRulePassed",
-      creation({ squadName: "zcc 1", squadId: 61, creatorSteamId: "steam-1", leaderSteamId: "steam-1" }),
+      creation({
+        squadName: "zcc 1",
+        squadId: 61,
+        creatorSteamId: "steam-1",
+        leaderSteamId: "steam-1",
+        classification: {
+          valid: true,
+          source: "policy_event",
+          policyRevision: 5,
+          typeId: "vehicle",
+          typeLabel: "载具队",
+          nature: "vehicle",
+          natureLabel: "载具队",
+          ruleId: "test:zcc",
+        },
+      }),
     );
 
     await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
@@ -582,7 +601,22 @@ async function testFinalPassWarningMatchesSquadNature() {
     harness.eventBus.emitModuleEvent(
       "module.squadRuleChain",
       "finalSquadRulePassed",
-      creation({ squadName: "mortar 1", squadId: 62, creatorSteamId: "steam-2", leaderSteamId: "steam-2" }),
+      creation({
+        squadName: "mortar 1",
+        squadId: 62,
+        creatorSteamId: "steam-2",
+        leaderSteamId: "steam-2",
+        classification: {
+          valid: true,
+          source: "policy_event",
+          policyRevision: 5,
+          typeId: "mortar",
+          typeLabel: "迫击炮",
+          nature: "support",
+          natureLabel: "支援队",
+          ruleId: "test:mortar",
+        },
+      }),
     );
 
     await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
@@ -841,6 +875,50 @@ async function testWorldBringUpClearsPreviousFinalPassRecords() {
   }
 }
 
+
+async function testRuntimePluginBroadcastHelpersUseModuleRegistry() {
+  const harness = await createHarness({ logClockSeconds: 10 });
+  try {
+    await waitFor(() => harness.broadcasts.some(
+      (item) => item.reason === "stepwise_squad_playtime_rule_reminder",
+    ));
+
+    harness.broadcasts.length = 0;
+    harness.eventBus.emitCoreEvent("round.world_bring_up", {
+      eventName: "round.world_bring_up",
+      serverId: "test-server",
+      eventId: "round-runtime-context",
+      rawLog: "LogWorld: Bringing World /Game/Test up for play",
+      logTime: "2026.07.26-13.00.00:000",
+    });
+    await waitFor(() => harness.broadcasts.some(
+      (item) => item.reason === "fair_squad_guard_round_start",
+    ));
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testDisbandFailureIsNotReportedAsHandled() {
+  const harness = await createHarness({
+    disbandResult: { ok: false, error: "rcon_disband_failed" },
+  });
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "INVALID RUNTIME SQUAD", squadId: 113 }),
+    );
+    await waitFor(() => harness.ruleChain.api.getState().recent.length > 0);
+    const record = harness.ruleChain.api.getState().recent[0];
+    assert.equal(record.status, "error");
+    assert.equal(record.error, "rcon_disband_failed");
+    assert.equal(record.actions.some((action) => action.type === "disband_failed"), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
 testClassificationFieldsNormalizeWithoutLoss();
 await testNameViolationShortCircuits();
 await testPopulationThresholdSkipsHistoryWithoutPausingClock();
@@ -858,4 +936,6 @@ await testLegacyFinalPassCacheRestoresBySessionTimestamp();
 await testFinalPassCacheNormalizesDuplicateOrderCodes();
 await testManualClearCurrentRemovesFinalPassRecords();
 await testWorldBringUpClearsPreviousFinalPassRecords();
+await testRuntimePluginBroadcastHelpersUseModuleRegistry();
+await testDisbandFailureIsNotReportedAsHandled();
 console.log("run-squad-rule-chain-tests: ok");

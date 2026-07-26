@@ -218,6 +218,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         createdAt: normalized.time,
         sourceEventId: normalized.eventId || buildDedupeKey(normalized),
         warningMessages: expandWarningMessages(record.warningMessages, runtimeConfig),
+        broadcastMessage: buildViolationBroadcastMessage(normalized),
         removeLeaderBeforeDisband: runtimeConfig.action === "disband_then_warn",
       };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
@@ -391,6 +392,12 @@ function summarizeResult(result) {
   };
 }
 
+function buildViolationBroadcastMessage(event = {}) {
+  const creator = text(event.creatorName) || "未知玩家";
+  const squadName = text(event.squadName) || `Squad ${event.squadId ?? "?"}`;
+  return `队名违规已处置：${creator} 创建的 ${squadName} 小队已按队名规范解散。`;
+}
+
 function applyActionStats(stats, actions = []) {
   for (const action of Array.isArray(actions) ? actions : []) {
     if (action?.type === "disbanded") stats.disbanded += 1;
@@ -422,6 +429,16 @@ function normalizeBoolean(value, fallback = false) {
   if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
   if (normalized === "false" || normalized === "0" || normalized === "no") return false;
   return fallback;
+}
+
+function cloneValue(value) {
+  if (value == null || typeof value !== "object") return value;
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch {}
+  }
+  return JSON.parse(JSON.stringify(value));
 }
 
 function nowIso() {

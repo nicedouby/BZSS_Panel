@@ -201,7 +201,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function broadcastMessage(message, reason, meta = {}) {
-    const adminWarn = getAdminWarnApi();
+    const adminWarn = getAdminWarnApi(modules);
     const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     const text = normalizeText(message);
     if (!text || typeof sender !== "function") return null;
@@ -548,7 +548,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function warnCreator(record) {
-    const adminWarn = getAdminWarnApi();
+    const adminWarn = getAdminWarnApi(modules);
     const sender = adminWarn?.sendAdminWarn ?? adminWarn?.warnPlayer;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
@@ -566,7 +566,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function sendViolationWarning(record) {
-    const adminWarn = getAdminWarnApi();
+    const adminWarn = getAdminWarnApi(modules);
     const sender = adminWarn?.sendAdminWarn ?? adminWarn?.warnPlayer;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
@@ -601,7 +601,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function broadcastViolation(record) {
-    const adminWarn = getAdminWarnApi();
+    const adminWarn = getAdminWarnApi(modules);
     const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") {
       return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
@@ -981,7 +981,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   };
 }
 
-function getAdminWarnApi() {
+function getAdminWarnApi(modules) {
   return modules?.adminWarn?.api ?? modules?.adminWarn ?? null;
 }
 
