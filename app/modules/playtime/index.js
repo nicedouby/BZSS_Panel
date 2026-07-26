@@ -1260,7 +1260,7 @@ class SteamGameDurationService {
       // not permanently dependent on a successful 100-ID response.
       const returnedIds = new Set(summaries.map((summary) => String(summary?.steamid ?? "").trim()).filter(Boolean));
       const missingIds = validIds.filter((id) => !returnedIds.has(id));
-      if (missingIds.length > 0 && validIds.length > 1) {
+      if (summaries.length > 0 && missingIds.length > 0 && validIds.length > 1) {
         for (const steamID of missingIds) {
           const fallback = await this.fetchSteamPlayerSummaries([steamID]);
           if (fallback.length > 0) summaries = summaries.concat(fallback);
