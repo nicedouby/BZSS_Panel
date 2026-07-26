@@ -22,30 +22,6 @@
         </div>
       </div>
 
-      <div class="tactical-map-viewer-count" role="status" aria-live="polite">
-        <span class="tactical-map-viewer-count__indicator" aria-hidden="true"></span>
-        <span>{{ tacticalMapViewerCount === null ? "正在统计查看人数" : `${tacticalMapViewerCount} 人正在查看` }}</span>
-      </div>
-
-      <div
-        class="tactical-map-recording"
-        :class="{ 'is-recording': tacticalRecording.recording, 'is-disabled': !tacticalRecording.recordingEnabled }"
-        role="status"
-        aria-live="polite"
-      >
-        <span class="tactical-map-recording__dot" aria-hidden="true"></span>
-        <span>{{ tacticalRecordingLabel }}</span>
-        <button
-          type="button"
-          class="tactical-map-recording__button"
-          :disabled="tacticalRecording.pending || tacticalRecording.known === false"
-          :title="tacticalRecording.recordingEnabled ? '停止本局战术回放录制' : '开始本局战术回放录制'"
-          @click="toggleTacticalRecording"
-        >
-          {{ tacticalRecording.pending ? '处理中…' : tacticalRecording.recordingEnabled ? '停止' : '开始' }}
-        </button>
-      </div>
-
       <!-- Centered Transform Container -->
         <div
           ref="mapRef"
@@ -305,15 +281,10 @@
             :title="vehicle.tooltip"
           >
             <span class="vehicle-marker__frame">
-              <span
-                class="vehicle-marker__icon"
-                role="img"
-                :aria-label="vehicle.iconLabel || '载具'"
-                :style="{
-                  '--vehicle-icon-url': `url('${vehicle.iconPath || '/assets/icons/T_map_helicopter_scout.PNG'}')`,
-                }"
-              ></span>
+              <img v-if="vehicle.iconPath" class="vehicle-marker__icon" :src="vehicle.iconPath" :alt="vehicle.iconLabel" />
+              <img v-else class="vehicle-marker__icon" src="/assets/icons/T_map_helicopter_scout.PNG" alt="直升机" />
             </span>
+            <span v-if="vehicle.occupied" class="vehicle-marker__driver">●</span>
           </div>
         </div>
 
@@ -530,60 +501,32 @@
         @focus-here="onFocusHere(mapCommandMenu)"
       />
 
-      <!-- Shortcut Key Hints Overlay -->
-      <div class="map-command-hint glass-panel font-mono">
-        <span class="hint-item"><span class="key">右键</span> 指令</span>
-        <span class="hint-item"><span class="key">双击</span> 资料</span>
-        <span class="hint-item"><span class="key">滚轮</span> 缩放</span>
-        <span class="hint-item"><span class="key">拖拽</span> 移动</span>
-        <span class="hint-item"><span class="key">ESC</span> 关闭</span>
-        <span class="hint-item"><span class="key">M</span> 测距</span>
-        <span class="hint-item"><span class="key">G</span> 网格</span>
-        <span class="hint-item"><span class="key">F</span> 复位</span>
-      </div>
-
-      <!-- Top Overlay Panels (Header & Tickets) -->
-      <div class="overlay-top-container">
-        <!-- System Title Block -->
-        <div class="system-header-card glass-panel">
-          <div class="header-led-indicator pulse-led"></div>
-          <div class="header-text-block">
-            <h1 class="main-title">SUMARI SATELLITE COMMAND</h1>
-            <p class="subtitle-text">战术地图实时定位系统 &bull; 日志驱动实时定位</p>
-          </div>
+      <header class="tactical-command-bar">
+        <div class="tactical-command-bar__identity">
+          <span class="tactical-command-bar__eyebrow">TACTICAL OPERATIONS</span>
+          <strong>{{ serverMapName || detectedMapName || "正在识别地图" }}</strong>
+          <span>{{ matchPhase || statusText || "实时战场态势" }}</span>
         </div>
-
-        <!-- Faction Match Tickets -->
-        <div class="tickets-overlay-card glass-panel">
-          <!-- Team 1 US Army -->
-          <div class="team-ticket-block tone-friendly" :style="getPerspectiveStyle(1)">
-            <div class="team-info-row">
-              <span class="team-label">TEAM 1</span>
-              <span class="ticket-number font-mono">{{ tickets.team1 }}</span>
-            </div>
-            <div class="ticket-progress-track">
-              <div class="ticket-progress-fill" :style="{ width: `${(tickets.team1 / 400) * 100}%` }"></div>
-            </div>
-          </div>
-
-          <!-- Divider -->
-          <div class="ticket-vs-divider">VS</div>
-
-          <!-- Team 2 PLA Forces -->
-          <div class="team-ticket-block tone-enemy" :style="getPerspectiveStyle(2)">
-            <div class="team-info-row">
-              <span class="team-label">TEAM 2</span>
-              <span class="ticket-number font-mono">{{ tickets.team2 }}</span>
-            </div>
-            <div class="ticket-progress-track">
-              <div class="ticket-progress-fill" :style="{ width: `${(tickets.team2 / 400) * 100}%` }"></div>
-            </div>
-          </div>
+        <div class="tactical-command-bar__tickets" aria-label="双方票数">
+          <span class="tactical-ticket tactical-ticket--team1" :style="getPerspectiveStyle(1)"><b>TEAM 1</b><strong>{{ tickets.team1 }}</strong></span>
+          <span class="tactical-ticket__vs">VS</span>
+          <span class="tactical-ticket tactical-ticket--team2" :style="getPerspectiveStyle(2)"><b>TEAM 2</b><strong>{{ tickets.team2 }}</strong></span>
         </div>
-      </div>
+        <div class="tactical-command-bar__status">
+          <span class="tactical-live-status"><i></i>{{ tacticalMapViewerCount === null ? "同步查看状态" : `${tacticalMapViewerCount} 人查看` }}</span>
+          <span class="tactical-recording-status" :class="{ 'is-recording': tacticalRecording.recording, 'is-disabled': !tacticalRecording.recordingEnabled }"><i></i>{{ tacticalRecordingLabel }}</span>
+          <button
+            type="button"
+            class="tactical-recording-action"
+            :disabled="tacticalRecording.pending || tacticalRecording.known === false"
+            :title="tacticalRecording.recordingEnabled ? '停止本局战术回放录制' : '开始本局战术回放录制'"
+            @click="toggleTacticalRecording"
+          >{{ tacticalRecording.pending ? "处理中…" : tacticalRecording.recordingEnabled ? "停止录制" : "开始录制" }}</button>
+        </div>
+      </header>
 
-      <!-- Floating Map Utility Action Controls (Bottom Left) -->
-      <div class="map-controls-panel glass-panel" aria-label="地图操作">
+      <section class="map-control-dock" aria-label="地图操作">
+        <div class="map-control-dock__nav">
         <button class="ctrl-btn" title="放大" @click="zoomIn">
           <span class="icon-span">+</span>
         </button>
@@ -593,7 +536,13 @@
         <button class="ctrl-btn" title="适配视口 (F)" @click="resetView">
           <span class="icon-span">↺</span>
         </button>
-        <div class="ctrl-divider"></div>
+        </div>
+        <div class="map-control-dock__menu-row">
+          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'layers' }" @click="toggleMapControlPanel('layers')" :aria-expanded="activeMapControlPanel === 'layers'">图层</button>
+          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'tools' || measureMode || combatHotspot != null }" @click="toggleMapControlPanel('tools')" :aria-expanded="activeMapControlPanel === 'tools'">工具</button>
+          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'help' }" @click="toggleMapControlPanel('help')" :aria-expanded="activeMapControlPanel === 'help'">帮助</button>
+        </div>
+        <div v-if="activeMapControlPanel === 'layers'" class="map-control-popover">
         <button
           class="ctrl-btn text-btn"
           :class="{ active: showGrid }"
@@ -648,6 +597,8 @@
         >
           存活
         </button>
+        </div>
+        <div v-if="activeMapControlPanel === 'tools'" class="map-control-popover">
         <button
           class="ctrl-btn text-btn measure-btn"
           :class="{ active: measureMode }"
@@ -681,20 +632,14 @@
         >
           清除热点
         </button>
-
-      </div>
-
-      <!-- Coordinate Sector Display Box (Bottom Right) -->
-      <div class="coordinates-hud-card glass-panel font-mono">
-        <div class="hud-item">
-          <span class="hud-label">GAME X:</span>
-          <span class="hud-val text-cyan">{{ hoverCoords ? Math.round(hoverCoords.gameX) : '-' }}</span>
         </div>
-        <div class="hud-item-divider"></div>
-        <div class="hud-item">
-          <span class="hud-label">GAME Y:</span>
-          <span class="hud-val text-yellow">{{ hoverCoords ? Math.round(hoverCoords.gameY) : '-' }}</span>
+        <div v-if="activeMapControlPanel === 'help'" class="map-control-popover map-control-popover--help">
+          <span><kbd>右键</kbd> 指令</span><span><kbd>双击</kbd> 资料</span><span><kbd>滚轮</kbd> 缩放</span><span><kbd>拖拽</kbd> 移动</span><span><kbd>M</kbd> 测距</span><span><kbd>G</kbd> 网格</span><span><kbd>F</kbd> 复位</span>
         </div>
+      </section>
+
+      <div class="map-coordinate-readout font-mono" aria-live="polite">
+        <span>坐标</span><b>X {{ hoverCoords ? Math.round(hoverCoords.gameX) : '-' }}</b><b>Y {{ hoverCoords ? Math.round(hoverCoords.gameY) : '-' }}</b>
       </div>
     </div>
     <TacticalMapSidebar
@@ -1258,6 +1203,11 @@ const showGrid = ref(true);
 const showCaptureZones = ref(true);
 const showFobs = ref(true);
 const filterAliveOnly = ref(false);
+const activeMapControlPanel = ref<"layers" | "tools" | "help" | null>(null);
+
+function toggleMapControlPanel(panel: "layers" | "tools" | "help") {
+  activeMapControlPanel.value = activeMapControlPanel.value === panel ? null : panel;
+}
 
 // Icon scaling and tags visibility refs
 const markerScale = ref(1.15);
@@ -3528,12 +3478,12 @@ onBeforeUnmount(deactivateMapPage);
   width: 0;
   height: 0;
   overflow: visible;
-  /* Muted tactical palette: readable on the map without neon glow pollution. */
-  --vehicle-accent: #a8b3bf;
+  --vehicle-accent: #94a3b8;
+  --vehicle-glow: rgba(148, 163, 184, .5);
 }
 
-.vehicle-marker.team-1 { --vehicle-accent: #4f8fb8; }
-.vehicle-marker.team-2 { --vehicle-accent: #c5666c; }
+.vehicle-marker.team-1 { --vehicle-accent: #60a5fa; --vehicle-glow: rgba(59, 130, 246, .64); }
+.vehicle-marker.team-2 { --vehicle-accent: #f87171; --vehicle-glow: rgba(248, 113, 113, .64); }
 
 .vehicle-marker__frame {
   position: absolute;
@@ -3545,29 +3495,104 @@ onBeforeUnmount(deactivateMapPage);
   place-items: center;
   transform: scale(var(--vehicle-marker-scale, 1)) rotate(var(--vehicle-yaw));
   transform-origin: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92)) drop-shadow(0 0 5px var(--vehicle-glow));
   will-change: transform;
 }
 
 .vehicle-marker__icon {
   width: 26px;
   height: 26px;
-  display: block;
-  background-color: var(--vehicle-accent);
-  /*
-   * Use the PNG alpha channel as the mask. This colors every opaque pixel
-   * of the icon, instead of using the source image's white luminance only.
-   */
-  -webkit-mask-image: var(--vehicle-icon-url);
-  mask-image: var(--vehicle-icon-url);
-  -webkit-mask-mode: alpha;
-  mask-mode: alpha;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  filter: none;
+  object-fit: contain;
+}
+
+.vehicle-marker__fallback {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--vehicle-accent);
+  border-radius: 50%;
+  background: rgba(2, 6, 23, .88);
+  color: var(--vehicle-accent);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.vehicle-marker__driver {
+  position: absolute;
+  left: 9px;
+  top: -12px;
+  color: #f8fafc;
+  font-size: 11px;
+  line-height: 1;
+  text-shadow: 0 0 5px var(--vehicle-glow), 0 1px 2px rgba(0, 0, 0, .9);
+}
+
+/* The command layer is deliberately small and grouped.  Map data keeps the
+   visual priority; controls only expand when the operator asks for them. */
+.tactical-command-bar {
+  position: absolute;
+  z-index: 60;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 9px 12px 9px 16px;
+  border: 1px solid rgba(148, 163, 184, .28);
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(4, 13, 27, .93), rgba(8, 23, 40, .84));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .32);
+  backdrop-filter: blur(14px);
+}
+.tactical-command-bar__identity { display: grid; min-width: 0; gap: 1px; }
+.tactical-command-bar__identity strong { overflow: hidden; color: #f1f7fb; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.tactical-command-bar__identity span:last-child { overflow: hidden; color: #91aabd; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.tactical-command-bar__eyebrow { color: #48d6aa; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.tactical-command-bar__tickets { display: flex; align-items: center; gap: 8px; padding: 0 14px; border-inline: 1px solid rgba(148, 163, 184, .17); }
+.tactical-ticket { display: grid; gap: 2px; min-width: 58px; text-align: center; }
+.tactical-ticket b { color: #91aabd; font-size: 9px; letter-spacing: .08em; }
+.tactical-ticket strong { color: var(--perspective-primary, #f8fafc); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; line-height: 1; }
+.tactical-ticket__vs { color: #60768a; font-size: 10px; font-weight: 800; }
+.tactical-command-bar__status { display: flex; justify-content: flex-end; align-items: center; gap: 9px; min-width: 0; color: #b9cad6; font-size: 11px; }
+.tactical-live-status, .tactical-recording-status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tactical-live-status i, .tactical-recording-status i { width: 7px; height: 7px; border-radius: 50%; background: #64748b; }
+.tactical-live-status i { background: #45d9ac; box-shadow: 0 0 10px rgba(69, 217, 172, .85); }
+.tactical-recording-status.is-recording { color: #fee2e2; }
+.tactical-recording-status.is-recording i { background: #f87171; box-shadow: 0 0 10px rgba(248, 113, 113, .88); }
+.tactical-recording-status.is-disabled { color: #718096; }
+.tactical-recording-action { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(111, 227, 178, .48); border-radius: 7px; background: rgba(20, 83, 67, .42); color: #9bf4cf; font-size: 11px; cursor: pointer; }
+.tactical-recording-action:hover:not(:disabled) { background: #48d6aa; color: #06251e; }
+.tactical-recording-action:disabled { cursor: wait; opacity: .55; }
+
+.map-control-dock { position: absolute; z-index: 60; bottom: 16px; left: 16px; display: grid; gap: 7px; }
+.map-control-dock__nav, .map-control-dock__menu-row, .map-control-popover, .map-coordinate-readout { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
+.map-control-dock__nav, .map-control-dock__menu-row { display: flex; width: fit-content; padding: 4px; }
+.map-control-dock .ctrl-btn { min-width: 34px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: #b8ccd9; }
+.map-control-dock .ctrl-btn:hover, .map-control-dock .ctrl-btn.active { background: rgba(72, 214, 170, .2); color: #a7f6d4; }
+.map-control-dock .ctrl-btn.text-btn { width: auto; min-width: 46px; padding: 0 10px; font-size: 11px; }
+.map-control-popover { display: grid; grid-template-columns: repeat(3, minmax(54px, 1fr)); width: min(260px, calc(100vw - 32px)); gap: 3px; padding: 5px; }
+.map-control-popover--help { grid-template-columns: 1fr 1fr; padding: 10px; color: #aac0ce; font-size: 11px; }
+.map-control-popover--help span { display: flex; align-items: center; gap: 6px; }
+.map-control-popover kbd { min-width: 30px; padding: 2px 4px; border: 1px solid rgba(148, 163, 184, .3); border-radius: 4px; color: #e1edf5; background: rgba(30, 41, 59, .7); font: inherit; text-align: center; }
+.map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
+.map-coordinate-readout span { color: #60768a; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
+.map-coordinate-readout b { color: #dcebf3; font-weight: 650; }
+
+@media (max-width: 1050px) {
+  .tactical-command-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .tactical-command-bar__tickets { order: 3; grid-column: 1 / -1; justify-self: center; padding: 5px 0 0; border-top: 1px solid rgba(148, 163, 184, .17); border-inline: 0; }
+}
+@media (max-width: 700px) {
+  .tactical-command-bar { top: 8px; left: 8px; right: 8px; gap: 8px; padding: 8px 10px; }
+  .tactical-command-bar__status { gap: 6px; }
+  .tactical-live-status, .tactical-recording-status { font-size: 0; }
+  .tactical-command-bar__identity strong { font-size: 13px; }
+  .tactical-command-bar__identity span:last-child { display: none; }
+  .map-control-dock { bottom: 8px; left: 8px; }
+  .map-coordinate-readout { right: 8px; bottom: 8px; }
 }
 </style>
