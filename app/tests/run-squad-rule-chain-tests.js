@@ -161,7 +161,7 @@ async function createHarness(options = {}) {
     squadManagement: {
       async requestDisband(request) {
         disbands.push(request);
-        return { ok: true };
+        return options.disbandResult ?? { ok: true };
       },
       async requestRemoveFromSquad(request) {
         removes.push(request);
@@ -296,6 +296,10 @@ async function testNameViolationShortCircuits() {
     assert.equal(harness.disbands.length, 1);
     assert.equal(harness.removes.length, 1);
     assert.equal(harness.warnings.length >= 1, true);
+    assert.equal(
+      harness.broadcasts.some((item) => item.reason === "squad_name_rule_broadcast"),
+      true,
+    );
     const stepwiseState = harness.stepwise.api.getStatus();
     assert.equal(stepwiseState.recentRecords.length, 0);
   } finally {
@@ -841,6 +845,50 @@ async function testWorldBringUpClearsPreviousFinalPassRecords() {
   }
 }
 
+
+async function testRuntimePluginBroadcastHelpersUseModuleRegistry() {
+  const harness = await createHarness({ logClockSeconds: 10 });
+  try {
+    await waitFor(() => harness.broadcasts.some(
+      (item) => item.reason === "stepwise_squad_playtime_rule_reminder",
+    ));
+
+    harness.broadcasts.length = 0;
+    harness.eventBus.emitCoreEvent("round.world_bring_up", {
+      eventName: "round.world_bring_up",
+      serverId: "test-server",
+      eventId: "round-runtime-context",
+      rawLog: "LogWorld: Bringing World /Game/Test up for play",
+      logTime: "2026.07.26-13.00.00:000",
+    });
+    await waitFor(() => harness.broadcasts.some(
+      (item) => item.reason === "fair_squad_guard_round_start",
+    ));
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testDisbandFailureIsNotReportedAsHandled() {
+  const harness = await createHarness({
+    disbandResult: { ok: false, error: "rcon_disband_failed" },
+  });
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "INVALID RUNTIME SQUAD", squadId: 113 }),
+    );
+    await waitFor(() => harness.ruleChain.api.getState().recent.length > 0);
+    const record = harness.ruleChain.api.getState().recent[0];
+    assert.equal(record.status, "error");
+    assert.equal(record.error, "rcon_disband_failed");
+    assert.equal(record.actions.some((action) => action.type === "disband_failed"), true);
+  } finally {
+    await harness.stop();
+  }
+}
+
 testClassificationFieldsNormalizeWithoutLoss();
 await testNameViolationShortCircuits();
 await testPopulationThresholdSkipsHistoryWithoutPausingClock();
@@ -858,4 +906,6 @@ await testLegacyFinalPassCacheRestoresBySessionTimestamp();
 await testFinalPassCacheNormalizesDuplicateOrderCodes();
 await testManualClearCurrentRemovesFinalPassRecords();
 await testWorldBringUpClearsPreviousFinalPassRecords();
+await testRuntimePluginBroadcastHelpersUseModuleRegistry();
+await testDisbandFailureIsNotReportedAsHandled();
 console.log("run-squad-rule-chain-tests: ok");
