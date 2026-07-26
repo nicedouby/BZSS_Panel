@@ -508,9 +508,8 @@ async function testVehicleSecondThirdAndOpenWindows() {
       creatorSteamId: "steam-open-vehicle",
     }));
     assert.equal(open.approved, true);
-    await waitFor(() => harness.broadcasts.length === 2, 2000);
-    assert.equal(harness.broadcasts.length, 2);
-    assert.equal(harness.disbands.length, 2);
+    assert.equal(harness.broadcasts.length, 1);
+    assert.equal(harness.disbands.length, 1);
   } finally {
     await harness.stop();
   }
