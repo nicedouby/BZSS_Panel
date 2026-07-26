@@ -88,6 +88,7 @@ export function createTacticalReplayPlayerModule({ config, logger }) {
       },
       listSessions: (options) => listSessions(settings, options),
       getSession: (sessionId) => getSession(settings, sessionId),
+      removeSession: (sessionId) => removeSession(settings, sessionId),
       readState: async (sessionId, options) => {
         state.reads += 1;
         state.lastReadAt = new Date().toISOString();
@@ -173,6 +174,7 @@ async function getSession(settings, sessionId) {
     : Number.isFinite(startedMs)
       ? Math.max(0, (Number.isFinite(endedMs) ? endedMs : Date.now()) - startedMs)
       : 0;
+  const sizeBytes = await getDirectorySize(directory);
 
   return {
     ...enriched,
@@ -180,9 +182,25 @@ async function getSession(settings, sessionId) {
     sessionId: enriched.sessionId ?? safeId.replace(/\.open$/i, ""),
     status: enriched.status ?? (enriched.endedAt ? "closed" : "recording"),
     durationMs,
+    sizeBytes,
     isPlayable: await hasReplayRecords(directory),
     rootDir: undefined,
   };
+}
+
+async function removeSession(settings, sessionId) {
+  const safeId = validateSessionId(sessionId);
+  const directory = await resolveSessionDirectory(settings.rootDir, safeId);
+  if (!directory) return null;
+  if (path.basename(directory).endsWith(".open")) {
+    const error = new Error("正在录制的回放不能删除，请先停止录制。");
+    error.code = "ReplaySessionRecording";
+    error.statusCode = 409;
+    throw error;
+  }
+  const removed = { id: safeId, sizeBytes: await getDirectorySize(directory) };
+  await fs.rm(directory, { recursive: true, force: false });
+  return removed;
 }
 
 async function recoverSessionHeader(directory) {
@@ -649,6 +667,17 @@ async function resolveSessionDirectory(rootDir, sessionId) {
     }
   }
   return null;
+}
+
+async function getDirectorySize(directory) {
+  let total = 0;
+  const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const item = path.join(directory, entry.name);
+    if (entry.isDirectory()) total += await getDirectorySize(item);
+    else total += Number((await fs.stat(item).catch(() => null))?.size ?? 0);
+  }
+  return total;
 }
 
 function clampInteger(value, minimum, maximum, fallback) {
