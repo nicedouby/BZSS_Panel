@@ -205,6 +205,8 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         reason,
         operator,
         system,
+        priority: request.priority,
+        batchId: request.batchId ?? "",
       });
 
       const result = buildResult({
@@ -457,7 +459,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     return actionHistory.slice(0, limit);
   }
 
-  async function executeForceTeamChangeCommand({ command, source, reason, operator, system }) {
+  async function executeForceTeamChangeCommand({ command, source, reason, operator, system, priority = false, batchId = "" }) {
     const requiredPermission = resolveRconPermission(command, { requiredPermission: "rcon.tb" });
     if (!system && !canSendRconCommand(operator, command, { requiredPermission })) {
       return {
@@ -476,8 +478,8 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         system,
         actor: operator,
         requiredPermission,
-        priority: requestPriority(request),
-        batchId: request.batchId ?? "",
+        priority: requestPriority({ priority }),
+        batchId,
       });
       return normalizeDispatchResponse(response);
     }
