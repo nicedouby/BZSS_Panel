@@ -656,30 +656,7 @@
         >
           清除热点
         </button>
-                <button
-          v-if="measurePoints.length"
-          class="ctrl-btn text-btn"
-          @click="clearMeasurePoints"
-          title="清空测距点"
-        >
-          清空
-        </button>
-                <button
-          class="ctrl-btn text-btn hotspot-ctrl-btn"
-          :class="{ active: combatHotspot != null }"
-          @click="calculateCombatHotspot"
-          title="计算并生成作战热点中心及1000m半径"
-        >
-          热点
-        </button>
-                <button
-          v-if="combatHotspot != null"
-          class="ctrl-btn text-btn"
-          @click="clearCombatHotspot"
-          title="清除作战热点"
-        >
-          清除热点
-        </button>
+
       </div>
 
       <!-- Coordinate Sector Display Box (Bottom Right) -->
