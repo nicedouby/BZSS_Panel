@@ -196,7 +196,7 @@ async function testNonChineseWeirdNameIsViolation() {
   assert.equal(harness.calls[0].type, "remove");
   assert.equal(harness.calls[1].type, "disband");
   const recent = harness.instance.api.getState().recent[0];
-  assert.equal(recent.actions.some((action) => action.type === "violation_emitted"), true);
+  assert.equal(recent.actions.some((action) => action.type === "violation_queued"), true);
   await harness.instance.stop();
 }
 
