@@ -655,7 +655,8 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
   }
 
   function getCurrentMatchContext() {
-    const state = modules?.matchState?.api?.getState?.() ?? {};
+    const matchStateApi = modules?.matchState?.api ?? modules?.matchState;
+    const state = matchStateApi?.getState?.() ?? {};
     const serverId = normalizeText(state?.serverId)
       || normalizeText(state?.serverStatus?.serverId)
       || normalizeText(core?.webStatus?.serverId)
@@ -755,15 +756,15 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     const serverId = normalizeText(
       core?.webStatus?.serverId
       ?? core?.webStatus?.state?.serverId
-      ?? modules?.matchState?.api?.getState?.()?.serverId
+      ?? (modules?.matchState?.api ?? modules?.matchState)?.getState?.()?.serverId
       ?? "",
     );
-    const playerState = modules?.playerState?.api;
+    const playerState = modules?.playerState?.api ?? modules?.playerState;
     if (typeof playerState?.getPlayerBySteamID === "function") {
       return playerState.getPlayerBySteamID(serverId, player.steamId);
     }
 
-    const matchState = modules?.matchState?.api?.getState?.();
+    const matchState = (modules?.matchState?.api ?? modules?.matchState)?.getState?.();
     const players = Array.isArray(matchState?.players?.list) ? matchState.players.list : [];
     return players.find((candidate) => normalizeText(candidate?.steamID ?? candidate?.steamId).toLowerCase() === normalizeText(player.steamId).toLowerCase()) ?? null;
   }
