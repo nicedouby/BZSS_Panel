@@ -1398,10 +1398,22 @@
 }
 
 .tactical-sidebar.is-collapsed {
-  transform: translateX(100%);
-  position: absolute;
-  right: 0;
-  height: 100%;
+  width: 32px;
+  min-width: 32px;
+  transform: none;
+  background: transparent;
+  border-left: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+/* Keep the toggle handle anchored to the map/sidebar boundary. The panel
+ * content is hidden independently, so the handle never travels with it. */
+.tactical-sidebar.is-collapsed .sidebar-content-wrapper {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(12px);
 }
 
 /* Tab Handle to toggle sidebar */
@@ -1438,8 +1450,13 @@
 .sidebar-content-wrapper {
   display: flex;
   flex-direction: column;
+  width: 360px;
+  min-width: 360px;
   height: 100%;
   overflow: hidden;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0s;
 }
 
 .sidebar-section {
