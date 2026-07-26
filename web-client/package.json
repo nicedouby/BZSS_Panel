@@ -7,8 +7,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "node scripts/run-vue-tsc.mjs --noEmit && node scripts/run-vite.mjs build --config vite.config.mjs",
     "typecheck": "node scripts/run-vue-tsc.mjs --noEmit",
+    "test:build-runner": "node scripts/test-node-tool-runner.mjs",
     "check:encoding": "node ../scripts/check-encoding.mjs",
-    "check": "npm run check:encoding && npm run typecheck && npm test && npm run scan:layout && npm run build",
+    "check": "npm run check:encoding && npm run test:build-runner && npm run typecheck && npm test && npm run scan:layout && npm run build",
     "preview": "vite preview --host 127.0.0.1",
     "scan:layout": "node scripts/scan-layout-contract.mjs",
     "test": "vitest run"
