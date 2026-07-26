@@ -273,7 +273,15 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     const reason = normalizeText(request.reason) || DEFAULT_SHUFFLE_REASON;
     const system = Boolean(request.system);
     const algorithm = normalizeShuffleAlgorithm(request.algorithm ?? request.mode);
-    const roster = normalizeShuffleRoster(request.players ?? request.roster);
+    const rawRoster = request.players ?? request.roster;
+    const roster = normalizeShuffleRoster(
+      Array.isArray(rawRoster)
+        ? rawRoster.map((player) => ({
+            ...player,
+            teamId: player?.teamId ?? player?.fromTeamId ?? player?.teamID,
+          }))
+        : rawRoster,
+    );
     const rawGroups = Array.isArray(request.groups)
       ? request.groups
       : typeof core.groupReport?.getShuffleGroups === "function"
