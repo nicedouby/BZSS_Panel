@@ -555,12 +555,15 @@ export class PlayerRepository {
     return normalizeSteamAvatarFields(row);
   }
 
-  async listPlayersWithSteamID({ limit, offset, order = "DESC" } = {}) {
+  async listPlayersWithSteamID({ limit, offset, order = "DESC", missingAvatarOnly = false } = {}) {
     let query = `SELECT id, current_name, steam_id, eos_id, game_seconds, steam_avatar, updated_at
        FROM players
        WHERE steam_id IS NOT NULL
-         AND TRIM(steam_id) <> ''
-       ORDER BY updated_at ${order === "ASC" ? "ASC" : "DESC"}`;
+         AND TRIM(steam_id) <> ''`;
+    if (missingAvatarOnly) {
+      query += " AND (steam_avatar IS NULL OR TRIM(steam_avatar) = '')";
+    }
+    query += ` ORDER BY updated_at ${order === "ASC" ? "ASC" : "DESC"}`;
     const params = [];
     if (limit !== undefined) {
       query += " LIMIT ?";
