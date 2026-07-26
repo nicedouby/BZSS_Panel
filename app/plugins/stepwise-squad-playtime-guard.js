@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { classifySquadName, SQUAD_NATURE, SQUAD_NATURE_LABEL } from "../domain/squad/squad_name_classifier.js";
+import { classifySquadNameWithPolicy } from "../domain/squad-name-policy/index.js";
 import {
   SQUAD_NAME_RULE_PASSED_EVENT,
   SQUAD_RULE_CHAIN_MODULE_ID,
@@ -764,11 +764,12 @@ function findRule(nature, seconds, runtimeConfig) {
 
 function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
   const creationSource = normalizeText(event.creationSource ?? fallbackSource) || fallbackSource;
-  const classification = classifySquadName(normalizeText(event.squadName));
-  const passedSquadType = normalizeText(event.squadNature ?? event.squadType);
-  const squadNature = passedSquadType || classification.nature;
-  const squadNatureLabel = normalizeText(event.squadTypeLabel)
-    || (squadNature === classification.nature ? classification.label : passedSquadType);
+  const classified = event.classification?.source
+    ? { classification: cloneValue(event.classification), policyRevision: event.classification.policyRevision }
+    : resolvePolicyClassification(event.squadName, modules, config);
+  const classification = classified?.classification ?? null;
+  const squadNature = normalizeText(classification?.nature);
+  const squadNatureLabel = normalizeText(classification?.natureLabel ?? classification?.typeLabel);
   return {
     id: normalizeText(event.id) || `sspg:${Date.now()}:${Math.random().toString(16).slice(2)}`,
     serverId: normalizeText(event.serverId),
@@ -791,14 +792,16 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
     creationConfidence: normalizeText(event.creationConfidence ?? (creationSource === "LOG" ? "HIGH" : "MEDIUM")),
     sourceMode: normalizeSourceMode(event.sourceMode ?? (creationSource === "LOG" ? "live" : creationSource === "RCON_SNAPSHOT" ? "backfill" : "recovery")),
     isLogConfirmed: creationSource === "LOG" || creationSource === "RCON_PROMOTED_TO_LOG",
+    classification,
+    policyRevision: nullableNumber(classified?.policyRevision ?? classification?.policyRevision),
     squadNature,
     squadNatureLabel,
-    squadTypeId: normalizeText(event.squadTypeId),
-    squadTypeLabel: normalizeText(event.squadTypeLabel) || squadNatureLabel,
-    squadRuleId: normalizeText(event.squadRuleId),
-    effectiveMaxPlayers: nullableNumber(event.effectiveMaxPlayers),
-    maxPlayersSource: normalizeText(event.maxPlayersSource) || "none",
-    assetPath: normalizeText(event.assetPath),
+    squadTypeId: normalizeText(classification?.typeId),
+    squadTypeLabel: normalizeText(classification?.typeLabel) || squadNatureLabel,
+    squadRuleId: normalizeText(classification?.ruleId),
+    effectiveMaxPlayers: nullableNumber(classification?.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(classification?.maxPlayersSource) || "none",
+    assetPath: normalizeText(classification?.assetPath),
     classificationMetadata: cloneValue(event.classificationMetadata) ?? {},
     squadVehicleClass: classification.vehicleClass,
     squadVehicleClassLabel: classification.vehicleClassLabel,
@@ -813,16 +816,28 @@ function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
 
 function buildClassificationFields(record = {}) {
   return {
-    squadType: normalizeText(record.squadNature) || "other",
-    squadNature: normalizeText(record.squadNature) || "other",
-    squadTypeId: normalizeText(record.squadTypeId),
-    squadTypeLabel: normalizeText(record.squadTypeLabel ?? record.squadNatureLabel),
-    squadRuleId: normalizeText(record.squadRuleId),
-    effectiveMaxPlayers: nullableNumber(record.effectiveMaxPlayers),
-    maxPlayersSource: normalizeText(record.maxPlayersSource) || "none",
-    assetPath: normalizeText(record.assetPath),
+    classification: cloneValue(record.classification) ?? null,
+    policyRevision: nullableNumber(record.policyRevision ?? record.classification?.policyRevision),
+    squadType: normalizeText(record.classification?.nature ?? record.squadNature) || "other",
+    squadNature: normalizeText(record.classification?.nature ?? record.squadNature) || "other",
+    squadTypeId: normalizeText(record.classification?.typeId ?? record.squadTypeId),
+    squadTypeLabel: normalizeText(record.classification?.typeLabel ?? record.squadTypeLabel ?? record.squadNatureLabel),
+    squadRuleId: normalizeText(record.classification?.ruleId ?? record.squadRuleId),
+    effectiveMaxPlayers: nullableNumber(record.classification?.effectiveMaxPlayers ?? record.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(record.classification?.maxPlayersSource ?? record.maxPlayersSource) || "none",
+    assetPath: normalizeText(record.classification?.assetPath ?? record.assetPath),
     classificationMetadata: cloneValue(record.classificationMetadata) ?? {},
   };
+}
+
+function resolvePolicyClassification(squadName, modules, config) {
+  const api = modules?.squadNamePolicyGuard?.classifySquadName
+    ? modules.squadNamePolicyGuard
+    : modules?.squadNamePolicyGuard?.api;
+  if (typeof api?.classifySquadName === "function") {
+    return api.classifySquadName(squadName);
+  }
+  return classifySquadNameWithPolicy(squadName, config);
 }
 
 function normalizeRconSquad(squad = {}, context = {}) {
