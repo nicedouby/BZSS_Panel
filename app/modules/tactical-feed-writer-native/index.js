@@ -19,6 +19,9 @@ const DEFAULTS = Object.freeze({
   segmentDurationMs: 30_000,
   endGraceMs: 5_000,
   metadataFlushMs: 5_000,
+  // Fallback for delayed or missing round-ended events.
+  roundResetMinimumSeconds: 30,
+  roundResetToleranceSeconds: 15,
 });
 
 export function createTacticalFeedWriterModule({ core, modules, config, logger }) {
@@ -60,10 +63,17 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
 
     const context = resolveRoundContext(snapshot, modules, core, settings);
     const ended = isMatchEnded(snapshot);
+    const playtimeSeconds = readPlaytimeSeconds(snapshot);
+    const roundReset = state.session
+      && hasPlaytimeReset(state.session.lastPlaytimeSeconds, playtimeSeconds, settings);
 
     if (!state.session) {
       if (!isMatchActive(snapshot)) return;
       if (context.anchor && context.anchor === state.lastEndedAnchor) return;
+      await beginSession(snapshot, context, now);
+    } else if (roundReset && isMatchActive(snapshot)) {
+      await endSession("playtime-reset", now);
+      state.lastEndedAnchor = "";
       await beginSession(snapshot, context, now);
     } else if (
       context.anchor
@@ -78,11 +88,9 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     if (!state.session) return;
 
     updateSessionRoster(snapshot);
+    if (playtimeSeconds != null) state.session.lastPlaytimeSeconds = playtimeSeconds;
 
     if (ended) {
-      if (hasPlayers(snapshot)) {
-        await writeSnapshot(snapshot, now, { force: true });
-      }
       if (!state.pendingEndAt) state.pendingEndAt = now + settings.endGraceMs;
       if (now >= state.pendingEndAt) await endSession("match-ended", now);
       return;
@@ -117,6 +125,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
       currentPlayerCount: 0,
       frameCount: 0,
       lastNonEmptySnapshot: null,
+      lastPlaytimeSeconds: readPlaytimeSeconds(snapshot),
     };
     state.segmentIndex = 0;
     state.sequence = 0;
@@ -202,7 +211,11 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
       serverId: state.session.serverId,
       roundAnchor: state.session.anchor,
       startedAt: new Date(state.session.startedAt).toISOString(),
-      ...(ended ? { endedAt: new Date(now).toISOString(), durationMs: Math.max(0, now - state.session.startedAt) } : {}),
+      ...(ended ? {
+        endedAt: new Date(now).toISOString(),
+        durationMs: getRecordedDurationMs(state.session),
+        recordedThroughAt: state.session.lastFrameAt ? new Date(state.session.lastFrameAt).toISOString() : null,
+      } : {}),
       status,
       reason,
       map: state.session.map,
@@ -222,9 +235,6 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   async function endSession(reason, now = Date.now()) {
     if (!state.session) return;
 
-    if (state.session.lastNonEmptySnapshot && now > state.lastFrameAt) {
-      await writeSnapshot(state.session.lastNonEmptySnapshot, now, { force: true, terminal: true });
-    }
     await closeSegment();
     await flushSessionMetadata("closed", now, reason);
     await unlink(path.join(state.session.directory, "writer.lock")).catch(() => {});
@@ -431,6 +441,8 @@ function readSettings(config) {
     segmentDurationMs: positiveInteger(value.segmentDurationMs, DEFAULTS.segmentDurationMs),
     endGraceMs: positiveInteger(value.endGraceMs, DEFAULTS.endGraceMs),
     metadataFlushMs: positiveInteger(value.metadataFlushMs, DEFAULTS.metadataFlushMs),
+    roundResetMinimumSeconds: positiveInteger(value.roundResetMinimumSeconds, DEFAULTS.roundResetMinimumSeconds),
+    roundResetToleranceSeconds: positiveInteger(value.roundResetToleranceSeconds, DEFAULTS.roundResetToleranceSeconds),
   };
 }
 
@@ -488,6 +500,24 @@ function isMatchEnded(snapshot) {
 
 function hasPlayers(snapshot) {
   return Array.isArray(snapshot?.players) && snapshot.players.length > 0;
+}
+
+function readPlaytimeSeconds(snapshot) {
+  const value = snapshot?.match?.playtime ?? snapshot?.server?.playtime ?? snapshot?.serverStatus?.playtime;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+}
+
+function hasPlaytimeReset(previous, current, settings) {
+  if (previous == null || current == null) return false;
+  const minimum = Number(settings.roundResetMinimumSeconds ?? 30);
+  const tolerance = Number(settings.roundResetToleranceSeconds ?? 15);
+  return previous >= minimum && current <= tolerance && current + tolerance < previous;
+}
+
+function getRecordedDurationMs(session) {
+  if (!session?.lastFrameAt || !session?.startedAt) return 0;
+  return Math.max(0, session.lastFrameAt - session.startedAt);
 }
 
 function rememberPlayer(target, player) {
