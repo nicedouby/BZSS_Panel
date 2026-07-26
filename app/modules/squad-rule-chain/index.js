@@ -152,7 +152,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   async function handleViolation(input = {}) {
     const event = normalizeSquadRuleViolationEvent(ensureAuthoritativeClassification(input));
     if (!hasAuthoritativeClassification(event)) {
-      remember(recent, {
+      const record = {
         id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
         createdAt: nowIso(),
         updatedAt: nowIso(),
@@ -162,20 +162,22 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         violation: false,
         reason: "未取得队名规范分类，已跳过自动处理。",
         actions: [{ type: "classification_missing", action: "audit_only" }],
-      }, recentLimit());
+      };
+      remember(recent, record, recentLimit());
       moduleLogger?.warn?.("[SquadRuleChain] classification_missing: violation skipped.");
-      return;
+      return record;
     }
     if (!isLiveActionEvent(event)) {
-      remember(recent, {
+      const record = {
         id: `${SQUAD_RULE_CHAIN_MODULE_ID}:audit:${Date.now()}:${Math.random().toString(16).slice(2)}`,
         createdAt: nowIso(),
         updatedAt: nowIso(),
         event,
         actions: [{ type: "audit_only" }],
         status: "audit_only",
-      }, recentLimit());
-      return;
+      };
+      remember(recent, record, recentLimit());
+      return record;
     }
     cancelFinalPassFallback(event);
     const enforcement = resolveEnforcementState();
