@@ -1,5 +1,7 @@
 // -*- coding: utf-8 -*-
 
+import { resolvePlayerFireTeam } from "./match-end-snapshot-fireteam.js";
+
 const PLUGIN_ID = "squad-members-playtime-warning";
 const DEFAULT_FIRST_WARNING_SECONDS = 5 * 60;
 const DEFAULT_LEADER_WARNING_SECONDS = 7 * 60 + 30;
@@ -30,37 +32,30 @@ function formatHours(gameSeconds) {
 }
 
 function normalizeFireTeam(player) {
-  const raw = first(
-    player?.fireTeam,
-    player?.fireteam,
-    player?.fireTeamName,
-    player?.fireteamName,
-    player?.fireTeamLabel,
-    player?.fireteamLabel,
-    player?.ftName,
-  ).toUpperCase();
+  const sources = [
+    player,
+    player?.bzssCore,
+    player?.bzssCore?.soldierInfo,
+    player?.playerScoreboard,
+  ];
 
-  if (raw) {
-    const match = raw.match(/(?:^|\\s|组|GROUP|FIRETEAM)([ABC])(?:组|GROUP)?$/i) || raw.match(/^([ABC])$/i);
-    if (match) return match[1].toUpperCase();
-    if (/ALPHA|火力组A|A组/.test(raw)) return "A";
-    if (/BRAVO|火力组B|B组/.test(raw)) return "B";
-    if (/CHARLIE|火力组C|C组/.test(raw)) return "C";
+  for (const source of sources) {
+    const resolved = resolvePlayerFireTeam(source, source?.bzssCore ?? source);
+    if (resolved.fireTeam) return resolved.fireTeam;
   }
 
-  const fireTeamId = Number(player?.fireTeamID ?? player?.fireteamID ?? player?.fireTeamId);
-  if (fireTeamId === 1) return "A";
-  if (fireTeamId === 2) return "B";
-  if (fireTeamId === 3) return "C";
-
-  const ftIndex = Number(player?.ftIndex ?? player?.fireTeamIndex ?? player?.fireteamIndex);
-  if (ftIndex === 0) return "A";
-  if (ftIndex === 1) return "B";
-  if (ftIndex === 2) return "C";
+  // 兼容 playerState 中常见的嵌套火力组字段。
+  const nestedIndex = player?.playerScoreboard?.fireTeamIndex
+    ?? player?.playerScoreboard?.ftIndex
+    ?? player?.fireTeamIndex
+    ?? player?.ftIndex;
+  const numericIndex = Number(nestedIndex);
+  if (numericIndex === 0) return "A";
+  if (numericIndex === 1) return "B";
+  if (numericIndex === 2) return "C";
 
   return "";
 }
-
 function getRole(player) {
   return first(
     player?.roleName,
@@ -208,7 +203,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const name = getPlayerName(player);
     const role = getRole(player);
     const seconds = await getPlaytimeSeconds(player);
-    return `${fireTeamText} ${name} 兵种 大致是 ${role} 游戏时长 ${formatHours(seconds)}`;
+    return `（${fireTeam || "未分"}组）${name} 兵种 大致是 ${role} 游戏时长 ${formatHours(seconds)}`;
   }
 
   async function buildLeaderLine(player, squadName) {
