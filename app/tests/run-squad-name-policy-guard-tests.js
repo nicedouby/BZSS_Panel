@@ -166,7 +166,7 @@ async function testLogViolationDisbandsThenWarns() {
   assert.equal(state.stats.violations, 1);
   assert.equal(state.stats.disbanded, 0);
   assert.equal(state.stats.warningsSent, 0);
-  assert.equal(state.recent[0].actions.some((action) => action.type === "violation_emitted"), true);
+  assert.equal(state.recent[0].actions.some((action) => action.type === "violation_queued"), true);
   await harness.instance.stop();
 }
 
