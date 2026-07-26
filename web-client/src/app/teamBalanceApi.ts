@@ -1,4 +1,4 @@
-import { apiPost } from "./apiClient";
+import { apiGet, apiPost } from "./apiClient";
 
 export interface TeamBalanceForceTeamChangeResponse {
   ok: boolean;
