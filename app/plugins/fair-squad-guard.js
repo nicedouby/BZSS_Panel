@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { classifySquadNameWithPolicy } from "../domain/squad-name-policy/index.js";
 import {
   SQUAD_RULE_CHAIN_MODULE_ID,
   SQUAD_RULE_SOURCES,
@@ -22,13 +23,6 @@ const DEFAULT_DISBAND_COMMAND_NAME_SUFFIX = "";
 const KICK_RETRY_DELAY_MS = 1000;
 const KICK_RETRY_COUNT = 3;
 const PHASE_POLL_INTERVAL_MS = 1000;
-
-const DEFAULT_INFANTRY_PATTERNS = Object.freeze([
-  "^squad\\s*\\d+$",
-  "^\\d+$",
-  "^inf(?:antry)?(?:\\s*\\d+)?$",
-  "^步兵(?:\\s*\\d+)?$",
-]);
 
 export function createPlugin({ core, modules, config, logger } = {}) {
   const pluginLogger =
@@ -305,7 +299,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         creatorName: event.leaderName ?? event.creatorName,
         creatorSteamId: event.leaderSteamId ?? event.creatorSteamId,
         creatorEosId: event.leaderEosId ?? event.creatorEosId,
-      }, "LOG");
+      }, "LOG", modules, config);
       if (!normalized.serverId || normalized.squadId == null) return;
       if (normalized.teamId == null) {
         const pendingKey = buildPendingKey(normalized);
@@ -336,7 +330,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           serverId,
           matchId,
           observedAt: normalizeText(event.time) || nowIso(),
-        });
+        }, modules, config);
         if (!normalized.serverId || normalized.teamId == null || normalized.squadId == null) continue;
         currentPresenceKeys.add(buildPresenceKey(normalized));
 
@@ -446,12 +440,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     if (seconds < runtimeConfig.infantryOnlyUntilSeconds) {
-      const allowed = isAllowedInfantryName(record.squadName, runtimeConfig);
+      if (!record.classification?.source) {
+        return {
+          approved: true,
+          phase: "classification_missing",
+          phaseLabel: "classification missing",
+          reasons: ["未取得队名规范分类，已跳过公平建队自动处理。"],
+        };
+      }
+      const allowed = isInfantryClassification(record.classification);
       return {
         approved: allowed,
         phase: "infantry_only",
         phaseLabel: "20-50s infantry only",
-        reasons: allowed ? [] : ["当前区间仅允许步兵队创建。"],
+        reasons: allowed ? [] : ["当前区间仅允许队名规范分类为步兵队的小队。"],
       };
     }
 
@@ -807,9 +809,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       noSquadCreationSeconds: runtimeConfig.noSquadCreationSeconds,
       infantryOnlyUntilSeconds: runtimeConfig.infantryOnlyUntilSeconds,
       maxViolationCountBeforeKick: runtimeConfig.maxViolationCountBeforeKick,
-      allowedInfantryNames: [...runtimeConfig.allowedInfantryNames],
-      allowedInfantryPatterns: [...runtimeConfig.allowedInfantryPatterns],
-      defaultInfantryPatterns: [...DEFAULT_INFANTRY_PATTERNS],
+      classificationSource: "squad_name_policy",
+      classificationMessage: "队伍类型由“队名规范”统一提供。",
       maxRecentRecords: runtimeConfig.maxRecentRecords,
       disbandCommandNameSuffix: runtimeConfig.disbandCommandNameSuffix,
       broadcastOnApproved: runtimeConfig.broadcastOnApproved,
@@ -882,7 +883,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return getStatus();
     },
     async simulateCreation(event = {}) {
-      return await enqueue(() => processCreation(normalizeCreationEvent(event)));
+      return await enqueue(() => processCreation(normalizeCreationEvent(event, "LOG", modules, config)));
     },
     async simulateSquadsUpdated(event = {}) {
       await handleSquadsUpdated(event);
@@ -970,8 +971,8 @@ function readConfig(config) {
     maxViolationCountBeforeKick: positiveInt(raw.maxViolationCountBeforeKick, DEFAULT_MAX_VIOLATIONS_BEFORE_KICK),
     maxRecentRecords: positiveInt(raw.maxRecentRecords, DEFAULT_RECENT_LIMIT),
     disbandCommandNameSuffix: normalizeText(raw.disbandCommandNameSuffix ?? DEFAULT_DISBAND_COMMAND_NAME_SUFFIX),
-    allowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
-    allowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
+    deprecatedAllowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
+    deprecatedAllowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
     broadcastOnApproved: raw.broadcastOnApproved === true,
     broadcastOnViolation: raw.broadcastOnViolation !== false,
   };
@@ -1017,21 +1018,27 @@ function createEmptySummary() {
   };
 }
 
-function normalizeCreationEvent(event = {}) {
+function normalizeCreationEvent(event = {}, fallbackSource = "LOG", modules = null, config = null) {
   const creationSource = normalizeText(event.creationSource ?? "LOG") || "LOG";
+  const classified = event.classification?.source
+    ? { classification: cloneValue(event.classification) }
+    : resolvePolicyClassification(event.squadName, modules, config);
   return {
     serverId: normalizeText(event.serverId),
     matchId: normalizeText(event.matchId),
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
     squadName: normalizeText(event.squadName),
-    squadNature: normalizeText(event.squadNature ?? event.squadType),
-    squadTypeId: normalizeText(event.squadTypeId),
-    squadTypeLabel: normalizeText(event.squadTypeLabel),
-    squadRuleId: normalizeText(event.squadRuleId),
-    effectiveMaxPlayers: nullableNumber(event.effectiveMaxPlayers),
-    maxPlayersSource: normalizeText(event.maxPlayersSource) || "none",
-    assetPath: normalizeText(event.assetPath),
+    classification: classified?.classification ?? null,
+    policyRevision: nullableNumber(classified?.policyRevision),
+    squadNature: normalizeText(classified?.classification?.nature),
+    squadTypeId: normalizeText(classified?.classification?.typeId),
+
+    squadTypeLabel: normalizeText(classified?.classification?.typeLabel),
+    squadRuleId: normalizeText(classified?.classification?.ruleId),
+    effectiveMaxPlayers: nullableNumber(classified?.classification?.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(classified?.classification?.maxPlayersSource) || "none",
+    assetPath: normalizeText(classified?.classification?.assetPath),
     classificationMetadata: cloneValue(event.classificationMetadata) ?? {},
     playtime: cloneValue(event.playtime) ?? null,
     factionName: normalizeText(event.factionName ?? event.teamName),
@@ -1051,19 +1058,21 @@ function normalizeCreationEvent(event = {}) {
 
 function buildClassificationFields(record = {}) {
   return {
-    squadType: normalizeText(record.squadNature) || "other",
-    squadNature: normalizeText(record.squadNature) || "other",
-    squadTypeId: normalizeText(record.squadTypeId),
-    squadTypeLabel: normalizeText(record.squadTypeLabel),
-    squadRuleId: normalizeText(record.squadRuleId),
-    effectiveMaxPlayers: nullableNumber(record.effectiveMaxPlayers),
-    maxPlayersSource: normalizeText(record.maxPlayersSource) || "none",
-    assetPath: normalizeText(record.assetPath),
+    classification: cloneValue(record.classification) ?? null,
+    policyRevision: nullableNumber(record.policyRevision ?? record.classification?.policyRevision),
+    squadType: normalizeText(record.classification?.nature ?? record.squadNature) || "other",
+    squadNature: normalizeText(record.classification?.nature ?? record.squadNature) || "other",
+    squadTypeId: normalizeText(record.classification?.typeId ?? record.squadTypeId),
+    squadTypeLabel: normalizeText(record.classification?.typeLabel ?? record.squadTypeLabel),
+    squadRuleId: normalizeText(record.classification?.ruleId ?? record.squadRuleId),
+    effectiveMaxPlayers: nullableNumber(record.classification?.effectiveMaxPlayers ?? record.effectiveMaxPlayers),
+    maxPlayersSource: normalizeText(record.classification?.maxPlayersSource ?? record.maxPlayersSource) || "none",
+    assetPath: normalizeText(record.classification?.assetPath ?? record.assetPath),
     classificationMetadata: cloneValue(record.classificationMetadata) ?? {},
   };
 }
 
-function normalizeRconSquad(squad = {}, context = {}) {
+function normalizeRconSquad(squad = {}, context = {}, modules = null, config = null) {
   return {
     serverId: normalizeText(squad.serverId ?? context.serverId),
     matchId: normalizeText(squad.matchId ?? context.matchId),
@@ -1110,13 +1119,22 @@ function shouldStartNewRecordGeneration(existing, event) {
   return nextCreatedAtMs > existingCreatedAtMs;
 }
 
-function isAllowedInfantryName(squadName, runtimeConfig) {
-  const normalized = normalizeSquadName(squadName);
-  if (!normalized) return false;
-  const allowedNames = Array.isArray(runtimeConfig?.allowedInfantryNames) ? runtimeConfig.allowedInfantryNames : [];
-  const allowedPatterns = Array.isArray(runtimeConfig?.allowedInfantryPatterns) ? runtimeConfig.allowedInfantryPatterns : [];
-  return allowedNames.some((name) => normalizeSquadName(name) === normalized)
-    || [...DEFAULT_INFANTRY_PATTERNS, ...allowedPatterns].some((pattern) => safeTest(pattern, squadName));
+function isInfantryClassification(classification) {
+  return classification?.valid === true && classification?.nature === "infantry";
+}
+
+function resolvePolicyClassification(squadName, modules, config) {
+  try {
+    const api = modules?.squadNamePolicyGuard?.classifySquadName
+      ? modules.squadNamePolicyGuard
+      : modules?.squadNamePolicyGuard?.api;
+    if (typeof api?.classifySquadName === "function") {
+      return api.classifySquadName(squadName);
+    }
+    return classifySquadNameWithPolicy(squadName, config);
+  } catch {
+    return null;
+  }
 }
 
 function parseListText(value) {
@@ -1174,14 +1192,6 @@ function buildCreatorKey(record) {
 
 function hasCreatorIdentity(record) {
   return Boolean(record.creatorName || record.creatorSteamId || record.creatorEosId);
-}
-
-function safeTest(pattern, value) {
-  try {
-    return new RegExp(pattern, "i").test(String(value ?? ""));
-  } catch {
-    return false;
-  }
 }
 
 function summarizeActionResult(result) {

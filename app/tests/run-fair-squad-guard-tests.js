@@ -52,6 +52,29 @@ async function createHarness(options = {}) {
   };
 
   const modules = {
+    squadNamePolicyGuard: {
+      classifySquadName(name) {
+        const isVehicle = /^(?:Armor|步兵战车|IFV)/i.test(String(name ?? "").trim());
+        return {
+          valid: true,
+          policyRevision: 12,
+          classification: {
+            valid: true,
+            source: "policy_event",
+            policyRevision: 12,
+            typeId: isVehicle ? "ifv" : "infantry",
+            typeLabel: isVehicle ? "步兵战车" : "战斗步兵",
+            nature: isVehicle ? "vehicle" : "infantry",
+            natureLabel: isVehicle ? "载具队" : "步兵队",
+            ruleId: isVehicle ? "vehicle.ifv" : "infantry.main",
+            matchedKind: "canonical",
+            matchedValue: String(name ?? ""),
+            effectiveMaxPlayers: null,
+            maxPlayersSource: "none",
+          },
+        };
+      },
+    },
     squadManagement: {
       getState() {
         return matchState;
@@ -289,7 +312,7 @@ async function testWindowRules() {
 
     const allowlisted = await harness.plugin.api.simulateCreation(logCreation({
       squadId: 5,
-      squadName: "INF OK",
+      squadName: "Squad 5",
       creatorName: "Third Leader",
       creatorSteamId: "steam-third-leader",
       creatorEosId: "eos-third-leader",

@@ -12,7 +12,7 @@ import {
   normalizeRuleChainPassEvent,
   normalizeSquadRuleViolationEvent,
 } from "./events.js";
-import { classifySquadName, SQUAD_NATURE, SQUAD_NATURE_LABEL } from "../../domain/squad/squad_name_classifier.js";
+import { SQUAD_NATURE, SQUAD_NATURE_LABEL } from "../../domain/squad/squad_name_classifier.js";
 
 const API_NAME = "squadRuleChain";
 const DEFAULT_RECENT_LIMIT = 200;
@@ -142,6 +142,21 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   async function handleViolation(input = {}) {
     const event = normalizeSquadRuleViolationEvent(input);
+    if (!hasAuthoritativeClassification(event)) {
+      remember(recent, {
+        id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        event,
+        status: "classification_missing",
+        approved: true,
+        violation: false,
+        reason: "未取得队名规范分类，已跳过自动处理。",
+        actions: [{ type: "classification_missing", action: "audit_only" }],
+      }, recentLimit());
+      moduleLogger?.warn?.("[SquadRuleChain] classification_missing: violation skipped.");
+      return;
+    }
     if (!isLiveActionEvent(event)) {
       remember(recent, {
         id: `${SQUAD_RULE_CHAIN_MODULE_ID}:audit:${Date.now()}:${Math.random().toString(16).slice(2)}`,
@@ -230,6 +245,21 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   async function handleFinalPass(input = {}) {
     const event = normalizeRuleChainPassEvent(input);
+    if (!hasAuthoritativeClassification(event)) {
+      remember(finalPassRecords, {
+        id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        event,
+        status: "classification_missing",
+        approved: true,
+        violation: false,
+        reason: "未取得队名规范分类，已跳过最终通过处理。",
+        actions: [{ type: "classification_missing", action: "audit_only" }],
+      }, recentLimit());
+      moduleLogger?.warn?.("[SquadRuleChain] classification_missing: final pass skipped.");
+      return;
+    }
     if (!isLiveActionEvent(event)) {
       return;
     }
@@ -313,6 +343,10 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
 
   function scheduleFinalPassFallback(input = {}) {
     const event = normalizeRuleChainPassEvent(input);
+    if (!hasAuthoritativeClassification(event)) {
+      moduleLogger?.warn?.("[SquadRuleChain] classification_missing: final pass fallback skipped.");
+      return;
+    }
     const key = buildFinalPassEventKey(event);
     if (!key || finalPassSeenKeys.has(key) || pendingFinalPassTimers.has(key)) return;
     const timer = setTimeout(() => {
@@ -641,11 +675,16 @@ function buildFinalPassWarningMessages(event = {}) {
 }
 
 function resolveSquadNature(event = {}) {
-  const explicitNature = normalizeText(event.squadNature ?? event.squadType);
-  if (explicitNature && Object.values(SQUAD_NATURE).includes(explicitNature)) {
-    return explicitNature;
-  }
-  return classifySquadName(event.squadName, { includeDebug: false })?.nature || SQUAD_NATURE.OTHER;
+  const nature = normalizeText(event.classification?.nature);
+  return Object.values(SQUAD_NATURE).includes(nature) ? nature : SQUAD_NATURE.OTHER;
+}
+
+function hasAuthoritativeClassification(event = {}) {
+  return Boolean(
+    event?.classification
+    && event.classification.source === "policy_event"
+    && Number.isFinite(Number(event.classification.policyRevision)),
+  );
 }
 
 function resolveSquadNatureLabel(event = {}) {

@@ -84,6 +84,7 @@ export function normalizePolicyEntryV2(rawEntry = {}, options = {}) {
     priority: normalizeInteger(source.priority, 100),
     source: optionalString(source.source) || options.defaultSource || "manual",
     notes: optionalString(source.notes),
+    ruleExemptions: isRecord(source.ruleExemptions) ? { ...source.ruleExemptions } : {},
     legacyVehicleType: optionalString(source.legacyVehicleType ?? source.vehicleType),
     searchTokens: dedupeStrings([
       ...asStringArray(source.searchTokens),
@@ -123,6 +124,7 @@ export function buildRuleClassification(entry, squadType, reason = "") {
     ruleId: entry?.id || "",
     ...maxPlayers,
     assetPath: entry?.asset || "",
+    ruleExemptions: entry?.ruleExemptions ?? squadType?.ruleExemptions ?? {},
     reason,
   };
 }
