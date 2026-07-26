@@ -28,6 +28,7 @@ const DEFAULT_AUTO_REFRESH_INTERVAL_MS = 15_000;
 const DEFAULT_AUTO_REFRESH_COOLDOWN_MINUTES = 30;
 const DEFAULT_AUTO_REFRESH_MISSING_ONLY = true;
 const DEFAULT_AUTO_REFRESH_BATCH_SIZE = 12;
+const DEFAULT_AVATAR_BACKFILL_BATCH_SIZE = 100;
 const MAX_JOB_HISTORY = 200;
 const MAX_JOB_EVENTS = 100;
 
@@ -159,6 +160,7 @@ class SteamGameDurationService {
     autoRefreshCooldownMinutes,
     autoRefreshMissingOnly,
     autoRefreshBatchSize,
+    avatarBackfillBatchSize,
     fetchAvatarsEnabled,
     apiBaseUrl,
     steamPlaytimeRepo,
@@ -191,6 +193,7 @@ class SteamGameDurationService {
     this.autoRefreshCooldownMinutes = Math.max(0, Number(autoRefreshCooldownMinutes) || DEFAULT_AUTO_REFRESH_COOLDOWN_MINUTES);
     this.autoRefreshMissingOnly = autoRefreshMissingOnly == null ? DEFAULT_AUTO_REFRESH_MISSING_ONLY : Boolean(autoRefreshMissingOnly);
     this.autoRefreshBatchSize = Math.max(1, Number(autoRefreshBatchSize) || DEFAULT_AUTO_REFRESH_BATCH_SIZE);
+    this.avatarBackfillBatchSize = Math.max(1, Math.min(100, Number(avatarBackfillBatchSize) || DEFAULT_AVATAR_BACKFILL_BATCH_SIZE));
     this.steamPlaytimeRepo = steamPlaytimeRepo || null;
     this.playerDatabase = playerDatabase || null;
     this.logger = logger || null;
@@ -250,6 +253,7 @@ class SteamGameDurationService {
       autoRefreshCooldownMinutes: this.autoRefreshCooldownMinutes,
       autoRefreshMissingOnly: this.autoRefreshMissingOnly,
       autoRefreshBatchSize: this.autoRefreshBatchSize,
+      avatarBackfillBatchSize: this.avatarBackfillBatchSize,
       activeLookups: this.activeLookups,
       queuedLookups: this.lookupQueue.length,
       queuedJobs,
@@ -759,6 +763,34 @@ class SteamGameDurationService {
     return { selectedTargets, skippedItems };
   }
 
+  async backfillMissingSteamAvatars({ batchSize = this.avatarBackfillBatchSize } = {}) {
+    const take = Math.max(1, Math.min(100, Number(batchSize) || DEFAULT_AVATAR_BACKFILL_BATCH_SIZE));
+    if (!this.fetchAvatarsEnabled || !this.apiKey || !this.playerDatabase?.listPlayersWithSteamID) {
+      return { requested: 0, updated: 0, skipped: true };
+    }
+
+    let requested = 0;
+    let updated = 0;
+    // Read the first missing page repeatedly: successful writes remove rows
+    // from that filter, so no historical player is skipped.
+    for (;;) {
+      const players = await this.playerDatabase.listPlayersWithSteamID({
+        limit: take,
+        missingAvatarOnly: true,
+      });
+      const steamIDs = players.map((player) => optionalSteamID(player?.steam_id ?? player?.steamID)).filter(Boolean);
+      if (!steamIDs.length) break;
+
+      const result = await this.fetchAndCacheSteamAvatars(steamIDs);
+      requested += steamIDs.length;
+      updated += Number(result?.updated || 0);
+
+      // Do not spin forever when Steam returns no profile or the request fails.
+      if (!result?.ok) break;
+    }
+
+    return { requested, updated, skipped: false };
+  }
   async startBackgroundAutoRefresh({
     getOnlinePlayers,
     playerDatabase = this.playerDatabase,
@@ -1196,29 +1228,30 @@ class SteamGameDurationService {
 
   async fetchAndCacheSteamAvatars(steamIDs) {
     if (!this.fetchAvatarsEnabled || !this.apiKey) {
-      return;
+      return { ok: false, requested: 0, updated: 0, reason: "Steam avatar API is not configured." };
     }
     const ids = Array.isArray(steamIDs) ? steamIDs : [steamIDs];
-    const validIds = ids.map((id) => {
+    const validIds = [...new Set(ids.map((id) => {
       try {
         return normalizeSteamID(id);
       } catch {
         return null;
       }
-    }).filter(Boolean);
-    if (validIds.length === 0) return;
+    }).filter(Boolean))];
+    if (validIds.length === 0) return { ok: true, requested: 0, updated: 0 };
 
     console.log(`[SteamAvatar] Info: Requesting fetch and cache for Steam IDs: ${validIds.join(", ")}`);
 
     try {
       const summaries = await this.fetchSteamPlayerSummaries(validIds);
       console.log(`[SteamAvatar] Info: Retrieved ${summaries.length} summaries. Writing to player-database...`);
+      let updated = 0;
       for (const summary of summaries) {
         const steamID = summary.steamid;
         const avatar = summary.avatarmedium || summary.avatar || summary.avatarfull;
         if (steamID && avatar) {
           console.log(`[SteamAvatar] Saving: ID=${steamID} -> URL=${avatar}`);
-          await this.playerDatabase?.updateSteamAvatarBySteamID?.(steamID, avatar, {
+          const saved = await this.playerDatabase?.updateSteamAvatarBySteamID?.(steamID, avatar, {
             personaName: summary.personaname || summary.realname || null,
             profileUrl: summary.profileurl || null,
             avatar: summary.avatar || null,
@@ -1226,16 +1259,18 @@ class SteamGameDurationService {
             avatarFull: summary.avatarfull || null,
             communityvisibilitystate: summary.communityvisibilitystate,
           });
+          if (saved) updated += 1;
         } else {
           console.log(`[SteamAvatar] Warning: Missing steamid or avatar in summary:`, JSON.stringify(summary));
         }
       }
+      return { ok: true, requested: validIds.length, received: summaries.length, updated };
     } catch (error) {
       console.error(`[SteamAvatar] Cache execution error:`, error);
       this.logger?.warn(`Failed to fetch and cache Steam avatars: ${error.message}`);
+      return { ok: false, requested: validIds.length, updated: 0, error: error?.message || String(error) };
     }
   }
-
   async fetchSteamFriends(steamID) {
     if (!this.apiKey) {
       throw new Error("Steam API key is not configured.");
@@ -1723,6 +1758,21 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
       await service.startBackgroundAutoRefresh({
         getOnlinePlayers,
         playerDatabase: modules.playerDatabase,
+      });
+
+      // A migrated database may retain playtime while lacking avatar URLs.
+      // Repair these records without blocking the panel startup sequence.
+      void service.backfillMissingSteamAvatars().then((result) => {
+        if (!result.skipped) {
+          moduleLogger?.info(`Steam avatar backfill finished: requested=${result.requested}, updated=${result.updated}`, {
+            operation: "steamAvatarBackfill",
+            data: result,
+          });
+        }
+      }).catch((error) => {
+        moduleLogger?.warn(`Steam avatar backfill failed: ${error.message}`, {
+          operation: "steamAvatarBackfill",
+        });
       });
 
       core.eventBus.onCoreEvent("On_PlayerConnected", async (event) => {
