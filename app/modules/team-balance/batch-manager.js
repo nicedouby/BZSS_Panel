@@ -186,6 +186,20 @@ export class TeamBalanceBatchManager {
       else batch.failed += 1;
       batch.currentPlayer = null;
 
+      void Promise.resolve(this.recordAudit?.({
+        action: "player.switch_team",
+        category: "player_management",
+        actor: batch.operator,
+        batchId: batch.id,
+        status: result.status,
+        playerId: result.playerId,
+        playerName: result.playerName,
+        steamId: result.steamId,
+        fromTeamId: result.fromTeamId,
+        targetTeamId: result.targetTeamId,
+        result: result.status,
+      })).catch((error) => this.logger?.warn?.(`[TB] item audit failed: ${error?.message ?? error}`));
+
       await yieldToEventLoop();
     }
 
