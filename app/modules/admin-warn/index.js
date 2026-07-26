@@ -432,6 +432,8 @@ function buildCommandText(kind, { targetName = "", targetPlayerId = "", message 
 function sanitizeWarningMessage(message) {
   return String(message ?? "")
     .replace(/\r\n?/g, "\n")
+    // RCON 命令不能直接包含真实换行，必须发送字面量 \\n。
+    .replace(/\n/g, "\\\\n")
     .replace(/"/g, "'")
     .trim()
     .slice(0, 180);
