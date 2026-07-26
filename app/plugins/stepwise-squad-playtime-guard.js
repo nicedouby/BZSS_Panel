@@ -26,8 +26,8 @@ const DEFAULT_RULES = Object.freeze({
   ]),
   vehicle: Object.freeze([
     Object.freeze({ startSeconds: 0, endSeconds: 60, minHoursExclusive: 1200 }),
-    Object.freeze({ startSeconds: 60, endSeconds: 75, minHoursExclusive: 600 }),
-    Object.freeze({ startSeconds: 75, endSeconds: 90, minHoursExclusive: 400 }),
+    Object.freeze({ startSeconds: 60, endSeconds: 90, minHoursExclusive: 800 }),
+    Object.freeze({ startSeconds: 90, endSeconds: 120, minHoursExclusive: 400 }),
   ]),
 });
 
