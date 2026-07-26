@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import https from "node:https";
+import tls from "node:tls";
 import { spawn } from "node:child_process";
 import HttpProxyAgentModule from "http-proxy-agent";
 import HttpsProxyAgentModule from "https-proxy-agent";
@@ -1539,6 +1540,27 @@ function createProxyAgent(proxyUrl, protocol) {
   return new HttpProxyAgent(urlStr);
 }
 
+let trustedCaCertificates;
+
+function getTrustedCaCertificates() {
+  if (trustedCaCertificates) return trustedCaCertificates;
+
+  const bundled = Array.isArray(tls.rootCertificates) ? tls.rootCertificates : [];
+  let system = [];
+  try {
+    const getCACertificates = tls.getCACertificates;
+    if (typeof getCACertificates === "function") {
+      const certificates = getCACertificates("system");
+      if (Array.isArray(certificates)) system = certificates;
+    }
+  } catch {
+    // Older Node versions may not expose the system trust store API.
+  }
+
+  trustedCaCertificates = [...new Set([...bundled, ...system].filter(Boolean))];
+  return trustedCaCertificates;
+}
+
 function requestJson(target, options = {}) {
   return new Promise((resolve, reject) => {
     const targetUrl = target instanceof URL ? target : new URL(String(target));
@@ -1550,6 +1572,10 @@ function requestJson(target, options = {}) {
       headers: options.headers || {},
       agent: options.agent,
       family: options.family,
+      // Node does not automatically include the Windows/system trust store.
+      // Merge it with Node's bundled roots so Steam API calls also work when
+      // the host uses a TUN/VPN/enterprise root certificate.
+      ca: options.ca || getTrustedCaCertificates(),
     };
     
     let timer = null;
