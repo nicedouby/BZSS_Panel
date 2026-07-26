@@ -54,7 +54,7 @@ async function createHarness(options = {}) {
   const modules = {
     squadNamePolicyGuard: {
       classifySquadName(name) {
-        const isVehicle = /^(?:Armor|步兵战车|IFV)/i.test(String(name ?? "").trim());
+        const isVehicle = /^(?:Armor|步兵战车|IFV|Tank)/i.test(String(name ?? "").trim());
         return {
           valid: true,
           policyRevision: 12,
