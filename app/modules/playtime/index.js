@@ -786,7 +786,7 @@ class SteamGameDurationService {
       updated += Number(result?.updated || 0);
 
       // Do not spin forever when Steam returns no profile or the request fails.
-      if (!result?.ok) break;
+      if (!result?.ok || Number(result?.updated || 0) <= 0) break;
     }
 
     return { requested, updated, skipped: false };
