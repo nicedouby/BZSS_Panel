@@ -1,5 +1,5 @@
 <template>
-  <aside class="tactical-sidebar" :class="{ 'is-map-sidebar-collapsed': isCollapsed }">
+  <aside class="tactical-sidebar" :class="{ 'is-collapsed': isCollapsed }">
     <!-- Collapsible toggle tab -->
     <button
       class="sidebar-toggle-tab"
@@ -81,10 +81,6 @@
             <label class="option-item-sidebar" :class="{ checked: showFobsModel }">
               <input v-model="showFobsModel" type="checkbox" />
               <span class="option-text">FOB</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: disableMarkerInteractionModel }">
-              <input v-model="disableMarkerInteractionModel" type="checkbox" />
-              <span class="option-text">穿透</span>
             </label>
             <label class="option-item-sidebar" :class="{ checked: measureModeModel }">
               <input v-model="measureModeModel" type="checkbox" />
@@ -481,7 +477,6 @@ const props = defineProps<{
   showPlayerCoords: boolean;
   showCaptureZones: boolean;
   showFobs: boolean;
-  disableMarkerInteraction: boolean;
   measureMode: boolean;
   selectedMapKey: string;
   markerScale: number;
@@ -534,7 +529,6 @@ const emit = defineEmits<{
   (e: "update:show-player-coords", value: boolean): void;
   (e: "update:show-capture-zones", value: boolean): void;
   (e: "update:show-fobs", value: boolean): void;
-  (e: "update:disable-marker-interaction", value: boolean): void;
   (e: "update:measure-mode", value: boolean): void;
   (e: "update:selected-map-key", value: string): void;
   (e: "update:marker-scale", value: number): void;
