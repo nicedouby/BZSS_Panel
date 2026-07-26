@@ -770,7 +770,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
   }
 
   async function recordBatchAudit(record) {
-    const audit = modules?.audit?.api;
+    const audit = modules?.audit?.api ?? modules?.audit;
     if (typeof audit?.record !== "function") return;
     await audit.record({
       ...record,
