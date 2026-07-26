@@ -102,6 +102,8 @@ function mapPlayerPlaytimeRow(row) {
     gameSecondsOverride,
     game_seconds: gameSeconds,
     gameSeconds,
+    steam_avatar: normalizeSteamAvatarUrl(row.steam_avatar ?? row.steamAvatar),
+    steamAvatar: normalizeSteamAvatarUrl(row.steam_avatar ?? row.steamAvatar),
   };
 }
 
