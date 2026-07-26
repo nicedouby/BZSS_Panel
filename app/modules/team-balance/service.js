@@ -697,26 +697,15 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     if (!context.serverId || context.roundKey.endsWith("|warmup") && context.roundKey.split("|").slice(1, 3).every((value) => !value)) {
       return { ok: false, reason: "round_unavailable", roundKey: context.roundKey, message: "当前没有可识别的对局。" };
     }
-    if (context.phase !== "warmup") {
-      return { ok: false, reason: "match_started", roundKey: context.roundKey, message: "对局已经开始，不能执行随机打乱。" };
-    }
-    if (Number.isFinite(context.playtime) && context.playtime > 0) {
-      return { ok: false, reason: "match_started", roundKey: context.roundKey, message: "对局已经开始，不能执行随机打乱。" };
-    }
+    // Shuffle is a one-shot command batch. It may be submitted during warmup
+    // or an active match; planId/clientRequestId prevent duplicate submission.
     return { ok: true, roundKey: context.roundKey };
   }
 
   async function canContinueBatch(batch) {
-    if (batch?.type !== "shuffle") return { ok: true };
-    const gate = getShuffleGate();
-    if (!gate.ok) return gate;
-    if (batch.roundKey && gate.roundKey !== batch.roundKey) {
-      return {
-        ok: false,
-        reason: "round_changed",
-        message: "对局已切换。",
-      };
-    }
+    // A shuffle batch must finish its already accepted one-shot command list.
+    // MatchState changes do not restart it or make it toggle players again.
+    if (batch?.type === "shuffle") return { ok: true };
     return { ok: true };
   }
 
@@ -730,14 +719,10 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         }
       : getCurrentMatchContext();
 
-    if (context.phase !== "warmup" || (Number.isFinite(context.playtime) && context.playtime > 0)) {
-      batchManager.cancelActiveByType("shuffle", "match_started");
-      return;
-    }
-
-    if (event?.eventName === "module.matchState.roundUpdated") {
-      batchManager.cancelActiveByType("shuffle", "round_changed");
-    }
+    // Do not cancel or recreate a shuffle when MatchState changes. The batch
+    // is already accepted and each player receives at most one command.
+    void context;
+    void event;
   }
 
   function interleaveShuffleMoves(moves) {
