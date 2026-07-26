@@ -504,12 +504,14 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       });
     }
 
-    const active = batchManager.findActive({ type: "shuffle", roundKey: planEntry.roundKey });
-    if (active) {
+    const existingShuffle = batchManager.findLatest({ type: "shuffle", roundKey: planEntry.roundKey });
+    if (existingShuffle) {
       return buildShuffleExecuteResult({
         ok: false,
-        error: "ShuffleAlreadyRunning",
-        message: "A shuffle task is already running for this round.",
+        error: existingShuffle.status === "queued" || existingShuffle.status === "running"
+          ? "ShuffleAlreadyRunning"
+          : "ShuffleAlreadySubmitted",
+        message: "当前对局已经提交过随机打乱，不能再次执行。",
         source,
         reason,
         operator,
@@ -517,7 +519,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         algorithm,
         planId,
         roundKey: planEntry.roundKey,
-        batch: active,
+        batch: existingShuffle,
       });
     }
 
