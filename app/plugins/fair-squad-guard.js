@@ -597,21 +597,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return `违规建队已拦截：${creator} 创建的 ${squadName} 违反公平建队规则，已按规则解散。`;
   }
 
-  async function broadcastViolation(record) {
-    const adminWarn = getAdminWarnApi(modules);
-    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
-    if (typeof sender !== "function") {
-      return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
-    }
-
-    const message = buildViolationBroadcastMessage(record);
-    return await sender.call(adminWarn, {
-      message,
-      reason: "fair_squad_guard_violation_broadcast",
-      sourceModule: PLUGIN_ID,
-      relatedEventId: record.id,
-      system: true,
-    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  // 保留兼容函数名，但违规处置广播已永久禁用。
+  async function broadcastViolation() {
+    return { success: true, skipped: true, skipReason: "enforcement_broadcast_disabled" };
   }
 
   async function disbandSquad(record) {
