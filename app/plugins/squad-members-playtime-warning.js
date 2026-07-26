@@ -27,9 +27,9 @@ function first(value, ...fallbacks) {
 
 function formatHours(gameSeconds) {
   const seconds = Math.max(0, Math.floor(Number(gameSeconds) || 0));
-  if (!seconds) return "未知小时";
+  if (!seconds) return "?h";
   const hours = Number((seconds / 3600).toFixed(1));
-  return `${hours}小时`;
+  return `${hours}h`;
 }
 
 function normalizeFireTeam(player) {
@@ -222,12 +222,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const name = getPlayerName(player);
     const role = getRole(player);
     const seconds = await getPlaytimeSeconds(player);
-    return `${fireTeam ? `（${fireTeam}组）` : ""}${name} ${role} 游戏时长 ${formatHours(seconds)}`;
+    return `${fireTeam ? `${fireTeam}组` : ""}${role} ${name} ${formatHours(seconds)}`;
   }
 
   async function buildLeaderLine(player, squadName) {
     const seconds = await getPlaytimeSeconds(player);
-    return `${squadName} 队长 ${getPlayerName(player)} 游戏时长 ${formatHours(seconds)}`;
+    return `${squadName} 队长 ${formatHours(seconds)}`;
   }
 
   function recipientKey(player) {
