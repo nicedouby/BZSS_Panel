@@ -188,6 +188,9 @@ export class PlayerRepository {
     await this.db.run(
       "UPDATE steam_profiles SET avatar_small = REPLACE(avatar_small, 'http://', 'https://'), avatar_medium = REPLACE(avatar_medium, 'http://', 'https://'), avatar_full = REPLACE(avatar_full, 'http://', 'https://') WHERE avatar_small LIKE 'http://%.steam%' OR avatar_medium LIKE 'http://%.steam%' OR avatar_full LIKE 'http://%.steam%';",
     );
+    await this.db.run(
+      "UPDATE steam_friends SET friend_avatar = REPLACE(friend_avatar, 'http://', 'https://') WHERE friend_avatar LIKE 'http://%.steam%';",
+    );
 
     const rows = await this.db.all("SELECT * FROM players");
     for (const row of rows) this.cache(normalizeSteamAvatarFields(row));
@@ -1395,7 +1398,10 @@ export class PlayerRepository {
        WHERE f.player_id = ?
        ORDER BY COALESCE(p.current_name, f.friend_name) COLLATE NOCASE ASC`,
       Number(playerId),
-    );
+    ).then((rows) => rows.map((row) => ({
+      ...row,
+      avatar: normalizeSteamAvatarUrl(row?.avatar),
+    })));
   }
 
   async upsertSteamFriends(playerId, friends = []) {
@@ -1408,7 +1414,13 @@ export class PlayerRepository {
        VALUES (?, ?, ?, ?, ?)`
     );
     for (const friend of friends) {
-      await stmt.run(Number(playerId), friend.steamID, friend.name, friend.avatar, ts);
+      await stmt.run(
+        Number(playerId),
+        friend.steamID,
+        friend.name,
+        normalizeSteamAvatarUrl(friend.avatar),
+        ts,
+      );
     }
     await stmt.finalize();
   }
