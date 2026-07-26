@@ -267,6 +267,9 @@ export interface TeamBalanceBatchResult extends TeamBalanceBatchPlayer {
 
 export interface TeamBalanceBatch {
   id: string;
+  type?: string;
+  planId?: string;
+  roundKey?: string;
   clientRequestId: string;
   status: "queued" | "running" | "completed" | "partial" | "cancelled";
   createdAt: string;
@@ -279,6 +282,7 @@ export interface TeamBalanceBatch {
   skipped: number;
   currentPlayer?: { steamId?: string | null; playerName?: string | null } | null;
   cancelRequested?: boolean;
+  cancelReason?: string;
   players?: TeamBalanceBatchPlayer[];
   results?: TeamBalanceBatchResult[];
 }
