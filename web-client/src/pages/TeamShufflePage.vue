@@ -657,7 +657,6 @@ async function refreshShuffleBatch() {
       system: false,
       error: finalBatch.status === "completed" ? "" : finalBatch.cancelReason || "partial",
       rconExecuted: finalBatch.succeeded > 0,
-      rconResponse: "",
       summary: {
         plannedMoveCount: finalBatch.total,
         executedCount: finalBatch.succeeded,
