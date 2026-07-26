@@ -43,9 +43,9 @@ import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/
 import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
-import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player/index.js";
+import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player-native/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
-import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer/index.js";
+import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer-native/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
