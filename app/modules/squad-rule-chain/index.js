@@ -13,6 +13,7 @@ import {
   normalizeSquadRuleViolationEvent,
 } from "./events.js";
 import { SQUAD_NATURE, SQUAD_NATURE_LABEL } from "../../domain/squad/squad_name_classifier.js";
+import { classifySquadNameWithPolicy } from "../../domain/squad-name-policy/index.js";
 
 const API_NAME = "squadRuleChain";
 const DEFAULT_RECENT_LIMIT = 200;
@@ -141,7 +142,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   };
 
   async function handleViolation(input = {}) {
-    const event = normalizeSquadRuleViolationEvent(input);
+    const event = normalizeSquadRuleViolationEvent(ensureAuthoritativeClassification(input));
     if (!hasAuthoritativeClassification(event)) {
       remember(recent, {
         id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
@@ -244,7 +245,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   async function handleFinalPass(input = {}) {
-    const event = normalizeRuleChainPassEvent(input);
+    const event = normalizeRuleChainPassEvent(ensureAuthoritativeClassification(input));
     if (!hasAuthoritativeClassification(event)) {
       remember(finalPassRecords, {
         id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
@@ -585,10 +586,11 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   async function warnLeader(event, message) {
-    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.sendAdminWarn ?? adminWarn?.warnPlayer;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     if (!event.leaderName) return { success: false, skipped: true, skipReason: "target_missing" };
-    return await sender.call(modules.adminWarn, {
+    return await sender.call(adminWarn, {
       targetName: event.leaderName,
       targetSteamId: event.leaderSteamId || undefined,
       targetEosId: event.leaderEosId || undefined,
@@ -601,7 +603,8 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   async function broadcastViolation(event) {
-    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     return await sender.call(modules.adminWarn, {
       message: event.broadcastMessage,
@@ -610,6 +613,10 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       relatedEventId: event.sourceEventId,
       system: true,
     }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  }
+
+  function getAdminWarnApi() {
+    return modules?.adminWarn?.api ?? modules?.adminWarn ?? null;
   }
 
   async function broadcastFinalPass(record) {
