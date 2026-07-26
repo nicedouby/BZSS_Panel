@@ -320,7 +320,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         { key: "enabled", type: "boolean", default: true, description: "是否启用插件" },
         { key: "squadWarningSeconds", type: "number", default: 300, description: "小队成员提醒时间（秒）" },
         { key: "leaderWarningSeconds", type: "number", default: 450, description: "阵营队长提醒时间（秒）" },
-        { key: "lineBreakMode", type: "select", default: "escaped", options: [
+        { key: "lineBreakMode", type: "select", default: "actual", options: [
           { label: "RCON 转义换行（推荐）", value: "escaped" },
           { label: "真实换行", value: "actual" },
           { label: "竖线分隔", value: "separator" },
