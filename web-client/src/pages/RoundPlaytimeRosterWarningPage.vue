@@ -252,14 +252,14 @@ const squadOptions = computed(() => Array.from(groupedSquads.value.entries()).ma
 })).sort((a, b) => a.label.localeCompare(b.label, "zh-CN")));
 const selectedSquadPlayers = computed(() => groupedSquads.value.get(selectedSquadKey.value) ?? []);
 const selectedSquadPreview = computed(() => buildPreview(
-  selectedSquadPlayers.value.slice().sort(memberSort).map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.role || "未知兵种"} ${player.name} 游戏时长 ${formatHours(player.gameSeconds)}`),
+  selectedSquadPlayers.value.slice().sort(memberSort).map((player) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.role || "未知兵种"} ${player.name} ${formatHours(player.gameSeconds)}`),
 ));
 const selectedTeamId = computed(() => selectedSquadPlayers.value[0]?.teamID || teamIds.value[0] || "");
 const selectedTeamPreview = computed(() => {
   const leaders = mergedPlayers.value
     .filter((player) => player.teamID === selectedTeamId.value && player.isLeader && player.squadID)
     .sort((a, b) => squadName(a).localeCompare(squadName(b), "zh-CN"));
-  return buildPreview(leaders.map((leader) => `${squadName(leader)} 队长游戏时长 ${formatHours(leader.gameSeconds)}`));
+  return buildPreview(leaders.map((leader) => `${squadName(leader)}队长 ${formatHours(leader.gameSeconds)}`));
 });
 const filteredPlayers = computed(() => {
   const needle = query.value.toLowerCase();
@@ -503,7 +503,7 @@ function squadName(player: any): string {
 function memberSort(a: any, b: any) { return fireRank(a.fireTeam) - fireRank(b.fireTeam) || Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name, "zh-CN"); }
 function fireRank(value: string) { return value === "A" ? 0 : value === "B" ? 1 : value === "C" ? 2 : 3; }
 function readSeconds(row: any) { const value = Number(row?.game_seconds ?? row?.gameSeconds ?? row?.steam_game_seconds ?? row?.steamGameSeconds); return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null; }
-function formatHours(seconds: number | null) { return seconds == null ? "未知" : `${Number((seconds / 3600).toFixed(1))}小时`; }
+function formatHours(seconds: number | null) { return seconds == null ? "?h" : `${Number((seconds / 3600).toFixed(1))}h`; }
 function decodeMessage(value: any) { return String(value ?? "").replaceAll("\\n", "\n"); }
 function normalizeId(value: any) { const text = String(value ?? "").trim(); return text && text.toLowerCase() !== "n/a" ? text : ""; }
 function nullableNumber(value: any) { if (value == null || value === "") return null; const number = Number(value); return Number.isFinite(number) ? number : null; }
