@@ -290,21 +290,27 @@ export class TeamBalanceBatchManager {
       return resultFor(player, "failed_state_unknown", "Source or target team is unknown.");
     }
 
-    let current = null;
-    try {
-      current = await this.resolveCurrentPlayer?.(player);
-    } catch (error) {
-      this.logger?.warn?.(`[TB] player state lookup failed: ${error?.message ?? error}`);
-    }
+    // Shuffle is intentionally a one-shot operation. The command itself is the
+    // source of truth; do not perform a preflight player-state check because a
+    // stale state can make a toggle command appear already applied and cause
+    // the next player/round to be switched back later.
+    if (batch.type !== "shuffle") {
+      let current = null;
+      try {
+        current = await this.resolveCurrentPlayer?.(player);
+      } catch (error) {
+        this.logger?.warn?.(`[TB] player state lookup failed: ${error?.message ?? error}`);
+      }
 
-    if (!current) return resultFor(player, "skipped_offline", "Player is offline.");
-    const currentTeamId = normalizeTeamId(current.teamId ?? current.teamID);
-    if (currentTeamId == null) return resultFor(player, "failed_state_unknown", "Current team is unknown.");
-    if (currentTeamId === normalizeTeamId(player.targetTeamId)) {
-      return resultFor(player, "already_applied", "Player is already on the target team.");
-    }
-    if (currentTeamId !== normalizeTeamId(player.fromTeamId)) {
-      return resultFor(player, "failed_state_unknown", "Player team changed before execution.");
+      if (!current) return resultFor(player, "skipped_offline", "Player is offline.");
+      const currentTeamId = normalizeTeamId(current.teamId ?? current.teamID);
+      if (currentTeamId == null) return resultFor(player, "failed_state_unknown", "Current team is unknown.");
+      if (currentTeamId === normalizeTeamId(player.targetTeamId)) {
+        return resultFor(player, "already_applied", "Player is already on the target team.");
+      }
+      if (currentTeamId !== normalizeTeamId(player.fromTeamId)) {
+        return resultFor(player, "failed_state_unknown", "Player team changed before execution.");
+      }
     }
 
     let response;
