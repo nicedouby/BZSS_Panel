@@ -43,6 +43,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     squadSentAt: "",
     leaderSentAt: "",
     lastClockSeconds: 0,
+    clockInitialized: false,
     blockedRoundKey: "",
     lastError: "",
     lastDispatch: null,
@@ -87,6 +88,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.leaderSent = false;
     state.squadSentAt = "";
     state.leaderSentAt = "";
+    state.lastClockSeconds = 0;
+    state.clockInitialized = false;
     state.lastError = "";
     state.lastDispatch = null;
     playtimeCache.clear();
@@ -129,8 +132,19 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     await handleManualTriggers();
 
     const current = clock();
-    state.lastClockSeconds = current.seconds;
     if (!current.trusted) return publicState();
+    if (!state.clockInitialized) {
+      state.lastClockSeconds = current.seconds;
+      state.clockInitialized = true;
+      await saveState();
+      return publicState();
+    }
+    const previousSeconds = state.lastClockSeconds;
+    state.lastClockSeconds = current.seconds;
+    if (current.seconds < previousSeconds) {
+      await saveState();
+      return publicState();
+    }
     if (state.blockedRoundKey) {
       if (current.roundKey === state.blockedRoundKey) return publicState();
       state.blockedRoundKey = "";
@@ -139,7 +153,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       resetRound(current.roundKey);
       await saveState();
     }
-    if (current.seconds >= cfg.squadWarningSeconds && !state.squadSent) {
+    const crossedSquadThreshold = previousSeconds < cfg.squadWarningSeconds
+      && current.seconds >= cfg.squadWarningSeconds;
+    const crossedLeaderThreshold = previousSeconds < cfg.leaderWarningSeconds
+      && current.seconds >= cfg.leaderWarningSeconds;
+    if (crossedSquadThreshold && !state.squadSent) {
       const result = await dispatchSquads(reason);
       if (result.attempted > 0) {
         state.squadSent = true;
@@ -147,7 +165,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         await saveState();
       }
     }
-    if (current.seconds >= cfg.leaderWarningSeconds && !state.leaderSent) {
+    if (crossedLeaderThreshold && !state.leaderSent) {
       const result = await dispatchLeaders(reason);
       if (result.attempted > 0) {
         state.leaderSent = true;
