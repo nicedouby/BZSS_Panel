@@ -769,24 +769,34 @@ class SteamGameDurationService {
       return { requested: 0, updated: 0, skipped: true };
     }
 
+    // Take a stable snapshot of all missing IDs first. The old implementation
+    // stopped at the first batch with zero updates, so older/inactive players
+    // behind one unsuccessful batch were never reached.
+    const rows = await this.playerDatabase.listPlayersWithSteamID({
+      missingAvatarOnly: true,
+    });
+    const steamIDs = [...new Set(
+      (Array.isArray(rows) ? rows : [])
+        .map((player) => optionalSteamID(player?.steam_id ?? player?.steamID))
+        .filter(Boolean),
+    )];
+
     let requested = 0;
     let updated = 0;
-    // Read the first missing page repeatedly: successful writes remove rows
-    // from that filter, so no historical player is skipped.
-    for (;;) {
-      const players = await this.playerDatabase.listPlayersWithSteamID({
-        limit: take,
-        missingAvatarOnly: true,
-      });
-      const steamIDs = players.map((player) => optionalSteamID(player?.steam_id ?? player?.steamID)).filter(Boolean);
-      if (!steamIDs.length) break;
-
-      const result = await this.fetchAndCacheSteamAvatars(steamIDs);
-      requested += steamIDs.length;
+    for (let offset = 0; offset < steamIDs.length; offset += take) {
+      const batch = steamIDs.slice(offset, offset + take);
+      const result = await this.fetchAndCacheSteamAvatars(batch);
+      requested += batch.length;
       updated += Number(result?.updated || 0);
 
-      // Do not spin forever when Steam returns no profile or the request fails.
-      if (!result?.ok || Number(result?.updated || 0) <= 0) break;
+      // Continue after an empty/failed batch. Steam can omit one batch while
+      // still returning valid profiles for later batches.
+      if (!result?.ok) {
+        this.logger?.warn(
+          `Steam avatar backfill batch failed; continuing with the remaining ${steamIDs.length - offset - batch.length} IDs.`,
+          { operation: "steamAvatarBackfillBatch", data: { batchSize: batch.length } },
+        );
+      }
     }
 
     return { requested, updated, skipped: false };
@@ -1243,7 +1253,20 @@ class SteamGameDurationService {
     console.log(`[SteamAvatar] Info: Requesting fetch and cache for Steam IDs: ${validIds.join(", ")}`);
 
     try {
-      const summaries = await this.fetchSteamPlayerSummaries(validIds);
+      let summaries = await this.fetchSteamPlayerSummaries(validIds);
+
+      // GetPlayerSummaries may omit individual profiles in a large request.
+      // Retry only the omitted IDs one by one so inactive/legacy players are
+      // not permanently dependent on a successful 100-ID response.
+      const returnedIds = new Set(summaries.map((summary) => String(summary?.steamid ?? "").trim()).filter(Boolean));
+      const missingIds = validIds.filter((id) => !returnedIds.has(id));
+      if (missingIds.length > 0 && validIds.length > 1) {
+        for (const steamID of missingIds) {
+          const fallback = await this.fetchSteamPlayerSummaries([steamID]);
+          if (fallback.length > 0) summaries = summaries.concat(fallback);
+        }
+      }
+
       console.log(`[SteamAvatar] Info: Retrieved ${summaries.length} summaries. Writing to player-database...`);
       let updated = 0;
       for (const summary of summaries) {
