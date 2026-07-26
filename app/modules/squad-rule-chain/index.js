@@ -240,8 +240,14 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         if (warnResult?.success !== false) stats.warned += 1;
       }
 
-      stats.handled += 1;
-      record.status = "handled";
+      if (disbandResult?.ok === false) {
+        stats.errors += 1;
+        record.status = "error";
+        record.error = disbandResult?.error || disbandResult?.message || "RCON 解散小队失败。";
+      } else {
+        stats.handled += 1;
+        record.status = "handled";
+      }
       record.updatedAt = nowIso();
     } catch (error) {
       stats.errors += 1;
