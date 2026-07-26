@@ -4,12 +4,23 @@
       <div
       ref="containerRef"
       class="map-viewport"
-      :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging }"
+      :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging, 'is-loading': isInitialMapLoading }"
       @pointerdown="startDrag"
       @wheel.prevent="onWheel"
     >
       <!-- Tech Grid Overlay Behind Map -->
       <div class="viewport-bg-grid"></div>
+
+      <!-- The map remains usable while its first snapshot and tile layer arrive. -->
+      <div v-if="isInitialMapLoading" class="tactical-map-loading" role="status" aria-live="polite">
+        <div class="tactical-map-loading__map" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </div>
+        <div class="tactical-map-loading__copy">
+          <strong>{{ loading ? "正在同步战场数据" : "正在准备地图图层" }}</strong>
+          <span>操作控件已可用，数据到达后会自动显示。</span>
+        </div>
+      </div>
 
       <div class="tactical-map-viewer-count" role="status" aria-live="polite">
         <span class="tactical-map-viewer-count__indicator" aria-hidden="true"></span>
@@ -466,7 +477,7 @@
 
       <!-- New Map Interaction Floating Elements -->
       <PlayerInfoPanel
-        v-if="isStandaloneMapRoute && playerInfoPanel"
+        v-if="playerInfoPanel"
         :player="playerInfoPanel.player"
         :x="playerInfoPanel.x"
         :y="playerInfoPanel.y"
@@ -567,7 +578,7 @@
       </div>
 
       <!-- Floating Map Utility Action Controls (Bottom Left) -->
-      <div class="map-controls-panel glass-panel">
+      <div class="map-controls-panel glass-panel" aria-label="地图操作">
         <button class="ctrl-btn" title="放大" @click="zoomIn">
           <span class="icon-span">+</span>
         </button>
@@ -582,6 +593,7 @@
           class="ctrl-btn text-btn"
           :class="{ active: showGrid }"
           @click="showGrid = !showGrid"
+          :aria-pressed="showGrid"
           title="网格开关 (G)"
         >
           网格
@@ -590,6 +602,7 @@
           class="ctrl-btn text-btn"
           :class="{ active: showCaptureZones }"
           @click="showCaptureZones = !showCaptureZones"
+          :aria-pressed="showCaptureZones"
           title="地标区域图层"
         >
           地标
@@ -598,6 +611,7 @@
           class="ctrl-btn text-btn"
           :class="{ active: showFobs }"
           @click="showFobs = !showFobs"
+          :aria-pressed="showFobs"
           title="FOB图层"
         >
           FOB
@@ -606,6 +620,7 @@
           class="ctrl-btn text-btn"
           :class="{ active: showPlayerNames }"
           @click="showPlayerNames = !showPlayerNames"
+          :aria-pressed="showPlayerNames"
           title="玩家姓名图层"
         >
           姓名
@@ -614,6 +629,7 @@
           class="ctrl-btn text-btn"
           :class="{ active: showPlayerCoords }"
           @click="showPlayerCoords = !showPlayerCoords"
+          :aria-pressed="showPlayerCoords"
           title="玩家坐标图层"
         >
           坐标
@@ -622,6 +638,7 @@
           class="ctrl-btn text-btn"
           :class="{ active: filterAliveOnly }"
           @click="filterAliveOnly = !filterAliveOnly"
+          :aria-pressed="filterAliveOnly"
           title="只显示存活玩家"
         >
           存活
@@ -630,6 +647,7 @@
           class="ctrl-btn text-btn measure-btn"
           :class="{ active: measureMode }"
           @click="toggleMeasureMode"
+          :aria-pressed="measureMode"
           title="多点测距 (M)"
         >
           测距
@@ -1214,6 +1232,9 @@ const loading = computed(() => {
   if (isStandaloneMapRoute.value) return tacticalStateStore.loading;
   return props.loading;
 });
+// Do not wait for every marker before making the page interactive.  The light
+// loading layer only covers the empty first paint and never intercepts input.
+const isInitialMapLoading = computed(() => loading.value || (!tilesReady.value && !snapshot.value));
 let simulatedCombatTimer: number | null = null;
 
 // Viewport Zoom & Pan state
@@ -1860,13 +1881,6 @@ function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent
     singleClickTimer.value = null;
   }
 
-  // MatchStatusPage owns the floating player window when the map is embedded.
-  // Render only one detail surface to avoid duplicate reactive update loops.
-  if (!isStandaloneMapRoute.value) {
-    showPlayerDetails(player, event);
-    return;
-  }
-
   selectedPlayerKey.value = getPlayerKey(player);
   if (containerRef.value) {
     const rect = containerRef.value.getBoundingClientRect();
@@ -1885,10 +1899,6 @@ function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent
     clearTimeout(singleClickTimer.value);
     singleClickTimer.value = null;
   }
-
-  // The embedded parent already handled the first click; do not emit a second
-  // selection or reopen the expensive drawer on double-click.
-  if (!isStandaloneMapRoute.value) return;
 
   playerInfoPanel.value = null;
   playerActionMenu.value = null;
