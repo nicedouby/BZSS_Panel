@@ -1,21 +1,19 @@
-import { spawnSync } from "node:child_process";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-const env = { ...process.env };
-if (env.NODE_OPTIONS) {
-  env.NODE_OPTIONS = env.NODE_OPTIONS
-    .replace(/(^|\s)--disallow-code-generation-from-strings(?:=\w+)?(?=\s|$)/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!env.NODE_OPTIONS) delete env.NODE_OPTIONS;
-}
+import { runNodeTool } from "./node-tool-runner.mjs";
 
-const result = spawnSync(
-  process.execPath,
-  [fileURLToPath(new URL("../node_modules/vite/bin/vite.js", import.meta.url)), ...process.argv.slice(2)],
-  { stdio: "inherit", env, windowsHide: false },
+const vitePath = fileURLToPath(
+  new URL("../node_modules/vite/bin/vite.js", import.meta.url),
 );
 
-if (result.error) throw result.error;
-process.exitCode = result.status ?? 1;
+try {
+  process.exitCode = await runNodeTool({
+    label: "Vite production build",
+    entry: vitePath,
+    args: process.argv.slice(2),
+  });
+} catch (error) {
+  console.error("[client-build] Unable to start Vite.", error);
+  process.exitCode = 1;
+}
