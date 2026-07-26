@@ -208,7 +208,7 @@ export async function handleTbRoutes({
           message: "Shuffle execution is not available.",
         };
 
-    json(result.ok ? 200 : mapErrorStatus(result.error), result);
+    json(result.ok ? (result.accepted ? 202 : 200) : mapErrorStatus(result.error), result);
     return true;
   }
 
