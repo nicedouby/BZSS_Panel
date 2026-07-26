@@ -199,7 +199,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   async function buildMemberLine(player) {
     const fireTeam = normalizeFireTeam(player);
-    const fireTeamText = fireTeam ? `(${fireTeam}组)` : "(未知组)";
     const name = getPlayerName(player);
     const role = getRole(player);
     const seconds = await getPlaytimeSeconds(player);
