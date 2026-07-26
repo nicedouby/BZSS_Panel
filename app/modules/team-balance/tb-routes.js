@@ -262,6 +262,7 @@ export async function handleTbRoutes({
       operator: buildOperator(user),
       system: false,
       operatorName: user?.username ?? "",
+      priority: body.priority ?? "high",
     }));
 
   json(result.ok ? 200 : mapErrorStatus(result.error), result);
