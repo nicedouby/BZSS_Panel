@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { createTeamBalanceService } from "../modules/team-balance/service.js";
+import { TeamBalanceBatchManager } from "../modules/team-balance/batch-manager.js";
 import { handleTbRoutes } from "../modules/team-balance/tb-routes.js";
 
 function createNoopLogger() {
@@ -14,6 +15,7 @@ function createNoopLogger() {
 
 function createService(overrides = {}) {
   return createTeamBalanceService({
+    modules: overrides.modules ?? {},
     core: {
       logger: createNoopLogger(),
       ...overrides.core,
@@ -407,5 +409,157 @@ await testHandleTbRoutesSupportsNewAndLegacyPaths();
 await testHandleTbRoutesReturnsRecords();
 await testHandleTbRoutesCreatesShufflePlan();
 await testHandleTbRoutesUnauthorizedAndForbidden();
+
+
+async function testBatchManagerSerializesItemsAndIsIdempotent() {
+  const calls = [];
+  let active = 0;
+  let maxActive = 0;
+  const manager = new TeamBalanceBatchManager({
+    resolveCurrentPlayer: async (player) => ({ teamID: player.fromTeamId }),
+    executeOnePlayer: async (player) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      calls.push(player.steamId);
+      await new Promise((resolve) => setImmediate(resolve));
+      active -= 1;
+      return { ok: true, message: "OK", command: `AdminForceTeamChange "${player.steamId}"` };
+    },
+  });
+
+  const request = {
+    clientRequestId: "batch-test-idempotency",
+    players: [
+      { steamId: "steam-1", playerName: "One", fromTeamId: 1, targetTeamId: 2 },
+      { steamId: "steam-2", playerName: "Two", fromTeamId: 1, targetTeamId: 2 },
+      { steamId: "steam-2", playerName: "Two duplicate", fromTeamId: 1, targetTeamId: 2 },
+    ],
+  };
+  const first = manager.create(request);
+  const second = manager.create(request);
+
+  assert.equal(first.ok, true);
+  assert.equal(first.batch.total, 2);
+  assert.equal(second.duplicate, true);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.deepEqual(calls, ["steam-1", "steam-2"]);
+  assert.equal(maxActive, 1);
+  assert.equal(manager.get(first.batch.id).status, "completed");
+}
+
+async function testBatchManagerSkipsStateAndDoesNotRetryTimeout() {
+  const calls = [];
+  const manager = new TeamBalanceBatchManager({
+    resolveCurrentPlayer: async (player) => {
+      if (player.steamId === "offline") return null;
+      if (player.steamId === "already") return { teamID: 2 };
+      return { teamID: 1 };
+    },
+    executeOnePlayer: async (player) => {
+      calls.push(player.steamId);
+      return { ok: false, message: "RCON timeout", error: "ETIMEDOUT" };
+    },
+  });
+
+  const created = manager.create({
+    clientRequestId: "batch-timeout",
+    players: [
+      { steamId: "offline", fromTeamId: 1, targetTeamId: 2 },
+      { steamId: "already", fromTeamId: 1, targetTeamId: 2 },
+      { steamId: "timeout", fromTeamId: 1, targetTeamId: 2 },
+    ],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const batch = manager.get(created.batch.id);
+  assert.deepEqual(calls, ["timeout"]);
+  assert.deepEqual(batch.results.map((result) => result.status), [
+    "skipped_offline",
+    "already_applied",
+    "unknown_result",
+  ]);
+  assert.equal(batch.failed, 1);
+}
+
+async function testBatchManagerCancellationStopsRemainingItems() {
+  const calls = [];
+  const manager = new TeamBalanceBatchManager({
+    resolveCurrentPlayer: async (player) => ({ teamID: player.fromTeamId }),
+    executeOnePlayer: async (player) => {
+      calls.push(player.steamId);
+      await new Promise((resolve) => setImmediate(resolve));
+      return { ok: true };
+    },
+  });
+  const created = manager.create({
+    clientRequestId: "batch-cancel",
+    players: [
+      { steamId: "cancel-1", fromTeamId: 1, targetTeamId: 2 },
+      { steamId: "cancel-2", fromTeamId: 1, targetTeamId: 2 },
+      { steamId: "cancel-3", fromTeamId: 1, targetTeamId: 2 },
+    ],
+  });
+  manager.cancel(created.batch.id);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  const batch = manager.get(created.batch.id);
+  assert.equal(batch.status, "cancelled");
+  assert.equal(calls.length, 0);
+  assert.equal(batch.results.every((result) => result.status === "cancelled"), true);
+}
+
+async function testBatchRouteReturnsAcceptedBeforeExecution() {
+  let created = 0;
+  const modules = {
+    teamBalance: {
+      createForceTeamChangeBatch(payload) {
+        created += 1;
+        return {
+          ok: true,
+          batch: {
+            id: "tb-batch-test",
+            status: "queued",
+            total: payload.players.length,
+            completed: 0,
+            succeeded: 0,
+            failed: 0,
+            skipped: 0,
+          },
+        };
+      },
+    },
+  };
+  const recorder = createRecorder();
+  await handleTbRoutes({
+    modules,
+    url: new URL("http://localhost/api/tb/force-team-change-batch"),
+    req: { method: "POST" },
+    user: {
+      id: "admin-1",
+      username: "Admin",
+      role: "SuperAdmin",
+      isSuperAdmin: true,
+      permissions: ["*"],
+    },
+    readJsonBody: async () => ({
+      clientRequestId: "route-batch",
+      players: Array.from({ length: 16 }, (_, index) => ({
+        steamId: `steam-${index}`,
+        fromTeamId: 1,
+        targetTeamId: 2,
+      })),
+    }),
+    json(status, body) {
+      recorder.status = status;
+      recorder.body = body;
+    },
+  });
+
+  assert.equal(created, 1);
+  assert.equal(recorder.status, 202);
+  assert.equal(recorder.body.batch.total, 16);
+  assert.equal(recorder.body.batch.completed, 0);
+}
 
 console.log("team balance tests passed");
