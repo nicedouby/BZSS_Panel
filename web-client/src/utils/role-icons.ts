@@ -39,7 +39,7 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["dead", "downed", "incapacitated"],
     icon: `${ICON_BASE}/T_role_dead.PNG`,
-    label: "Downed",
+    label: "倒地",
     tone: "default",
   },
   {
@@ -75,7 +75,7 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["automaticrifleman", "automatic rifleman", "automatic rifle", "ar"],
     icon: `${ICON_BASE}/T_role_automaticrifleman.PNG`,
-    label: "MG / AR",
+    label: "班机",
     tone: "mg",
   },
   {
@@ -87,7 +87,7 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["engineer"],
     icon: `${ICON_BASE}/T_role_engineer.PNG`,
-    label: "Engineer",
+    label: "工兵",
     tone: "engineer",
   },
   {
@@ -111,19 +111,19 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["sniper"],
     icon: `${ICON_BASE}/T_role_sniper.PNG`,
-    label: "Marksman",
+    label: "狙击",
     tone: "marksman",
   },
   {
     patterns: ["scout"],
     icon: `${ICON_BASE}/T_role_scout.PNG`,
-    label: "Scout",
+    label: "侦察",
     tone: "rifleman",
   },
   {
     patterns: ["recon"],
     icon: `${ICON_BASE}/T_role_recon.PNG`,
-    label: "Recon",
+    label: "侦察",
     tone: "rifleman",
   },
   {
@@ -153,7 +153,7 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["antiair", "anti air", "anti-air", "aa"],
     icon: `${ICON_BASE}/T_role_antiair.PNG`,
-    label: "Anti-Air",
+    label: "防空",
     tone: "at",
   },
   {
@@ -165,13 +165,13 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["rifleman", "plain", "rifleman1", "rifleman2"],
     icon: `${ICON_BASE}/T_role_rifleman.PNG`,
-    label: "Rifleman",
+    label: "步枪",
     tone: "rifleman",
   },
   {
     patterns: ["recruit"],
     icon: `${ICON_BASE}/T_role_recruit.PNG`,
-    label: "Recruit",
+    label: "新兵",
     tone: "default",
   },
 ];
