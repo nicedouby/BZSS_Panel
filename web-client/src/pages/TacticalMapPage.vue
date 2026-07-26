@@ -758,7 +758,6 @@
       @update:show-player-coords="showPlayerCoords = $event"
       @update:show-capture-zones="showCaptureZones = $event"
       @update:show-fobs="showFobs = $event"
-      @update:disable-marker-interaction="disableMarkerInteraction = $event"
       @update:measure-mode="measureMode = $event"
       @update:selected-map-key="selectedMapKey = $event"
       @update:marker-scale="markerScale = $event"
