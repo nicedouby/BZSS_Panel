@@ -784,13 +784,13 @@
       "maxViolationCountBeforeKick": 15,
       "disbandCommandNameSuffix": "",
       "broadcastOnApproved": false,
-      "broadcastOnViolation": false
+      "broadcastOnViolation": true
     },
     "stepwiseSquadPlaytimeGuard": {
       "enabled": true,
       "directory": "./data/stepwise-squad-playtime-guard",
       "broadcastOnApproved": false,
-      "broadcastOnViolation": false,
+      "broadcastOnViolation": true,
       "warnOnMissingPlaytime": true,
       "liveLookupWhenMissing": true,
       "maxRecentRecords": 300,
