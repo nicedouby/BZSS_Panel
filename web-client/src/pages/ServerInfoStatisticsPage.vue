@@ -36,7 +36,27 @@
       >
         <!-- 1. Overview Tab -->
         <div v-if="activeTab === 'overview'" class="tab-pane overview-pane">
-          <!-- KPIs -->
+          <ServerStatsSameTimeWindow
+            :target-time="targetTime"
+            :window-minutes="windowMinutes"
+            :lookback-days="lookbackDays"
+            :same-weekday-only="sameWeekdayOnly"
+            :series="sameTimeSeries"
+            :summary="sameTimeSummary"
+            :loading="loadingSameTime"
+            :error="sameTimeError"
+            :max-players="currentServer?.maxPlayers ?? 100"
+            :using-custom-dates="usingCustomSameTimeDates"
+            :selected-date-count="selectedDates.length"
+            @update:target-time="targetTime = $event"
+            @update:window-minutes="windowMinutes = $event"
+            @update:lookback-days="lookbackDays = $event"
+            @update:same-weekday-only="sameWeekdayOnly = $event"
+            @set-now="setTargetToNow"
+            @open-dates="openDateDialog"
+            @refresh="loadSameTime"
+          />
+
           <ServerStatsKpiGrid
             :current-metrics="currentMetrics"
             :samples="samples"
@@ -45,25 +65,18 @@
             :max-queue="currentServer?.maxQueue ?? 50"
           />
 
-          <!-- 12-Column Responsive Layout -->
-          <div class="overview-grid">
-            <!-- Left (8 or 7 cols): Population Chart -->
-            <div class="grid-chart-col">
-              <ServerPopulationChart
-                v-if="chartStage >= 1"
-                :samples="samples"
-                :max-players="currentServer?.maxPlayers ?? 100"
-                :match-started-at="currentMatch?.startedAt ?? null"
-              />
-            </div>
+          <div class="live-chart-stage">
+            <ServerPopulationChart
+              v-if="chartStage >= 1"
+              :samples="samples"
+              :max-players="currentServer?.maxPlayers ?? 100"
+              :match-started-at="currentMatch?.startedAt ?? null"
+            />
+          </div>
 
-            <!-- Right (4 or 5 cols): Insights Panel -->
-            <div class="grid-insight-col">
-              <ServerStatsInsightPanel :summary="summary" />
-            </div>
-
-            <!-- Full Width (12 cols): TPS Chart -->
-            <div class="grid-tps-col">
+          <div class="secondary-grid">
+            <ServerStatsInsightPanel :summary="summary" />
+            <div class="tps-stage">
               <ServerTpsChart v-if="chartStage >= 2" :samples="samples" :summary="summary" />
             </div>
           </div>
@@ -107,6 +120,7 @@ import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted,
 import DataState from "../components/common/DataState.vue";
 import ServerStatsToolbar from "../components/server-stats/ServerStatsToolbar.vue";
 import ServerStatsKpiGrid from "../components/server-stats/ServerStatsKpiGrid.vue";
+import ServerStatsSameTimeWindow from "../components/server-stats/ServerStatsSameTimeWindow.vue";
 import ServerPopulationChart from "../components/server-stats/ServerPopulationChart.vue";
 import ServerTpsChart from "../components/server-stats/ServerTpsChart.vue";
 import ServerStatsInsightPanel from "../components/server-stats/ServerStatsInsightPanel.vue";
@@ -132,6 +146,17 @@ const {
   isPolling,
   currentServer,
   currentMatch,
+  targetTime,
+  windowMinutes,
+  lookbackDays,
+  sameWeekdayOnly,
+  loadingSameTime,
+  sameTimeError,
+  sameTimeSeries,
+  sameTimeSummary,
+  usingCustomSameTimeDates,
+  loadSameTime,
+  setTargetToNow,
 
   // Compare bindings
   compareDates,
@@ -154,9 +179,9 @@ const {
 const activeTab = ref<"overview" | "trend" | "compare">("overview");
 
 const tabs = [
-  { key: "overview", label: "概览" },
-  { key: "trend", label: "趋势分析" },
-  { key: "compare", label: "历史对比" },
+  { key: "overview", label: "实时与历史同期" },
+  { key: "trend", label: "全天趋势" },
+  { key: "compare", label: "自选日期对比" },
 ] as const;
 
 const blockingError = computed(() => (historyError.value && !hasData.value ? historyError.value : ""));
@@ -278,43 +303,23 @@ onUnmounted(deactivateStatsPage);
   overflow-y: auto;
 }
 
-/* 12-Column Responsive Layout using CSS Grid */
-.overview-grid {
+.live-chart-stage {
+  margin-bottom: 16px;
+}
+
+.secondary-grid {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: minmax(300px, 0.36fr) minmax(0, 0.64fr);
   gap: 16px;
 }
 
-/* Default / Large desktop (> 1440px): 8 columns chart + 4 columns insight */
-.grid-chart-col {
-  grid-column: span 8 / span 8;
+.tps-stage {
+  min-width: 0;
 }
 
-.grid-insight-col {
-  grid-column: span 4 / span 4;
-}
-
-.grid-tps-col {
-  grid-column: span 12 / span 12;
-}
-
-/* Medium desktop (1024px - 1440px): 7 columns chart + 5 columns insight */
-@media (min-width: 1024px) and (max-width: 1440px) {
-  .grid-chart-col {
-    grid-column: span 7 / span 7;
-  }
-
-  .grid-insight-col {
-    grid-column: span 5 / span 5;
-  }
-}
-
-/* Tablet / small screens (< 1024px): Stack columns full width */
 @media (max-width: 1024px) {
-  .grid-chart-col,
-  .grid-insight-col,
-  .grid-tps-col {
-    grid-column: span 12 / span 12;
+  .secondary-grid {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -5,6 +5,7 @@ import { useServerMetricsPolling } from "./useServerMetricsPolling";
 import { useServerMetricsRange, type ServerMetricRangeKey } from "./useServerMetricsRange";
 import { useServerMetricsAnalytics } from "./useServerMetricsAnalytics";
 import { useServerMetricsComparison } from "./useServerMetricsComparison";
+import { useServerMetricsSameTime } from "./useServerMetricsSameTime";
 
 export type ServerMetricTone = "critical" | "warn" | "ok" | "idle";
 
@@ -116,8 +117,12 @@ export function useServerMetrics() {
     isPending,
   } = pollingManager;
 
-  function start() {
+  async function start() {
     startPolling();
+    await Promise.all([
+      loadAvailableDates(),
+      loadHistory(),
+    ]);
   }
 
   function stop() {
@@ -135,6 +140,11 @@ export function useServerMetrics() {
 
   // Comparison helper
   const comparisonManager = useServerMetricsComparison(() => currentServer.value?.id ?? "BZSS_Main");
+  const sameTimeManager = useServerMetricsSameTime(
+    availableDates,
+    selectedDates,
+    () => currentServer.value?.id ?? "BZSS_Main",
+  );
 
   const lastUpdatedLabel = computed(() => {
     if (!lastUpdatedAt.value) return "--:--:--";
@@ -299,6 +309,20 @@ export function useServerMetrics() {
     alignedComparisonSeries: comparisonManager.alignedComparisonSeries,
     toggleCompareDate: comparisonManager.toggleCompareDate,
     clearComparison: comparisonManager.clearComparison,
+
+    // Historical same-time intelligence
+    targetTime: sameTimeManager.targetTime,
+    windowMinutes: sameTimeManager.windowMinutes,
+    lookbackDays: sameTimeManager.lookbackDays,
+    sameWeekdayOnly: sameTimeManager.sameWeekdayOnly,
+    loadingSameTime: sameTimeManager.loadingSameTime,
+    sameTimeError: sameTimeManager.sameTimeError,
+    sameTimeSeries: sameTimeManager.sameTimeSeries,
+    sameTimeSummary: sameTimeManager.sameTimeSummary,
+    selectedHistoricalDates: sameTimeManager.selectedHistoricalDates,
+    usingCustomSameTimeDates: sameTimeManager.usingCustomDates,
+    loadSameTime: sameTimeManager.loadSameTime,
+    setTargetToNow: sameTimeManager.setTargetToNow,
 
     start,
     stop,
