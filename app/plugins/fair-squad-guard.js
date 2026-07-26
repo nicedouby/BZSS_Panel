@@ -201,7 +201,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function broadcastMessage(message, reason, meta = {}) {
-    const sender = getBroadcastSender();
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     const text = normalizeText(message);
     if (!text || typeof sender !== "function") return null;
 
