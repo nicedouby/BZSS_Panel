@@ -310,7 +310,7 @@
                 role="img"
                 :aria-label="vehicle.iconLabel || '载具'"
                 :style="{
-                  '--vehicle-icon-url': `url("${vehicle.iconPath || '/assets/icons/T_map_helicopter_scout.PNG'}")`,
+                  '--vehicle-icon-url': `url('${vehicle.iconPath || '/assets/icons/T_map_helicopter_scout.PNG'}')`,
                 }"
               ></span>
             </span>
