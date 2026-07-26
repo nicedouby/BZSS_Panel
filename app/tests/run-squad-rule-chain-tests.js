@@ -95,7 +95,7 @@ function testClassificationFieldsNormalizeWithoutLoss() {
     assert.equal(event.squadType, "vehicle");
     assert.equal(event.squadNature, "vehicle");
     assert.equal(event.squadTypeId, "ifv");
-    assert.equal(event.squadTypeLabel, "IFV / 步战车");
+    assert.equal(event.squadTypeLabel, "步战车");
     assert.equal(event.squadRuleId, "rule:bmp");
     assert.equal(event.effectiveMaxPlayers, 4);
     assert.equal(event.maxPlayersSource, "type_default");
@@ -510,7 +510,7 @@ async function testClassificationFieldsReachFinalPass() {
     assert.equal(event.squadType, "vehicle");
     assert.equal(event.squadNature, "vehicle");
     assert.equal(event.squadTypeId, "ifv");
-    assert.equal(event.squadTypeLabel, "步战车");
+    assert.equal(event.squadTypeLabel, "IFV / 步战车");
     assert.equal(event.squadRuleId, "rule:bmp");
     assert.equal(event.effectiveMaxPlayers, 4);
     assert.equal(event.maxPlayersSource, "type_default");
