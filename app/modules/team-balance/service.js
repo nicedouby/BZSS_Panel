@@ -383,6 +383,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       expiresAt,
       executedAt: null,
       executedBatchId: "",
+      batchSnapshot: null,
       plan: plan.plan,
     });
 
@@ -469,7 +470,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         algorithm,
         planId,
         roundKey: planEntry.roundKey,
-        batch: batchManager.get(planEntry.executedBatchId),
+        batch: batchManager.get(planEntry.executedBatchId) ?? planEntry.batchSnapshot ?? null,
       });
     }
 
@@ -591,6 +592,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     }
 
     planEntry.executedBatchId = created.batch.id;
+    planEntry.batchSnapshot = created.batch;
     planEntry.executedAt = new Date().toISOString();
 
     return buildShuffleExecuteResult({
