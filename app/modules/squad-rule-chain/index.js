@@ -606,7 +606,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     const adminWarn = getAdminWarnApi();
     const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
-    return await sender.call(modules.adminWarn, {
+    return await sender.call(adminWarn, {
       message: event.broadcastMessage,
       reason: `${event.source}_broadcast`,
       sourceModule: SQUAD_RULE_CHAIN_MODULE_ID,
@@ -620,9 +620,10 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   async function broadcastFinalPass(record) {
-    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
-    return await sender.call(modules.adminWarn, {
+    return await sender.call(adminWarn, {
       message: buildFinalPassBroadcastMessageV2(record),
       reason: "squad_rule_chain_final_pass_broadcast",
       sourceModule: SQUAD_RULE_CHAIN_MODULE_ID,
