@@ -1343,6 +1343,25 @@ async function testSquadNamePolicyRoutesExposeTestAndProtectedSave() {
   await adminServer.handleRequest(validateReq, validateRecorder.res);
   assert.equal(validateRecorder.state.status, 422);
   assert.equal(JSON.parse(validateRecorder.state.body).errors.some((item) => item.code === "non_vehicle_asset"), true);
+
+  const whitelistRecorder = createRecorder();
+  const whitelistReq = Readable.from([JSON.stringify({
+    name: "ZCC",
+    nature: "vehicle",
+    allowSquadSuffix: true,
+  })]);
+  whitelistReq.method = "POST";
+  whitelistReq.url = "/api/squad-name-policy/whitelist";
+  whitelistReq.headers = { host: "localhost", "content-type": "application/json" };
+  whitelistReq.socket = {};
+  await adminServer.handleRequest(whitelistReq, whitelistRecorder.res);
+  assert.equal(whitelistRecorder.state.status, 200);
+  const whitelistBody = JSON.parse(whitelistRecorder.state.body);
+  assert.equal(whitelistBody.ok, true);
+  assert.equal(whitelistBody.evaluation.valid, true);
+  assert.equal(whitelistBody.evaluation.classification.nature, "vehicle");
+  const whitelistRaw = JSON.parse(await fs.readFile(policyPath, "utf8"));
+  assert.equal(whitelistRaw.entries.some((entry) => entry.name === "ZCC" && entry.source === "squad_name_tracking_whitelist"), true);
 }
 
 async function testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClear() {
