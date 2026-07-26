@@ -150,7 +150,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   };
 
   async function handleViolation(input = {}) {
-    const event = normalizeSquadRuleViolationEvent(ensureAuthoritativeClassification(input));
+    const event = normalizeSquadRuleViolationEvent(ensureAuthoritativeClassification(input, modules, config, moduleLogger));
     if (!hasAuthoritativeClassification(event)) {
       const record = {
         id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
@@ -262,7 +262,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   async function handleFinalPass(input = {}) {
-    const event = normalizeRuleChainPassEvent(ensureAuthoritativeClassification(input));
+    const event = normalizeRuleChainPassEvent(ensureAuthoritativeClassification(input, modules, config, moduleLogger));
     if (!hasAuthoritativeClassification(event)) {
       remember(finalPassRecords, {
         id: SQUAD_RULE_CHAIN_MODULE_ID + ":classification-missing:" + Date.now(),
@@ -361,7 +361,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   function scheduleFinalPassFallback(input = {}) {
-    const event = normalizeRuleChainPassEvent(ensureAuthoritativeClassification(input));
+    const event = normalizeRuleChainPassEvent(ensureAuthoritativeClassification(input, modules, config, moduleLogger));
     if (!hasAuthoritativeClassification(event)) {
       moduleLogger?.warn?.("[SquadRuleChain] classification_missing: final pass fallback skipped.");
       return;
@@ -705,7 +705,7 @@ function resolveSquadNature(event = {}) {
   return Object.values(SQUAD_NATURE).includes(nature) ? nature : SQUAD_NATURE.OTHER;
 }
 
-function ensureAuthoritativeClassification(input = {}) {
+function ensureAuthoritativeClassification(input = {}, modules = null, config = null, moduleLogger = null) {
   const existing = input?.classification;
   if (
     existing
