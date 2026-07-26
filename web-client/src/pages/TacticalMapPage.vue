@@ -305,10 +305,15 @@
             :title="vehicle.tooltip"
           >
             <span class="vehicle-marker__frame">
-              <img v-if="vehicle.iconPath" class="vehicle-marker__icon" :src="vehicle.iconPath" :alt="vehicle.iconLabel" />
-              <img v-else class="vehicle-marker__icon" src="/assets/icons/T_map_helicopter_scout.PNG" alt="直升机" />
+              <span
+                class="vehicle-marker__icon"
+                role="img"
+                :aria-label="vehicle.iconLabel || '载具'"
+                :style="{
+                  '--vehicle-icon-url': `url("${vehicle.iconPath || '/assets/icons/T_map_helicopter_scout.PNG'}")`,
+                }"
+              ></span>
             </span>
-            <span v-if="vehicle.occupied" class="vehicle-marker__driver">●</span>
           </div>
         </div>
 
@@ -3524,11 +3529,10 @@ onBeforeUnmount(deactivateMapPage);
   height: 0;
   overflow: visible;
   --vehicle-accent: #94a3b8;
-  --vehicle-glow: rgba(148, 163, 184, .5);
 }
 
-.vehicle-marker.team-1 { --vehicle-accent: #60a5fa; --vehicle-glow: rgba(59, 130, 246, .64); }
-.vehicle-marker.team-2 { --vehicle-accent: #f87171; --vehicle-glow: rgba(248, 113, 113, .64); }
+.vehicle-marker.team-1 { --vehicle-accent: #60a5fa; }
+.vehicle-marker.team-2 { --vehicle-accent: #f87171; }
 
 .vehicle-marker__frame {
   position: absolute;
@@ -3540,36 +3544,22 @@ onBeforeUnmount(deactivateMapPage);
   place-items: center;
   transform: scale(var(--vehicle-marker-scale, 1)) rotate(var(--vehicle-yaw));
   transform-origin: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92)) drop-shadow(0 0 5px var(--vehicle-glow));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92));
   will-change: transform;
 }
 
 .vehicle-marker__icon {
   width: 26px;
   height: 26px;
-  object-fit: contain;
-}
-
-.vehicle-marker__fallback {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--vehicle-accent);
-  border-radius: 50%;
-  background: rgba(2, 6, 23, .88);
-  color: var(--vehicle-accent);
-  font-size: 13px;
-  line-height: 1;
-}
-
-.vehicle-marker__driver {
-  position: absolute;
-  left: 9px;
-  top: -12px;
-  color: #f8fafc;
-  font-size: 11px;
-  line-height: 1;
-  text-shadow: 0 0 5px var(--vehicle-glow), 0 1px 2px rgba(0, 0, 0, .9);
+  display: block;
+  background: var(--vehicle-accent);
+  -webkit-mask-image: var(--vehicle-icon-url);
+  mask-image: var(--vehicle-icon-url);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 </style>
