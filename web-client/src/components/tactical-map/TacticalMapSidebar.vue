@@ -596,10 +596,6 @@ const showFobsModel = computed({
   get: () => props.showFobs,
   set: (value: boolean) => emit("update:show-fobs", value),
 });
-const disableMarkerInteractionModel = computed({
-  get: () => props.disableMarkerInteraction,
-  set: (value: boolean) => emit("update:disable-marker-interaction", value),
-});
 const measureModeModel = computed({
   get: () => props.measureMode,
   set: (value: boolean) => emit("update:measure-mode", value),
