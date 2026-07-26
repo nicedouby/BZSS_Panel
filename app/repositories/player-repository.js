@@ -13,6 +13,36 @@ function cleanId(value) {
   return text;
 }
 
+function normalizeSteamAvatarUrl(value) {
+  const text = cleanText(value);
+  if (!text) return null;
+
+  // Steam 曾经返回过 http://media.steampowered.com/... 地址。
+  // 面板在 HTTPS 页面中直接加载会触发 mixed content（混合内容）拦截。
+  try {
+    const url = new URL(text);
+    if (
+      url.protocol === "http:" &&
+      /(?:^|\.)steam(?:powered|static)\.com$/i.test(url.hostname)
+    ) {
+      url.protocol = "https:";
+      return url.toString();
+    }
+    return url.toString();
+  } catch {
+    return text;
+  }
+}
+
+function normalizeSteamAvatarFields(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    steam_avatar: normalizeSteamAvatarUrl(row.steam_avatar ?? row.steamAvatar),
+    steamAvatar: normalizeSteamAvatarUrl(row.steam_avatar ?? row.steamAvatar),
+  };
+}
+
 function normalizeSeconds(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
@@ -150,8 +180,17 @@ export class PlayerRepository {
     this.byEOSID.clear();
     this.byName.clear();
 
+    // 修复迁移前遗留的 HTTP Steam 头像地址，并同步修复详细资料表。
+    // 只转换 Steam 域名，避免修改其他业务数据。
+    await this.db.run(
+      "UPDATE players SET steam_avatar = REPLACE(steam_avatar, 'http://', 'https://') WHERE steam_avatar LIKE 'http://%.steam%';",
+    );
+    await this.db.run(
+      "UPDATE steam_profiles SET avatar_small = REPLACE(avatar_small, 'http://', 'https://'), avatar_medium = REPLACE(avatar_medium, 'http://', 'https://'), avatar_full = REPLACE(avatar_full, 'http://', 'https://') WHERE avatar_small LIKE 'http://%.steam%' OR avatar_medium LIKE 'http://%.steam%' OR avatar_full LIKE 'http://%.steam%';",
+    );
+
     const rows = await this.db.all("SELECT * FROM players");
-    for (const row of rows) this.cache(row);
+    for (const row of rows) this.cache(normalizeSteamAvatarFields(row));
   }
 
   async findByIdentity({ name, steamID, eosID, qqNumber }) {
@@ -477,7 +516,7 @@ export class PlayerRepository {
       orderBy = "players.updated_at DESC";
     }
 
-    return this.db.all(
+    const rows = await this.db.all(
       `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
               players.permission_group, players.steam_game_seconds, players.game_seconds,
               players.game_seconds_override, players.server_seconds,
@@ -491,6 +530,7 @@ export class PlayerRepository {
       cappedLimit,
       safeOffset,
     );
+    return rows.map(normalizeSteamAvatarFields);
   }
 
   async countPlayers({ query = "", q: qAlias = "" } = {}) {
@@ -506,7 +546,8 @@ export class PlayerRepository {
   }
 
   async getPlayerById(playerId) {
-    return this.db.get("SELECT * FROM players WHERE id = ?", Number(playerId));
+    const row = await this.db.get("SELECT * FROM players WHERE id = ?", Number(playerId));
+    return normalizeSteamAvatarFields(row);
   }
 
   async listPlayersWithSteamID({ limit, offset, order = "DESC" } = {}) {
@@ -637,7 +678,7 @@ export class PlayerRepository {
     if (!normalizedSteamID) return null;
     await this.db.run(
       "UPDATE players SET steam_avatar = ?, updated_at = ? WHERE steam_id = ?",
-      steamAvatar,
+      normalizeSteamAvatarUrl(steamAvatar),
       ts,
       normalizedSteamID,
     );
@@ -669,9 +710,9 @@ export class PlayerRepository {
         Number(player.id),
         personaName,
         profileUrl,
-        cleanText(profile.avatar ?? profile.avatarsmall),
-        cleanText(profile.avatarMedium ?? profile.avatarmedium) ?? steamAvatar,
-        cleanText(profile.avatarFull ?? profile.avatarfull),
+        normalizeSteamAvatarUrl(profile.avatar ?? profile.avatarsmall),
+        normalizeSteamAvatarUrl(profile.avatarMedium ?? profile.avatarmedium) ?? normalizeSteamAvatarUrl(steamAvatar),
+        normalizeSteamAvatarUrl(profile.avatarFull ?? profile.avatarfull),
         Number.isFinite(Number(profile.communityvisibilitystate)) ? Number(profile.communityvisibilitystate) : null,
         ts,
         ts,
@@ -682,7 +723,7 @@ export class PlayerRepository {
     const steam = normalizedSteamID;
     if (steam && this.bySteamID.has(steam)) {
       const cached = this.bySteamID.get(steam);
-      cached.steam_avatar = steamAvatar;
+      cached.steam_avatar = normalizeSteamAvatarUrl(steamAvatar);
       cached.updated_at = ts;
     }
     return player ?? null;
