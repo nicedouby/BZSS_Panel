@@ -20,13 +20,14 @@ const DEFAULT_RECENT_LOG_LIMIT = 200;
 const RULE_REMINDER_SECONDS = 10;
 const DEFAULT_RULES = Object.freeze({
   infantry: Object.freeze([
-    Object.freeze({ startSeconds: 0, endSeconds: 25, minHoursExclusive: 400 }),
-    Object.freeze({ startSeconds: 25, endSeconds: 40, minHoursExclusive: 200 }),
+    Object.freeze({ startSeconds: 0, endSeconds: 30, minHoursExclusive: 800 }),
+    Object.freeze({ startSeconds: 30, endSeconds: 50, minHoursExclusive: 600 }),
+    Object.freeze({ startSeconds: 50, endSeconds: 100, minHoursExclusive: 400 }),
   ]),
   vehicle: Object.freeze([
-    Object.freeze({ startSeconds: 0, endSeconds: 60, minHoursExclusive: 800 }),
-    Object.freeze({ startSeconds: 60, endSeconds: 75, minHoursExclusive: 600 }),
-    Object.freeze({ startSeconds: 75, endSeconds: 90, minHoursExclusive: 400 }),
+    Object.freeze({ startSeconds: 0, endSeconds: 60, minHoursExclusive: 1200 }),
+    Object.freeze({ startSeconds: 60, endSeconds: 90, minHoursExclusive: 800 }),
+    Object.freeze({ startSeconds: 90, endSeconds: 120, minHoursExclusive: 400 }),
   ]),
 });
 
