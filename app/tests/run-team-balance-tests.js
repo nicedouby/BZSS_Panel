@@ -643,8 +643,8 @@ async function testShufflePlanHasIdentityAndAsyncExecution() {
   assert.equal(duplicate.duplicate, true);
 
   await new Promise((resolve) => setTimeout(resolve, 30));
-  assert.equal(commands.length, 1);
-  assert.equal(commands[0].batchId, accepted.batch.id);
+  assert.equal(commands.length, accepted.batch.total);
+  assert.equal(commands.every((command) => command.batchId === accepted.batch.id), true);
 }
 
 async function testShuffleGateStopsAfterMatchStart() {
