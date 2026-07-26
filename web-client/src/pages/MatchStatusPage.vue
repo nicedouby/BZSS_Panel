@@ -3147,4 +3147,41 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 
 
 
+
+.batch-team-change-progress-card {
+  margin: 0 16px 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(80, 180, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(14, 25, 42, 0.82);
+}
+.batch-team-change-progress-head,
+.batch-team-change-progress-stats,
+.batch-team-change-progress-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.batch-team-change-progress-head {
+  justify-content: space-between;
+}
+.batch-team-change-progress-head span {
+  color: rgba(210, 225, 245, 0.62);
+  font-size: 12px;
+}
+.batch-team-change-progress-stats {
+  margin-top: 8px;
+  color: rgba(235, 245, 255, 0.86);
+  font-size: 13px;
+}
+.batch-team-change-current {
+  margin-top: 8px;
+  color: #67c7ff;
+  font-size: 13px;
+}
+.batch-team-change-progress-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 </style>
