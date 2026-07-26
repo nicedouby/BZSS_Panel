@@ -426,7 +426,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
         warningMessages: shouldWarn(record, decision) ? [buildWarnMessage(record, decision)] : [],
-        broadcastMessage: shouldBroadcastViolation(record, decision) ? buildViolationBroadcastMessage(record, decision) : "",
+        broadcastMessage: "",
         disbandReason: buildDisbandReason(record, decision),
       };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
@@ -468,11 +468,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  function shouldBroadcastViolation(record, decision) {
-    if (!runtimeConfig.broadcastOnViolation) return false;
-    if (decision.approved) return false;
-    if (decision.status === "kick_cooldown") return false;
-    return !record.actions.some((action) => action.type === "broadcasted_violation" || action.type === "broadcast_violation_failed");
+  // 违规处置永远不进行全服广播；只保留对相关队长的 adminWarn。
+  function shouldBroadcastViolation() {
+    return false;
   }
 
   function shouldWarn(record, decision) {
@@ -750,7 +748,7 @@ function readConfig(config) {
     enabled: raw.enabled !== false,
     directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
     broadcastOnApproved: raw.broadcastOnApproved === true,
-    broadcastOnViolation: raw.broadcastOnViolation !== false,
+    broadcastOnViolation: false,
     warnOnMissingPlaytime: raw.warnOnMissingPlaytime !== false,
     liveLookupWhenMissing: raw.liveLookupWhenMissing !== false,
     maxRecentRecords: positiveInt(raw.maxRecentRecords, DEFAULT_RECENT_LIMIT),
