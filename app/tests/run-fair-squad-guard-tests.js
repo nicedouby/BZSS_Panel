@@ -610,7 +610,7 @@ async function testTransientDisbandFailureRetries() {
     const statusBefore = harness.plugin.api.getStatus();
     const recordBefore = statusBefore.recentRecords.find((r) => r.squadId === 40);
     assert.equal(recordBefore.active, true);
-    assert.equal(recordBefore.actions.some((a) => a.type === "violation_emitted"), true);
+    assert.equal(recordBefore.actions.some((a) => a.type === "violation_queued"), true);
 
     harness.webStatus.logClockSeconds = 60; // Progress clock to open phase
 
@@ -623,7 +623,7 @@ async function testTransientDisbandFailureRetries() {
     assert.equal(harness.disbands.length, 2);
     const statusAfter = harness.plugin.api.getStatus();
     const recordAfter = statusAfter.recentRecords.find((r) => r.squadId === 40);
-    assert.equal(recordAfter.actions.some((a) => a.type === "violation_emitted"), true);
+    assert.equal(recordAfter.actions.some((a) => a.type === "violation_queued"), true);
 
     await harness.emitModuleEvent("module.matchState", "squadsUpdated", {
       serverId: "test-server",
