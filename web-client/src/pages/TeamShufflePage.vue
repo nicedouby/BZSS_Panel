@@ -1528,4 +1528,41 @@ function formatHours(value: number | null | undefined) {
     justify-content: flex-start;
   }
 }
+
+.shuffle-batch-card {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 9px;
+  background: rgba(51, 20, 26, 0.72);
+}
+.shuffle-batch-card__header,
+.shuffle-batch-card__stats,
+.shuffle-batch-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.shuffle-batch-card__header {
+  justify-content: space-between;
+}
+.shuffle-batch-card__header span {
+  color: rgba(255, 225, 225, 0.62);
+  font-size: 12px;
+}
+.shuffle-batch-card__stats {
+  margin-top: 8px;
+  color: #ffe4e6;
+  font-size: 13px;
+}
+.shuffle-batch-card__current {
+  margin-top: 8px;
+  color: #fda4af;
+  font-size: 13px;
+}
+.shuffle-batch-card__actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 </style>
