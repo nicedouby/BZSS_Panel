@@ -400,6 +400,7 @@ function normalizePlayer(raw: any, source: string) {
 }
 
 function collectFireTeamEvidence(raw: any, source: string) {
+  if (source !== "bzssCore") return [];
   const out: any[] = [];
   const add = (fireTeam: string, rawValue: any, path: string, priority: number) => {
     if (!fireTeam) return;
