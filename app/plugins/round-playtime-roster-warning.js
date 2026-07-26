@@ -568,7 +568,7 @@ function budget(items, maxChars, mode, builder) {
   const limit = Math.max(1, Math.floor((maxChars - separatorLength) / Math.max(1, items.length)));
   return encodeLines(items.map((item) => truncate(builder(item, limit), limit)), mode);
 }
-function normalizeLineBreakMode(value) { const mode = text(value).toLowerCase(); return ["escaped", "actual", "separator"].includes(mode) ? mode : "escaped"; }
+function normalizeLineBreakMode(value) { const mode = text(value).toLowerCase(); return ["escaped", "actual", "separator"].includes(mode) ? mode : "actual"; }
 function summarizeDispatch(result) { return result ? { ...result } : null; }
 function group(players, keyFn) { const map = new Map(); for (const player of players) { const key = keyFn(player); if (!key) continue; if (!map.has(key)) map.set(key, []); map.get(key).push(player); } return map; }
 function dedupe(players) { const seen = new Set(); return (players ?? []).filter((player) => { const key = player.steamID || player.eosID || player.playerID || player.name.toLowerCase(); if (!key || seen.has(key)) return false; seen.add(key); return true; }); }
