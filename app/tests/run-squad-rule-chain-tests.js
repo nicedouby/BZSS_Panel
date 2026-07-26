@@ -571,7 +571,22 @@ async function testFinalPassWarningMatchesSquadNature() {
     harness.eventBus.emitModuleEvent(
       "module.squadRuleChain",
       "finalSquadRulePassed",
-      creation({ squadName: "zcc 1", squadId: 61, creatorSteamId: "steam-1", leaderSteamId: "steam-1" }),
+      creation({
+        squadName: "zcc 1",
+        squadId: 61,
+        creatorSteamId: "steam-1",
+        leaderSteamId: "steam-1",
+        classification: {
+          valid: true,
+          source: "policy_event",
+          policyRevision: 5,
+          typeId: "vehicle",
+          typeLabel: "载具队",
+          nature: "vehicle",
+          natureLabel: "载具队",
+          ruleId: "test:zcc",
+        },
+      }),
     );
 
     await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
@@ -586,7 +601,22 @@ async function testFinalPassWarningMatchesSquadNature() {
     harness.eventBus.emitModuleEvent(
       "module.squadRuleChain",
       "finalSquadRulePassed",
-      creation({ squadName: "mortar 1", squadId: 62, creatorSteamId: "steam-2", leaderSteamId: "steam-2" }),
+      creation({
+        squadName: "mortar 1",
+        squadId: 62,
+        creatorSteamId: "steam-2",
+        leaderSteamId: "steam-2",
+        classification: {
+          valid: true,
+          source: "policy_event",
+          policyRevision: 5,
+          typeId: "mortar",
+          typeLabel: "迫击炮",
+          nature: "support",
+          natureLabel: "支援队",
+          ruleId: "test:mortar",
+        },
+      }),
     );
 
     await waitFor(() => harness.broadcasts.some((item) => item.reason === "squad_rule_chain_final_pass_broadcast"));
