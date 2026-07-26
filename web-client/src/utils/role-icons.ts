@@ -27,13 +27,13 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["pilot squadleader", "pilot sl", "squadleader pilot", "sl pilot"],
     icon: `${ICON_BASE}/T_role_pilot_squadleader.PNG`,
-    label: "Pilot SL",
+    label: "飞行员队长",
     tone: "leader",
   },
   {
     patterns: ["crewman squadleader", "crew squadleader", "squadleader crewman", "sl crewman", "crew sl"],
     icon: `${ICON_BASE}/T_role_crewman_squadleader.PNG`,
-    label: "Crewman SL",
+    label: "乘员队长",
     tone: "leader",
   },
   {
@@ -45,35 +45,35 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["squadleader", "sl", "leader"],
     icon: `${ICON_BASE}/T_role_squadleader.PNG`,
-    label: "Squad Leader",
+    label: "队长",
     tone: "leader",
   },
   {
     patterns: ["medic"],
     icon: `${ICON_BASE}/T_role_medic.PNG`,
-    label: "Medic",
+    label: "医疗",
     tone: "medic",
   },
   {
     patterns: ["heavyantitank", "heavy anti tank", "heavy anti-tank", "hat"],
     icon: `${ICON_BASE}/T_role_heavyantitank.PNG`,
-    label: "Heavy AT",
+    label: "重筒",
     tone: "at",
   },
   {
     patterns: ["lightantitank", "light anti tank", "light anti-tank", "antitank", "anti tank", "lat"],
     icon: `${ICON_BASE}/T_role_lightantitank.PNG`,
-    label: "Light AT",
+    label: "轻筒",
     tone: "at",
   },
   {
     patterns: ["machinegunner", "machine gunner", "mg"],
     icon: `${ICON_BASE}/T_role_machinegunner.PNG`,
-    label: "MG / AR",
+    label: "通机",
     tone: "mg",
   },
   {
-    patterns: ["automaticrifleman", "automatic rifleman", "ar"],
+    patterns: ["automaticrifleman", "automatic rifleman", "automatic rifle", "ar"],
     icon: `${ICON_BASE}/T_role_automaticrifleman.PNG`,
     label: "MG / AR",
     tone: "mg",
@@ -81,7 +81,7 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["combatengineer", "combat engineer"],
     icon: `${ICON_BASE}/T_role_engineer.PNG`,
-    label: "Engineer",
+    label: "工兵",
     tone: "engineer",
   },
   {
@@ -93,19 +93,19 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["sapper", "miner"],
     icon: `${ICON_BASE}/T_role_sapper.PNG`,
-    label: "Sapper",
+    label: "工兵",
     tone: "engineer",
   },
   {
     patterns: ["breacher"],
     icon: `${ICON_BASE}/T_role_breacher.PNG`,
-    label: "Breacher",
+    label: "突击",
     tone: "engineer",
   },
   {
     patterns: ["designatedmarksman", "designated marksman", "marksman"],
     icon: `${ICON_BASE}/T_role_designatedmarksman.PNG`,
-    label: "Marksman",
+    label: "精确射手",
     tone: "marksman",
   },
   {
@@ -129,25 +129,25 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["raider"],
     icon: `${ICON_BASE}/T_role_raider.PNG`,
-    label: "Raider",
+    label: "奇袭",
     tone: "rifleman",
   },
   {
     patterns: ["grenadier"],
     icon: `${ICON_BASE}/T_role_grenadier.PNG`,
-    label: "Grenadier",
+    label: "榴弹",
     tone: "rifleman",
   },
   {
     patterns: ["crewman", "crew"],
     icon: `${ICON_BASE}/T_role_crewman.PNG`,
-    label: "Crewman",
+    label: "乘员",
     tone: "crewman",
   },
   {
     patterns: ["pilot"],
     icon: `${ICON_BASE}/T_role_pilot.PNG`,
-    label: "Pilot",
+    label: "飞行员",
     tone: "pilot",
   },
   {
@@ -159,7 +159,7 @@ const ROLE_ICON_MATCHES: RoleIconMatch[] = [
   {
     patterns: ["rifleman scoped", "riflemanscoped"],
     icon: `${ICON_BASE}/T_role_rifleman_scoped.PNG`,
-    label: "Rifleman",
+    label: "步枪",
     tone: "rifleman",
   },
   {
