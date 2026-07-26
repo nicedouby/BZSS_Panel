@@ -56,6 +56,16 @@ function cleanText(value) {
   return text || null;
 }
 
+function readSteamApiKeyFromConfig(configPath) {
+  try {
+    const raw = fs.readFileSync(configPath, "utf8");
+    const parsed = JSON.parse(raw);
+    return String(parsed?.steam?.apiKey ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function clampWaitMs(value, fallback) {
   const waitMs = Number(value);
   if (!Number.isFinite(waitMs)) return fallback;
@@ -431,8 +441,14 @@ class SteamGameDurationService {
     let processed = 0;
     let running = 0;
 
+    let avatarRefreshPromise = null;
     if (this.apiKey && selectedTargets.length > 0) {
-      this.fetchAndCacheSteamAvatars(selectedTargets.map((t) => t.steamID)).catch(() => {});
+      avatarRefreshPromise = this.fetchAndCacheSteamAvatars(
+        selectedTargets.map((t) => t.steamID),
+      ).catch((error) => {
+        this.logger?.warn(`Steam avatar refresh failed: ${error?.message || error}`);
+        return null;
+      });
     }
 
     this._setJobProgress(job, {
@@ -548,6 +564,8 @@ class SteamGameDurationService {
     };
 
     await Promise.all(selectedTargets.map((player) => settleOne(player)));
+    // Do not mark the online refresh as completed before avatar writes finish.
+    if (avatarRefreshPromise) await avatarRefreshPromise;
 
     return {
       total,
