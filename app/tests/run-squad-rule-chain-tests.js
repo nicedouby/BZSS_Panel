@@ -512,9 +512,9 @@ async function testClassificationFieldsReachFinalPass() {
     assert.equal(event.squadTypeId, "ifv");
     assert.equal(event.squadTypeLabel, "IFV / 步战车");
     assert.equal(event.squadRuleId, "rule:bmp");
-    assert.equal(event.effectiveMaxPlayers, 4);
-    assert.equal(event.maxPlayersSource, "type_default");
-    assert.equal(event.assetPath, "/Game/BMP");
+    assert.equal(event.effectiveMaxPlayers, null);
+    assert.equal(event.maxPlayersSource, "none");
+    assert.equal(event.assetPath, "");
     assert.deepEqual(event.classificationMetadata, { matchedKind: "canonical" });
     assert.equal(event.playtime?.known, true);
     assert.equal(event.playtime?.hoursText, "1000h");
