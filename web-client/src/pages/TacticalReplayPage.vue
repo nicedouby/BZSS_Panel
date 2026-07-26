@@ -23,7 +23,7 @@
     </div>
 
     <section v-else class="replay-grid">
-      <aside class="session-rail panel">
+      <aside v-if="!isPlayerMode" class="session-rail panel">
         <div class="panel-heading"><div><span class="panel-kicker">ARCHIVE</span><h2>对局档案</h2></div><span class="count-badge">{{ sessions.length }}</span></div>
         <div class="archive-tools">
           <label class="search-box"><span>⌕</span><input v-model="searchText" type="search" placeholder="搜索地图或图层" /></label>
@@ -45,7 +45,10 @@
       <main class="stage panel" :class="{ 'is-player-stage': isPlayerMode }">
         <div class="stage-heading">
           <div><span class="panel-kicker">{{ isPlayerMode ? "RECONSTRUCTED SCENE" : "MAP PREVIEW" }}</span><h2>{{ activeSession && activeSession.map || "选择一场对局" }}</h2><span class="stage-layer">{{ activeSession && activeSession.layer || "等待选择录制档案" }}</span></div>
-          <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span></div>
+          <div class="stage-actions">
+            <div class="stage-metrics"><span><b>{{ formatClock(currentMs) }}</b><small>当前时间</small></span><span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span></div>
+            <button v-if="!isPlayerMode && activeSession" class="open-player-button" type="button" @click="openStandalonePlayer">打开独立播放器</button>
+          </div>
         </div>
 
         <div v-if="!isPlayerMode" class="session-overview">
@@ -425,10 +428,9 @@ async function loadSessions() {
     const routeSessionId = String(route.params.sessionId || "");
     const selected = sessions.value.find((item) => item.id === routeSessionId)
       || sessions.value.find((item) => item.id === (activeSession.value && activeSession.value.id))
-      || sessions.value[0]
       || null;
-    // Refreshing the archive list must not reset the currently displayed
-    // scene. Only a genuinely different selection needs a new state read.
+    // 档案刷新只获取轻量元数据，绝不自动读取第一场的 JSONL 帧。
+    // 只有用户点击档案或通过独立播放器路由指定 sessionId 时才开始读取回放。
     if (selected && selected.id !== activeSession.value?.id) await selectSession(selected);
     else if (selected && activeSession.value) activeSession.value = { ...activeSession.value, ...selected };
   } catch (error: any) { errorText.value = error && error.message || "无法读取回放档案"; }
@@ -460,6 +462,14 @@ async function selectSession(session: ReplaySession) {
       if (seekTimer) { clearTimeout(seekTimer); seekTimer = null; }
     }
   }
+}
+function openStandalonePlayer() {
+  if (!activeSession.value) return;
+  void router.push({
+    name: "tactical-replay-player",
+    params: { sessionId: activeSession.value.id },
+    query: currentMs.value > 0 ? { at: String(Math.round(currentMs.value)) } : undefined,
+  });
 }
 async function deleteSession(session: ReplaySession) {
   if (session.status === "recording") return;
@@ -562,11 +572,12 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .archive-path { display: block; max-width: min(100%, 720px); margin: 12px auto; overflow: auto; padding: 8px 10px; border: 1px solid rgba(150,190,211,.14); border-radius: 7px; color: #89a9b9; background: rgba(4,15,26,.45); font-size: 11px; text-align: left; }
 .error-banner { padding: 12px 14px; margin-bottom: 18px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 10px; }
 .panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 24px 80px rgba(0,0,0,.2); border-radius: 16px; }
-.replay-grid { display: grid; grid-template-columns: minmax(320px, 380px) minmax(0, 1fr); gap: 15px; align-items: start; min-height: 650px; }
-.is-player-mode .replay-grid { grid-template-columns: 240px minmax(0, 1fr) 220px; min-height: calc(100vh - 180px); }
+.replay-grid { display: grid; grid-template-columns: 306px minmax(0, 1fr); gap: 15px; align-items: start; min-height: 650px; }
+.is-player-mode .replay-grid { grid-template-columns: minmax(0, 1fr) 250px; min-height: calc(100vh - 180px); }
 .session-rail, .inspector { padding: 16px; min-height: 640px; }
-.session-rail { position: sticky; top: 14px; }
-.panel-heading, .stage-heading, .timeline-topline, .timeline-controls, .selected-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.session-rail { position: sticky; top: 14px; width: 306px; box-sizing: border-box; }
+.is-player-mode .session-rail { display: none; }
+.panel-heading, .stage-heading, .timeline-topline, .timeline-controls, .selected-top, .stage-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-heading h2, .stage-heading h2 { margin: 5px 0 0; font-size: 17px; }
 .count-badge { min-width: 25px; padding: 4px 7px; text-align: center; border-radius: 7px; background: rgba(65,151,191,.18); color: #9bcee2; font-size: 12px; }
 .archive-tools { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 8px; margin: 17px 0 12px; }
@@ -593,6 +604,9 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .stage { min-width: 0; padding: 18px; }
 .is-player-mode .stage { min-height: calc(100vh - 180px); }
 .stage-layer { display: inline-block; margin-top: 7px; color: #7697ab; font-size: 11px; }
+.stage-actions { flex: 0 0 auto; }
+.open-player-button { padding: 8px 10px; border: 1px solid rgba(64,223,160,.48); border-radius: 8px; color: #83f0c3; background: rgba(19,82,70,.32); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.open-player-button:hover { color: #062117; background: #43dca5; border-color: #43dca5; }
 .stage-metrics { display: flex; gap: 18px; }
 .stage-metrics span { display: grid; gap: 3px; text-align: right; }
 .stage-metrics b { color: #eaf7f5; font-size: 16px; }
@@ -604,7 +618,7 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .session-overview b.recording { color: #72e5b6; }
 .map-shell { position: relative; min-height: 355px; margin-top: 15px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 12px; background: #081827; cursor: grab; touch-action: none; user-select: none; }
 .is-player-mode .map-shell { min-height: clamp(620px, calc(100vh - 365px), 1000px); }
-.map-shell.is-preview { cursor: grab; touch-action: none; background: #061420; }
+.map-shell.is-preview { min-height: clamp(520px, calc(100vh - 355px), 920px); cursor: grab; touch-action: none; background: #061420; }
 .map-shell.is-dragging { cursor: grabbing; }
 .replay-map-transform { position: absolute; top: 0; left: 0; width: 1000px; height: 1000px; transform-origin: 0 0; will-change: transform; z-index: 2; background: #020205; }
 .map-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(120,183,203,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(120,183,203,.12) 1px, transparent 1px); background-size: 64px 64px; }
@@ -665,6 +679,6 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .empty-icon { color: #55ddb6; font-size: 48px; }
 .empty-state h2 { margin: 0; font-size: 20px; }
 .empty-state p { margin: 0 0 8px; color: #7897a7; font-size: 13px; }
-@media (max-width: 1200px) { .is-player-mode .replay-grid { grid-template-columns: 210px minmax(0,1fr); min-height: auto; } .is-player-mode .inspector { grid-column: 1 / -1; min-height: auto; } .inspector-placeholder { min-height: 100px; } .session-overview { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (max-width: 1200px) { .is-player-mode .replay-grid { grid-template-columns: minmax(0,1fr) 220px; min-height: auto; } .is-player-mode .inspector { grid-column: auto; min-height: auto; } .inspector-placeholder { min-height: 100px; } .session-overview { grid-template-columns: repeat(3, minmax(0,1fr)); } }
 @media (max-width: 800px) { .replay-workbench { padding: 18px 12px 24px; } .replay-header { display: grid; } .header-actions { justify-content: space-between; } .replay-grid, .is-player-mode .replay-grid { display: block; } .session-rail { position: static; } .session-rail, .stage, .inspector { min-height: auto; margin-bottom: 12px; } .session-list { max-height: 260px; } .map-shell, .is-player-mode .map-shell { min-height: 350px; } .stage-metrics { gap: 8px; } .session-overview { grid-template-columns: 1fr 1fr; } .session-overview > span:last-of-type { grid-column: 1 / -1; } }
 </style>
