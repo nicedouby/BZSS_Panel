@@ -318,7 +318,7 @@ function applyConfig(value: any) {
   form.leaderWarningSeconds = finite(value.leaderWarningSeconds, 450);
   form.pollIntervalMs = finite(value.pollIntervalMs, 1000);
   form.maxWarningChars = finite(value.maxWarningChars, 180);
-  form.lineBreakMode = ["escaped", "actual", "separator"].includes(value.lineBreakMode) ? value.lineBreakMode : "escaped";
+  form.lineBreakMode = ["escaped", "actual", "separator"].includes(value.lineBreakMode) ? value.lineBreakMode : "actual";
   form.liveLookupWhenMissing = value.liveLookupWhenMissing === true;
   form.persistState = value.persistState !== false;
 }
