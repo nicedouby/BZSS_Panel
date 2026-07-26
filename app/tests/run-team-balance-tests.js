@@ -562,4 +562,9 @@ async function testBatchRouteReturnsAcceptedBeforeExecution() {
   assert.equal(recorder.body.batch.completed, 0);
 }
 
+await testBatchManagerSerializesItemsAndIsIdempotent();
+await testBatchManagerSkipsStateAndDoesNotRetryTimeout();
+await testBatchManagerCancellationStopsRemainingItems();
+await testBatchRouteReturnsAcceptedBeforeExecution();
+
 console.log("team balance tests passed");
