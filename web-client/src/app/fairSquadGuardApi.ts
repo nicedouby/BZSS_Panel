@@ -36,9 +36,6 @@ export interface FairSquadGuardStatus {
     noSquadCreationSeconds: number;
     infantryOnlyUntilSeconds: number;
     maxViolationCountBeforeKick: number;
-    allowedInfantryNames: string[];
-    allowedInfantryPatterns: string[];
-    defaultInfantryPatterns: string[];
     disbandCommandNameSuffix: string;
     broadcastOnApproved: boolean;
     broadcastOnViolation: boolean;
