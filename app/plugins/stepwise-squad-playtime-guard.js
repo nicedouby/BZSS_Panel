@@ -426,7 +426,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
         warningMessages: shouldWarn(record, decision) ? [buildWarnMessage(record, decision)] : [],
-        broadcastMessage: shouldBroadcastViolation(record, decision) ? buildViolationBroadcastMessage(record, decision) : "",
+        broadcastMessage: "",
         disbandReason: buildDisbandReason(record, decision),
       };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
@@ -468,11 +468,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  function shouldBroadcastViolation(record, decision) {
-    if (!runtimeConfig.broadcastOnViolation) return false;
-    if (decision.approved) return false;
-    if (decision.status === "kick_cooldown") return false;
-    return !record.actions.some((action) => action.type === "broadcasted_violation" || action.type === "broadcast_violation_failed");
+  // 违规处置永远不进行全服广播；只保留对相关队长的 adminWarn。
+  function shouldBroadcastViolation() {
+    return false;
   }
 
   function shouldWarn(record, decision) {
@@ -480,29 +478,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     return true;
   }
 
-  async function broadcastViolation(record, decision) {
-    const adminWarn = getAdminWarnApi(modules);
-    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
-    if (typeof sender !== "function") {
-      record.actions.push({
-        type: "broadcast_violation_failed",
-        result: { error: "admin_warn_unavailable" },
-      });
-      return;
-    }
-
-    const result = await sender.call(adminWarn, {
-      message: buildViolationBroadcastMessage(record, decision),
-      reason: "stepwise_squad_playtime_violation_broadcast",
-      sourceModule: PLUGIN_ID,
-      relatedEventId: record.id,
-      system: true,
-    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
-
-    record.actions.push({
-      type: result?.success === false ? "broadcast_violation_failed" : "broadcasted_violation",
-      result: summarizeActionResult(result),
-    });
+  // 保留兼容函数名，但违规处置广播已永久禁用。
+  async function broadcastViolation() {
+    return { success: true, skipped: true, skipReason: "enforcement_broadcast_disabled" };
   }
 
   async function maybeBroadcastRuleReminder(record = null) {
@@ -750,7 +728,7 @@ function readConfig(config) {
     enabled: raw.enabled !== false,
     directory: normalizeText(raw.directory) || DEFAULT_DATA_DIR,
     broadcastOnApproved: raw.broadcastOnApproved === true,
-    broadcastOnViolation: raw.broadcastOnViolation !== false,
+    broadcastOnViolation: false,
     warnOnMissingPlaytime: raw.warnOnMissingPlaytime !== false,
     liveLookupWhenMissing: raw.liveLookupWhenMissing !== false,
     maxRecentRecords: positiveInt(raw.maxRecentRecords, DEFAULT_RECENT_LIMIT),
