@@ -295,7 +295,7 @@
           >
             <span class="vehicle-marker__frame">
               <img v-if="vehicle.iconPath" class="vehicle-marker__icon" :src="vehicle.iconPath" :alt="vehicle.iconLabel" />
-              <span v-else class="vehicle-marker__fallback" aria-hidden="true">🚙</span>
+              <img v-else class="vehicle-marker__icon" src="/assets/icons/T_map_helicopter_scout.PNG" alt="直升机" />
             </span>
             <span v-if="vehicle.occupied" class="vehicle-marker__driver">●</span>
           </div>
