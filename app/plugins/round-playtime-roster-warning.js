@@ -549,7 +549,7 @@ function buildSquadRosterMessage(players, maxChars, lineBreakMode = "escaped") {
   if (wireLength(full, lineBreakMode) <= maxChars) return encodeLines(full, lineBreakMode);
   const compact = buildSquadRosterLines(players, true);
   if (wireLength(compact, lineBreakMode) <= maxChars) return encodeLines(compact, lineBreakMode);
-  return budget(players, maxChars, lineBreakMode, (player, limit) => `${player.fireTeam || "?"}${player.roleShort}${truncate(player.name, Math.max(1, limit - player.roleShort.length - 5))}${hoursShort(player.gameSeconds)}`);
+  return budget(players, maxChars, lineBreakMode, (player, limit) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.roleShort} ${truncate(player.name, Math.max(1, limit - player.roleShort.length - 7))} ${hoursShort(player.gameSeconds)}`);
 }
 
 function buildLeaderRosterMessage(leaders, maxChars, lineBreakMode = "escaped") {
