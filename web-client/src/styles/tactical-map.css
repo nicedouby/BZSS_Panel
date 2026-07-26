@@ -1278,6 +1278,8 @@
   bottom: 16px;
   left: 16px;
   display: flex;
+  flex-wrap: wrap;
+  max-width: min(calc(100% - 32px), 620px);
   align-items: center;
   gap: 6px;
   padding: 6px;
@@ -1331,6 +1333,68 @@
   color: #00e5ff;
   border-color: #00e5ff;
   box-shadow: inset 0 0 6px rgba(0, 240, 255, 0.2), 0 0 10px rgba(0, 240, 255, 0.15);
+}
+
+/* A non-blocking first-paint state: users can pan, zoom and open controls
+   before the snapshot or map tiles have finished loading. */
+.tactical-map-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  align-content: center;
+  pointer-events: none;
+  color: #d7f5ff;
+  background: linear-gradient(135deg, rgba(3, 12, 24, .74), rgba(6, 21, 35, .45));
+  transition: opacity .18s ease;
+}
+
+.tactical-map-loading__map {
+  position: relative;
+  width: min(42vw, 360px);
+  aspect-ratio: 1.6;
+  overflow: hidden;
+  border: 1px solid rgba(103, 232, 249, .2);
+  border-radius: 10px;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(103,232,249,.09) 50%, transparent 51%),
+    linear-gradient(transparent 49%, rgba(103,232,249,.09) 50%, transparent 51%),
+    rgba(8, 25, 40, .88);
+  background-size: 26px 26px;
+  box-shadow: 0 14px 36px rgba(0,0,0,.28);
+}
+
+.tactical-map-loading__map::after {
+  content: "";
+  position: absolute;
+  inset: -20% -45%;
+  background: linear-gradient(90deg, transparent, rgba(103,232,249,.22), transparent);
+  animation: tactical-map-scan 1.25s ease-in-out infinite;
+}
+
+.tactical-map-loading__map i {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #5eead4;
+  box-shadow: 0 0 13px rgba(94,234,212,.95);
+}
+.tactical-map-loading__map i:nth-child(1) { left: 23%; top: 31%; }
+.tactical-map-loading__map i:nth-child(2) { left: 64%; top: 58%; animation: tactical-map-dot 1.1s ease-in-out infinite alternate; }
+.tactical-map-loading__map i:nth-child(3) { left: 75%; top: 25%; opacity: .55; }
+.tactical-map-loading__copy { display: grid; gap: 5px; text-align: center; text-shadow: 0 1px 5px #000; }
+.tactical-map-loading__copy strong { font-size: 14px; letter-spacing: .04em; }
+.tactical-map-loading__copy span { color: #9fc1cf; font-size: 11px; }
+@keyframes tactical-map-scan { from { transform: translateX(-24%); } to { transform: translateX(24%); } }
+@keyframes tactical-map-dot { to { transform: scale(1.45); opacity: .5; } }
+
+@media (max-width: 760px) {
+  .map-controls-panel { bottom: 10px; left: 10px; gap: 4px; max-width: calc(100% - 20px); }
+  .ctrl-btn.text-btn { padding: 0 8px; }
+  .tactical-map-loading__map { width: min(68vw, 320px); }
 }
 
 /* Coordinates Sector HUD (Bottom Right) */
