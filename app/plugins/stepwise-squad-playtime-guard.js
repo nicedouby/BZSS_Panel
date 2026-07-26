@@ -472,7 +472,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function broadcastViolation(record, decision) {
-    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") {
       record.actions.push({
         type: "broadcast_violation_failed",
@@ -481,7 +482,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return;
     }
 
-    const result = await sender.call(modules.adminWarn, {
+    const result = await sender.call(adminWarn, {
       message: buildViolationBroadcastMessage(record, decision),
       reason: "stepwise_squad_playtime_violation_broadcast",
       sourceModule: PLUGIN_ID,
@@ -512,10 +513,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     });
     if (state.ruleReminderBroadcastKeys.has(matchKey)) return;
 
-    const sender = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") return;
 
-    const result = await sender.call(modules.adminWarn, {
+    const result = await sender.call(adminWarn, {
       message: buildRuleReminderMessage(runtimeConfig?.rules),
       reason: "stepwise_squad_playtime_rule_reminder",
       sourceModule: PLUGIN_ID,
@@ -727,6 +729,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
     },
   };
+}
+
+function getAdminWarnApi() {
+  return modules?.adminWarn?.api ?? modules?.adminWarn ?? null;
 }
 
 function readConfig(config) {
