@@ -202,7 +202,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     rememberRecord(record);
 
     try {
-      emitSquadRuleViolation(core, {
+      const violationEvent = {
         serverId: normalized.serverId,
         matchId: normalized.matchId,
         teamId: normalized.teamId,
@@ -212,15 +212,30 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         leaderSteamId: normalized.creatorSteamId,
         leaderName: normalized.creatorName,
         leaderEosId: normalized.creatorEosId,
+        sourceMode: normalized.sourceMode,
+        canTriggerActions: normalized.canTriggerActions,
         source: SQUAD_RULE_SOURCES.squadNameRule,
         reason: evaluation.reason,
         createdAt: normalized.time,
         sourceEventId: normalized.eventId || buildDedupeKey(normalized),
         warningMessages: expandWarningMessages(record.warningMessages, runtimeConfig),
         removeLeaderBeforeDisband: runtimeConfig.action === "disband_then_warn",
-      });
-      record.actions.push({ type: "violation_emitted" });
-      record.status = "handled";
+      };
+      const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
+      if (typeof ruleChain?.submitViolation === "function") {
+        const actionRecord = await ruleChain.submitViolation(violationEvent);
+        record.actions.push(...cloneValue(actionRecord?.actions ?? []));
+        record.ruleChainStatus = actionRecord?.status ?? "unknown";
+        record.enforcement = cloneValue(actionRecord?.enforcement ?? null);
+        record.status = actionRecord?.status === "handled" ? "handled" : (actionRecord?.status || "error");
+        if (actionRecord?.status !== "handled") {
+          record.error = actionRecord?.error || actionRecord?.reason || "规则链未完成处置。";
+        }
+      } else {
+        emitSquadRuleViolation(core, violationEvent);
+        record.actions.push({ type: "violation_queued", reason: "rule_chain_direct_api_unavailable" });
+        record.status = "queued";
+      }
       record.updatedAt = nowIso();
     } catch (error) {
       stats.errors += 1;
@@ -285,6 +300,8 @@ function normalizeSquadEvent(event = {}) {
     creatorSteamId: text(event.creatorSteamId ?? event.creatorSteamID ?? event.steamId ?? event.steamID ?? event.leaderSteamId),
     creatorEosId: text(event.creatorEosId ?? event.creatorEOSID ?? event.eosId ?? event.eosID ?? event.leaderEosId),
     source: text(event.source),
+    sourceMode: text(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode) || "live",
+    canTriggerActions: normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true),
     time: text(event.time ?? event.createdAt ?? event.observedAt) || nowIso(),
     generation: nullableNumber(event.generation ?? event.record?.generation) ?? 1,
   };
@@ -388,6 +405,14 @@ function nullableNumber(value) {
 
 function text(value) {
   return String(value ?? "").trim();
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (value === true || value === false) return value;
+  const normalized = text(value).toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+  return fallback;
 }
 
 function nowIso() {
