@@ -95,7 +95,7 @@ function testClassificationFieldsNormalizeWithoutLoss() {
     assert.equal(event.squadType, "vehicle");
     assert.equal(event.squadNature, "vehicle");
     assert.equal(event.squadTypeId, "ifv");
-    assert.equal(event.squadTypeLabel, "步战车");
+    assert.equal(event.squadTypeLabel, "IFV / 步战车");
     assert.equal(event.squadRuleId, "rule:bmp");
     assert.equal(event.effectiveMaxPlayers, 4);
     assert.equal(event.maxPlayersSource, "type_default");
@@ -521,7 +521,7 @@ async function testClassificationFieldsReachFinalPass() {
     const broadcast = harness.broadcasts.find((item) => item.reason === "squad_rule_chain_final_pass_broadcast");
     assert.equal(
       broadcast?.message,
-      "Leader 建立了BMP小队，队伍性质：载具队，队伍类型：步战车，游戏时长：1000h，建队码：1",
+      "Leader 建立了BMP小队，队伍性质：载具队，队伍类型：IFV / 步战车，游戏时长：1000h，建队码：1",
     );
   } finally {
     await harness.stop();
