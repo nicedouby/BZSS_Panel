@@ -421,7 +421,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
         playtime: cloneValue(record.playtime) ?? null,
-      });
+      };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
       if (typeof ruleChain?.submitFinalPass === "function") {
         const finalRecord = await ruleChain.submitFinalPass(finalPassEvent);
@@ -503,7 +503,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       metadata: {
         teamName: record.factionName,
       },
-    });
+    };
     const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
     if (typeof ruleChain?.submitViolation === "function") {
       const actionRecord = await ruleChain.submitViolation(violationEvent);
