@@ -17,7 +17,7 @@
     <div v-if="!sessions.length && !loadingSessions" class="empty-state">
       <div class="empty-icon">◷</div>
       <h2>还没有可播放的战术录制</h2>
-      <p>请先在实时战术地图打开录制。录制结束后，档案会出现在这里；进行中的 `.open` 会话也可直接读取。</p>
+      <p>请先在实时战术地图打开录制。录制结束后，档案会出现在这里；进行中的原生录制会话也可直接读取。</p>
       <code v-if="archiveRootDir" class="archive-path">{{ archiveRootDir }}</code>
       <button class="primary-button" type="button" @click="loadSessions">重新扫描</button>
     </div>
