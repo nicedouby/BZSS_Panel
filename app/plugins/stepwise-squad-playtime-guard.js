@@ -140,7 +140,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         creatorName: event.leaderName ?? event.creatorName,
         creatorSteamId: event.leaderSteamId ?? event.creatorSteamId,
         creatorEosId: event.leaderEosId ?? event.creatorEosId,
-      }, "LOG");
+      }, "LOG", modules, config);
       const clockContext = getClockContext();
       const loggedEvent = {
         ...normalized,
@@ -183,7 +183,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           serverId,
           matchId,
           observedAt: normalizeText(event.time) || nowIso(),
-        });
+        }, modules, config);
         if (!normalized.serverId || normalized.teamId == null || normalized.squadId == null) continue;
         rememberCreationLog(state, buildCreationLogEntry({
           ...normalized,
@@ -219,7 +219,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function processCreation(event) {
-    const normalizedEvent = normalizeCreationEvent(event, event.creationSource ?? "LOG");
+    const normalizedEvent = normalizeCreationEvent(event, event.creationSource ?? "LOG", modules, config);
     const serverId = getServerId(normalizedEvent.serverId);
     if (!serverId || normalizedEvent.squadId == null) return null;
     if (normalizedEvent.creationSource === "LOG" && normalizedEvent.teamId == null) return null;
@@ -648,7 +648,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     getStatus,
     getState: getStatus,
     async simulateCreation(event = {}) {
-      return await enqueue(() => processCreation(normalizeCreationEvent(event, event.creationSource ?? "LOG")));
+      return await enqueue(() => processCreation(normalizeCreationEvent(event, event.creationSource ?? "LOG", modules, config)));
     },
     async simulateSquadsUpdated(event = {}) {
       await handleSquadsUpdated(event);
@@ -762,7 +762,7 @@ function findRule(nature, seconds, runtimeConfig) {
   };
 }
 
-function normalizeCreationEvent(event = {}, fallbackSource = "LOG") {
+function normalizeCreationEvent(event = {}, fallbackSource = "LOG", modules = null, config = null) {
   const creationSource = normalizeText(event.creationSource ?? fallbackSource) || fallbackSource;
   const classified = event.classification?.source
     ? { classification: cloneValue(event.classification), policyRevision: event.classification.policyRevision }
@@ -840,7 +840,7 @@ function resolvePolicyClassification(squadName, modules, config) {
   return classifySquadNameWithPolicy(squadName, config);
 }
 
-function normalizeRconSquad(squad = {}, context = {}) {
+function normalizeRconSquad(squad = {}, context = {}, modules = null, config = null) {
   return normalizeCreationEvent({
     serverId: squad.serverId ?? context.serverId,
     matchId: squad.matchId ?? context.matchId,
@@ -854,7 +854,7 @@ function normalizeRconSquad(squad = {}, context = {}) {
     updatedAt: squad.updatedAt ?? context.observedAt,
     creationSource: "RCON_SNAPSHOT",
     creationConfidence: "MEDIUM",
-  }, "RCON_SNAPSHOT");
+  }, "RCON_SNAPSHOT", modules, config);
 }
 
 function mergeCreation(existing, event, context) {
