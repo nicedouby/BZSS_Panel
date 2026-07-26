@@ -535,12 +535,12 @@ function resolveRole(value) {
 }
 
 function buildSquadRosterLines(players, compact = false) {
-  if (!compact) return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.role} ${player.name} 游戏时长 ${hours(player.gameSeconds)}`);
-  return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.roleShort}${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
+  if (!compact) return players.map((player) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.role} ${player.name} ${hours(player.gameSeconds)}`);
+  return players.map((player) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.roleShort} ${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
 }
 
 function buildLeaderRosterLines(leaders, compact = false) {
-  if (!compact) return leaders.map((leader) => `${leader.squadName} 队长游戏时长 ${hours(leader.gameSeconds)}`);
+  if (!compact) return leaders.map((leader) => `${leader.squadName}队长 ${hours(leader.gameSeconds)}`);
   return leaders.map((leader) => `${truncate(leader.squadName, 10)}队长 ${hours(leader.gameSeconds)}`);
 }
 
@@ -576,7 +576,7 @@ function identityKeys(player) { return [["steam", player.steamID], ["eos", playe
 function memberSort(a, b) { return fireRank(a.fireTeam) - fireRank(b.fireTeam) || Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name, "zh-CN"); }
 function fireRank(value) { return value === "A" ? 0 : value === "B" ? 1 : value === "C" ? 2 : 3; }
 function readSeconds(row) { const value = Number(row?.game_seconds ?? row?.gameSeconds ?? row?.steam_game_seconds ?? row?.steamGameSeconds); return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null; }
-function hours(seconds) { return seconds == null ? "未知" : `${Number((seconds / 3600).toFixed(1))}小时`; }
+function hours(seconds) { return seconds == null ? "?h" : `${Number((seconds / 3600).toFixed(1))}h`; }
 function hoursShort(seconds) { return seconds == null ? "?h" : `${Number((seconds / 3600).toFixed(seconds >= 360000 ? 0 : 1))}h`; }
 function truncate(value, max) { const raw = String(value ?? ""); return raw.length <= max ? raw : max <= 1 ? raw.slice(0, max) : `${raw.slice(0, max - 1)}…`; }
 function text(value) { return String(value ?? "").trim(); }
