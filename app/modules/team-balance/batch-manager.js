@@ -12,12 +12,14 @@ export class TeamBalanceBatchManager {
     executeOnePlayer,
     resolveCurrentPlayer,
     recordAudit,
+    canContinue,
     logger,
     now = () => Date.now(),
   } = {}) {
     this.executeOnePlayer = executeOnePlayer;
     this.resolveCurrentPlayer = resolveCurrentPlayer;
     this.recordAudit = recordAudit;
+    this.canContinue = canContinue;
     this.logger = logger;
     this.now = now;
     this.history = [];
@@ -54,6 +56,9 @@ export class TeamBalanceBatchManager {
     const batch = {
       id,
       clientRequestId,
+      type: normalizeText(request.type) || "manual",
+      planId: normalizeText(request.planId) || "",
+      roundKey: normalizeText(request.roundKey) || "",
       source: normalizeText(request.source) || "web.matchStatus.batch",
       reason: normalizeText(request.reason) || "manual_batch_team_balance",
       operator: request.operator ?? null,
@@ -68,6 +73,7 @@ export class TeamBalanceBatchManager {
       skipped: 0,
       currentPlayer: null,
       cancelRequested: false,
+      cancelReason: "",
       players,
       results: [],
     };
@@ -98,20 +104,48 @@ export class TeamBalanceBatchManager {
   }
 
   get(id) {
-    return this.byId.get(normalizeText(id)) ? snapshotBatch(this.byId.get(normalizeText(id))) : null;
+    const batch = this.byId.get(normalizeText(id));
+    return batch ? snapshotBatch(batch) : null;
   }
 
-  cancel(id) {
+  findActive({ type = "", roundKey = "" } = {}) {
+    const normalizedType = normalizeText(type);
+    const normalizedRoundKey = normalizeText(roundKey);
+    const batch = this.history.find((item) => {
+      if (item.status !== "queued" && item.status !== "running") return false;
+      if (normalizedType && item.type !== normalizedType) return false;
+      if (normalizedRoundKey && item.roundKey !== normalizedRoundKey) return false;
+      return true;
+    });
+    return batch ? snapshotBatch(batch) : null;
+  }
+
+  cancelActiveByType(type, reason = "cancelled", roundKey = "") {
+    const normalizedType = normalizeText(type);
+    const normalizedRoundKey = normalizeText(roundKey);
+    const cancelled = [];
+    for (const batch of this.history) {
+      if (batch.type !== normalizedType) continue;
+      if (normalizedRoundKey && batch.roundKey !== normalizedRoundKey) continue;
+      if (batch.status !== "queued" && batch.status !== "running") continue;
+      const result = this.cancel(batch.id, reason);
+      if (result.ok) cancelled.push(result.batch ?? this.get(batch.id));
+    }
+    return cancelled;
+  }
+
+  cancel(id, reason = "cancelled") {
     const batch = this.byId.get(normalizeText(id));
     if (!batch) return { ok: false, error: "BatchNotFound", message: "Batch not found." };
 
     if (batch.status === "queued") {
       batch.cancelRequested = true;
+      batch.cancelReason = normalizeText(reason) || "cancelled";
       batch.status = "cancelled";
       batch.completedAt = new Date(this.now()).toISOString();
       for (const player of batch.players) {
         if (!batch.results.some((result) => result.steamId === player.steamId)) {
-          batch.results.push(resultFor(player, "cancelled", "Batch cancelled before execution."));
+          batch.results.push(resultFor(player, "cancelled", `Batch cancelled before execution: ${batch.cancelReason}.`));
           batch.completed += 1;
           batch.skipped += 1;
         }
@@ -122,6 +156,7 @@ export class TeamBalanceBatchManager {
 
     if (batch.status === "running") {
       batch.cancelRequested = true;
+      batch.cancelReason = normalizeText(reason) || "cancelled";
       return {
         ok: true,
         status: "cancelling",
@@ -159,6 +194,8 @@ export class TeamBalanceBatchManager {
 
   async runBatch(batch) {
     if (batch.cancelRequested) {
+      batch.cancelReason = batch.cancelReason || "cancelled";
+      markRemainingCancelled(batch, batch.cancelReason);
       batch.status = "cancelled";
       batch.completedAt = new Date(this.now()).toISOString();
       return;
@@ -169,7 +206,15 @@ export class TeamBalanceBatchManager {
 
     for (const player of batch.players) {
       if (batch.cancelRequested) {
-        markRemainingCancelled(batch);
+        markRemainingCancelled(batch, batch.cancelReason || "cancelled");
+        break;
+      }
+
+      const gate = await this.checkContinue(batch);
+      if (!gate.ok) {
+        batch.cancelRequested = true;
+        batch.cancelReason = gate.reason || "execution_gate_closed";
+        markRemainingCancelled(batch, batch.cancelReason);
         break;
       }
 
@@ -224,6 +269,19 @@ export class TeamBalanceBatchManager {
       source: batch.source,
       reason: batch.reason,
     })).catch((error) => this.logger?.warn?.(`[TB] batch completion audit failed: ${error?.message ?? error}`));
+  }
+
+  async checkContinue(batch) {
+    if (typeof this.canContinue !== "function") return { ok: true };
+    try {
+      const result = await this.canContinue(batch);
+      return result && result.ok === false
+        ? { ok: false, reason: normalizeText(result.reason) || "execution_gate_closed" }
+        : { ok: true };
+    } catch (error) {
+      this.logger?.warn?.(`[TB] batch execution gate failed: ${error?.message ?? error}`);
+      return { ok: false, reason: "execution_gate_error" };
+    }
   }
 
   async executePlayer(batch, player) {
@@ -339,10 +397,10 @@ function resultFor(player, status, message, response = null) {
   };
 }
 
-function markRemainingCancelled(batch) {
+function markRemainingCancelled(batch, reason = "cancelled") {
   for (const player of batch.players) {
     if (batch.results.some((result) => result.steamId === (player.steamId || null))) continue;
-    batch.results.push(resultFor(player, "cancelled", "Batch cancelled."));
+    batch.results.push(resultFor(player, "cancelled", `Batch cancelled: ${reason}.`));
     batch.completed += 1;
     batch.skipped += 1;
   }
