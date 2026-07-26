@@ -222,7 +222,7 @@ const form = reactive({
   leaderWarningSeconds: 450,
   pollIntervalMs: 1000,
   maxWarningChars: 180,
-  lineBreakMode: "escaped",
+  lineBreakMode: "actual",
   liveLookupWhenMissing: false,
   persistState: true,
 });
