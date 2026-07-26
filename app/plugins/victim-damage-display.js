@@ -142,7 +142,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     const attackerName = normalizeText(attacker.displayName || attacker.name).toLocaleLowerCase();
     const victimName = normalizeText(victim.displayName || victim.name).toLocaleLowerCase();
     if ((victimKey && attackerKey && attackerKey === victimKey) || (attackerName && victimName && attackerName === victimName)) {
-      return { kind: "self" };
+      return { kind: "self", label: "自身" };
     }
 
     if (attacker.isFallback || !attackerKey && !attackerName) return { kind: "environment", label: "自身/环境" };
@@ -249,13 +249,11 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
     const damage = normalizeDamage(record?.damage);
     if (!(damage > 0)) { recordAudit(event, record, "intercepted", "invalid_damage"); return skip("invalid_damage"); }
-    if (damage === runtimeConfig.adminPunishmentDamage) { recordAudit(event, record, "intercepted", "admin_punishment_damage"); return skip("admin_punishment_damage"); }
 
     const victim = resolveIdentity(record, "victim");
     if (!victim.playerId && !victim.name) { recordAudit(event, record, "intercepted", "invalid_victim"); return skip("invalid_victim"); }
     const attacker = resolveIdentity(record, "attacker");
     const source = classifyAttackerSource(record, attacker, victim);
-    if (source.kind === "self") { recordAudit(event, record, "intercepted", "self_attacker"); return skip("self_attacker"); }
 
     const eventKey = buildEventKey(event, record, attacker, victim, damage);
     if (isDuplicate(eventKey)) { recordAudit(event, record, "intercepted", "duplicate"); return skip("duplicate"); }
