@@ -757,7 +757,8 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 .tactical-sidebar {
   position: relative;
   height: 100%;
-  width: 340px;
+  width: 360px;
+  min-width: 360px;
   display: flex;
   flex-shrink: 0;
   background: radial-gradient(ellipse at 100% 0%, rgba(10, 18, 42, 0.97), rgba(4, 7, 18, 0.99));
@@ -765,26 +766,27 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   box-shadow: -12px 0 50px rgba(0, 0, 0, 0.9), inset 1px 0 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(20px) saturate(180%);
   z-index: 30;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: none;
 }
 
 /* The grid column is sized by this root element. Collapsing only the inner
  * wrapper leaves the `auto` grid track at 340px, so the map never grows. */
-.tactical-sidebar.is-map-sidebar-collapsed {
-  width: 0;
-  min-width: 0;
-  flex-basis: 0;
+.tactical-sidebar.is-collapsed {
+  width: 32px;
+  min-width: 32px;
+  background: transparent;
   border-left-color: transparent;
   box-shadow: none;
+  backdrop-filter: none;
 }
 
 /* ─── Toggle Tab ──────────────────────────────────── */
 .sidebar-toggle-tab {
   position: absolute;
-  left: -22px;
+  left: -24px;
   top: 50%;
   transform: translateY(-50%);
-  width: 22px;
+  width: 24px;
   height: 72px;
   border: 1px solid rgba(0, 240, 255, 0.18);
   border-right: none;
@@ -814,16 +816,22 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 .sidebar-content-wrapper {
   display: flex;
   flex-direction: column;
-  width: 340px;
+  width: 360px;
+  min-width: 360px;
   height: 100%;
   overflow: hidden;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0s;
 }
 
 .sidebar-content-wrapper.is-collapsed {
-  width: 0;
+  width: 360px;
+  min-width: 360px;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
+  transform: translateX(12px);
 }
 
 /* ─── Header ──────────────────────────────────────── */
