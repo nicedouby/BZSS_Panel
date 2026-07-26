@@ -299,7 +299,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         creatorName: event.leaderName ?? event.creatorName,
         creatorSteamId: event.leaderSteamId ?? event.creatorSteamId,
         creatorEosId: event.leaderEosId ?? event.creatorEosId,
-      }, "LOG");
+      }, "LOG", modules, config);
       if (!normalized.serverId || normalized.squadId == null) return;
       if (normalized.teamId == null) {
         const pendingKey = buildPendingKey(normalized);
@@ -330,7 +330,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           serverId,
           matchId,
           observedAt: normalizeText(event.time) || nowIso(),
-        });
+        }, modules, config);
         if (!normalized.serverId || normalized.teamId == null || normalized.squadId == null) continue;
         currentPresenceKeys.add(buildPresenceKey(normalized));
 
@@ -875,7 +875,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return getStatus();
     },
     async simulateCreation(event = {}) {
-      return await enqueue(() => processCreation(normalizeCreationEvent(event)));
+      return await enqueue(() => processCreation(normalizeCreationEvent(event, "LOG", modules, config)));
     },
     async simulateSquadsUpdated(event = {}) {
       await handleSquadsUpdated(event);
@@ -1010,7 +1010,7 @@ function createEmptySummary() {
   };
 }
 
-function normalizeCreationEvent(event = {}) {
+function normalizeCreationEvent(event = {}, fallbackSource = "LOG", modules = null, config = null) {
   const creationSource = normalizeText(event.creationSource ?? "LOG") || "LOG";
   const classified = event.classification?.source
     ? { classification: cloneValue(event.classification) }
@@ -1064,7 +1064,7 @@ function buildClassificationFields(record = {}) {
   };
 }
 
-function normalizeRconSquad(squad = {}, context = {}) {
+function normalizeRconSquad(squad = {}, context = {}, modules = null, config = null) {
   return {
     serverId: normalizeText(squad.serverId ?? context.serverId),
     matchId: normalizeText(squad.matchId ?? context.matchId),
