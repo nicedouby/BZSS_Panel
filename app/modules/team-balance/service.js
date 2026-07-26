@@ -663,13 +663,21 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       ?? "",
     );
     const round = state?.round?.current ?? {};
+    const latestRound = Array.isArray(state?.round?.history) ? state.round.history.at(-1) ?? {} : {};
     const roundAnchor = [
       round?.worldPath,
       round?.serverPlayAt,
       round?.logLineTime,
       round?.receivedAt,
+      latestRound?.worldPath,
+      latestRound?.serverPlayAt,
+      latestRound?.logLineTime,
+      latestRound?.receivedAt,
       state?.round?.lastAcceptedAt,
-    ].map(normalizeText).find(Boolean) || "no-round";
+      // MatchState can enter warmup before the first round event is recorded.
+      // Map/layer is the stable identity available during that window.
+      "warmup",
+    ].map(normalizeText).find(Boolean) || "warmup";
     const map = normalizeText(state?.match?.map ?? state?.serverStatus?.map);
     const layer = normalizeText(state?.match?.layer ?? state?.serverStatus?.layer);
     const phase = normalizeText(state?.match?.phase).toLowerCase() || "unknown";
