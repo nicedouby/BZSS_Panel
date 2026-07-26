@@ -527,7 +527,14 @@ function merge(base, overlay) {
   };
 }
 
-function resolveRole(value) {\n  return {\n    label: resolveRoleLabel(value),\n    short: resolveRoleShortLabel(value),\n  };\n}\n\nfunction buildSquadRosterLines(players, compact = false) {
+function resolveRole(value) {
+  return {
+    label: resolveRoleLabel(value),
+    short: resolveRoleShortLabel(value),
+  };
+}
+
+function buildSquadRosterLines(players, compact = false) {
   if (!compact) return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.role} ${player.name} 游戏时长 ${hours(player.gameSeconds)}`);
   return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.roleShort}${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
 }
