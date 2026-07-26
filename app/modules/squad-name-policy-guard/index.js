@@ -218,6 +218,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         createdAt: normalized.time,
         sourceEventId: normalized.eventId || buildDedupeKey(normalized),
         warningMessages: expandWarningMessages(record.warningMessages, runtimeConfig),
+        broadcastMessage: buildViolationBroadcastMessage(normalized),
         removeLeaderBeforeDisband: runtimeConfig.action === "disband_then_warn",
       };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
@@ -389,6 +390,12 @@ function summarizeResult(result) {
     rconExecuted: result.rconExecuted,
     rconResponse: result.rconResponse,
   };
+}
+
+function buildViolationBroadcastMessage(event = {}) {
+  const creator = text(event.creatorName) || "未知玩家";
+  const squadName = text(event.squadName) || `Squad ${event.squadId ?? "?"}`;
+  return `队名违规已处置：${creator} 创建的 ${squadName} 小队已按队名规范解散。`;
 }
 
 function applyActionStats(stats, actions = []) {
