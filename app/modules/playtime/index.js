@@ -158,7 +158,9 @@ class SteamGameDurationService {
     proxyUrl,
     noProxy,
   } = {}) {
-    this.apiKey = String(apiKey || process.env.STEAM_API_KEY || "").trim();
+    this.pythonConfigPath = path.resolve(process.cwd(), String(pythonConfigPath || "./support/runtime-assets/steam-playtime/config.json"));
+    this.apiKey = String(apiKey || process.env.STEAM_API_KEY || "").trim()
+      || readSteamApiKeyFromConfig(this.pythonConfigPath);
     this.appId = Number(appId) || DEFAULT_APP_ID;
     this.maxConcurrent = Math.max(1, Number(maxConcurrent) || DEFAULT_MAX_CONCURRENT);
     this.requestTimeoutMs = Math.max(1000, Number(requestTimeoutMs) || DEFAULT_TIMEOUT_MS);
