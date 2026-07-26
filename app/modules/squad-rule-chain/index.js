@@ -726,7 +726,7 @@ function ensureAuthoritativeClassification(input = {}, modules = null, config = 
     if (!classified?.classification) return input;
     return {
       ...input,
-      classification: cloneValue(classified.classification),
+      classification: cloneJsonSafe(classified.classification),
       policyRevision: classified.policyRevision,
       squadType: classified.classification.nature,
       squadNature: classified.classification.nature,
