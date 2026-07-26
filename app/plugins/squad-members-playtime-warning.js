@@ -26,8 +26,8 @@ function first(value, ...fallbacks) {
 }
 
 function formatHours(gameSeconds) {
+  if (gameSeconds == null) return "未公开";
   const seconds = Math.max(0, Math.floor(Number(gameSeconds) || 0));
-  if (!seconds) return "?h";
   const hours = Number((seconds / 3600).toFixed(1));
   return `${hours}h`;
 }
@@ -204,10 +204,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       try {
         const cached = await playtime.getBySteamID?.(steamID);
         const cachedSeconds = cached?.game_seconds ?? cached?.gameSeconds;
-        if (cachedSeconds != null) return Number(cachedSeconds) || 0;
+        const cachedUnpublished = cached && (
+          cached.found === false
+          || cached.isPublic === false
+          || String(cached.visibility ?? "").toLowerCase() === "private"
+        );
+        if (!cachedUnpublished && cachedSeconds != null) return Number(cachedSeconds) || 0;
 
-        if (!runtimeConfig.liveLookupWhenMissing) return null;
+        // 未公开或没有缓存时，先尝试实时获取一次。
         const lookup = await playtime.lookupSteamID?.(steamID, { lastSeenName: getPlayerName(player) });
+        if (lookup?.found === false) return null;
         return lookup?.gameSeconds != null ? Number(lookup.gameSeconds) || 0 : null;
       } catch (error) {
         pluginLogger?.debug?.(`[${PLUGIN_ID}] playtime lookup failed: ${error?.message ?? error}`);
