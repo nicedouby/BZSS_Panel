@@ -947,7 +947,7 @@
             {
               "id": "welcome",
               "enabled": true,
-              "message": "欢迎来到 BZSS 服务器，本服服规相较其他服务器较为不同，\n请完整阅读并遵守服务器规则，祝你游戏愉快。"
+              "message": "欢迎来到 BZSS 服务器，本服服规相较其他服务器较为不同，\n请完整阅读并遵守服务器规则，祝你游戏愉快。\n若没有看到进阵营选择页面，请按J输入kxr"
             }
           ]
         },
@@ -1000,10 +1000,11 @@
       ]
     },
     "teamKillApology": {
-      "enabled": true,
+      "enabled": false,
       "deadlineSeconds": 600,
       "reminderSeconds": 60,
-      "timeoutAction": "remove_from_squad"
+      "timeoutAction": "remove_from_squad",
+      "broadcastOnApology": true
     },
     "victimDamageDisplay": {
       "enabled": true,
