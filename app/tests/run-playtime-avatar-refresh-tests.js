@@ -124,7 +124,42 @@ async function main() {
   const backfill = await service.backfillMissingSteamAvatars();
   assert.deepEqual(backfill, { requested: 2, updated: 2, skipped: false });
   assert.equal(persistedAvatars.length, 2);
-  assert.equal(missingAvatarQueries, 2);
+  assert.equal(missingAvatarQueries, 1);
+
+  let backfillBatch = 0;
+  const attemptedBatches = [];
+  const serviceWithEmptyFirstBatch = new SteamGameDurationService({
+    apiKey: "test-key",
+    avatarBackfillBatchSize: 2,
+    playerDatabase: {
+      async listPlayersWithSteamID({ missingAvatarOnly }) {
+        assert.equal(missingAvatarOnly, true);
+        return [
+          { steam_id: "76561198000000011" },
+          { steam_id: "76561198000000012" },
+          { steam_id: "76561198000000013" },
+          { steam_id: "76561198000000014" },
+        ];
+      },
+      async updateSteamAvatarBySteamID(id, avatar) {
+        persistedAvatars.push({ id, avatar });
+        return { id };
+      },
+    },
+  });
+  serviceWithEmptyFirstBatch.fetchAndCacheSteamAvatars = async (ids) => {
+    attemptedBatches.push(ids);
+    backfillBatch += 1;
+    return backfillBatch === 1
+      ? { ok: true, requested: ids.length, updated: 0 }
+      : { ok: true, requested: ids.length, updated: ids.length };
+  };
+  const continuedBackfill = await serviceWithEmptyFirstBatch.backfillMissingSteamAvatars();
+  assert.deepEqual(continuedBackfill, { requested: 4, updated: 2, skipped: false });
+  assert.deepEqual(attemptedBatches, [
+    ["76561198000000011", "76561198000000012"],
+    ["76561198000000013", "76561198000000014"],
+  ]);
 
   console.log("run-playtime-avatar-refresh-tests: ok");
 }
