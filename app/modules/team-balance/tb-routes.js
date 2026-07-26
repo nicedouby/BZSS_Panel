@@ -45,7 +45,7 @@ export async function handleTbRoutes({
     return true;
   }
 
-  if (isBatchCollection || batchDetailMatch || batchCancelMatch) {
+  if (isBatchCollection || isBatchCreate || batchDetailMatch || batchCancelMatch) {
     if (!user) {
       json(401, {
         error: "Unauthorized",
