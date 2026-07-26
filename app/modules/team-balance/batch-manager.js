@@ -79,7 +79,7 @@ export class TeamBalanceBatchManager {
     this.queue.push(batch);
     this.schedulePump();
 
-    void this.recordAudit?.({
+    void Promise.resolve(this.recordAudit?.({
       action: "player.batch_switch_team",
       category: "player_management",
       actor: batch.operator,
@@ -88,7 +88,7 @@ export class TeamBalanceBatchManager {
       total: batch.total,
       source: batch.source,
       reason: batch.reason,
-    }).catch((error) => this.logger?.warn?.(`[TB] batch audit failed: ${error?.message ?? error}`));
+    })).catch((error) => this.logger?.warn?.(`[TB] batch audit failed: ${error?.message ?? error}`));
 
     return { ok: true, duplicate: false, batch: snapshotBatch(batch) };
   }
@@ -197,7 +197,7 @@ export class TeamBalanceBatchManager {
         : "completed";
     batch.completedAt = new Date(this.now()).toISOString();
 
-    void this.recordAudit?.({
+    void Promise.resolve(this.recordAudit?.({
       action: "player.batch_switch_team",
       category: "player_management",
       actor: batch.operator,
@@ -209,10 +209,15 @@ export class TeamBalanceBatchManager {
       skipped: batch.skipped,
       source: batch.source,
       reason: batch.reason,
-    }).catch((error) => this.logger?.warn?.(`[TB] batch completion audit failed: ${error?.message ?? error}`));
+    })).catch((error) => this.logger?.warn?.(`[TB] batch completion audit failed: ${error?.message ?? error}`));
   }
 
   async executePlayer(batch, player) {
+    if (player.invalid || !player.steamId) return resultFor(player, "invalid_steam_id", "SteamID is invalid.");
+    if (normalizeTeamId(player.fromTeamId) == null || normalizeTeamId(player.targetTeamId) == null) {
+      return resultFor(player, "failed_state_unknown", "Source or target team is unknown.");
+    }
+
     let current = null;
     try {
       current = await this.resolveCurrentPlayer?.(player);
