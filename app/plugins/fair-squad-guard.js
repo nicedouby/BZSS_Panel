@@ -440,12 +440,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     if (seconds < runtimeConfig.infantryOnlyUntilSeconds) {
+      if (!record.classification?.source) {
+        return {
+          approved: true,
+          phase: "classification_missing",
+          phaseLabel: "classification missing",
+          reasons: ["未取得队名规范分类，已跳过公平建队自动处理。"],
+        };
+      }
       const allowed = isInfantryClassification(record.classification);
       return {
         approved: allowed,
         phase: "infantry_only",
         phaseLabel: "20-50s infantry only",
-        reasons: allowed ? [] : ["当前区间仅允许步兵队创建。"],
+        reasons: allowed ? [] : ["当前区间仅允许队名规范分类为步兵队的小队。"],
       };
     }
 
@@ -1116,13 +1124,17 @@ function isInfantryClassification(classification) {
 }
 
 function resolvePolicyClassification(squadName, modules, config) {
-  const api = modules?.squadNamePolicyGuard?.classifySquadName
-    ? modules.squadNamePolicyGuard
-    : modules?.squadNamePolicyGuard?.api;
-  if (typeof api?.classifySquadName === "function") {
-    return api.classifySquadName(squadName);
+  try {
+    const api = modules?.squadNamePolicyGuard?.classifySquadName
+      ? modules.squadNamePolicyGuard
+      : modules?.squadNamePolicyGuard?.api;
+    if (typeof api?.classifySquadName === "function") {
+      return api.classifySquadName(squadName);
+    }
+    return classifySquadNameWithPolicy(squadName, config);
+  } catch {
+    return null;
   }
-  return classifySquadNameWithPolicy(squadName, config);
 }
 
 function parseListText(value) {
@@ -1180,14 +1192,6 @@ function buildCreatorKey(record) {
 
 function hasCreatorIdentity(record) {
   return Boolean(record.creatorName || record.creatorSteamId || record.creatorEosId);
-}
-
-function safeTest(pattern, value) {
-  try {
-    return new RegExp(pattern, "i").test(String(value ?? ""));
-  } catch {
-    return false;
-  }
 }
 
 function summarizeActionResult(result) {
