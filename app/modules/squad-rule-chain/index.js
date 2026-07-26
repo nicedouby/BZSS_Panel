@@ -361,7 +361,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
   }
 
   function scheduleFinalPassFallback(input = {}) {
-    const event = normalizeRuleChainPassEvent(input);
+    const event = normalizeRuleChainPassEvent(ensureAuthoritativeClassification(input));
     if (!hasAuthoritativeClassification(event)) {
       moduleLogger?.warn?.("[SquadRuleChain] classification_missing: final pass fallback skipped.");
       return;
