@@ -182,7 +182,6 @@ class SteamGameDurationService {
     this.usePythonScript = usePythonScript !== false;
     this.pythonBin = String(pythonBin || "python").trim() || "python";
     this.pythonScriptPath = path.resolve(process.cwd(), String(pythonScript || "./support/runtime-assets/steam-playtime/FetchGameDuration.py"));
-    this.pythonConfigPath = path.resolve(process.cwd(), String(pythonConfigPath || "./support/runtime-assets/steam-playtime/config.json"));
     this.scriptTimeoutMs = Math.max(1000, Number(scriptTimeoutMs) || DEFAULT_SCRIPT_TIMEOUT_MS);
     this.scriptFallbackToApi = Boolean(scriptFallbackToApi);
     this.onlineRefreshFreshnessWindowMinutes = Math.max(0, Number(onlineRefreshFreshnessWindowMinutes) || DEFAULT_ONLINE_REFRESH_FRESHNESS_WINDOW_MINUTES);
@@ -308,6 +307,11 @@ class SteamGameDurationService {
         lastSeenName: player?.name || player?.current_name || label || null,
       });
       const updatedPlayer = await this._syncPlayerDuration({ player, steamID: normalizedSteamID, lookup });
+
+      // Ensure the player row exists before writing the Steam profile/avatar.
+      if (this.apiKey && this.fetchAvatarsEnabled) {
+        await this.fetchAndCacheSteamAvatars([normalizedSteamID]);
+      }
 
       if (updatedPlayer?.id && this.apiKey) {
         try {
@@ -441,16 +445,6 @@ class SteamGameDurationService {
     let processed = 0;
     let running = 0;
 
-    let avatarRefreshPromise = null;
-    if (this.apiKey && selectedTargets.length > 0) {
-      avatarRefreshPromise = this.fetchAndCacheSteamAvatars(
-        selectedTargets.map((t) => t.steamID),
-      ).catch((error) => {
-        this.logger?.warn(`Steam avatar refresh failed: ${error?.message || error}`);
-        return null;
-      });
-    }
-
     this._setJobProgress(job, {
       phase: selectedTargets.length ? "filter" : "completed",
       message: selectedTargets.length
@@ -564,8 +558,11 @@ class SteamGameDurationService {
     };
 
     await Promise.all(selectedTargets.map((player) => settleOne(player)));
-    // Do not mark the online refresh as completed before avatar writes finish.
-    if (avatarRefreshPromise) await avatarRefreshPromise;
+
+    // All player rows now exist; fetch avatars only after database identity sync.
+    if (this.apiKey && this.fetchAvatarsEnabled && selectedTargets.length > 0) {
+      await this.fetchAndCacheSteamAvatars(selectedTargets.map((t) => t.steamID));
+    }
 
     return {
       total,
@@ -589,10 +586,6 @@ class SteamGameDurationService {
     if (!this.isConfigured()) throw new Error("Steam API key or Python lookup config is not configured.");
 
     const normalizedSteamID = normalizeSteamID(steamID);
-
-    if (this.apiKey && this.fetchAvatarsEnabled) {
-      this.fetchAndCacheSteamAvatars([normalizedSteamID]).catch(() => {});
-    }
 
     const cacheKey = `${normalizedSteamID}:${this.appId}`;
     const inflight = this.inflightLookups.get(cacheKey);
