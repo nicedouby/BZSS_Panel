@@ -618,7 +618,7 @@ async function testShufflePlanHasIdentityAndAsyncExecution() {
     { steamId: "steam-2", playerName: "Two", teamId: 2, playtimeSeconds: 2 },
   ];
 
-  const plan = await service.api.createPlaytimeShufflePlan({ operator, algorithm: "random_even", players });
+  const plan = await service.api.createPlaytimeShufflePlan({ operator, algorithm: "mirror", players });
   assert.equal(plan.ok, true);
   assert.ok(plan.plan.planId);
   assert.ok(plan.plan.roundKey);
