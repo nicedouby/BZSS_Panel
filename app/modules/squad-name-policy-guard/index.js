@@ -334,7 +334,7 @@ function expandWarningMessages(messages = [], runtimeConfig = {}) {
 }
 
 function isViolation(evaluation) {
-  return Boolean(evaluation?.ok) && evaluation?.valid === false;
+  return evaluation?.valid === false;
 }
 
 function buildDedupeKey(event) {
