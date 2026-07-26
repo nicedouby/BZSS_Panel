@@ -457,7 +457,7 @@ async function testInfantrySecondWindowAndOpenWindow() {
     assert.equal(failed.violation, true);
     assert.equal(harness.disbands.length, 1);
 
-    harness.webStatus.logClockSeconds = 50;
+    harness.webStatus.logClockSeconds = 100;
     const open = await harness.plugin.api.simulateCreation(creation({
       squadId: 23,
       squadName: "INF 23",
