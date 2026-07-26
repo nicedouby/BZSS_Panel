@@ -737,8 +737,6 @@
       "infantryOnlyUntilSeconds": 50,
       "maxViolationCountBeforeKick": 15,
       "disbandCommandNameSuffix": "",
-      "allowedInfantryNamesText": "",
-      "allowedInfantryPatternsText": "",
       "broadcastOnApproved": false,
       "broadcastOnViolation": false
     },
