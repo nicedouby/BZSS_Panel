@@ -214,14 +214,8 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
         if (removeResult?.ok !== false) stats.removed += 1;
       }
 
-      if (event.broadcastMessage) {
-        const broadcastResult = await broadcastViolation(event);
-        record.actions.push({
-          type: broadcastResult?.success === false ? "broadcast_failed" : "broadcasted",
-          result: summarizeActionResult(broadcastResult),
-        });
-        if (broadcastResult?.success !== false) stats.broadcasts += 1;
-      }
+      // 违规处置只向相关队长发送 adminWarn，不进行全服广播。
+      // 正常建队通过播报仍由 handleFinalPass() 独立处理。
 
       const disbandResult = await disbandSquad(event);
       record.actions.push({
