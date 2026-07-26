@@ -252,7 +252,7 @@ const squadOptions = computed(() => Array.from(groupedSquads.value.entries()).ma
 })).sort((a, b) => a.label.localeCompare(b.label, "zh-CN")));
 const selectedSquadPlayers = computed(() => groupedSquads.value.get(selectedSquadKey.value) ?? []);
 const selectedSquadPreview = computed(() => buildPreview(
-  selectedSquadPlayers.value.slice().sort(memberSort).map((player) => `（${player.fireTeam || "未分"}组）${player.role || "未知兵种"} ${player.name} 游戏时长 ${formatHours(player.gameSeconds)}`),
+  selectedSquadPlayers.value.slice().sort(memberSort).map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.role || "未知兵种"} ${player.name} 游戏时长 ${formatHours(player.gameSeconds)}`),
 ));
 const selectedTeamId = computed(() => selectedSquadPlayers.value[0]?.teamID || teamIds.value[0] || "");
 const selectedTeamPreview = computed(() => {
