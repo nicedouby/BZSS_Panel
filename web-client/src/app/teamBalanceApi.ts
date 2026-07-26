@@ -283,7 +283,7 @@ export function createForceTeamChangeBatch(payload: {
   reason?: string;
   players: TeamBalanceBatchPlayer[];
 }) {
-  return apiPost<TeamBalanceBatchResponse>("/api/tb/force-team-change-batches", payload);
+  return apiPost<TeamBalanceBatchResponse>("/api/tb/force-team-change-batch", payload);
 }
 
 export function listForceTeamChangeBatches() {
