@@ -3,8 +3,8 @@
 import {
   buildSquadNamePolicyWarningMessages,
   testSquadNamePolicy,
+  classifySquadNameWithPolicy,
 } from "../../domain/squad-name-policy/index.js";
-import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 import {
   SQUAD_RULE_SOURCES,
   emitSquadNameRulePassed,
@@ -56,15 +56,22 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
       };
     },
 
+    classifySquadName(squadName) {
+      return classifySquadNameWithPolicy(squadName, config);
+    },
+
     simulate(request = {}) {
       const normalized = normalizeSquadEvent({
         ...request,
         serverId: request.serverId ?? core?.webStatus?.serverId,
         source: "simulate",
       });
-      const evaluation = testSquadNamePolicy(normalized.squadName, config);
+      const classified = classifySquadNameWithPolicy(normalized.squadName, config);
+      const evaluation = classified.evaluation;
       return {
         event: normalized,
+        classification: classified.classification,
+        policyRevision: classified.policyRevision,
         evaluation,
         violation: isViolation(evaluation),
         warningMessages: buildWarningMessages(evaluation),
@@ -291,27 +298,24 @@ function buildWarningMessages(evaluation) {
 }
 
 function buildClassificationEventFields(squadName, evaluation) {
-  const classification = evaluation?.classification && typeof evaluation.classification === "object"
-    ? evaluation.classification
-    : null;
-  const fallbackNature = classification
-    ? ""
-    : text(classifySquadName(squadName, { includeDebug: false })?.nature);
-  const nature = text(classification?.nature) || fallbackNature || "other";
+  const classified = classifySquadNameWithPolicy(squadName);
+  const classification = classified.classification;
   return {
-    squadType: nature,
-    squadNature: nature,
+    classification: cloneValue(classification),
+    policyRevision: classified.policyRevision,
+    squadType: text(classification?.nature) || "other",
+    squadNature: text(classification?.nature) || "other",
     squadTypeId: text(classification?.typeId),
-    squadTypeLabel: text(classification?.typeLabel ?? classification?.label),
-    squadRuleId: text(classification?.ruleId ?? evaluation?.matched?.id),
+    squadTypeLabel: text(classification?.typeLabel),
+    squadRuleId: text(classification?.ruleId),
     effectiveMaxPlayers: nullableNumber(classification?.effectiveMaxPlayers),
     maxPlayersSource: text(classification?.maxPlayersSource) || "none",
-    assetPath: text(classification?.assetPath ?? evaluation?.matched?.asset),
+    assetPath: text(classification?.assetPath),
     classificationMetadata: {
-      reason: text(classification?.reason ?? evaluation?.reason),
-      matchedKind: text(evaluation?.matched?.matchedKind),
-      matchedValue: text(evaluation?.matched?.matchedValue),
-      fallback: !classification,
+      reason: text(evaluation?.reason),
+      matchedKind: text(classification?.matchedKind),
+      matchedValue: text(classification?.matchedValue),
+      fallback: false,
     },
   };
 }
