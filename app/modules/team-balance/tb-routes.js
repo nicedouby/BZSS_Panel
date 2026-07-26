@@ -5,6 +5,7 @@ const TB_PATH = "/api/tb/force-team-change";
 const RECORDS_PATH = "/api/tb/records";
 const SHUFFLE_PLAN_PATH = "/api/tb/shuffle-plan";
 const SHUFFLE_EXECUTE_PATH = "/api/tb/shuffle-execute";
+const BATCHES_PATH = "/api/tb/force-team-change-batches";
 
 export async function handleTbRoutes({
   core,
@@ -15,8 +16,15 @@ export async function handleTbRoutes({
   readJsonBody,
   json,
 }) {
+  const batchDetailMatch = url.pathname.match(/^\/api\/tb\/force-team-change-batches\/([^/]+)$/);
+  const batchCancelMatch = url.pathname.match(/^\/api\/tb\/force-team-change-batches\/([^/]+)\/cancel$/);
+  const isBatchCollection = url.pathname === BATCHES_PATH;
+
   if (
-    url.pathname !== TB_PATH
+    !isBatchCollection
+    && !batchDetailMatch
+    && !batchCancelMatch
+    && url.pathname !== TB_PATH
     && url.pathname !== LEGACY_PATH
     && url.pathname !== RECORDS_PATH
     && url.pathname !== SHUFFLE_PLAN_PATH
@@ -30,6 +38,72 @@ export async function handleTbRoutes({
     json(404, {
       error: "TeamBalanceUnavailable",
       message: "Team balance module is not loaded.",
+    });
+    return true;
+  }
+
+  if (isBatchCollection || batchDetailMatch || batchCancelMatch) {
+    if (!user) {
+      json(401, {
+        error: "Unauthorized",
+        message: "Authentication required.",
+      });
+      return true;
+    }
+
+    if (isBatchCollection && req.method === "POST") {
+      const body = (await readJsonBody(req)) ?? {};
+      const result = typeof teamBalance.createForceTeamChangeBatch === "function"
+        ? teamBalance.createForceTeamChangeBatch({
+            ...body,
+            source: body.source ?? "web.matchStatus.batch",
+            reason: body.reason ?? "manual_batch_team_balance",
+            operator: buildOperator(user),
+            system: false,
+          })
+        : {
+            ok: false,
+            error: "BatchUnavailable",
+            message: "Batch team change is not available.",
+          };
+
+      json(result.ok ? 202 : mapErrorStatus(result.error), result);
+      return true;
+    }
+
+    if (isBatchCollection && req.method === "GET") {
+      const batches = typeof teamBalance.listForceTeamChangeBatches === "function"
+        ? teamBalance.listForceTeamChangeBatches()
+        : [];
+      json(200, { ok: true, batches });
+      return true;
+    }
+
+    if (batchDetailMatch && req.method === "GET") {
+      const batchId = decodeURIComponent(batchDetailMatch[1]);
+      const batch = typeof teamBalance.getForceTeamChangeBatch === "function"
+        ? teamBalance.getForceTeamChangeBatch(batchId)
+        : null;
+      if (!batch) {
+        json(404, { ok: false, error: "BatchNotFound", message: "Batch not found." });
+      } else {
+        json(200, { ok: true, batch });
+      }
+      return true;
+    }
+
+    if (batchCancelMatch && req.method === "POST") {
+      const batchId = decodeURIComponent(batchCancelMatch[1]);
+      const result = typeof teamBalance.cancelForceTeamChangeBatch === "function"
+        ? teamBalance.cancelForceTeamChangeBatch(batchId)
+        : { ok: false, error: "BatchUnavailable", message: "Batch cancellation is not available." };
+      json(result.ok ? 200 : mapErrorStatus(result.error), result);
+      return true;
+    }
+
+    json(405, {
+      error: "MethodNotAllowed",
+      message: "Unsupported batch endpoint method.",
     });
     return true;
   }
