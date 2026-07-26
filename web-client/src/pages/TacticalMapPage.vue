@@ -268,7 +268,6 @@
             :game-y="getPlayerPosition(player)?.y"
             :scale="dynamicMarkerScale"
             :tone="getPerspectiveTone(player.teamId)"
-            :disable-interaction="disableMarkerInteraction"
             @click.stop.prevent="handlePlayerSingleClick(player, $event)"
             @dblclick.stop.prevent="handlePlayerDoubleClick(player, $event)"
             @contextmenu.prevent.stop="handlePlayerRightClick(player, $event)"
@@ -626,14 +625,6 @@
           存活
         </button>
         <button
-          class="ctrl-btn text-btn"
-          :class="{ active: disableMarkerInteraction }"
-          @click="disableMarkerInteraction = !disableMarkerInteraction"
-          title="穿透玩家标记(方便查看地图)"
-        >
-          穿透
-        </button>
-        <button
           class="ctrl-btn text-btn measure-btn"
           :class="{ active: measureMode }"
           @click="toggleMeasureMode"
@@ -718,7 +709,6 @@
       :show-player-coords="showPlayerCoords"
       :show-capture-zones="showCaptureZones"
       :show-fobs="showFobs"
-      :disable-marker-interaction="disableMarkerInteraction"
       :measure-mode="measureMode"
       :selected-map-key="selectedMapKey"
       :marker-scale="markerScale"
@@ -1264,12 +1254,11 @@ const showGrid = ref(true);
 const showCaptureZones = ref(true);
 const showFobs = ref(true);
 const filterAliveOnly = ref(false);
-const disableMarkerInteraction = ref(false);
 
 // Icon scaling and tags visibility refs
 const markerScale = ref(1.15);
 const showPlayerNames = ref(true);
-const showPlayerCoords = ref(true);
+const showPlayerCoords = ref(false);
 
 // Viewport dimension tracking for tile loader
 const vpWidth = ref(0);
