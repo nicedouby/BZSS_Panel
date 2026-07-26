@@ -281,10 +281,43 @@
             :title="vehicle.tooltip"
           >
             <span class="vehicle-marker__frame">
-              <img v-if="vehicle.iconPath" class="vehicle-marker__icon" :src="vehicle.iconPath" :alt="vehicle.iconLabel" />
-              <img v-else class="vehicle-marker__icon" src="/assets/icons/T_map_helicopter_scout.PNG" alt="直升机" />
+              <svg
+                class="vehicle-marker__icon"
+                viewBox="0 0 128 128"
+                role="img"
+                :aria-label="vehicle.iconLabel || '载具'"
+              >
+                <defs>
+                  <filter :id="`vehicle-white-tint-${vehicle.id}`" color-interpolation-filters="sRGB">
+                    <!-- The source icon has gray details and white fill. Tint only the white pixels. -->
+                    <feColorMatrix
+                      in="SourceGraphic"
+                      type="matrix"
+                      values="0 0 0 0 0
+                              0 0 0 0 0
+                              0 0 0 0 0
+                              .3333 .3333 .3333 0 -.3451"
+                      result="white-mask"
+                    />
+                    <feComponentTransfer in="white-mask" result="white-mask-threshold">
+                      <feFuncA type="linear" slope="1.527" intercept="0" />
+                    </feComponentTransfer>
+                    <feFlood :flood-color="getVehicleIconColor(vehicle)" flood-opacity="1" result="team-color" />
+                    <feComposite in="team-color" in2="white-mask-threshold" operator="in" result="tinted-white" />
+                    <feComposite in="tinted-white" in2="SourceGraphic" operator="over" />
+                  </filter>
+                </defs>
+                <image
+                  x="0"
+                  y="0"
+                  width="128"
+                  height="128"
+                  preserveAspectRatio="none"
+                  :href="vehicle.iconPath || '/assets/icons/T_map_helicopter_scout.PNG'"
+                  :filter="`url(#vehicle-white-tint-${vehicle.id})`"
+                />
+              </svg>
             </span>
-            <span v-if="vehicle.occupied" class="vehicle-marker__driver">●</span>
           </div>
         </div>
 
@@ -3262,6 +3295,10 @@ function cleanWeaponName(weaponClass: string | null | undefined): string {
     .replace(/_\d+$/, "");
 }
 
+function getVehicleIconColor(vehicle: VehicleMarker): string {
+  return getPerspectivePalette(getPerspectiveTone(vehicle.teamId)).icon;
+}
+
 function getFobIconColor(fob: FobMarker) {
   if (fob.isBleeding) return "#ef4444";
   const health = Number(fob.health);
@@ -3495,14 +3532,15 @@ onBeforeUnmount(deactivateMapPage);
   place-items: center;
   transform: scale(var(--vehicle-marker-scale, 1)) rotate(var(--vehicle-yaw));
   transform-origin: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92)) drop-shadow(0 0 5px var(--vehicle-glow));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92));
   will-change: transform;
 }
 
 .vehicle-marker__icon {
   width: 26px;
   height: 26px;
-  object-fit: contain;
+  display: block;
+  overflow: visible;
 }
 
 .vehicle-marker__fallback {
@@ -3518,15 +3556,6 @@ onBeforeUnmount(deactivateMapPage);
   line-height: 1;
 }
 
-.vehicle-marker__driver {
-  position: absolute;
-  left: 9px;
-  top: -12px;
-  color: #f8fafc;
-  font-size: 11px;
-  line-height: 1;
-  text-shadow: 0 0 5px var(--vehicle-glow), 0 1px 2px rgba(0, 0, 0, .9);
-}
 
 /* The command layer is deliberately small and grouped.  Map data keeps the
    visual priority; controls only expand when the operator asks for them. */
