@@ -11,12 +11,12 @@
 export const ROLE_DEFINITIONS = Object.freeze([
   { roleKey: "pilot_squadleader", patterns: ["pilot squadleader", "pilot sl", "squadleader pilot", "sl pilot"], label: "飞行员队长", short: "飞行队长", icon: "T_role_pilot_squadleader.PNG" },
   { roleKey: "crewman_squadleader", patterns: ["crewman squadleader", "crew squadleader", "squadleader crewman", "sl crewman", "crew sl"], label: "乘员队长", short: "乘员队长", icon: "T_role_crewman_squadleader.PNG" },
-  { roleKey: "squadleader", patterns: ["squadleader", "squad leader", " sl ", "leader"], label: "队长", short: "队长", icon: "T_role_squadleader.PNG" },
+  { roleKey: "squadleader", patterns: ["squadleader", "squad leader", "sl", "leader"], label: "队长", short: "队长", icon: "T_role_squadleader.PNG" },
   { roleKey: "medic", patterns: ["medic"], label: "医疗", short: "医疗", icon: "T_role_medic.PNG" },
   { roleKey: "heavy_antitank", patterns: ["heavyantitank", "heavy anti tank", "heavy anti-tank", "hat", "重筒"], label: "重筒", short: "重筒", icon: "T_role_heavyantitank.PNG" },
   { roleKey: "light_antitank", patterns: ["lightantitank", "light anti tank", "light anti-tank", "antitank", "anti tank", "lat", "轻筒"], label: "轻筒", short: "轻筒", icon: "T_role_lightantitank.PNG" },
   { roleKey: "machinegunner", patterns: ["machinegunner", "machine gunner", "machine gun", "mg", "通机"], label: "通机", short: "通机", icon: "T_role_machinegunner.PNG" },
-  { roleKey: "automatic_rifleman", patterns: ["automaticrifleman", "automatic rifleman", "automatic rifle", " ar ", "班机"], label: "班机", short: "班机", icon: "T_role_automaticrifleman.PNG" },
+  { roleKey: "automatic_rifleman", patterns: ["automaticrifleman", "automatic rifleman", "automatic rifle", "ar", "班机"], label: "班机", short: "班机", icon: "T_role_automaticrifleman.PNG" },
   { roleKey: "grenadier", patterns: ["grenadier", "grenade", "榴弹"], label: "榴弹", short: "榴弹", icon: "T_role_grenadier.PNG" },
   { roleKey: "engineer", patterns: ["combatengineer", "combat engineer", "engineer", "sapper", "工兵"], label: "工兵", short: "工兵", icon: "T_role_engineer.PNG" },
   { roleKey: "raider", patterns: ["raider", "奇袭"], label: "奇袭", short: "奇袭", icon: "T_role_raider.PNG" },
@@ -30,13 +30,13 @@ export const ROLE_DEFINITIONS = Object.freeze([
 function normalize(value) {
   return String(value ?? "")
     .toLowerCase()
-    .replace(/[_.\\/-]+/g, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/[_.\/-]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function compact(value) {
-  return normalize(value).replace(/\\s+/g, "");
+  return normalize(value).replace(/\s+/g, "");
 }
 
 function matches(value, pattern) {
@@ -52,7 +52,7 @@ function matches(value, pattern) {
 function fallbackLabel(value) {
   const raw = String(value ?? "").trim();
   return raw
-    .split(/[./\\\\]/)
+    .split(/[./\\]/)
     .pop()
     .replace(/_C$/i, "")
     .replace(/^(BP_|Role_|Soldier_)/i, "")
