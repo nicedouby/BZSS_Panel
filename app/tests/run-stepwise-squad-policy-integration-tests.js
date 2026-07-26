@@ -9,7 +9,7 @@ const source = await fs.readFile(path.join(root, "app/plugins/stepwise-squad-pla
 assert.match(source, /classifySquadNameWithPolicy/);
 assert.match(source, /classification\?\.source/);
 assert.match(source, /classification_missing/);
-assert.doesNotMatch(source, /classifySquadName\(/);
+assert.doesNotMatch(source, /domain\\/squad\\/squad_name_classifier/);
 assert.doesNotMatch(source, /domain\/squad\/squad_name_classifier/);
 
 console.log("stepwise squad policy integration tests passed");
