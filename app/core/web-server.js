@@ -556,6 +556,90 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/squad-name-policy/whitelist") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+      if (!this.requireSuperAdmin(user, res)) return;
+
+      const body = await this.readJsonBody(req);
+      const name = String(body?.name ?? body?.squadName ?? "").trim();
+      const requestedNature = String(body?.nature ?? "infantry").trim().toLowerCase();
+      if (!name) {
+        return this.json(res, 400, {
+          error: "MissingName",
+          message: "Squad name is required.",
+        });
+      }
+      if (!["infantry", "vehicle", "support", "logistics"].includes(requestedNature)) {
+        return this.json(res, 400, {
+          error: "InvalidNature",
+          message: "nature must be infantry, vehicle, support, or logistics.",
+        });
+      }
+
+      const current = await readSquadNamePolicyState(this.core.config);
+      const selectedType = current.types.find((type) => (
+        type.id === String(body?.typeId ?? "").trim()
+        && type.nature === requestedNature
+        && type.enabled !== false
+      )) ?? current.types.find((type) => type.nature === requestedNature && type.enabled !== false);
+      if (!selectedType) {
+        return this.json(res, 422, {
+          error: "SquadTypeUnavailable",
+          message: `No enabled squad type is configured for nature '${requestedNature}'.`,
+        });
+      }
+
+      const normalizeName = (value) => String(value ?? "").trim().replace(/\\s+/g, " ").toLowerCase();
+      const nameKey = normalizeName(name);
+      const entries = current.entries.map((entry) => ({ ...entry }));
+      const existingIndex = entries.findIndex((entry) => normalizeName(entry.name) === nameKey);
+      const previous = existingIndex >= 0 ? entries[existingIndex] : null;
+      const whitelistEntry = {
+        ...(previous ?? {}),
+        id: previous?.id || `rule:whitelist_${crypto.createHash("sha1").update(nameKey).digest("hex").slice(0, 16)}`,
+        name,
+        aliases: Array.isArray(previous?.aliases) ? previous.aliases : [],
+        keywords: Array.isArray(previous?.keywords) ? previous.keywords : [],
+        typeId: selectedType.id,
+        faction: String(previous?.faction ?? ""),
+        asset: String(previous?.asset ?? ""),
+        maxPlayersOverride: previous?.maxPlayersOverride ?? null,
+        allowSquadSuffix: body?.allowSquadSuffix !== false,
+        enabled: true,
+        priority: Math.max(1000, Number(previous?.priority ?? 0) || 0),
+        source: "squad_name_tracking_whitelist",
+        notes: "Added from squad-name tracking whitelist.",
+        legacyVehicleType: String(previous?.legacyVehicleType ?? ""),
+        searchTokens: Array.isArray(previous?.searchTokens) ? previous.searchTokens : [],
+      };
+      if (existingIndex >= 0) entries.splice(existingIndex, 1, whitelistEntry);
+      else entries.push(whitelistEntry);
+
+      const saved = await saveSquadNamePolicyState(this.core.config, {
+        revision: current.revision,
+        source: current.source,
+        suggestionLimit: current.suggestionLimit,
+        defaultNamePatterns: current.defaultNamePatterns,
+        types: current.types.map(({ ruleCount, ...type }) => type),
+        entries,
+        auditActor: user?.username ?? user?.name ?? "admin",
+      });
+      this.modules.squadRestrictionMonitor?.reload?.();
+      const evaluation = testSquadNamePolicy(name, this.core.config);
+      return this.json(res, 200, {
+        ok: evaluation.valid === true,
+        entry: whitelistEntry,
+        classification: evaluation.classification ?? null,
+        evaluation,
+        policyRevision: saved.revision,
+      });
+    }
+
     if (url.pathname === "/api/squad-name-policy/validate") {
       if (req.method !== "POST") {
         return this.json(res, 405, {
