@@ -122,6 +122,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   let activeMatchKey = "";
   let firstWarningSent = false;
   let leaderWarningSent = false;
+  let clockInitialized = false;
+  let lastClockSeconds = 0;
   const playtimeCache = new Map();
 
   function isSubscribed() {
@@ -343,11 +345,22 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       activeMatchKey = matchKey;
       firstWarningSent = false;
       leaderWarningSent = false;
+      clockInitialized = false;
+      lastClockSeconds = 0;
       playtimeCache.clear();
     }
 
     const serverId = first(snapshot?.serverId, core?.webStatus?.serverId);
     if (!serverId || clockSeconds <= 0) return;
+
+    if (!clockInitialized) {
+      lastClockSeconds = clockSeconds;
+      clockInitialized = true;
+      return;
+    }
+    const previousClockSeconds = lastClockSeconds;
+    lastClockSeconds = clockSeconds;
+    if (clockSeconds < previousClockSeconds) return;
 
     const warnApi = getWarnApi();
     if (typeof warnApi !== "function") return;
@@ -355,12 +368,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     const players = getPlayers(serverId);
     if (!players.length) return;
 
-    if (!firstWarningSent && clockSeconds >= runtimeConfig.firstWarningSeconds) {
+    const crossedFirstThreshold = previousClockSeconds < runtimeConfig.firstWarningSeconds
+      && clockSeconds >= runtimeConfig.firstWarningSeconds;
+    const crossedLeaderThreshold = previousClockSeconds < runtimeConfig.leaderWarningSeconds
+      && clockSeconds >= runtimeConfig.leaderWarningSeconds;
+    if (crossedFirstThreshold && !firstWarningSent) {
       const sent = await sendSquadMemberWarnings(players, snapshot, warnApi);
       if (sent) firstWarningSent = true;
     }
 
-    if (!leaderWarningSent && clockSeconds >= runtimeConfig.leaderWarningSeconds) {
+    if (crossedLeaderThreshold && !leaderWarningSent) {
       const sent = await sendLeaderWarnings(players, snapshot, warnApi);
       if (sent) leaderWarningSent = true;
     }
