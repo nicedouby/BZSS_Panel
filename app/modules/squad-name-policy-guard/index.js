@@ -190,7 +190,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     }
 
     stats.violations += 1;
-    const record = {
+    const record = rememberRecord({
       event: normalized,
       source,
       status: "violation",
@@ -198,8 +198,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
       evaluation,
       warningMessages: buildWarningMessages(evaluation),
       actions: [],
-    };
-    rememberRecord(record);
+    });
 
     try {
       const violationEvent = {
@@ -228,7 +227,8 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         record.ruleChainStatus = actionRecord?.status ?? "unknown";
         record.enforcement = cloneValue(actionRecord?.enforcement ?? null);
         record.status = actionRecord?.status === "handled" ? "handled" : (actionRecord?.status || "error");
-        if (actionRecord?.status !== "handled") {
+        applyActionStats(stats, record.actions);
+        if (actionRecord?.status !== "handled" && actionRecord?.status !== "population_skipped") {
           record.error = actionRecord?.error || actionRecord?.reason || "规则链未完成处置。";
         }
       } else {
@@ -389,6 +389,15 @@ function summarizeResult(result) {
     rconExecuted: result.rconExecuted,
     rconResponse: result.rconResponse,
   };
+}
+
+function applyActionStats(stats, actions = []) {
+  for (const action of Array.isArray(actions) ? actions : []) {
+    if (action?.type === "disbanded") stats.disbanded += 1;
+    if (action?.type === "disband_failed") stats.disbandFailed += 1;
+    if (action?.type === "warned") stats.warningsSent += 1;
+    if (action?.type === "warn_failed" || action?.type === "warning_skipped") stats.warningsSkipped += 1;
+  }
 }
 
 function positiveNumber(value, fallback) {
