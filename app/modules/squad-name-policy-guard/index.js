@@ -218,7 +218,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         createdAt: normalized.time,
         sourceEventId: normalized.eventId || buildDedupeKey(normalized),
         warningMessages: expandWarningMessages(record.warningMessages, runtimeConfig),
-        broadcastMessage: buildViolationBroadcastMessage(normalized),
+        broadcastMessage: "",
         removeLeaderBeforeDisband: runtimeConfig.action === "disband_then_warn",
       };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
