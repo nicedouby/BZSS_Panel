@@ -1,5 +1,6 @@
 // -*- coding: utf-8 -*-
 
+import { TeamBalanceBatchManager } from "./batch-manager.js";
 import {
   canSendRconCommand,
   hasPermission,
@@ -15,7 +16,7 @@ const DEFAULT_SWITCH_PERMISSION = "squad.switch";
 const MAX_ACTION_HISTORY = 100;
 const SHUFFLE_ALGORITHMS = new Set(["playtime_balanced", "random_even", "mirror"]);
 
-export function createTeamBalanceService({ core, config, logger }) {
+export function createTeamBalanceService({ core, modules, config, logger }) {
   const moduleLogger = logger
     ?? core.createLogger?.({
       moduleId: MODULE_ID,
@@ -28,6 +29,12 @@ export function createTeamBalanceService({ core, config, logger }) {
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const switchPermission = String(moduleConfig.switchPermission ?? DEFAULT_SWITCH_PERMISSION).trim() || DEFAULT_SWITCH_PERMISSION;
   const actionHistory = [];
+  const batchManager = new TeamBalanceBatchManager({
+    executeOnePlayer: (player) => forceTeamChange(player),
+    resolveCurrentPlayer,
+    recordAudit: recordBatchAudit,
+    logger: moduleLogger,
+  });
 
   const api = {
     forceTeamChange(request = {}) {
@@ -52,6 +59,22 @@ export function createTeamBalanceService({ core, config, logger }) {
 
     listForceTeamChangeRecords(request = {}) {
       return listForceTeamChangeRecords(request);
+    },
+
+    createForceTeamChangeBatch(request = {}) {
+      return createForceTeamChangeBatch(request);
+    },
+
+    listForceTeamChangeBatches() {
+      return batchManager.list();
+    },
+
+    getForceTeamChangeBatch(batchId) {
+      return batchManager.get(batchId);
+    },
+
+    cancelForceTeamChangeBatch(batchId) {
+      return batchManager.cancel(batchId);
     },
 
     getConfig() {
@@ -88,6 +111,29 @@ export function createTeamBalanceService({ core, config, logger }) {
     async stop() {},
   };
 
+  function createForceTeamChangeBatch(request = {}) {
+    const operator = normalizeOperator(
+      request.operator ?? request.actor ?? request.viewer ?? null,
+      request.operatorName ?? request.actorName ?? "",
+    );
+    const source = normalizeText(request.source) || "web.matchStatus.batch";
+    const reason = normalizeText(request.reason) || "manual_batch_team_balance";
+
+    if (!enabled) {
+      return { ok: false, error: "ModuleDisabled", message: "TeamBalance module is disabled." };
+    }
+    if (!canSwitch(operator, { switchPermission })) {
+      return { ok: false, error: "Forbidden", message: `Permission '${switchPermission}' is required.` };
+    }
+
+    return batchManager.create({
+      ...request,
+      source,
+      reason,
+      operator,
+    });
+  }
+
   async function forceTeamChange(request = {}) {
     const operator = normalizeOperator(
       request.operator ?? request.actor ?? request.viewer ?? null,
@@ -112,6 +158,7 @@ export function createTeamBalanceService({ core, config, logger }) {
         reason,
         operator,
         system,
+        batchId: request.batchId ?? "",
       });
       recordAction(result);
       return result;
@@ -429,6 +476,8 @@ export function createTeamBalanceService({ core, config, logger }) {
         system,
         actor: operator,
         requiredPermission,
+        priority: requestPriority(request),
+        batchId: request.batchId ?? "",
       });
       return normalizeDispatchResponse(response);
     }
@@ -444,6 +493,34 @@ export function createTeamBalanceService({ core, config, logger }) {
     }
 
     throw new Error("No RCON executor is available.");
+  }
+
+  async function resolveCurrentPlayer(player) {
+    const serverId = normalizeText(
+      core?.webStatus?.serverId
+      ?? core?.webStatus?.state?.serverId
+      ?? modules?.matchState?.api?.getState?.()?.serverId
+      ?? "",
+    );
+    const playerState = modules?.playerState?.api;
+    if (typeof playerState?.getPlayerBySteamID === "function") {
+      return playerState.getPlayerBySteamID(serverId, player.steamId);
+    }
+
+    const matchState = modules?.matchState?.api?.getState?.();
+    const players = Array.isArray(matchState?.players?.list) ? matchState.players.list : [];
+    return players.find((candidate) => normalizeText(candidate?.steamID ?? candidate?.steamId).toLowerCase() === normalizeText(player.steamId).toLowerCase()) ?? null;
+  }
+
+  async function recordBatchAudit(record) {
+    const audit = modules?.audit?.api;
+    if (typeof audit?.record !== "function") return;
+    await audit.record({
+      ...record,
+      actorId: record.actor?.id ?? record.actor?.username ?? "",
+      actorName: record.actor?.name ?? record.actor?.username ?? "",
+      serverId: core?.webStatus?.serverId ?? "",
+    });
   }
 
   function recordAction(result) {
@@ -603,6 +680,10 @@ function canSwitch(viewer, config = {}) {
   if (viewer.isSuperAdmin) return true;
   const permissions = normalizePermissionList(viewer.permissions ?? viewer.permission);
   return hasPermission(permissions, config.switchPermission || DEFAULT_SWITCH_PERMISSION);
+}
+
+function requestPriority(request) {
+  return request?.priority === "high" ? "high" : false;
 }
 
 function normalizeDispatchResponse(response) {
