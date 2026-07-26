@@ -409,7 +409,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   async function applyDecision(record, decision) {
     if (!decision.approved) {
-      emitSquadRuleViolation(core, {
+      const violationEvent = {
         serverId: record.serverId,
         matchId: record.matchId,
         teamId: record.teamId,
@@ -429,7 +429,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         broadcastMessage: shouldBroadcastViolation(record, decision) ? buildViolationBroadcastMessage(record, decision) : "",
         disbandReason: buildDisbandReason(record, decision),
       });
-      record.actions.push({ type: "violation_emitted" });
+      const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
+      if (typeof ruleChain?.submitViolation === "function") {
+        const actionRecord = await ruleChain.submitViolation(violationEvent);
+        record.actions.push(...cloneValue(actionRecord?.actions ?? []));
+        record.ruleChainStatus = actionRecord?.status ?? "unknown";
+        record.enforcement = cloneValue(actionRecord?.enforcement ?? null);
+      } else {
+        emitSquadRuleViolation(core, violationEvent);
+        record.actions.push({ type: "violation_queued", reason: "rule_chain_direct_api_unavailable" });
+      }
       record.active = false;
       record.resolvedAt = nowIso();
     }
