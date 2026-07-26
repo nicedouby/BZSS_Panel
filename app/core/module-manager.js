@@ -31,7 +31,7 @@ import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createSquadNamePolicyPatrolModule } from "../modules/squad-name-policy-patrol/index.js";
-import { createPlaytimeModule } from "../modules/playtime/index.js";
+import { createPlaytimeModule } from "../modules/playtime-avatar-refresh/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
 import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.js";
@@ -43,9 +43,9 @@ import { createBlackEdgePrivilegeModule } from "../modules/black-edge-privilege/
 import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
-import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player/index.js";
+import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player-native/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
-import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer/index.js";
+import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer-native/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
