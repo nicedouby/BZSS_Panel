@@ -54,6 +54,7 @@ export function normalizeRuleChainPassEvent(event = {}) {
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
     squadName: text(event.squadName),
+    classification: normalizeClassification(event.classification),
     squadType: text(event.squadType),
     squadNature: text(event.squadNature ?? event.squadType),
     squadTypeId: text(event.squadTypeId),
@@ -82,6 +83,7 @@ export function normalizeSquadRuleViolationEvent(event = {}) {
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
     squadName: text(event.squadName),
+    classification: normalizeClassification(event.classification),
     squadType: text(event.squadType),
     squadNature: text(event.squadNature ?? event.squadType),
     squadTypeId: text(event.squadTypeId),
@@ -108,6 +110,28 @@ export function normalizeSquadRuleViolationEvent(event = {}) {
     removeLeaderBeforeDisband: Boolean(event.removeLeaderBeforeDisband),
     metadata: cloneValue(event.metadata) ?? null,
   };
+}
+
+function normalizeClassification(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const classification = {
+    valid: value.valid === true,
+    source: text(value.source),
+    policyRevision: nullableNumber(value.policyRevision),
+    classificationSource: text(value.classificationSource || value.source),
+    classifiedAt: text(value.classifiedAt),
+    typeId: text(value.typeId),
+    typeLabel: text(value.typeLabel),
+    nature: text(value.nature),
+    natureLabel: text(value.natureLabel),
+    ruleId: text(value.ruleId),
+    matchedKind: text(value.matchedKind),
+    matchedValue: text(value.matchedValue),
+    effectiveMaxPlayers: nullableNumber(value.effectiveMaxPlayers),
+    maxPlayersSource: text(value.maxPlayersSource) || "none",
+    ruleExemptions: cloneValue(value.ruleExemptions) ?? {},
+  };
+  return classification.source ? classification : null;
 }
 
 function text(value) {
