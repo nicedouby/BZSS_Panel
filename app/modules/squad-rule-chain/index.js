@@ -687,6 +687,43 @@ function resolveSquadNature(event = {}) {
   return Object.values(SQUAD_NATURE).includes(nature) ? nature : SQUAD_NATURE.OTHER;
 }
 
+function ensureAuthoritativeClassification(input = {}) {
+  const existing = input?.classification;
+  if (
+    existing
+    && existing.source === "policy_event"
+    && Number.isFinite(Number(existing.policyRevision))
+  ) {
+    return input;
+  }
+
+  const squadName = normalizeText(input?.squadName);
+  if (!squadName) return input;
+
+  try {
+    const provider = modules?.squadNamePolicyGuard?.api ?? modules?.squadNamePolicyGuard;
+    const classified = typeof provider?.classifySquadName === "function"
+      ? provider.classifySquadName(squadName)
+      : classifySquadNameWithPolicy(squadName, config);
+    if (!classified?.classification) return input;
+    return {
+      ...input,
+      classification: cloneValue(classified.classification),
+      policyRevision: classified.policyRevision,
+      squadType: classified.classification.nature,
+      squadNature: classified.classification.nature,
+      squadTypeId: classified.classification.typeId,
+      squadTypeLabel: classified.classification.typeLabel,
+      squadRuleId: classified.classification.ruleId,
+    };
+  } catch (error) {
+    moduleLogger?.warn?.(
+      `[SquadRuleChain] authoritative classification lookup failed for ${squadName}: ${error?.message ?? error}`,
+    );
+    return input;
+  }
+}
+
 function hasAuthoritativeClassification(event = {}) {
   return Boolean(
     event?.classification
