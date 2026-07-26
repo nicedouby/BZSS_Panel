@@ -220,3 +220,88 @@ export function executeTeamShufflePlan(payload: {
 }) {
   return apiPost<TeamShuffleExecuteResponse>("/api/tb/shuffle-execute", payload);
 }
+
+
+export type TeamBalanceBatchItemStatus =
+  | "queued"
+  | "running"
+  | "success"
+  | "already_applied"
+  | "skipped_offline"
+  | "invalid_steam_id"
+  | "permission_denied"
+  | "rcon_failed"
+  | "unknown_result"
+  | "failed_state_unknown"
+  | "cancelled";
+
+export interface TeamBalanceBatchPlayer {
+  playerId?: string | number | null;
+  steamId: string;
+  playerName?: string;
+  fromTeamId: number;
+  targetTeamId: number;
+}
+
+export interface TeamBalanceBatchResult extends TeamBalanceBatchPlayer {
+  status: TeamBalanceBatchItemStatus;
+  ok: boolean;
+  message?: string;
+  error?: string;
+  command?: string;
+  rconResponse?: string;
+  completedAt?: string;
+}
+
+export interface TeamBalanceBatch {
+  id: string;
+  clientRequestId: string;
+  status: "queued" | "running" | "completed" | "partial" | "cancelled";
+  createdAt: string;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  total: number;
+  completed: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+  currentPlayer?: { steamId?: string | null; playerName?: string | null } | null;
+  cancelRequested?: boolean;
+  players?: TeamBalanceBatchPlayer[];
+  results?: TeamBalanceBatchResult[];
+}
+
+export interface TeamBalanceBatchResponse {
+  ok: boolean;
+  duplicate?: boolean;
+  batch: TeamBalanceBatch;
+}
+
+export function createForceTeamChangeBatch(payload: {
+  clientRequestId: string;
+  source?: string;
+  reason?: string;
+  players: TeamBalanceBatchPlayer[];
+}) {
+  return apiPost<TeamBalanceBatchResponse>("/api/tb/force-team-change-batches", payload);
+}
+
+export function listForceTeamChangeBatches() {
+  return apiGet<{ ok: boolean; batches: TeamBalanceBatch[] }>("/api/tb/force-team-change-batches");
+}
+
+export function getForceTeamChangeBatch(batchId: string) {
+  return apiGet<{ ok: boolean; batch: TeamBalanceBatch }>(
+    `/api/tb/force-team-change-batches/${encodeURIComponent(batchId)}`,
+  );
+}
+
+export function cancelForceTeamChangeBatch(batchId: string) {
+  return apiPost<{
+    ok: boolean;
+    status: string;
+    completed?: number;
+    remaining?: number;
+    batch?: TeamBalanceBatch;
+  }>(`/api/tb/force-team-change-batches/${encodeURIComponent(batchId)}/cancel`, {});
+}
