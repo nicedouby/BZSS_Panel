@@ -209,7 +209,7 @@ async function createHarness(options = {}) {
 
   const config = {
     get(key, fallback) {
-      if (key === "squadNamePolicy.path") return options.policyPath ?? `${process.cwd()}\\config\\squad_name_policy.json`;
+      if (key === "squadNamePolicy.path") return options.policyPath ?? path.join(process.cwd(), "config", "squad_name_policy.json");
       if (key === "modules.squadNamePolicyGuard") {
         return {
           enabled: true,
