@@ -647,7 +647,7 @@ async function testShufflePlanHasIdentityAndAsyncExecution() {
   assert.equal(commands.every((command) => command.batchId === accepted.batch.id), true);
 }
 
-async function testShuffleGateStopsAfterMatchStart() {
+async function testShuffleCanSubmitAfterMatchStart() {
   const state = {
     serverId: "server-1",
     match: { map: "Map", layer: "Layer", phase: "warmup", playtime: 0 },
@@ -683,11 +683,12 @@ async function testShuffleGateStopsAfterMatchStart() {
     roundKey: plan.plan.roundKey,
     players: plan.plan.moves,
   });
-  assert.equal(result.ok, false);
-  assert.equal(result.error, "ShuffleUnavailable");
+  assert.equal(result.ok, true);
+  assert.equal(result.accepted, true);
+  assert.ok(result.batch?.id);
 }
 
 await testShufflePlanHasIdentityAndAsyncExecution();
-await testShuffleGateStopsAfterMatchStart();
+await testShuffleCanSubmitAfterMatchStart();
 
 console.log("team balance tests passed");
