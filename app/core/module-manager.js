@@ -31,7 +31,7 @@ import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 import { createSquadRuleChainModule } from "../modules/squad-rule-chain/index.js";
 import { createSquadNamePolicyGuardModule } from "../modules/squad-name-policy-guard/index.js";
 import { createSquadNamePolicyPatrolModule } from "../modules/squad-name-policy-patrol/index.js";
-import { createPlaytimeModule } from "../modules/playtime/index.js";
+import { createPlaytimeModule } from "../modules/playtime-avatar-refresh/index.js";
 import { createPluginSubscriptionsModule } from "../modules/plugin-subscriptions/index.js";
 import { createServerStatsModule } from "../modules/server-stats/index.js";
 import { createRemoteTelemetryModule } from "../modules/remote-telemetry/index.js";
