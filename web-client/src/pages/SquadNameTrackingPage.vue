@@ -1056,11 +1056,6 @@ type StepwiseFullState = {
   };
 };
 
-type WhitelistRulesResponse = {
-  updatedAt?: string | null;
-  exactRules?: Record<SquadRuleNature, string[]>;
-};
-
 type WhitelistSource = {
   squadName?: string;
   squadNature?: string;
@@ -1077,7 +1072,6 @@ const patrolState = ref<PatrolState | null>(null);
 const stepwiseState = ref<SquadNameTrackingState["stepwise"] | null>(null);
 const fairState = ref<SquadNameTrackingState["fair"] | null>(null);
 const trackingRecords = ref<TrackingRecord[]>([]);
-const whitelistRules = ref<Record<SquadRuleNature, string[]> | null>(null);
 const whitelistModalOpen = ref(false);
 const whitelistSaving = ref(false);
 const whitelistError = ref("");
@@ -1490,10 +1484,7 @@ async function loadAll(showSpinner = true) {
   error.value = "";
 
   try {
-    const [trackingResponse, whitelistResponse] = await Promise.all([
-      apiGet<{ ok: boolean; data: SquadNameTrackingState }>("/api/squad-name-tracking/state"),
-      apiGet<WhitelistRulesResponse>("/api/squad-name/rules").catch(() => null),
-    ]);
+    const trackingResponse = await apiGet<{ ok: boolean; data: SquadNameTrackingState }>("/api/squad-name-tracking/state");
     const data = trackingResponse.data;
     lifecycle.value = data.lifecycle ?? { list: [] };
     guardState.value = data.guard ?? { enabled: false, recent: [] };
@@ -1501,7 +1492,6 @@ async function loadAll(showSpinner = true) {
     stepwiseState.value = data.stepwise ?? { enabled: false, recentRecords: [] };
     fairState.value = data.fair ?? { enabled: false, recentRecords: [] };
     trackingRecords.value = data.records ?? [];
-    whitelistRules.value = normalizeWhitelistRules(whitelistResponse?.exactRules);
   } catch (err) {
     error.value = err instanceof Error ? err.message : "加载建队追踪失败。";
   } finally {
@@ -1707,11 +1697,8 @@ async function openWhitelistDialog(source: WhitelistSource) {
 
   whitelistError.value = "";
   try {
-    await ensureWhitelistRulesLoaded();
     whitelistDraft.squadName = squadName;
-    whitelistDraft.nature = getWhitelistNature(squadName)
-      ?? normalizeNature(source.squadNature)
-      ?? "infantry";
+    whitelistDraft.nature = normalizeNature(source.squadNature) ?? "infantry";
     whitelistModalOpen.value = true;
   } catch (err) {
     whitelistError.value = err instanceof Error ? err.message : "加载白名单失败。";
@@ -1725,13 +1712,6 @@ function closeWhitelistDialog() {
   whitelistError.value = "";
 }
 
-async function ensureWhitelistRulesLoaded() {
-  if (whitelistRules.value) return whitelistRules.value;
-  const payload = await apiGet<WhitelistRulesResponse>("/api/squad-name/rules");
-  whitelistRules.value = normalizeWhitelistRules(payload.exactRules);
-  return whitelistRules.value;
-}
-
 async function saveWhitelistEntry() {
   const squadName = String(whitelistDraft.squadName ?? "").trim();
   if (!squadName) {
@@ -1743,15 +1723,19 @@ async function saveWhitelistEntry() {
   whitelistError.value = "";
 
   try {
-    const nextRules = normalizeWhitelistRules(whitelistRules.value ?? undefined);
-    removeWhitelistName(nextRules, squadName);
-    nextRules[whitelistDraft.nature].push(squadName);
-
-    const payload = await apiPost<WhitelistRulesResponse>("/api/squad-name/rules", {
-      exactRules: nextRules,
+    const payload = await apiPost<{
+      ok: boolean;
+      policyRevision: number;
+      evaluation?: { valid?: boolean };
+    }>("/api/squad-name-policy/whitelist", {
+      name: squadName,
+      nature: whitelistDraft.nature,
+      allowSquadSuffix: true,
     });
+    if (!payload.ok || payload.evaluation?.valid !== true) {
+      throw new Error("保存后回验失败，队名规范尚未识别该名称。");
+    }
 
-    whitelistRules.value = normalizeWhitelistRules(payload.exactRules ?? nextRules);
     whitelistModalOpen.value = false;
     ui.pushToast({
       title: "白名单已更新",
@@ -1770,52 +1754,6 @@ async function saveWhitelistEntry() {
   }
 }
 
-function normalizeWhitelistRules(exactRules?: Partial<Record<SquadRuleNature, string[]>> | null) {
-  return {
-    infantry: normalizeWhitelistNames(exactRules?.infantry),
-    vehicle: normalizeWhitelistNames(exactRules?.vehicle),
-    support: normalizeWhitelistNames(exactRules?.support),
-    logistics: normalizeWhitelistNames(exactRules?.logistics),
-  };
-}
-
-function normalizeWhitelistNames(values: unknown) {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const item of Array.isArray(values) ? values : []) {
-    const name = String(item ?? "").trim();
-    if (!name) continue;
-    const key = normalizeSquadNameKey(name);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(name);
-  }
-  return result;
-}
-
-function removeWhitelistName(rules: Record<SquadRuleNature, string[]>, squadName: string) {
-  const target = normalizeSquadNameKey(squadName);
-  for (const nature of whitelistNatureOptions) {
-    rules[nature.value] = rules[nature.value].filter((item) => normalizeSquadNameKey(item) !== target);
-  }
-}
-
-function getWhitelistNature(squadName: string) {
-  const target = normalizeSquadNameKey(squadName);
-  if (!target || !whitelistRules.value) return null;
-
-  for (const nature of whitelistNatureOptions) {
-    if (whitelistRules.value[nature.value].some((item) => normalizeSquadNameKey(item) === target)) {
-      return nature.value;
-    }
-  }
-  return null;
-}
-
-function normalizeSquadNameKey(value: string) {
-  return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
-}
-
 function normalizeNature(value?: string) {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "infantry" || normalized === "vehicle" || normalized === "support" || normalized === "logistics") return normalized;
@@ -1830,11 +1768,7 @@ function getNatureLabel(nature?: string) {
   return "未知";
 }
 
-const whitelistCurrentNatureLabel = computed(() => {
-  const current = getWhitelistNature(whitelistDraft.squadName);
-  if (current) return `当前已在 ${getNatureLabel(current)} 白名单`;
-  return "当前未在白名单中";
-});
+const whitelistCurrentNatureLabel = computed(() => "保存后将立即写入队名规范并回验。");
 </script>
 
 <style scoped>

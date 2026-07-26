@@ -252,6 +252,7 @@ async function createHarness(options = {}) {
   };
 
   const ruleChain = createSquadRuleChainModule({ core, modules, config, logger: noopLogger() });
+  modules.squadRuleChain = ruleChain.api;
   const nameGuard = createSquadNamePolicyGuardModule({ core, modules, config, logger: noopLogger() });
   const stepwise = createStepwisePlugin({ core, modules, config, logger: noopLogger() });
   const fair = createFairPlugin({ core, modules, config, logger: noopLogger() });

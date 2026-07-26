@@ -407,7 +407,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!decision.approved) {
       await applyViolationActions(record);
     } else {
-      emitFinalSquadRulePassed(core, {
+      const finalPassEvent = {
         serverId: record.serverId,
         matchId: record.matchId,
         teamId: record.teamId,
@@ -421,8 +421,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         createdAtMs: record.createdAtMs,
         sourceEventId: record.id,
         playtime: cloneValue(record.playtime) ?? null,
-      });
-      record.actions.push({ type: "final_pass_emitted" });
+      };
+      const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
+      if (typeof ruleChain?.submitFinalPass === "function") {
+        const finalRecord = await ruleChain.submitFinalPass(finalPassEvent);
+        record.actions.push(...cloneValue(finalRecord?.actions ?? []));
+        record.ruleChainStatus = finalRecord?.status ?? "unknown";
+      } else {
+        emitFinalSquadRulePassed(core, finalPassEvent);
+        record.actions.push({ type: "final_pass_queued", reason: "rule_chain_direct_api_unavailable" });
+      }
     }
 
     rememberRecord(record);
@@ -472,7 +480,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       record.actions.push({ type: "violation_recorded" });
     }
 
-    emitSquadRuleViolation(core, {
+    const violationEvent = {
       serverId: record.serverId,
       matchId: record.matchId,
       teamId: record.teamId,
@@ -495,8 +503,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       metadata: {
         teamName: record.factionName,
       },
-    });
-    record.actions.push({ type: "violation_emitted" });
+    };
+    const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
+    if (typeof ruleChain?.submitViolation === "function") {
+      const actionRecord = await ruleChain.submitViolation(violationEvent);
+      record.actions.push(...cloneValue(actionRecord?.actions ?? []));
+      record.ruleChainStatus = actionRecord?.status ?? "unknown";
+      record.enforcement = cloneValue(actionRecord?.enforcement ?? null);
+    } else {
+      emitSquadRuleViolation(core, violationEvent);
+      record.actions.push({ type: "violation_queued", reason: "rule_chain_direct_api_unavailable" });
+    }
     record.active = false;
     record.resolvedAt = nowIso();
     if (record.isLogConfirmed && hasCreatorIdentity(record)) {
