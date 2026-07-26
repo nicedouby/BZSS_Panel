@@ -42,6 +42,8 @@ export function createTacticalReplayPlayerModule(context) {
 
     getSession: (sessionId) => getSession(settings, legacy.api, sessionId),
 
+    removeSession: (sessionId) => removeSession(settings, legacy.api, sessionId),
+
     async readState(sessionId, options = {}) {
       state.reads += 1;
       state.lastReadAt = new Date().toISOString();
@@ -133,6 +135,7 @@ async function getSession(settings, legacyApi, sessionId) {
 async function buildNativeSession(rootDir, directoryName, metadata) {
   const directory = path.join(rootDir, directoryName);
   const segmentNames = await listNativeSegments(directory);
+  const sizeBytes = await getDirectorySize(directory);
   const startedMs = Date.parse(metadata?.startedAt ?? "");
   const endedMs = Date.parse(metadata?.endedAt ?? "");
   const durationMs = Number.isFinite(Number(metadata?.durationMs))
@@ -155,9 +158,32 @@ async function buildNativeSession(rootDir, directoryName, metadata) {
     peakPlayerCount: nonNegativeInteger(metadata?.peakPlayerCount),
     currentPlayerCount: nonNegativeInteger(metadata?.currentPlayerCount),
     frameCount: nonNegativeInteger(metadata?.frameCount),
+    sizeBytes,
     isPlayable: segmentNames.length > 0,
     rootDir: undefined,
   };
+}
+
+async function removeSession(settings, legacyApi, sessionId) {
+  const safeId = validateSessionId(sessionId);
+  const directory = await resolveSessionDirectory(settings.rootDir, safeId);
+  if (!directory) return null;
+  if (path.basename(directory).endsWith(".open")) {
+    const error = new Error("正在录制的回放不能删除，请先停止录制。");
+    error.code = "ReplaySessionRecording";
+    error.statusCode = 409;
+    throw error;
+  }
+  const metadata = await readSessionMetadata(directory);
+  if (metadata?.format !== FORMAT) return await legacyApi?.removeSession?.(sessionId) ?? null;
+  const removed = {
+    id: String(metadata.sessionId ?? safeId),
+    map: metadata.map ?? "",
+    layer: metadata.layer ?? "",
+    sizeBytes: await getDirectorySize(directory),
+  };
+  await fs.rm(directory, { recursive: true, force: false });
+  return removed;
 }
 
 async function readNativeState(settings, session, { atMs = 0 } = {}) {
@@ -325,6 +351,17 @@ async function listNativeSegments(directory) {
     .filter((entry) => entry.isFile() && SEGMENT_PATTERN.test(entry.name))
     .map((entry) => entry.name)
     .sort();
+}
+
+async function getDirectorySize(directory) {
+  let total = 0;
+  const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const item = path.join(directory, entry.name);
+    if (entry.isDirectory()) total += await getDirectorySize(item);
+    else total += Number((await fs.stat(item).catch(() => null))?.size ?? 0);
+  }
+  return total;
 }
 
 function readSettings(config) {
