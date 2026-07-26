@@ -154,7 +154,7 @@ async function handleTacticalReplayPlayerRoutes({ modules, url, req, json }) {
     json(404, { error: "ModuleNotFound", message: "tacticalReplayPlayer module is not loaded." });
     return true;
   }
-  if (req.method !== "GET") {
+  if (req.method !== "GET" && req.method !== "DELETE") {
     json(405, { error: "MethodNotAllowed", message: "Only GET is supported." });
     return true;
   }
@@ -177,6 +177,22 @@ async function handleTacticalReplayPlayerRoutes({ modules, url, req, json }) {
   }
 
   const sessionId = decodePathSegment(segments[3]);
+  if (segments.length === 4 && req.method === "DELETE") {
+    try {
+      const removed = await player.removeSession?.(sessionId);
+      if (!removed) {
+        json(404, { error: "ReplaySessionNotFound", message: "Replay session was not found." });
+        return true;
+      }
+      json(200, { ok: true, removed });
+    } catch (error) {
+      json(Number(error?.statusCode) || 500, {
+        error: error?.code ?? "ReplaySessionDeleteFailed",
+        message: error?.message ?? "Unable to delete replay session.",
+      });
+    }
+    return true;
+  }
   if (segments.length === 4) {
     const session = await player.getSession?.(sessionId);
     if (!session) {
