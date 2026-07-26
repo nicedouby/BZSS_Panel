@@ -205,11 +205,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!player.steamID || !modules?.playtime) return null;
     if (playtimeCache.has(player.steamID)) return playtimeCache.get(player.steamID);
     try {
-      let row = await modules.playtime.getBySteamID?.(player.steamID);
-      let seconds = readSeconds(row);
-      if (seconds == null && cfg.liveLookupWhenMissing) {
-        row = await modules.playtime.lookupSteamID?.(player.steamID, { lastSeenName: player.name });
-        seconds = readSeconds(row);
+      const row = await modules.playtime.getBySteamID?.(player.steamID);
+      const cachedUnpublished = row && (
+        row.found === false
+        || row.isPublic === false
+        || String(row.visibility ?? "").toLowerCase() === "private"
+      );
+      let seconds = cachedUnpublished ? null : readSeconds(row);
+      if (seconds == null || cachedUnpublished) {
+        // 未公开或没有缓存时，先尝试实时获取一次。
+        const lookup = await modules.playtime.lookupSteamID?.(player.steamID, { lastSeenName: player.name });
+        seconds = lookup?.found === false ? null : readSeconds(lookup);
       }
       playtimeCache.set(player.steamID, seconds);
       return seconds;
@@ -597,8 +603,8 @@ function identityKeys(player) { return [["steam", player.steamID], ["eos", playe
 function memberSort(a, b) { return fireRank(a.fireTeam) - fireRank(b.fireTeam) || Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name, "zh-CN"); }
 function fireRank(value) { return value === "A" ? 0 : value === "B" ? 1 : value === "C" ? 2 : 3; }
 function readSeconds(row) { const value = Number(row?.game_seconds ?? row?.gameSeconds ?? row?.steam_game_seconds ?? row?.steamGameSeconds); return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null; }
-function hours(seconds) { return seconds == null ? "?h" : `${Number((seconds / 3600).toFixed(1))}h`; }
-function hoursShort(seconds) { return seconds == null ? "?h" : `${Number((seconds / 3600).toFixed(seconds >= 360000 ? 0 : 1))}h`; }
+function hours(seconds) { return seconds == null ? "未公开" : `${Number((seconds / 3600).toFixed(1))}h`; }
+function hoursShort(seconds) { return seconds == null ? "未公开" : `${Number((seconds / 3600).toFixed(seconds >= 360000 ? 0 : 1))}h`; }
 function truncate(value, max) { const raw = String(value ?? ""); return raw.length <= max ? raw : max <= 1 ? raw.slice(0, max) : `${raw.slice(0, max - 1)}…`; }
 function text(value) { return String(value ?? "").trim(); }
 function id(value) { const normalized = text(value); return normalized && normalized !== "0" && normalized.toLowerCase() !== "n/a" ? normalized : ""; }
