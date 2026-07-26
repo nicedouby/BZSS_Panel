@@ -3528,11 +3528,12 @@ onBeforeUnmount(deactivateMapPage);
   width: 0;
   height: 0;
   overflow: visible;
-  --vehicle-accent: #94a3b8;
+  /* Muted tactical palette: readable on the map without neon glow pollution. */
+  --vehicle-accent: #a8b3bf;
 }
 
-.vehicle-marker.team-1 { --vehicle-accent: #60a5fa; }
-.vehicle-marker.team-2 { --vehicle-accent: #f87171; }
+.vehicle-marker.team-1 { --vehicle-accent: #4f8fb8; }
+.vehicle-marker.team-2 { --vehicle-accent: #c5666c; }
 
 .vehicle-marker__frame {
   position: absolute;
@@ -3552,14 +3553,21 @@ onBeforeUnmount(deactivateMapPage);
   width: 26px;
   height: 26px;
   display: block;
-  background: var(--vehicle-accent);
+  background-color: var(--vehicle-accent);
+  /*
+   * Use the PNG alpha channel as the mask. This colors every opaque pixel
+   * of the icon, instead of using the source image's white luminance only.
+   */
   -webkit-mask-image: var(--vehicle-icon-url);
   mask-image: var(--vehicle-icon-url);
+  -webkit-mask-mode: alpha;
+  mask-mode: alpha;
   -webkit-mask-position: center;
   mask-position: center;
   -webkit-mask-repeat: no-repeat;
   mask-repeat: no-repeat;
   -webkit-mask-size: contain;
   mask-size: contain;
+  filter: none;
 }
 </style>
