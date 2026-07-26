@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import { resolvePlayerFireTeam } from "./match-end-snapshot-fireteam.js";
+import { resolveRoleLabel } from "../core/role-classifier.js";
 
 const PLUGIN_ID = "squad-members-playtime-warning";
 const DEFAULT_FIRST_WARNING_SECONDS = 5 * 60;
@@ -48,21 +49,7 @@ function normalizeFireTeam(player) {
 
   return "";
 }
-function getRole(player) {
-  return first(
-    player?.roleName,
-    player?.roleDisplayName,
-    player?.className,
-    player?.class,
-    player?.kitName,
-    player?.kit,
-    player?.role,
-    player?.兵种,
-    "未知",
-  );
-}
-
-function getSquadName(squad) {
+function getRole(player) {\n  return resolveRoleLabel(\n    player?.roleName\n      ?? player?.roleDisplayName\n      ?? player?.className\n      ?? player?.class\n      ?? player?.kitName\n      ?? player?.kit\n      ?? player?.role\n      ?? player?.兵种,\n  );\n}\nfunction getSquadName(squad) {
   return first(
     squad?.squadName,
     squad?.name,
