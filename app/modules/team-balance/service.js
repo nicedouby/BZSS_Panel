@@ -15,6 +15,7 @@ const DEFAULT_SHUFFLE_REASON = "match_status_playtime_shuffle_plan";
 const DEFAULT_SWITCH_PERMISSION = "squad.switch";
 const MAX_ACTION_HISTORY = 100;
 const SHUFFLE_ALGORITHMS = new Set(["playtime_balanced", "random_even", "mirror"]);
+const SHUFFLE_PLAN_TTL_MS = 10 * 60 * 1000;
 
 export function createTeamBalanceService({ core, modules, config, logger }) {
   const moduleLogger = logger
@@ -29,9 +30,12 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
   const enabled = Boolean(moduleConfig.enabled ?? true);
   const switchPermission = String(moduleConfig.switchPermission ?? DEFAULT_SWITCH_PERMISSION).trim() || DEFAULT_SWITCH_PERMISSION;
   const actionHistory = [];
+  const shufflePlans = new Map();
+  const unsubscribers = [];
   const batchManager = new TeamBalanceBatchManager({
     executeOnePlayer: (player) => forceTeamChange(player),
     resolveCurrentPlayer,
+    canContinue: canContinueBatch,
     recordAudit: recordBatchAudit,
     logger: moduleLogger,
   });
@@ -99,6 +103,13 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     async init() {},
 
     async start() {
+      if (core.eventBus?.onModuleEvent) {
+        unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "updated", handleMatchStateEvent));
+      }
+      if (core.eventBus?.onCoreEvent) {
+        unsubscribers.push(core.eventBus.onCoreEvent("RCON_MATCH_STATE_UPDATED", handleMatchStateEvent));
+      }
+
       moduleLogger?.info?.("TeamBalance module started.", {
         operation: "start",
         data: {
@@ -108,7 +119,15 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       });
     },
 
-    async stop() {},
+    async stop() {
+      batchManager.cancelActiveByType("shuffle", "module_stopped");
+      for (const unsubscribe of unsubscribers.splice(0)) {
+        try {
+          unsubscribe?.();
+        } catch {}
+      }
+      shufflePlans.clear();
+    },
   };
 
   function createForceTeamChangeBatch(request = {}) {
@@ -321,7 +340,44 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       return result;
     }
 
+    const gate = getShuffleGate();
+    if (!gate.ok) {
+      const result = buildShufflePlanResult({
+        ok: false,
+        error: "ShuffleUnavailable",
+        message: gate.message,
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+      });
+      recordAction(result);
+      return result;
+    }
+
+    const planId = `shuffle-plan-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const roundKey = gate.roundKey;
+    const generatedAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + SHUFFLE_PLAN_TTL_MS).toISOString();
     const plan = buildPlaytimeShufflePlanWithGroups(roster, shuffleGroups, algorithm);
+    plan.plan = {
+      ...plan.plan,
+      planId,
+      roundKey,
+      generatedAt,
+      expiresAt,
+      executedAt: null,
+    };
+    shufflePlans.set(planId, {
+      planId,
+      roundKey,
+      expiresAt,
+      executedAt: null,
+      executedBatchId: "",
+      plan: plan.plan,
+    });
+
     const result = buildShufflePlanResult({
       ok: true,
       error: "",
@@ -347,10 +403,11 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     const reason = normalizeText(request.reason) || "team_shuffle_execute";
     const system = Boolean(request.system);
     const algorithm = normalizeShuffleAlgorithm(request.algorithm ?? request.mode);
-    const roster = normalizeShuffleRoster(request.players ?? request.roster);
+    const planId = normalizeText(request.planId);
+    const planEntry = planId ? shufflePlans.get(planId) : null;
 
     if (!enabled) {
-      const result = buildShuffleExecuteResult({
+      return buildShuffleExecuteResult({
         ok: false,
         error: "ModuleDisabled",
         message: "TeamBalance module is disabled.",
@@ -359,13 +416,12 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         operator,
         system,
         algorithm,
+        planId,
       });
-      recordAction(result);
-      return result;
     }
 
     if (!system && !canSwitch(operator, { switchPermission })) {
-      const result = buildShuffleExecuteResult({
+      return buildShuffleExecuteResult({
         ok: false,
         error: "Forbidden",
         message: `Permission '${switchPermission}' is required.`,
@@ -374,84 +430,167 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         operator,
         system,
         algorithm,
+        planId,
       });
-      recordAction(result);
-      return result;
     }
 
-    const moves = roster
-      .filter((player) => player.online !== false)
-      .map((player) => ({
-        ...player,
-        targetTeamId: normalizeTeamId(player.targetTeamId ?? player.targetTeamID ?? player.teamId),
-      }))
-      .filter((player) => {
-        if (!player.steamId) return false;
-        if (player.targetTeamId == null) return false;
-        return player.teamId !== player.targetTeamId;
+    if (!planId || !planEntry) {
+      return buildShuffleExecuteResult({
+        ok: false,
+        error: "UnknownShufflePlan",
+        message: "The shuffle plan is missing or has expired.",
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+        planId,
       });
+    }
+
+    if (planEntry.executedBatchId) {
+      return buildShuffleExecuteResult({
+        ok: true,
+        duplicate: true,
+        accepted: true,
+        message: "This shuffle plan has already been submitted.",
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+        planId,
+        roundKey: planEntry.roundKey,
+        batch: batchManager.get(planEntry.executedBatchId),
+      });
+    }
+
+    if (Date.parse(planEntry.expiresAt) <= Date.now()) {
+      return buildShuffleExecuteResult({
+        ok: false,
+        error: "ShufflePlanExpired",
+        message: "The shuffle plan has expired.",
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+        planId,
+      });
+    }
+
+    const gate = getShuffleGate();
+    if (!gate.ok || gate.roundKey !== planEntry.roundKey) {
+      return buildShuffleExecuteResult({
+        ok: false,
+        error: "ShuffleUnavailable",
+        message: gate.ok ? "The shuffle plan belongs to another round." : gate.message,
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+        planId,
+        roundKey: gate.roundKey,
+      });
+    }
+
+    const active = batchManager.findActive({ type: "shuffle", roundKey: planEntry.roundKey });
+    if (active) {
+      return buildShuffleExecuteResult({
+        ok: false,
+        error: "ShuffleAlreadyRunning",
+        message: "A shuffle task is already running for this round.",
+        source,
+        reason,
+        operator,
+        system,
+        algorithm,
+        planId,
+        roundKey: planEntry.roundKey,
+        batch: active,
+      });
+    }
+
+    const roster = normalizeShuffleRoster(request.players ?? request.roster);
+    const moves = interleaveShuffleMoves(
+      roster
+        .map((player) => ({
+          ...player,
+          targetTeamId: normalizeTeamId(player.targetTeamId ?? player.targetTeamID),
+        }))
+        .filter((player) => (
+          player.steamId
+          && player.targetTeamId != null
+          && player.teamId !== player.targetTeamId
+          && player.online !== false
+        )),
+    );
 
     if (!moves.length) {
-      const result = buildShuffleExecuteResult({
+      return buildShuffleExecuteResult({
         ok: true,
-        error: "",
         message: "No team switches were required.",
         source,
         reason,
         operator,
         system,
         algorithm,
-        executed: [],
-        failed: [],
+        planId,
+        roundKey: planEntry.roundKey,
+        batch: null,
       });
-      recordAction(result);
-      return result;
     }
 
-    const executed = [];
-    const failed = [];
-    for (const move of moves) {
-      const result = await forceTeamChange({
+    const created = batchManager.create({
+      clientRequestId: normalizeText(request.clientRequestId) || `shuffle:${planId}`,
+      type: "shuffle",
+      planId,
+      roundKey: planEntry.roundKey,
+      source,
+      reason,
+      operator,
+      players: moves.map((move) => ({
+        playerId: move.playerId,
         steamId: move.steamId,
         playerName: move.playerName,
+        fromTeamId: move.teamId,
+        targetTeamId: move.targetTeamId,
+      })),
+    });
+
+    if (!created.ok) {
+      return buildShuffleExecuteResult({
+        ok: false,
+        error: created.error || "BatchCreateFailed",
+        message: created.message || "Failed to create shuffle batch.",
         source,
         reason,
         operator,
         system,
+        algorithm,
+        planId,
+        roundKey: planEntry.roundKey,
       });
-      const entry = {
-        playerId: move.playerId || null,
-        steamId: move.steamId || null,
-        eosId: move.eosId || null,
-        playerName: move.playerName,
-        fromTeamId: move.teamId,
-        targetTeamId: move.targetTeamId,
-        ok: Boolean(result.ok),
-        error: result.error || "",
-        message: result.message || "",
-        command: result.command || "",
-        rconResponse: result.rconResponse || "",
-      };
-      if (result.ok) executed.push(entry);
-      else failed.push(entry);
     }
 
-    const result = buildShuffleExecuteResult({
-      ok: failed.length === 0,
-      error: failed.length ? "PartialFailure" : "",
-      message: failed.length
-        ? `Executed ${executed.length} team switches, ${failed.length} failed.`
-        : `Executed ${executed.length} team switches.`,
+    planEntry.executedBatchId = created.batch.id;
+    planEntry.executedAt = new Date().toISOString();
+
+    return buildShuffleExecuteResult({
+      ok: true,
+      accepted: true,
+      duplicate: Boolean(created.duplicate),
+      message: created.duplicate ? "This shuffle plan has already been submitted." : "Shuffle batch queued.",
       source,
       reason,
       operator,
       system,
       algorithm,
-      executed,
-      failed,
+      planId,
+      roundKey: planEntry.roundKey,
+      batch: created.batch,
     });
-    recordAction(result);
-    return result;
   }
 
   function listForceTeamChangeRecords(request = {}) {
