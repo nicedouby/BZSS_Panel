@@ -579,7 +579,7 @@ async function testMissingPlaytimeDisbandsWarnsAndStartsLookup() {
 
 async function testLogThenRconOnlyProcessesOnce() {
   const harness = await createHarness({
-    playtimeRows: [["steam-1", { game_seconds: 401 * 3600 }]],
+    playtimeRows: [["steam-1", { game_seconds: 801 * 3600 }]],
   });
   try {
     const first = await harness.plugin.api.simulateCreation(creation({
