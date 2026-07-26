@@ -179,7 +179,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         teamId: normalized.teamId,
         squadId: normalized.squadId,
         squadName: normalized.squadName,
-        ...buildClassificationEventFields(normalized.squadName, evaluation),
+        ...buildClassificationEventFields(normalized.squadName, evaluation, config),
         leaderSteamId: normalized.creatorSteamId,
         leaderName: normalized.creatorName,
         leaderEosId: normalized.creatorEosId,
@@ -208,7 +208,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         teamId: normalized.teamId,
         squadId: normalized.squadId,
         squadName: normalized.squadName,
-        ...buildClassificationEventFields(normalized.squadName, evaluation),
+        ...buildClassificationEventFields(normalized.squadName, evaluation, config),
         leaderSteamId: normalized.creatorSteamId,
         leaderName: normalized.creatorName,
         leaderEosId: normalized.creatorEosId,
@@ -297,8 +297,8 @@ function buildWarningMessages(evaluation) {
   return buildSquadNamePolicyWarningMessages(evaluation?.suggestions ?? []);
 }
 
-function buildClassificationEventFields(squadName, evaluation) {
-  const classified = classifySquadNameWithPolicy(squadName);
+function buildClassificationEventFields(squadName, evaluation, config) {
+  const classified = classifySquadNameWithPolicy(squadName, config);
   const classification = classified.classification;
   return {
     classification: cloneValue(classification),
