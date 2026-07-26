@@ -239,10 +239,12 @@ const mergedPlayers = computed(() => mergePlayers(
 const identifiedCount = computed(() => mergedPlayers.value.filter((item) => item.fireTeam).length);
 const conflictCount = computed(() => mergedPlayers.value.filter((item) => item.fireTeamConflict).length);
 const teamIds = computed<string[]>(() => Array.from(new Set<string>(mergedPlayers.value.map((item) => String(item.teamID || "")).filter(Boolean))).sort());
-const squadMap = computed(() => new Map(extractSquads(matchOverview.value).map((squad: any) => [
-  `${normalizeId(squad.teamID ?? squad.teamId)}|${normalizeId(squad.squadID ?? squad.squadId)}`,
-  String(squad.squadName ?? squad.name ?? "").trim(),
-])));
+const squadMap = computed<Map<string, string>>(() => new Map<string, string>(
+  extractSquads(matchOverview.value).map((squad: any): [string, string] => [
+    `${normalizeId(squad.teamID ?? squad.teamId)}|${normalizeId(squad.squadID ?? squad.squadId)}`,
+    String(squad.squadName ?? squad.name ?? "").trim(),
+  ]),
+));
 const groupedSquads = computed(() => groupBy(mergedPlayers.value.filter((player) => player.teamID && player.squadID), (player) => `${player.teamID}|${player.squadID}`));
 const squadOptions = computed(() => Array.from(groupedSquads.value.entries()).map(([key, players]) => ({
   key,
@@ -492,7 +494,11 @@ function normalizeFireId(value: any) { const number = Number(value); return numb
 function normalizeFireIndex(value: any) { const number = Number(value); return number === 0 ? "A" : number === 1 ? "B" : number === 2 ? "C" : ""; }
 function cleanRole(value: any) { return String(value ?? "").split(/[/.\\]/).pop()?.replace(/_C$/i, "").replace(/^BP_/, "").replaceAll("_", " ") ?? ""; }
 function groupBy<T>(items: T[], keyFn: (item: T) => string) { const map = new Map<string, T[]>(); for (const item of items) { const key = keyFn(item); if (!map.has(key)) map.set(key, []); map.get(key)!.push(item); } return map; }
-function squadName(player: any) { return squadMap.value.get(`${player.teamID}|${player.squadID}`) || (player.squadID ? `${player.squadID}队（未命名）` : "未加入小队"); }
+function squadName(player: any): string {
+  const key = `${player.teamID}|${player.squadID}`;
+  const resolvedName = squadMap.value.get(key);
+  return resolvedName || (player.squadID ? `${player.squadID}队（未命名）` : "未加入小队");
+}
 function memberSort(a: any, b: any) { return fireRank(a.fireTeam) - fireRank(b.fireTeam) || Number(b.isLeader) - Number(a.isLeader) || a.name.localeCompare(b.name, "zh-CN"); }
 function fireRank(value: string) { return value === "A" ? 0 : value === "B" ? 1 : value === "C" ? 2 : 3; }
 function readSeconds(row: any) { const value = Number(row?.game_seconds ?? row?.gameSeconds ?? row?.steam_game_seconds ?? row?.steamGameSeconds); return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null; }
