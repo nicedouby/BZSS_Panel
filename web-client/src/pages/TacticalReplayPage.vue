@@ -25,13 +25,19 @@
     <section v-else class="replay-grid">
       <aside class="session-rail panel">
         <div class="panel-heading"><div><span class="panel-kicker">ARCHIVE</span><h2>对局档案</h2></div><span class="count-badge">{{ sessions.length }}</span></div>
-        <label class="search-box"><span>⌕</span><input v-model="searchText" type="search" placeholder="搜索地图或图层" /></label>
+        <div class="archive-tools">
+          <label class="search-box"><span>⌕</span><input v-model="searchText" type="search" placeholder="搜索地图或图层" /></label>
+          <label class="duration-filter"><span>时长</span><select v-model="durationFilter"><option value="all">全部</option><option value="short">少于 1 分钟</option><option value="1-5">1–5 分钟</option><option value="5-15">5–15 分钟</option><option value="15-30">15–30 分钟</option><option value="long">超过 30 分钟</option></select></label>
+        </div>
         <div class="session-list">
-          <button v-for="item in filteredSessions" :key="item.id" type="button" class="session-card" :class="{ selected: item.id === (activeSession && activeSession.id), unreadable: item.isPlayable === false }" :disabled="item.isPlayable === false" @click="selectSession(item)">
+          <div v-for="item in filteredSessions" :key="item.id" class="session-card" :class="{ selected: item.id === (activeSession && activeSession.id), unreadable: item.isPlayable === false }">
+            <button type="button" class="session-select" :disabled="item.isPlayable === false" @click="selectSession(item)">
             <span class="session-status" :class="item.status"></span>
-            <span class="session-body"><strong>{{ item.map || (item.isPlayable === false ? "异常档案" : "未知地图") }}</strong><small>{{ item.archiveError || item.layer || "未记录图层" }}</small><em><span>{{ formatDate(item.startedAt) }}</span><span>{{ formatDuration(item.durationMs) }}</span></em></span>
+            <span class="session-body"><strong>{{ item.map || (item.isPlayable === false ? "异常档案" : "未知地图") }}</strong><small>{{ item.archiveError || item.layer || "未记录图层" }}</small><em><span>{{ formatDate(item.startedAt) }}</span><span>{{ formatDuration(item.durationMs) }} · {{ formatBytes(item.sizeBytes) }}</span></em></span>
             <span class="session-arrow">›</span>
-          </button>
+            </button>
+            <button v-if="item.status !== 'recording' && item.isPlayable !== false" type="button" class="delete-session-button" title="删除此快照" aria-label="删除此快照" @click.stop="deleteSession(item)">×</button>
+          </div>
           <p v-if="!filteredSessions.length" class="muted-empty">没有匹配的档案</p>
         </div>
       </aside>
@@ -45,6 +51,7 @@
         <div v-if="!isPlayerMode" class="session-overview">
           <span><small>录制时间</small><b>{{ activeSession ? formatDate(activeSession.startedAt) : "--" }}</b></span>
           <span><small>回放时长</small><b>{{ activeSession ? formatDuration(activeSession.durationMs) : "--:--" }}</b></span>
+          <span><small>档案大小</small><b>{{ activeSession ? formatBytes(activeSession.sizeBytes) : "--" }}</b></span>
           <span><small>档案状态</small><b :class="{ recording: activeSession && activeSession.status === 'recording' }">{{ activeSession && activeSession.status === "recording" ? "录制中" : "可播放" }}</b></span>
         </div>
 
@@ -150,7 +157,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiGet } from "../app/apiClient";
+import { apiDelete, apiGet } from "../app/apiClient";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
@@ -158,7 +165,7 @@ import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
 import { resolveRoleIcon, type RoleIconInfo } from "../utils/role-icons";
 
-interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; isPlayable?: boolean; archiveError?: string; }
+interface ReplaySession { id: string; map?: string; layer?: string; status?: string; durationMs?: number; startedAt?: string; sizeBytes?: number; isPlayable?: boolean; archiveError?: string; }
 interface ReplayPosition { x: number; y: number; z?: number; }
 interface ReplayPlayer { key: string; name: string; teamId: number | null; squadId: number | null; role: string; roleInfo: RoleIconInfo; isLeader: boolean; health: number | null; ping: number | null; kills: number | null; wounds: number | null; deaths: number | null; yaw: number | null; position: ReplayPosition | null; positionText: string; mapX: number; mapY: number; hasPosition: boolean; }
 
@@ -171,6 +178,7 @@ const state = ref<Record<string, any> | null>(null);
 const status = ref<Record<string, any> | null>(null);
 const selectedPlayer = ref<ReplayPlayer | null>(null);
 const searchText = ref("");
+const durationFilter = ref("all");
 const currentMs = ref(0);
 const playing = ref(false);
 const playbackRate = ref(1);
@@ -201,7 +209,17 @@ const MANUAL_SEEK_DELAY_MS = 140;
 
 const filteredSessions = computed(() => {
   const query = searchText.value.trim().toLocaleLowerCase();
-  return query ? sessions.value.filter((item) => (String(item.map || "") + " " + String(item.layer || "")).toLocaleLowerCase().includes(query)) : sessions.value;
+  return sessions.value.filter((item) => {
+    const matchesQuery = !query || (String(item.map || "") + " " + String(item.layer || "")).toLocaleLowerCase().includes(query);
+    const minutes = Number(item.durationMs || 0) / 60_000;
+    const matchesDuration = durationFilter.value === "all"
+      || (durationFilter.value === "short" && minutes < 1)
+      || (durationFilter.value === "1-5" && minutes >= 1 && minutes < 5)
+      || (durationFilter.value === "5-15" && minutes >= 5 && minutes < 15)
+      || (durationFilter.value === "15-30" && minutes >= 15 && minutes <= 30)
+      || (durationFilter.value === "long" && minutes > 30);
+    return matchesQuery && matchesDuration;
+  });
 });
 const archiveRootDir = computed(() => String(status.value && status.value.rootDir || ""));
 const durationMs = computed(() => Math.max(1, Number((activeSession.value && activeSession.value.durationMs) || (state.value && state.value.session && state.value.session.durationMs) || 1)));
@@ -288,6 +306,13 @@ function numberOrNull(value: any) { const n = Number(value); return Number.isFin
 function round(value: any) { const n = Number(value); return Number.isFinite(n) ? Math.round(n) : "--"; }
 function formatClock(value: any) { const total = Math.max(0, Math.floor(Number(value || 0) / 1000)); return String(Math.floor(total / 60)).padStart(2, "0") + ":" + String(total % 60).padStart(2, "0"); }
 function formatDuration(value: any) { return Number(value) > 0 ? formatClock(value) : "--:--"; }
+function formatBytes(value: any) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "大小未知";
+  if (bytes < 1024 * 1024) return Math.max(1, Math.round(bytes / 1024)) + " KB";
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(bytes < 100 * 1024 * 1024 ? 1 : 0) + " MB";
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
 function formatDate(value: any) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "未知时间" : date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 
 function updateViewportSize() {
@@ -436,6 +461,23 @@ async function selectSession(session: ReplaySession) {
     }
   }
 }
+async function deleteSession(session: ReplaySession) {
+  if (session.status === "recording") return;
+  if (!window.confirm(`确定删除这场 ${session.map || "未知地图"} 的回放快照吗？删除后无法恢复。`)) return;
+  try {
+    errorText.value = "";
+    await apiDelete<any>("/api/tactical-replay/sessions/" + encodeURIComponent(session.id));
+    if (activeSession.value?.id === session.id) {
+      playing.value = false;
+      activeSession.value = null;
+      state.value = null;
+      selectedPlayer.value = null;
+    }
+    sessions.value = sessions.value.filter((item) => item.id !== session.id);
+  } catch (error: any) {
+    errorText.value = error?.message || "删除回放快照失败";
+  }
+}
 async function loadState(atMs: number) {
   if (!activeSession.value) return;
   const sessionId = activeSession.value.id;
@@ -520,17 +562,23 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .archive-path { display: block; max-width: min(100%, 720px); margin: 12px auto; overflow: auto; padding: 8px 10px; border: 1px solid rgba(150,190,211,.14); border-radius: 7px; color: #89a9b9; background: rgba(4,15,26,.45); font-size: 11px; text-align: left; }
 .error-banner { padding: 12px 14px; margin-bottom: 18px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 10px; }
 .panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 24px 80px rgba(0,0,0,.2); border-radius: 16px; }
-.replay-grid { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 15px; align-items: start; min-height: 650px; }
+.replay-grid { display: grid; grid-template-columns: minmax(320px, 380px) minmax(0, 1fr); gap: 15px; align-items: start; min-height: 650px; }
 .is-player-mode .replay-grid { grid-template-columns: 240px minmax(0, 1fr) 220px; min-height: calc(100vh - 180px); }
 .session-rail, .inspector { padding: 16px; min-height: 640px; }
 .session-rail { position: sticky; top: 14px; }
 .panel-heading, .stage-heading, .timeline-topline, .timeline-controls, .selected-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel-heading h2, .stage-heading h2 { margin: 5px 0 0; font-size: 17px; }
 .count-badge { min-width: 25px; padding: 4px 7px; text-align: center; border-radius: 7px; background: rgba(65,151,191,.18); color: #9bcee2; font-size: 12px; }
-.search-box { display: flex; gap: 8px; align-items: center; padding: 9px 10px; margin: 17px 0 12px; border: 1px solid rgba(150,190,211,.14); border-radius: 9px; color: #7a9ab0; background: rgba(5,15,26,.5); }
+.archive-tools { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 8px; margin: 17px 0 12px; }
+.search-box { display: flex; gap: 8px; align-items: center; padding: 9px 10px; border: 1px solid rgba(150,190,211,.14); border-radius: 9px; color: #7a9ab0; background: rgba(5,15,26,.5); }
 .search-box input { width: 100%; border: 0; outline: 0; color: #e8f0fb; background: transparent; font-size: 12px; }
+.duration-filter { display: grid; gap: 4px; color: #6f8da0; font-size: 10px; }
+.duration-filter select { min-width: 0; padding: 8px 7px; border: 1px solid rgba(150,190,211,.14); border-radius: 8px; color: #cfe1ee; background: rgba(5,15,26,.7); font-size: 10px; }
 .session-list { display: grid; gap: 7px; max-height: calc(100vh - 300px); overflow: auto; }
-.session-card { display: grid; grid-template-columns: 8px minmax(0,1fr) auto; gap: 9px; width: 100%; padding: 11px 9px; text-align: left; color: #bad0df; border: 1px solid transparent; border-radius: 10px; background: rgba(4,13,24,.34); cursor: pointer; }
+.session-card { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 24px; width: 100%; padding: 0; text-align: left; color: #bad0df; border: 1px solid transparent; border-radius: 10px; background: rgba(4,13,24,.34); }
+.session-select { display: grid; grid-template-columns: 8px minmax(0,1fr) auto; gap: 9px; min-width: 0; padding: 11px 4px 11px 9px; text-align: left; color: inherit; border: 0; background: transparent; cursor: pointer; }
+.delete-session-button { align-self: center; width: 22px; height: 22px; margin-right: 3px; padding: 0; border: 1px solid transparent; border-radius: 6px; color: #7692a2; background: transparent; cursor: pointer; font-size: 17px; line-height: 1; }
+.delete-session-button:hover { border-color: rgba(248,113,113,.42); color: #ff8d95; background: rgba(127,29,29,.28); }
 .session-card:hover, .session-card.selected { border-color: rgba(71,211,165,.45); background: rgba(23,81,79,.25); }
 .session-card.unreadable { cursor: not-allowed; opacity: .58; }
 .session-card.unreadable:hover { border-color: rgba(248,113,113,.45); background: rgba(127,29,29,.18); }
@@ -549,7 +597,7 @@ onBeforeUnmount(() => { stateLoadToken += 1; playbackLastTickAt = 0; if (animati
 .stage-metrics span { display: grid; gap: 3px; text-align: right; }
 .stage-metrics b { color: #eaf7f5; font-size: 16px; }
 .stage-metrics small { color: #6f8d9e; font-size: 10px; }
-.session-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; margin-top: 16px; padding: 10px; border: 1px solid rgba(136,190,205,.13); border-radius: 11px; background: rgba(4,15,26,.38); }
+.session-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 16px; padding: 10px; border: 1px solid rgba(136,190,205,.13); border-radius: 11px; background: rgba(4,15,26,.38); }
 .session-overview > span { display: grid; gap: 4px; min-width: 0; padding: 5px 7px; }
 .session-overview small { color: #6e8c9e; font-size: 10px; }
 .session-overview b { overflow: hidden; color: #dcecf2; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
