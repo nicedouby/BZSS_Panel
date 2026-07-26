@@ -520,7 +520,15 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       });
     }
 
-    const roster = normalizeShuffleRoster(request.players ?? request.roster);
+    const rawRoster = request.players ?? request.roster;
+    const roster = normalizeShuffleRoster(
+      Array.isArray(rawRoster)
+        ? rawRoster.map((player) => ({
+            ...player,
+            teamId: player?.teamId ?? player?.fromTeamId ?? player?.teamID,
+          }))
+        : rawRoster,
+    );
     const moves = interleaveShuffleMoves(
       roster
         .map((player) => ({
