@@ -21,6 +21,7 @@ export function createTacticalReplayPlayerModule(context) {
     nativeReads: 0,
     lastReadAt: "",
     lastError: "",
+    closedSessionSizeCache: new Map(),
   };
 
   const api = {
@@ -38,17 +39,17 @@ export function createTacticalReplayPlayerModule(context) {
       };
     },
 
-    listSessions: (options) => listSessions(settings, legacy.api, options),
+    listSessions: (options) => listSessions(settings, legacy.api, options, state.closedSessionSizeCache),
 
-    getSession: (sessionId) => getSession(settings, legacy.api, sessionId),
+    getSession: (sessionId) => getSession(settings, legacy.api, sessionId, state.closedSessionSizeCache),
 
-    removeSession: (sessionId) => removeSession(settings, legacy.api, sessionId),
+    removeSession: (sessionId) => removeSession(settings, legacy.api, sessionId, state.closedSessionSizeCache),
 
     async readState(sessionId, options = {}) {
       state.reads += 1;
       state.lastReadAt = new Date().toISOString();
       try {
-        const session = await getSession(settings, legacy.api, sessionId);
+        const session = await getSession(settings, legacy.api, sessionId, state.closedSessionSizeCache);
         if (!session) return null;
         if (session.format !== FORMAT) {
           return await legacy.api?.readState?.(sessionId, options) ?? null;
@@ -90,7 +91,7 @@ export function createTacticalReplayPlayerModule(context) {
   };
 }
 
-async function listSessions(settings, legacyApi, { limit = 100 } = {}) {
+async function listSessions(settings, legacyApi, { limit = 100 } = {}, sizeCache = new Map()) {
   await fs.mkdir(settings.rootDir, { recursive: true });
   const entries = await fs.readdir(settings.rootDir, { withFileTypes: true });
   const sessions = [];
@@ -100,7 +101,7 @@ async function listSessions(settings, legacyApi, { limit = 100 } = {}) {
     try {
       const metadata = await readSessionMetadata(path.join(settings.rootDir, entry.name));
       if (metadata?.format === FORMAT) {
-        sessions.push(await buildNativeSession(settings.rootDir, entry.name, metadata));
+        sessions.push(await buildNativeSession(settings.rootDir, entry.name, metadata, sizeCache));
         continue;
       }
       const legacySession = await legacyApi?.getSession?.(entry.name);
@@ -120,22 +121,26 @@ async function listSessions(settings, legacyApi, { limit = 100 } = {}) {
   return sessions.slice(0, clampInteger(limit, 1, 1000, 100));
 }
 
-async function getSession(settings, legacyApi, sessionId) {
+async function getSession(settings, legacyApi, sessionId, sizeCache = new Map()) {
   const safeId = validateSessionId(sessionId);
   const directory = await resolveSessionDirectory(settings.rootDir, safeId);
   if (!directory) return null;
 
   const metadata = await readSessionMetadata(directory);
   if (metadata?.format === FORMAT) {
-    return buildNativeSession(settings.rootDir, path.basename(directory), metadata);
+    return buildNativeSession(settings.rootDir, path.basename(directory), metadata, sizeCache);
   }
   return await legacyApi?.getSession?.(sessionId) ?? null;
 }
 
-async function buildNativeSession(rootDir, directoryName, metadata) {
+async function buildNativeSession(rootDir, directoryName, metadata, sizeCache = new Map()) {
   const directory = path.join(rootDir, directoryName);
   const segmentNames = await listNativeSegments(directory);
-  const sizeBytes = await getDirectorySize(directory);
+  // Closed archives are immutable. Reusing their measured size prevents every
+  // refresh from recursively stat-ing every historical JSONL segment.
+  const sizeBytes = directoryName.endsWith(".open")
+    ? await getDirectorySize(directory)
+    : await getCachedDirectorySize(directory, sizeCache);
   const startedMs = Date.parse(metadata?.startedAt ?? "");
   const endedMs = Date.parse(metadata?.endedAt ?? "");
   const durationMs = Number.isFinite(Number(metadata?.durationMs))
@@ -164,7 +169,7 @@ async function buildNativeSession(rootDir, directoryName, metadata) {
   };
 }
 
-async function removeSession(settings, legacyApi, sessionId) {
+async function removeSession(settings, legacyApi, sessionId, sizeCache = new Map()) {
   const safeId = validateSessionId(sessionId);
   const directory = await resolveSessionDirectory(settings.rootDir, safeId);
   if (!directory) return null;
@@ -183,6 +188,7 @@ async function removeSession(settings, legacyApi, sessionId) {
     sizeBytes: await getDirectorySize(directory),
   };
   await fs.rm(directory, { recursive: true, force: false });
+  sizeCache.delete(directory);
   return removed;
 }
 
@@ -351,6 +357,16 @@ async function listNativeSegments(directory) {
     .filter((entry) => entry.isFile() && SEGMENT_PATTERN.test(entry.name))
     .map((entry) => entry.name)
     .sort();
+}
+
+async function getCachedDirectorySize(directory, sizeCache) {
+  const info = await fs.stat(directory);
+  const cached = sizeCache.get(directory);
+  const modifiedAt = Number(info.mtimeMs ?? 0);
+  if (cached && cached.modifiedAt === modifiedAt) return cached.sizeBytes;
+  const sizeBytes = await getDirectorySize(directory);
+  sizeCache.set(directory, { modifiedAt, sizeBytes });
+  return sizeBytes;
 }
 
 async function getDirectorySize(directory) {
