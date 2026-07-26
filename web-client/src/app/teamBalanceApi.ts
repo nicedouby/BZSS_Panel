@@ -85,7 +85,11 @@ export interface TeamShufflePlanResponse {
     };
   } | null;
   plan: {
+    planId?: string;
+    roundKey?: string;
     generatedAt: string;
+    expiresAt?: string | null;
+    executedAt?: string | null;
     mode: string;
     players: TeamShufflePlanPlayer[];
     moves: TeamShufflePlanPlayer[];
@@ -101,6 +105,11 @@ export interface TeamShufflePlanResponse {
 
 export interface TeamShuffleExecuteResponse {
   ok: boolean;
+  accepted?: boolean;
+  duplicate?: boolean;
+  planId?: string;
+  roundKey?: string;
+  batch?: TeamBalanceBatch | null;
   type: string;
   action: string;
   source: string;
@@ -200,6 +209,9 @@ export function createPlaytimeShufflePlan(payload: {
 }
 
 export function executeTeamShufflePlan(payload: {
+  planId: string;
+  roundKey?: string;
+  clientRequestId?: string;
   source?: string;
   reason?: string;
   algorithm?: string;
