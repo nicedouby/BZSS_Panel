@@ -431,6 +431,16 @@ function normalizeBoolean(value, fallback = false) {
   return fallback;
 }
 
+function cloneValue(value) {
+  if (value == null || typeof value !== "object") return value;
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(value);
+    } catch {}
+  }
+  return JSON.parse(JSON.stringify(value));
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
