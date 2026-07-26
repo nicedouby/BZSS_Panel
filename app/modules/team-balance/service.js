@@ -656,12 +656,11 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
 
   function getCurrentMatchContext() {
     const state = modules?.matchState?.api?.getState?.() ?? {};
-    const serverId = normalizeText(
-      state?.serverId
-      ?? core?.webStatus?.serverId
-      ?? core?.webStatus?.getSnapshot?.()?.serverId
-      ?? "",
-    );
+    const serverId = normalizeText(state?.serverId)
+      || normalizeText(state?.serverStatus?.serverId)
+      || normalizeText(core?.webStatus?.serverId)
+      || normalizeText(core?.webStatus?.getSnapshot?.()?.serverId)
+      || "";
     const round = state?.round?.current ?? {};
     const latestRound = Array.isArray(state?.round?.history) ? state.round.history.at(-1) ?? {} : {};
     const roundAnchor = [
@@ -678,8 +677,8 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       // Map/layer is the stable identity available during that window.
       "warmup",
     ].map(normalizeText).find(Boolean) || "warmup";
-    const map = normalizeText(state?.match?.map ?? state?.serverStatus?.map);
-    const layer = normalizeText(state?.match?.layer ?? state?.serverStatus?.layer);
+    const map = normalizeText(state?.match?.map) || normalizeText(state?.serverStatus?.map);
+    const layer = normalizeText(state?.match?.layer) || normalizeText(state?.serverStatus?.layer);
     const phase = normalizeText(state?.match?.phase).toLowerCase() || "unknown";
     const rawPlaytime = state?.match?.playtime ?? state?.serverStatus?.playtime;
     const playtime = Number(rawPlaytime);
@@ -694,7 +693,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
 
   function getShuffleGate() {
     const context = getCurrentMatchContext();
-    if (!context.serverId || context.roundKey.endsWith("|no-round")) {
+    if (!context.serverId || context.roundKey.endsWith("|warmup") && context.roundKey.split("|").slice(1, 3).every((value) => !value)) {
       return { ok: false, reason: "round_unavailable", roundKey: context.roundKey, message: "当前没有可识别的对局。" };
     }
     if (context.phase !== "warmup") {
