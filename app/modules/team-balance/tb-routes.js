@@ -5,6 +5,7 @@ const TB_PATH = "/api/tb/force-team-change";
 const RECORDS_PATH = "/api/tb/records";
 const SHUFFLE_PLAN_PATH = "/api/tb/shuffle-plan";
 const SHUFFLE_EXECUTE_PATH = "/api/tb/shuffle-execute";
+const BATCH_CREATE_PATH = "/api/tb/force-team-change-batch";
 const BATCHES_PATH = "/api/tb/force-team-change-batches";
 
 export async function handleTbRoutes({
@@ -19,9 +20,11 @@ export async function handleTbRoutes({
   const batchDetailMatch = url.pathname.match(/^\/api\/tb\/force-team-change-batches\/([^/]+)$/);
   const batchCancelMatch = url.pathname.match(/^\/api\/tb\/force-team-change-batches\/([^/]+)\/cancel$/);
   const isBatchCollection = url.pathname === BATCHES_PATH;
+  const isBatchCreate = url.pathname === BATCH_CREATE_PATH;
 
   if (
     !isBatchCollection
+    && !isBatchCreate
     && !batchDetailMatch
     && !batchCancelMatch
     && url.pathname !== TB_PATH
@@ -51,7 +54,7 @@ export async function handleTbRoutes({
       return true;
     }
 
-    if (isBatchCollection && req.method === "POST") {
+    if ((isBatchCollection || isBatchCreate) && req.method === "POST") {
       const body = (await readJsonBody(req)) ?? {};
       const result = typeof teamBalance.createForceTeamChangeBatch === "function"
         ? teamBalance.createForceTeamChangeBatch({
