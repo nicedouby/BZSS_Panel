@@ -143,8 +143,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
             system: true,
           });
 
-          const success = result?.success !== false
-            && result?.ok !== false
+          const success = Boolean(result?.success ?? result?.ok ?? false)
             && result?.skipped !== true;
 
           if (success) {
