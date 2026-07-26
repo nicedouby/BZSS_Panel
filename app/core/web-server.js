@@ -6464,7 +6464,7 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
 
   for (const item of Array.isArray(guard?.recent) ? guard.recent : []) {
     const status = String(item.status ?? "").trim();
-    if (status !== "violation" && status !== "handled" && status !== "error") continue;
+    if (!["violation", "handled", "error", "population_skipped", "queued", "classification_missing", "audit_only"].includes(status)) continue;
     const key = buildTrackingKey({
       serverId: item.serverId ?? item.event?.serverId ?? "",
       matchId: item.matchId ?? item.event?.matchId ?? "",
@@ -6484,10 +6484,18 @@ function buildSquadNameTrackingRecords({ guard, stepwise, fair, ruleChain, lifec
       creatorSteamId: item.event?.creatorSteamId ?? item.event?.creatorSteamID ?? item.event?.steamId ?? item.event?.steamID ?? "",
       source: "squad_name_rule",
       stage: "squad_name",
-      status: "violation",
-      decisionLabel: "队名违规",
-      decisionTone: "danger",
-      reason: item.reason ?? "",
+      status,
+      decisionLabel: status === "handled"
+        ? "队名违规（已处置）"
+        : status === "population_skipped"
+          ? "队名违规（人数未达处置门槛）"
+          : status === "queued"
+            ? "队名违规（等待规则链）"
+            : status === "error"
+              ? "队名违规（处置失败）"
+              : "队名违规",
+      decisionTone: status === "handled" ? "danger" : (status === "error" ? "danger" : "warning"),
+      reason: item.error ?? item.reason ?? "",
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       actions: Array.isArray(item.actions) ? item.actions.map((action) => action.type).filter(Boolean) : [],
