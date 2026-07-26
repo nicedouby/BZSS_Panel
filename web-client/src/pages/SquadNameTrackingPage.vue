@@ -1707,7 +1707,6 @@ async function openWhitelistDialog(source: WhitelistSource) {
 
   whitelistError.value = "";
   try {
-    await ensureWhitelistRulesLoaded();
     whitelistDraft.squadName = squadName;
     whitelistDraft.nature = getWhitelistNature(squadName)
       ?? normalizeNature(source.squadNature)
@@ -1743,15 +1742,19 @@ async function saveWhitelistEntry() {
   whitelistError.value = "";
 
   try {
-    const nextRules = normalizeWhitelistRules(whitelistRules.value ?? undefined);
-    removeWhitelistName(nextRules, squadName);
-    nextRules[whitelistDraft.nature].push(squadName);
-
-    const payload = await apiPost<WhitelistRulesResponse>("/api/squad-name/rules", {
-      exactRules: nextRules,
+    const payload = await apiPost<{
+      ok: boolean;
+      policyRevision: number;
+      evaluation?: { valid?: boolean };
+    }>("/api/squad-name-policy/whitelist", {
+      name: squadName,
+      nature: whitelistDraft.nature,
+      allowSquadSuffix: true,
     });
+    if (!payload.ok || payload.evaluation?.valid !== true) {
+      throw new Error("保存后回验失败，队名规范尚未识别该名称。");
+    }
 
-    whitelistRules.value = normalizeWhitelistRules(payload.exactRules ?? nextRules);
     whitelistModalOpen.value = false;
     ui.pushToast({
       title: "白名单已更新",
