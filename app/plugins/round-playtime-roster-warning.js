@@ -133,6 +133,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     const current = clock();
     if (!current.trusted) return publicState();
+    if (state.blockedRoundKey) {
+      if (current.roundKey === state.blockedRoundKey) return publicState();
+      state.blockedRoundKey = "";
+    }
+    if (state.roundKey !== current.roundKey) {
+      resetRound(current.roundKey);
+      state.lastClockSeconds = current.seconds;
+      state.clockInitialized = true;
+      await saveState();
+      return publicState();
+    }
     if (!state.clockInitialized) {
       state.lastClockSeconds = current.seconds;
       state.clockInitialized = true;
@@ -144,14 +155,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (current.seconds < previousSeconds) {
       await saveState();
       return publicState();
-    }
-    if (state.blockedRoundKey) {
-      if (current.roundKey === state.blockedRoundKey) return publicState();
-      state.blockedRoundKey = "";
-    }
-    if (state.roundKey !== current.roundKey) {
-      resetRound(current.roundKey);
-      await saveState();
     }
     const crossedSquadThreshold = previousSeconds < cfg.squadWarningSeconds
       && current.seconds >= cfg.squadWarningSeconds;
