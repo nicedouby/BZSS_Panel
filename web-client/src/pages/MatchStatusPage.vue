@@ -1847,7 +1847,7 @@ async function refreshOnlinePlaytime(force = false) {
   };
 
   try {
-    const job = await apiPost<PlaytimeJobViewModel>("/api/playtime/online/refresh", {
+    const job = await apiPost<PlaytimeJobViewModel>("/api/jobs/playtime-refresh-online", {
       waitMs: 0,
       force,
     });
