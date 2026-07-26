@@ -138,6 +138,20 @@ async function testForceTeamChangeRejectsMissingSteamId() {
 async function testCreatePlaytimeShufflePlanRecordsWithoutRcon() {
   let dispatchCalled = false;
   const service = createService({
+    modules: {
+      matchState: {
+        api: {
+          getState() {
+            return {
+              serverId: "server-1",
+              match: { map: "Map", layer: "Layer", phase: "warmup", playtime: 0 },
+              serverStatus: { map: "Map", layer: "Layer", playtime: 0 },
+              round: { current: { worldPath: "round-1" }, lastAcceptedAt: "round-1" },
+            };
+          },
+        },
+      },
+    },
     core: {
       logger: createNoopLogger(),
       rconManager: {
@@ -566,5 +580,114 @@ await testBatchManagerSerializesItemsAndIsIdempotent();
 await testBatchManagerSkipsStateAndDoesNotRetryTimeout();
 await testBatchManagerCancellationStopsRemainingItems();
 await testBatchRouteReturnsAcceptedBeforeExecution();
+
+
+async function testShufflePlanHasIdentityAndAsyncExecution() {
+  const commands = [];
+  const state = {
+    serverId: "server-1",
+    match: { map: "Map", layer: "Layer", phase: "warmup", playtime: 0 },
+    serverStatus: { map: "Map", layer: "Layer", playtime: 0 },
+    round: { current: { worldPath: "round-1" }, lastAcceptedAt: "round-1" },
+  };
+  const service = createService({
+    modules: {
+      matchState: { api: { getState: () => state } },
+      playerState: {
+        api: {
+          getPlayerBySteamID(_serverId, steamId) {
+            return { steamID: steamId, teamID: steamId === "steam-1" ? 1 : 2 };
+          },
+        },
+      },
+    },
+    core: {
+      logger: createNoopLogger(),
+      webStatus: { serverId: "server-1" },
+      rconManager: {
+        async dispatchCommand(payload) {
+          commands.push(payload);
+          return { success: true, rconExecuted: true, rconResponse: "OK", message: "OK" };
+        },
+      },
+    },
+  });
+  const operator = { id: "admin", name: "Admin", username: "Admin", isSuperAdmin: true, permissions: ["*"] };
+  const players = [
+    { steamId: "steam-1", playerName: "One", teamId: 1, playtimeSeconds: 1 },
+    { steamId: "steam-2", playerName: "Two", teamId: 2, playtimeSeconds: 2 },
+  ];
+
+  const plan = await service.api.createPlaytimeShufflePlan({ operator, algorithm: "random_even", players });
+  assert.equal(plan.ok, true);
+  assert.ok(plan.plan.planId);
+  assert.ok(plan.plan.roundKey);
+
+  const accepted = await service.api.executeShufflePlan({
+    operator,
+    planId: plan.plan.planId,
+    roundKey: plan.plan.roundKey,
+    players: plan.plan.moves,
+  });
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.accepted, true);
+  assert.equal(accepted.batch.status, "queued");
+
+  const duplicate = await service.api.executeShufflePlan({
+    operator,
+    planId: plan.plan.planId,
+    roundKey: plan.plan.roundKey,
+    players: plan.plan.moves,
+  });
+  assert.equal(duplicate.ok, true);
+  assert.equal(duplicate.duplicate, true);
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(commands.length, 1);
+  assert.equal(commands[0].batchId, accepted.batch.id);
+}
+
+async function testShuffleGateStopsAfterMatchStart() {
+  const state = {
+    serverId: "server-1",
+    match: { map: "Map", layer: "Layer", phase: "warmup", playtime: 0 },
+    serverStatus: { map: "Map", layer: "Layer", playtime: 0 },
+    round: { current: { worldPath: "round-1" }, lastAcceptedAt: "round-1" },
+  };
+  const service = createService({
+    modules: {
+      matchState: { api: { getState: () => state } },
+      playerState: {
+        api: { getPlayerBySteamID: () => ({ teamID: 1 }) },
+      },
+    },
+    core: {
+      logger: createNoopLogger(),
+      webStatus: { serverId: "server-1" },
+      rconManager: { async dispatchCommand() { return { success: true }; } },
+    },
+  });
+  const operator = { id: "admin", name: "Admin", username: "Admin", isSuperAdmin: true, permissions: ["*"] };
+  const plan = await service.api.createPlaytimeShufflePlan({
+    operator,
+    players: [
+      { steamId: "steam-1", playerName: "One", teamId: 1, playtimeSeconds: 1 },
+      { steamId: "steam-2", playerName: "Two", teamId: 2, playtimeSeconds: 2 },
+    ],
+  });
+  state.match.phase = "in_progress";
+  state.match.playtime = 1;
+  const result = await service.api.executeShufflePlan({
+    operator,
+    planId: plan.plan.planId,
+    roundKey: plan.plan.roundKey,
+    players: plan.plan.moves,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "ShuffleUnavailable");
+}
+
+await testShufflePlanHasIdentityAndAsyncExecution();
+await testShuffleGateStopsAfterMatchStart();
 
 console.log("team balance tests passed");
