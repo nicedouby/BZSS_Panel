@@ -210,6 +210,33 @@
       </div>
     </div>
 
+    <section v-if="batchTeamChange" class="batch-team-change-progress-card">
+      <div class="batch-team-change-progress-head">
+        <strong>批量跳边{{ batchTeamChange.status === "running" ? "进行中" : "任务" }}</strong>
+        <span>{{ batchTeamChange.id }}</span>
+      </div>
+      <div class="batch-team-change-progress-stats">
+        <span>总数：{{ batchTeamChange.total }}</span>
+        <span>成功：{{ batchTeamChange.succeeded }}</span>
+        <span>失败：{{ batchTeamChange.failed }}</span>
+        <span>跳过：{{ batchTeamChange.skipped }}</span>
+        <span>剩余：{{ Math.max(0, batchTeamChange.total - batchTeamChange.completed) }}</span>
+      </div>
+      <div v-if="batchTeamChange.currentPlayer" class="batch-team-change-current">
+        当前：{{ batchTeamChange.currentPlayer.playerName || batchTeamChange.currentPlayer.steamId }}
+      </div>
+      <div class="batch-team-change-progress-actions">
+        <AppButton
+          v-if="batchTeamChange.status === 'queued' || batchTeamChange.status === 'running'"
+          variant="ghost"
+          :disabled="batchTeamChange.cancelRequested === true"
+          @click="handleCancelBatchTeamChange"
+        >
+          {{ batchTeamChange.cancelRequested ? "取消中..." : "取消任务" }}
+        </AppButton>
+      </div>
+    </section>
+
     <!-- 批量操作悬浮条 -->
     <transition name="bar-slide">
       <StickyActionBar v-if="multiSelectMode && selectedPlayers.length > 0" class="batch-action-bar batch-action-bar--compact">
@@ -226,8 +253,12 @@
           <AppButton variant="danger" @click="handleBatchKick">
             批量 Kick
           </AppButton>
-          <AppButton variant="primary" @click="handleBatchForceTeamChange">
-            批量跳边
+          <AppButton
+            variant="primary"
+            :disabled="batchTeamChangeSubmitting"
+            @click="handleBatchForceTeamChange"
+          >
+            {{ batchTeamChangeSubmitting ? "提交中..." : "批量跳边" }}
           </AppButton>
           <div class="batch-divider"></div>
           <AppButton variant="ghost" @click="clearBatchSelection">
@@ -254,7 +285,12 @@ import { useServerStore } from "../stores/server.store";
 import { useMatchStore } from "../stores/match.store";
 import { useJobStore } from "../stores/job.store";
 import { useUiStore } from "../stores/ui.store";
-import { forceTeamChange } from "../app/teamBalanceApi";
+import {
+  createForceTeamChangeBatch,
+  listForceTeamChangeBatches,
+  getForceTeamChangeBatch,
+  cancelForceTeamChangeBatch,
+} from "../app/teamBalanceApi";
 import { warnPlayer, kickPlayer } from "../app/squadManagementApi";
 import {
   adaptTeam,
@@ -437,6 +473,9 @@ let battleStatsRefreshIdleHandle: number | null = null;
 
 const multiSelectMode = ref(false);
 const selectedPlayerIds = ref<Set<string | number>>(new Set());
+const batchTeamChangeSubmitting = ref(false);
+const batchTeamChange = ref<any>(null);
+let batchTeamChangePollTimer: ReturnType<typeof setInterval> | null = null;
 
 const selectedPlayers = computed(() => {
   const list: PlayerRowViewModel[] = [];
@@ -855,10 +894,16 @@ function handleVisibilityChange() {
 onMounted(() => {
   pageHidden.value = typeof document !== "undefined" ? document.hidden : false;
   document.addEventListener("visibilitychange", handleVisibilityChange);
+  void restoreBatchTeamChange();
+  batchTeamChangePollTimer = setInterval(() => {
+    if (active.value && !pageHidden.value) void refreshBatchTeamChange();
+  }, 1_000);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  if (batchTeamChangePollTimer) clearInterval(batchTeamChangePollTimer);
+  batchTeamChangePollTimer = null;
   cancelIdleTask(battleStatsRefreshIdleHandle);
   tacticalStateStore.stopStream();
 });
@@ -1354,60 +1399,98 @@ async function handleBatchKick() {
 }
 
 async function handleBatchForceTeamChange() {
-  if (selectedPlayers.value.length === 0) return;
+  if (batchTeamChangeSubmitting.value || selectedPlayers.value.length === 0) return;
 
   const confirmed = await ui.openConfirm({
-    title: "???????",
-    message: `??????? ${selectedPlayers.value.length} ???????????`,
+    title: "确认批量跳边",
+    message: `将为 ${selectedPlayers.value.length} 名玩家创建一个后台批量任务。任务会逐条执行，不会阻塞页面。`,
     tone: "warn",
   });
   if (!confirmed) return;
 
   const targets = [...selectedPlayers.value];
-  let successCount = 0;
-  let failCount = 0;
-
-  ui.pushToast({
-    title: "?????",
-    message: `??? ${targets.length} ???????...`,
-    tone: "idle",
-  });
-
-  await Promise.all(
-    targets.map(async (player) => {
-      try {
-        const res = await forceTeamChange({
-          steamId: player.steamId ?? undefined,
+  const clientRequestId = `batch-team-change-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  batchTeamChangeSubmitting.value = true;
+  try {
+    const response = await createForceTeamChangeBatch({
+      clientRequestId,
+      source: "web.matchStatus.batch",
+      reason: "manual_batch_team_balance",
+      players: targets.map((player) => {
+        const fromTeamId = Number(player.teamId);
+        return {
+          playerId: player.playerId ?? null,
+          steamId: String(player.steamId ?? "").trim(),
           playerName: player.name,
-          source: "manual_team_balance",
-          reason: "manual_team_balance",
-          operator: {
-            id: auth.user?.id ?? auth.user?.username ?? "",
-            name: auth.user?.username ?? "",
-            username: auth.user?.username ?? "",
-            role: auth.user?.role ?? "",
-            isSuperAdmin: Boolean(auth.user?.isSuperAdmin),
-            permissions: Array.isArray(auth.user?.permissions) ? auth.user.permissions : [],
-          },
-        });
-        if (res.ok) {
-          successCount++;
-        } else {
-          failCount++;
-        }
-      } catch (e) {
-        failCount++;
-      }
-    })
-  );
+          fromTeamId,
+          targetTeamId: fromTeamId === 1 ? 2 : 1,
+        };
+      }),
+    });
 
-  ui.pushToast({
-    title: "批量跳边完成",
-    message: `成功: ${successCount}，失败: ${failCount}`,
-    tone: failCount > 0 ? "warn" : "ok",
-  });
+    if (!response?.ok || !response.batch) {
+      throw new Error(String((response as any)?.message || "批量任务创建失败"));
+    }
 
-  clearBatchSelection();
+    batchTeamChange.value = response.batch;
+    clearBatchSelection();
+    ui.pushToast({
+      title: "批量任务已提交",
+      message: `已提交 ${response.batch.total} 名玩家，页面将继续正常刷新。`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "批量任务提交失败",
+      message: renderApiError(error, "批量任务提交失败"),
+      tone: "warn",
+    });
+  } finally {
+    batchTeamChangeSubmitting.value = false;
+  }
+}
+
+async function refreshBatchTeamChange() {
+  const id = String(batchTeamChange.value?.id ?? "").trim();
+  if (!id) return;
+  try {
+    const response = await getForceTeamChangeBatch(id);
+    if (response?.ok && response.batch) batchTeamChange.value = response.batch;
+  } catch {
+    // Keep the last known progress; the normal page refresh remains independent.
+  }
+}
+
+async function restoreBatchTeamChange() {
+  try {
+    const response = await listForceTeamChangeBatches();
+    const batches = Array.isArray(response?.batches) ? response.batches : [];
+    const activeBatch = batches.find((batch) => batch.status === "queued" || batch.status === "running");
+    if (activeBatch) batchTeamChange.value = activeBatch;
+  } catch {
+    // Older servers may not have the new endpoint yet.
+  }
+}
+
+async function handleCancelBatchTeamChange() {
+  const id = String(batchTeamChange.value?.id ?? "").trim();
+  if (!id || batchTeamChange.value?.cancelRequested) return;
+  try {
+    const response = await cancelForceTeamChangeBatch(id);
+    if (response?.batch) batchTeamChange.value = response.batch;
+    else batchTeamChange.value = { ...batchTeamChange.value, cancelRequested: true };
+    ui.pushToast({
+      title: "取消请求已提交",
+      message: "当前 RCON 命令会完成，尚未执行的玩家将停止。",
+      tone: "idle",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "取消批量任务失败",
+      message: renderApiError(error, "取消批量任务失败"),
+      tone: "warn",
+    });
+  }
 }
 
 async function handlePlayerPlaytimeUpdated() {
