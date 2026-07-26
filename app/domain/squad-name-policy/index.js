@@ -149,6 +149,49 @@ export function testSquadNamePolicy(rawName, policyOrConfig = null) {
   return evaluateSquadName(rawName, policy);
 }
 
+/**
+ * The only authoritative squad classification entry point.
+ * Consumers must use this result instead of keyword classifiers.
+ */
+export function classifySquadNameWithPolicy(rawName, policyOrConfig = null) {
+  const policy = isPolicyDocument(policyOrConfig)
+    ? normalizePolicyDocument(policyOrConfig, { policyPath: policyOrConfig.policyPath })
+    : loadSquadNamePolicy(policyOrConfig);
+  const evaluation = evaluateSquadName(rawName, policy);
+  const source = "policy_event";
+  const matched = evaluation?.matched ?? {};
+  const evaluated = evaluation?.classification ?? {};
+  const classification = {
+    valid: evaluation.valid === true,
+    source,
+    policyRevision: policy.revision,
+    classificationSource: source,
+    classifiedAt: new Date().toISOString(),
+    typeId: String(evaluated.typeId ?? matched.typeId ?? "other"),
+    typeLabel: String(evaluated.typeLabel ?? evaluated.label ?? matched.typeLabel ?? "其他"),
+    nature: String(evaluated.nature ?? matched.nature ?? "other"),
+    natureLabel: String(
+      evaluated.natureLabel
+      ?? evaluated.label
+      ?? matched.natureLabel
+      ?? matched.typeLabel
+      ?? "其他",
+    ),
+    ruleId: String(evaluated.ruleId ?? matched.id ?? ""),
+    matchedKind: String(matched.matchedKind ?? ""),
+    matchedValue: String(matched.matchedValue ?? ""),
+    effectiveMaxPlayers: evaluated.effectiveMaxPlayers ?? matched.effectiveMaxPlayers ?? null,
+    maxPlayersSource: String(
+      evaluated.maxPlayersSource
+      ?? matched.maxPlayersSource
+      ?? "none",
+    ),
+    assetPath: String(evaluated.assetPath ?? matched.asset ?? ""),
+    ruleExemptions: evaluated.ruleExemptions ?? matched.ruleExemptions ?? {},
+  };
+  return { valid: classification.valid, classification, evaluation, policyRevision: policy.revision };
+}
+
 export function evaluateSquadName(rawName, policy) {
   const input = String(rawName ?? "");
   const normalizedInput = normalizePolicyName(input);
