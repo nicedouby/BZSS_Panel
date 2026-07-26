@@ -289,7 +289,7 @@ async function testWindowRules() {
 
     const allowlisted = await harness.plugin.api.simulateCreation(logCreation({
       squadId: 5,
-      squadName: "INF OK",
+      squadName: "Squad 5",
       creatorName: "Third Leader",
       creatorSteamId: "steam-third-leader",
       creatorEosId: "eos-third-leader",
