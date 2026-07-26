@@ -584,7 +584,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function broadcastViolation(record) {
-    const sender = getBroadcastSender();
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
     if (typeof sender !== "function") {
       return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     }
