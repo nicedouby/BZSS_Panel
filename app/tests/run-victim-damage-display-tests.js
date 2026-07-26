@@ -86,21 +86,21 @@ async function testExplosiveDamageWithoutResolvedAttackerStillDisplays() {
   await plugin.stop();
 }
 
-async function testRejectsAdministrativeAndSelfDamage() {
+async function testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage() {
   const { plugin, warnings } = createHarness();
   await plugin.start();
   await plugin.api.handleCombatEvent({ eventId: "admin", record: damageRecord({ damage: "1000000" }) });
   await plugin.api.handleCombatEvent({ eventId: "wound", record: damageRecord({ type: "wound" }) });
-  await plugin.api.handleCombatEvent({ eventId: "invalid", record: damageRecord({ attacker: { resolved: false, name: "Unknown" } }) });
+  await plugin.api.handleCombatEvent({ eventId: "unresolved", record: damageRecord({ attacker: { resolved: false } }) });
   await plugin.api.handleCombatEvent({ eventId: "self", record: damageRecord({ attacker: { resolved: true, playerId: "victim-id", name: "Victim" } }) });
-  // An unresolved attacker is treated as environment/explosive damage so a
-  // valid victim is not silently denied a damage notification.
-  assert.equal(warnings.length, 1);
+  assert.equal(warnings.length, 3);
+  assert.match(warnings[0].message, /受到 1000000 点伤害/);
+  assert.match(warnings[1].message, /来源：自身\/环境/);
+  assert.match(warnings[2].message, /来源：自身/);
   const state = plugin.api.getState();
-  assert.equal(state.adminPunishmentSkipped, 1);
+  assert.equal(state.adminPunishmentSkipped, 0);
   assert.equal(state.nonDamageSkipped, 1);
-  assert.equal(state.invalidAttackerSkipped, 0);
-  assert.equal(state.selfAttackerSkipped, 1);
+  assert.equal(state.selfAttackerSkipped, 0);
   await plugin.stop();
 }
 
@@ -120,7 +120,7 @@ async function testDedupesAndUnsubscribes() {
 await testStandardDamageAndWeaponCompaction();
 await testFriendlyFallbackBotAndEmptyWeapon();
 await testExplosiveDamageWithoutResolvedAttackerStillDisplays();
-await testRejectsAdministrativeAndSelfDamage();
+await testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage();
 await testDedupesAndUnsubscribes();
 
 console.log("victim damage display tests passed");
