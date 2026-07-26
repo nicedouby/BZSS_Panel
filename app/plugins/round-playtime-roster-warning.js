@@ -527,15 +527,7 @@ function merge(base, overlay) {
   };
 }
 
-function resolveRole(value) {
-  const normalized = text(value).toLowerCase().replace(/[_./\\-]+/g, " ");
-  const rule = ROLE_LABELS.find(([patterns]) => patterns.some((pattern) => normalized.includes(pattern)));
-  if (rule) return { label: rule[1], short: rule[2] };
-  const clean = text(value).split(/[/.\\]/).pop().replace(/_C$/i, "").replace(/^(BP_|Role_|Soldier_)/i, "").replaceAll("_", " ");
-  return { label: clean || "未知兵种", short: truncate(clean || "兵种", 4) };
-}
-
-function buildSquadRosterLines(players, compact = false) {
+function resolveRole(value) {\n  return {\n    label: resolveRoleLabel(value),\n    short: resolveRoleShortLabel(value),\n  };\n}\n\nfunction buildSquadRosterLines(players, compact = false) {
   if (!compact) return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.role} ${player.name} 游戏时长 ${hours(player.gameSeconds)}`);
   return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.roleShort}${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
 }
