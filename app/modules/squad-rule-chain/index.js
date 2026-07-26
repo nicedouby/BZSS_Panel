@@ -614,17 +614,9 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
     }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
   }
 
-  async function broadcastViolation(event) {
-    const adminWarn = getAdminWarnApi();
-    const sender = adminWarn?.broadcastMessage ?? adminWarn?.sendAdminBroadcast;
-    if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
-    return await sender.call(adminWarn, {
-      message: event.broadcastMessage,
-      reason: `${event.source}_broadcast`,
-      sourceModule: SQUAD_RULE_CHAIN_MODULE_ID,
-      relatedEventId: event.sourceEventId,
-      system: true,
-    }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
+  // 违规处置不允许调用全服广播；正常建队通过播报使用 broadcastFinalPass。
+  async function broadcastViolation() {
+    return { success: true, skipped: true, skipReason: "enforcement_broadcast_disabled" };
   }
 
   function getAdminWarnApi() {
