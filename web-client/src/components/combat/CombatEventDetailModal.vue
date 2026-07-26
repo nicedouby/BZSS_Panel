@@ -215,6 +215,7 @@ function searchPlayer(value: string) {
   min-width: 0;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .dialog-panel,
@@ -234,10 +235,11 @@ function searchPlayer(value: string) {
 }
 
 .detail-panel {
+  grid-template-rows: auto minmax(0, 1fr) minmax(92px, 0.9fr);
   height: 100%;
   min-height: 0;
-  overflow: auto;
-  border-radius: 16px;
+  overflow: hidden;
+  border-radius: 14px;
 }
 
 .dialog-head {
@@ -260,7 +262,12 @@ function searchPlayer(value: string) {
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .detail-grid > div {
@@ -283,6 +290,7 @@ function searchPlayer(value: string) {
 .identity-card small {
   color: var(--color-text-muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .identity-meta {
@@ -430,6 +438,8 @@ function searchPlayer(value: string) {
   padding: 10px;
   white-space: pre-wrap;
   word-break: break-word;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .empty-state {
@@ -450,6 +460,10 @@ function searchPlayer(value: string) {
 }
 
 @media (max-width: 720px) {
+  .detail-panel {
+    padding: 10px;
+  }
+
   .detail-grid {
     grid-template-columns: 1fr;
   }

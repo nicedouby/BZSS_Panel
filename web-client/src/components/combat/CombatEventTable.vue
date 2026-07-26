@@ -1,7 +1,7 @@
 <template>
-  <PageCard compact class="combat-event-table-panel">
+  <PageCard compact overflow="clip" body-mode="fill" class="combat-event-table-panel">
     <div v-if="events.length" class="table-wrap">
-      <table>
+      <table aria-label="战斗事件列表">
         <thead>
           <tr>
             <th>{{ t("common.lastUpdated") }}</th>
@@ -96,7 +96,11 @@
                 {{ weaponTypeLabel(event) }}
               </span>
             </td>
-            <td><button type="button" @click="emit('select', event)">{{ t("common.open") }}</button></td>
+            <td class="action-cell">
+              <button type="button" class="detail-button" @click="emit('select', event)">
+                {{ t("common.open") }}
+              </button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -105,7 +109,7 @@
       <div class="bz-empty-inner">
         <div class="bz-empty-icon">∅</div>
         <div class="bz-empty-title">暂无事件</div>
-        <div class="bz-empty-desc">当前筛选条件下没有可显示的战斗记录。可以尝试放宽类型、关系、武器或搜索条件。</div>
+        <div class="bz-empty-desc">{{ emptyText || "当前筛选条件下没有可显示的战斗记录。可以尝试放宽类型或搜索条件。" }}</div>
       </div>
     </div>
   </PageCard>
@@ -118,6 +122,7 @@ import { t } from "../../i18n";
 
 const props = defineProps<{
   events: any[];
+  emptyText?: string;
   highlightKey?: string;
 }>();
 
@@ -295,9 +300,12 @@ function isClusterHighlighted(event: any, index: number) {
 
 <style scoped>
 .table-wrap {
+  min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .combat-event-table-panel {
@@ -317,7 +325,9 @@ function isClusterHighlighted(event: any, index: number) {
 
 table {
   width: 100%;
+  min-width: 980px;
   border-collapse: collapse;
+  table-layout: auto;
 }
 
 th,
@@ -330,9 +340,21 @@ td {
 }
 
 th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--color-bg-card) 94%, var(--color-bg-page));
   color: var(--color-text-muted);
   font-size: 11px;
   font-weight: 600;
+  box-shadow: 0 1px 0 var(--color-border-default);
+}
+
+th:last-child {
+  right: 0;
+  z-index: 3;
+  width: 64px;
+  box-shadow: -8px 0 14px rgba(0, 0, 0, 0.12), 0 1px 0 var(--color-border-default);
 }
 
 .combat-row td {
@@ -379,6 +401,30 @@ th {
   filter: saturate(1.1);
 }
 
+.action-cell {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  width: 64px;
+  background-clip: padding-box;
+  box-shadow: -8px 0 14px rgba(0, 0, 0, 0.12);
+}
+
+.detail-button {
+  min-height: 28px;
+  border: 1px solid color-mix(in srgb, var(--color-brand-primary) 35%, var(--color-border-default));
+  border-radius: 6px;
+  padding: 3px 9px;
+  background: color-mix(in srgb, var(--color-brand-primary) 9%, var(--color-bg-elevated));
+  color: var(--color-brand-primary);
+  cursor: pointer;
+}
+
+.detail-button:hover {
+  border-color: var(--color-brand-primary);
+  background: color-mix(in srgb, var(--color-brand-primary) 16%, var(--color-bg-elevated));
+}
+
 .event-type-pill {
   display: inline-flex;
   align-items: center;
@@ -414,6 +460,7 @@ th {
 }
 
 .identity-cell {
+  max-width: 320px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -421,6 +468,15 @@ th {
   padding: 1px 2px;
   border-radius: 6px;
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.combat-table-empty {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  overflow: auto;
 }
 
 .identity-cell:hover {
@@ -523,10 +579,14 @@ th {
   color: #fecaca;
 }
 
-.combat-table-empty {
-  min-height: 0;
-  height: 100%;
-  display: grid;
-  place-items: center;
+@media (max-width: 640px) {
+  table {
+    min-width: 860px;
+  }
+
+  th,
+  td {
+    padding: 7px 8px;
+  }
 }
 </style>
