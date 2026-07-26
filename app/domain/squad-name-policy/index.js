@@ -490,9 +490,11 @@ export function normalizePolicyName(value) {
 }
 
 export function stripSquadSuffix(value) {
-  return String(value ?? "")
+  const normalized = String(value ?? "")
     .normalize("NFKC")
-    .trim()
+    .trim();
+  return normalized
+    .replace(/\s*(?:(?:小队|队伍|队|squad|team)\s*)?\d+$/iu, "")
     .replace(/\s*(?:小队|队伍|队|squad|team)\s*$/iu, "")
     .trim();
 }
