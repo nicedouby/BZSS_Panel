@@ -108,6 +108,17 @@ export class TeamBalanceBatchManager {
     return batch ? snapshotBatch(batch) : null;
   }
 
+  findLatest({ type = "", roundKey = "" } = {}) {
+    const normalizedType = normalizeText(type);
+    const normalizedRoundKey = normalizeText(roundKey);
+    const batch = this.history.find((item) => {
+      if (normalizedType && item.type !== normalizedType) return false;
+      if (normalizedRoundKey && item.roundKey !== normalizedRoundKey) return false;
+      return true;
+    });
+    return batch ? snapshotBatch(batch) : null;
+  }
+
   findActive({ type = "", roundKey = "" } = {}) {
     const normalizedType = normalizeText(type);
     const normalizedRoundKey = normalizeText(roundKey);
