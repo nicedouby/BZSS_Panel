@@ -14,6 +14,7 @@ type VehicleIconMatch = {
 };
 
 const ICO_BASE = "/assets/icons";
+const DEFAULT_VEHICLE_ICON = `${ICO_BASE}/T_map_helicopter_scout.PNG`;
 
 const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
   // --- Jets ---
@@ -281,6 +282,7 @@ export function resolveVehicleIcon(vehicleType: unknown): RoleIconInfo {
     }
   }
 
-  // Fallback: unrecognized vehicle type
-  return { icon: "🚙", label: "载具", tone: "crewman" };
+  // Fallback: keep unknown vehicles recognizable as aircraft instead of using
+  // an unrelated emoji that does not match the tactical-map icon system.
+  return { icon: DEFAULT_VEHICLE_ICON, label: "直升机", tone: "crewman" };
 }
