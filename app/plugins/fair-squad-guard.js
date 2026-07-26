@@ -206,7 +206,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (!text || typeof sender !== "function") return null;
 
     try {
-      return await sender.call(modules.adminWarn, {
+      return await sender.call(adminWarn, {
         message: text,
         reason,
         sourceModule: PLUGIN_ID,
@@ -530,11 +530,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function warnCreator(record) {
-    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.sendAdminWarn ?? adminWarn?.warnPlayer;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
     if (!targetName) return { success: false, skipped: true, skipReason: "target_missing" };
-    return await sender.call(modules.adminWarn, {
+    return await sender.call(adminWarn, {
       targetName,
       targetSteamId: record.creatorSteamId,
       targetEosId: record.creatorEosId,
@@ -547,11 +548,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function sendViolationWarning(record) {
-    const sender = modules?.adminWarn?.sendAdminWarn ?? modules?.adminWarn?.warnPlayer;
+    const adminWarn = getAdminWarnApi();
+    const sender = adminWarn?.sendAdminWarn ?? adminWarn?.warnPlayer;
     if (typeof sender !== "function") return { success: false, skipped: true, skipReason: "admin_warn_unavailable" };
     const targetName = record.creatorName || record.creatorSteamId || record.creatorEosId;
     if (!targetName) return { success: false, skipped: true, skipReason: "target_missing" };
-    return await sender.call(modules.adminWarn, {
+    return await sender.call(adminWarn, {
       targetName,
       targetSteamId: record.creatorSteamId,
       targetEosId: record.creatorEosId,
@@ -587,7 +589,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     const message = buildViolationBroadcastMessage(record);
-    return await sender.call(modules.adminWarn, {
+    return await sender.call(adminWarn, {
       message,
       reason: "fair_squad_guard_violation_broadcast",
       sourceModule: PLUGIN_ID,
@@ -958,6 +960,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
     },
   };
+}
+
+function getAdminWarnApi() {
+  return modules?.adminWarn?.api ?? modules?.adminWarn ?? null;
 }
 
 function readConfig(config) {
