@@ -271,7 +271,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     for (const squad of squads.values()) {
       const lines = [];
       for (const member of squad.members) lines.push(await buildMemberLine(member));
-      const message = `[小队游戏时长提醒] ${getSquadName(squad.members[0])}\n${lines.join("\n")}`;
+      const message = lines.join("\n");
 
       const seen = new Set();
       for (const recipient of squad.members) {
@@ -313,7 +313,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const leaders = [...team.leaders.values()];
       const lines = [];
       for (const leader of leaders) lines.push(await buildLeaderLine(leader.player, leader.squadName));
-      const message = `[小队长游戏时长提醒]\n${lines.join("\n")}`;
+      const message = lines.join("\n");
 
       const seen = new Set();
       for (const recipient of team.players) {
