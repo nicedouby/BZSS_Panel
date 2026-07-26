@@ -49,7 +49,20 @@ function normalizeFireTeam(player) {
 
   return "";
 }
-function getRole(player) {\n  return resolveRoleLabel(\n    player?.roleName\n      ?? player?.roleDisplayName\n      ?? player?.className\n      ?? player?.class\n      ?? player?.kitName\n      ?? player?.kit\n      ?? player?.role\n      ?? player?.兵种,\n  );\n}\nfunction getSquadName(squad) {
+function getRole(player) {
+  return resolveRoleLabel(
+    player?.roleName
+      ?? player?.roleDisplayName
+      ?? player?.className
+      ?? player?.class
+      ?? player?.kitName
+      ?? player?.kit
+      ?? player?.role
+      ?? player?.兵种,
+  );
+}
+
+function getSquadName(squad) {
   return first(
     squad?.squadName,
     squad?.name,
