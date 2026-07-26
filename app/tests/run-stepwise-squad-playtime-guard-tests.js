@@ -521,7 +521,7 @@ async function testPlayerDatabaseFallbackProvidesPlaytime() {
       current_name: "Leader",
       steam_id: "steam-db",
       eos_id: "eos-db",
-      game_seconds: 401 * 3600,
+      game_seconds: 801 * 3600,
     },
   });
   try {
