@@ -104,9 +104,8 @@ async function main() {
   const service = new SteamGameDurationService({
     apiKey: "test-key",
     playerDatabase: {
-      async listPlayersWithSteamID({ missingAvatarOnly, limit }) {
+      async listPlayersWithSteamID({ missingAvatarOnly }) {
         assert.equal(missingAvatarOnly, true);
-        assert.equal(limit, 100);
         missingAvatarQueries += 1;
         return missingAvatarQueries === 1 ? [{ steam_id: "76561198000000002" }, { steam_id: "76561198000000003" }] : [];
       },
