@@ -287,7 +287,9 @@
               left: `${vehicle.mapX}%`,
               top: `${vehicle.mapY}%`,
               '--vehicle-marker-scale': dynamicMarkerScale,
-              '--vehicle-yaw': `${vehicle.yaw ?? 0}deg`,
+              // The game yaw and the helicopter icon's forward axis differ by
+              // 90 degrees. Positive CSS rotation is clockwise.
+              '--vehicle-yaw': `${(vehicle.yaw ?? 0) + 90}deg`,
             }"
             :title="vehicle.tooltip"
           >
