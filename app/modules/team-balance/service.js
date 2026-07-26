@@ -636,6 +636,96 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     throw new Error("No RCON executor is available.");
   }
 
+  function getCurrentMatchContext() {
+    const state = modules?.matchState?.api?.getState?.() ?? {};
+    const serverId = normalizeText(
+      state?.serverId
+      ?? core?.webStatus?.serverId
+      ?? core?.webStatus?.getSnapshot?.()?.serverId
+      ?? "",
+    );
+    const round = state?.round?.current ?? {};
+    const roundAnchor = [
+      round?.worldPath,
+      round?.serverPlayAt,
+      round?.logLineTime,
+      round?.receivedAt,
+      state?.round?.lastAcceptedAt,
+    ].map(normalizeText).find(Boolean) || "no-round";
+    const map = normalizeText(state?.match?.map ?? state?.serverStatus?.map);
+    const layer = normalizeText(state?.match?.layer ?? state?.serverStatus?.layer);
+    const phase = normalizeText(state?.match?.phase).toLowerCase() || "unknown";
+    const rawPlaytime = state?.match?.playtime ?? state?.serverStatus?.playtime;
+    const playtime = Number(rawPlaytime);
+    return {
+      state,
+      serverId,
+      phase,
+      playtime,
+      roundKey: [serverId, map, layer, roundAnchor].join("|"),
+    };
+  }
+
+  function getShuffleGate() {
+    const context = getCurrentMatchContext();
+    if (!context.serverId || context.roundKey.endsWith("|no-round")) {
+      return { ok: false, reason: "round_unavailable", roundKey: context.roundKey, message: "当前没有可识别的对局。" };
+    }
+    if (context.phase !== "warmup") {
+      return { ok: false, reason: "match_started", roundKey: context.roundKey, message: "对局已经开始，不能执行随机打乱。" };
+    }
+    if (Number.isFinite(context.playtime) && context.playtime > 0) {
+      return { ok: false, reason: "match_started", roundKey: context.roundKey, message: "对局已经开始，不能执行随机打乱。" };
+    }
+    return { ok: true, roundKey: context.roundKey };
+  }
+
+  async function canContinueBatch(batch) {
+    if (batch?.type !== "shuffle") return { ok: true };
+    const gate = getShuffleGate();
+    if (!gate.ok) return gate;
+    if (batch.roundKey && gate.roundKey !== batch.roundKey) {
+      return {
+        ok: false,
+        reason: "round_changed",
+        message: "对局已切换。",
+      };
+    }
+    return { ok: true };
+  }
+
+  function handleMatchStateEvent(event = {}) {
+    const context = event?.matchState
+      ? {
+          ...getCurrentMatchContext(),
+          state: event.matchState,
+          phase: normalizeText(event.matchState?.match?.phase).toLowerCase() || "unknown",
+          playtime: Number(event.matchState?.match?.playtime ?? event.matchState?.serverStatus?.playtime),
+        }
+      : getCurrentMatchContext();
+
+    if (context.phase !== "warmup" || (Number.isFinite(context.playtime) && context.playtime > 0)) {
+      batchManager.cancelActiveByType("shuffle", "match_started");
+      return;
+    }
+
+    if (event?.eventName === "module.matchState.roundUpdated") {
+      batchManager.cancelActiveByType("shuffle", "round_changed");
+    }
+  }
+
+  function interleaveShuffleMoves(moves) {
+    const t1ToT2 = moves.filter((move) => move.teamId === 1 && move.targetTeamId === 2);
+    const t2ToT1 = moves.filter((move) => move.teamId === 2 && move.targetTeamId === 1);
+    const ordered = [];
+    const count = Math.max(t1ToT2.length, t2ToT1.length);
+    for (let index = 0; index < count; index += 1) {
+      if (t1ToT2[index]) ordered.push(t1ToT2[index]);
+      if (t2ToT1[index]) ordered.push(t2ToT1[index]);
+    }
+    return ordered;
+  }
+
   async function resolveCurrentPlayer(player) {
     const serverId = normalizeText(
       core?.webStatus?.serverId
@@ -779,6 +869,11 @@ function buildShuffleExecuteResult({
   algorithm = "playtime_balanced",
   executed = [],
   failed = [],
+  accepted = false,
+  duplicate = false,
+  planId = "",
+  roundKey = "",
+  batch = null,
 }) {
   return {
     ok: Boolean(ok),
@@ -794,6 +889,11 @@ function buildShuffleExecuteResult({
     algorithm,
     error,
     message,
+    accepted: Boolean(accepted),
+    duplicate: Boolean(duplicate),
+    planId,
+    roundKey,
+    batch,
     command: "",
     rconExecuted: executed.length > 0,
     rconResponse: "",
