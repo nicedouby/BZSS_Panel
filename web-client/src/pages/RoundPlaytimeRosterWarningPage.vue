@@ -55,8 +55,8 @@
           <label>
             <span>换行传输方式</span>
             <select v-model="form.lineBreakMode">
-              <option value="escaped">RCON 转义 \n（推荐）</option>
-              <option value="actual">真实换行</option>
+              <option value="actual">真实换行（推荐）</option>
+              <option value="escaped">RCON 转义 \\n</option>
               <option value="separator">竖线分隔</option>
             </select>
           </label>
