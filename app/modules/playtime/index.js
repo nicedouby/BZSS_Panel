@@ -1094,7 +1094,9 @@ class SteamGameDurationService {
       return this.proxyAgentCache.get(cacheKey);
     }
 
-    const agent = createProxyAgent(resolved.proxyUrl, targetUrl.protocol);
+    const agent = createProxyAgent(resolved.proxyUrl, targetUrl.protocol, {
+      ca: getTrustedCaCertificates(),
+    });
     if (agent) {
       this.proxyAgentCache.set(cacheKey, agent);
     }
@@ -1527,17 +1529,24 @@ function resolveProxyUrlForTarget(target, options = {}) {
   };
 }
 
-function createProxyAgent(proxyUrl, protocol) {
+function createProxyAgent(proxyUrl, protocol, options = {}) {
   if (!proxyUrl) return null;
   const urlStr = String(proxyUrl);
   if (urlStr.startsWith("socks")) {
-    return new SocksProxyAgent(urlStr);
+    return new SocksProxyAgent(urlStr, options);
   }
   const cleanProtocol = String(protocol || "").toLowerCase();
   if (cleanProtocol === "https:" || cleanProtocol === "https") {
-    return new HttpsProxyAgent(urlStr);
+    // HttpsProxyAgent creates a separate TLS socket after CONNECT.
+    // Pass the trust store to that socket as well; requestJson's \`ca\`
+    // option only applies to the outer request and is otherwise ignored
+    // by the proxy tunnel.
+    return new HttpsProxyAgent(urlStr, {
+      ...options,
+      rejectUnauthorized: true,
+    });
   }
-  return new HttpProxyAgent(urlStr);
+  return new HttpProxyAgent(urlStr, options);
 }
 
 let trustedCaCertificates;
