@@ -497,7 +497,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       createdAtMs: record.createdAtMs,
       sourceEventId: record.id,
       warningMessages: record.isLogConfirmed && hasCreatorIdentity(record) ? [`违规建队拦截：${record.reasons.join(" ")}`] : [],
-      broadcastMessage: shouldBroadcastViolation(record) ? buildViolationBroadcastMessage(record) : "",
+      broadcastMessage: "",
       disbandReason: `公平建队守护：${record.reasons.join(" ")}`.trim(),
       removeLeaderBeforeDisband: true,
       metadata: {
@@ -519,9 +519,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (record.isLogConfirmed && hasCreatorIdentity(record)) {
       state.summary.warned += 1;
       state.summary.disbanded += 1;
-      if (shouldBroadcastViolation(record)) {
-        state.summary.broadcasts = (state.summary.broadcasts || 0) + 1;
-      }
     }
 
     const alreadyCounted = record.actions.some((action) => action.type === "violation_counted");
@@ -583,9 +580,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }).catch((error) => ({ success: false, error: error?.message ?? String(error) }));
   }
 
-  function shouldBroadcastViolation(record) {
-    if (!runtimeConfig.broadcastOnViolation) return false;
-    return !record.actions.some((action) => action.type === "broadcasted_violation" || action.type === "broadcast_violation_failed");
+  // 违规处置永远不进行全服广播；只由中央规则链向队长发送 adminWarn。
+  function shouldBroadcastViolation() {
+    return false;
   }
 
   function buildViolationBroadcastMessage(record) {
@@ -999,7 +996,7 @@ function readConfig(config) {
     deprecatedAllowedInfantryNames: parseListText(raw.allowedInfantryNamesText ?? raw.allowedInfantryNames),
     deprecatedAllowedInfantryPatterns: parseListText(raw.allowedInfantryPatternsText ?? raw.allowedInfantryNamePatterns),
     broadcastOnApproved: raw.broadcastOnApproved === true,
-    broadcastOnViolation: raw.broadcastOnViolation !== false,
+    broadcastOnViolation: false,
   };
 }
 
