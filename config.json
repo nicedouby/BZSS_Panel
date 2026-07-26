@@ -893,20 +893,25 @@
           "infantry": [
             {
               "startSeconds": 0,
-              "endSeconds": 25,
-              "minHoursExclusive": 400
+              "endSeconds": 30,
+              "minHoursExclusive": 800
             },
             {
-              "startSeconds": 25,
-              "endSeconds": 40,
-              "minHoursExclusive": 200
+              "startSeconds": 30,
+              "endSeconds": 50,
+              "minHoursExclusive": 600
+            },
+            {
+              "startSeconds": 50,
+              "endSeconds": 100,
+              "minHoursExclusive": 400
             }
           ],
           "vehicle": [
             {
               "startSeconds": 0,
               "endSeconds": 60,
-              "minHoursExclusive": 800
+              "minHoursExclusive": 1200
             },
             {
               "startSeconds": 60,
