@@ -437,6 +437,7 @@ function normalizePlayer(raw, sourceName = "player") {
 }
 
 function collectFireTeamEvidence(raw, sourceName) {
+  if (!text(sourceName).toLowerCase().includes("bzsscore")) return [];
   const evidence = [];
   const add = (fireTeam, rawValue, source, priority) => {
     if (!fireTeam) return;
@@ -535,8 +536,8 @@ function resolveRole(value) {
 }
 
 function buildSquadRosterLines(players, compact = false) {
-  if (!compact) return players.map((player) => `（${player.fireTeam || "未分"}组）${player.role} ${player.name} 游戏时长 ${hours(player.gameSeconds)}`);
-  return players.map((player) => `（${player.fireTeam || "?"}组）${player.roleShort}${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
+  if (!compact) return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.role} ${player.name} 游戏时长 ${hours(player.gameSeconds)}`);
+  return players.map((player) => `${player.fireTeam ? `（${player.fireTeam}组）` : ""}${player.roleShort}${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
 }
 
 function buildLeaderRosterLines(leaders, compact = false) {
