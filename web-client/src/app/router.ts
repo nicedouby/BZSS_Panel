@@ -58,6 +58,18 @@ export const router = createRouter({
         contentPadding: "none",
       },
     },
+    {
+      path: "/plugins/round-playtime-roster-warning",
+      name: "round-playtime-roster-warning",
+      component: () => import("../pages/RoundPlaytimeRosterWarningPage.vue"),
+      meta: {
+        title: "开局时长提醒",
+        refreshPolicy: "polling",
+        layoutMode: "workspace",
+        contentPadding: "none",
+        superAdminOnly: true,
+      },
+    },
     ...buildPageRoutes(),
     {
       path: "/combat-clean",
