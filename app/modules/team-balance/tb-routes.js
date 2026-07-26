@@ -54,7 +54,7 @@ export async function handleTbRoutes({
       return true;
     }
 
-    if ((isBatchCollection || isBatchCreate) && req.method === "POST") {
+    if (isBatchCreate && req.method === "POST") {
       const body = (await readJsonBody(req)) ?? {};
       const result = typeof teamBalance.createForceTeamChangeBatch === "function"
         ? teamBalance.createForceTeamChangeBatch({
