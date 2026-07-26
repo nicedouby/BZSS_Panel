@@ -346,6 +346,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
+    if (!record.classification?.source) {
+      return {
+        status: "classification_missing",
+        phase: "classification_missing",
+        phaseLabel: "classification missing",
+        approved: true,
+        violation: false,
+        reason: "未取得队名规范分类，已跳过阶梯建队自动处理。",
+      };
+    }
+
     if (record.squadNature !== "infantry" && record.squadNature !== "vehicle") {
       return {
         status: "skipped_other_nature",
@@ -831,13 +842,17 @@ function buildClassificationFields(record = {}) {
 }
 
 function resolvePolicyClassification(squadName, modules, config) {
-  const api = modules?.squadNamePolicyGuard?.classifySquadName
-    ? modules.squadNamePolicyGuard
-    : modules?.squadNamePolicyGuard?.api;
-  if (typeof api?.classifySquadName === "function") {
-    return api.classifySquadName(squadName);
+  try {
+    const api = modules?.squadNamePolicyGuard?.classifySquadName
+      ? modules.squadNamePolicyGuard
+      : modules?.squadNamePolicyGuard?.api;
+    if (typeof api?.classifySquadName === "function") {
+      return api.classifySquadName(squadName);
+    }
+    return classifySquadNameWithPolicy(squadName, config);
+  } catch {
+    return null;
   }
-  return classifySquadNameWithPolicy(squadName, config);
 }
 
 function normalizeRconSquad(squad = {}, context = {}, modules = null, config = null) {
