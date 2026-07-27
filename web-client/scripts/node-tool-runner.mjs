@@ -13,15 +13,16 @@ export function createStableNodeToolEnv(source = process.env) {
   delete env.NODE_COMPILE_CACHE;
   delete env.V8_COMPILE_CACHE_CACHE_DIR;
 
-  if (env.NODE_OPTIONS) {
-    let options = String(env.NODE_OPTIONS);
-    for (const pattern of UNSAFE_NODE_OPTION_PATTERNS) {
-      options = options.replace(pattern, " ");
-    }
-    options = options.replace(/\s+/g, " ").trim();
-    if (options) env.NODE_OPTIONS = options;
-    else delete env.NODE_OPTIONS;
+  let options = String(env.NODE_OPTIONS || "");
+  for (const pattern of UNSAFE_NODE_OPTION_PATTERNS) {
+    options = options.replace(pattern, " ");
   }
+  if (!options.includes("--max-old-space-size")) {
+    options += " --max-old-space-size=4096";
+  }
+  options = options.replace(/\s+/g, " ").trim();
+  if (options) env.NODE_OPTIONS = options;
+  else delete env.NODE_OPTIONS;
 
   return env;
 }

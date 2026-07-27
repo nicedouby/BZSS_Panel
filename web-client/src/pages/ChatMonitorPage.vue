@@ -102,7 +102,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onActivated, onMounted, onBeforeUnmount, onDeactivated, nextTick, watch } from "vue";
-import * as echarts from "echarts";
+import { echarts } from "../utils/echarts";
 import { RecycleScroller } from "vue-virtual-scroller";
 import WorkspaceToolbar from "../components/common/WorkspaceToolbar.vue";
 import StatusBadge from "../components/common/StatusBadge.vue";

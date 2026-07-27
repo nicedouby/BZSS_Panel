@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { ref, onActivated, onDeactivated, onMounted, onUnmounted, shallowRef, watch } from "vue";
-import * as echarts from "echarts";
+import { echarts, type EChartsOption } from "../../utils/echarts";
 import { STATS_THEME } from "./serverStatsTheme";
 import { readChartThemeTokens } from "../../theme/chartTheme";
 import { useUiStore } from "../../stores/ui.store";
@@ -74,7 +74,7 @@ function ensureChart() {
   }
 }
 
-function buildOption(): echarts.EChartsOption {
+function buildOption(): EChartsOption {
   const tokens = readChartThemeTokens();
   const tpsData = props.samples
     .filter((s) => s.metrics.tps != null)

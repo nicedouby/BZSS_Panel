@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
-import * as echarts from "echarts";
+import { echarts } from "../../utils/echarts";
 import { readChartThemeTokens } from "../../theme/chartTheme";
 import { useUiStore } from "../../stores/ui.store";
 

@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, shallowRef, watch, computed } from "vue";
-import * as echarts from "echarts";
+import { echarts, type EChartsOption } from "../../utils/echarts";
 import { STATS_THEME } from "./serverStatsTheme";
 import { readChartThemeTokens } from "../../theme/chartTheme";
 import { useUiStore } from "../../stores/ui.store";
@@ -97,7 +97,7 @@ function ensureChart() {
   }
 }
 
-function buildOption(): echarts.EChartsOption {
+function buildOption(): EChartsOption {
   const tokens = readChartThemeTokens();
 
   // Create Series List

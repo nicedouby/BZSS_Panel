@@ -113,7 +113,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { apiGet } from "../app/apiClient";
 import RuntimeLogModal from "../components/runtime/RuntimeLogModal.vue";
-import * as echarts from "echarts";
+import { echarts, type EChartsOption } from "../utils/echarts";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { readChartThemeTokens } from "../theme/chartTheme";
 import { useUiStore } from "../stores/ui.store";
@@ -205,7 +205,7 @@ function updateChart(history: NonNullable<SystemStatus["system"]["memoryHistory"
   const heapTotalData = history.map(h => [h.timestamp, h.heapTotal / 1024 / 1024]);
   const heapUsedData = history.map(h => [h.timestamp, h.heapUsed / 1024 / 1024]);
 
-  const option: echarts.EChartsOption = {
+  const option: EChartsOption = {
     backgroundColor: "transparent",
     animation: false,
     tooltip: {

@@ -53,7 +53,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, shallowRef, watch, computed } from "vue";
-import * as echarts from "echarts";
+import { echarts, type EChartsOption } from "../../utils/echarts";
 import { STATS_THEME } from "./serverStatsTheme";
 import { readChartThemeTokens } from "../../theme/chartTheme";
 import { useUiStore } from "../../stores/ui.store";
@@ -171,7 +171,7 @@ function getTpsClass(avgTps: number | null) {
 }
 
 // Heatmap Option configuration
-function buildHeatmapOption(): echarts.EChartsOption {
+function buildHeatmapOption(): EChartsOption {
   const tokens = readChartThemeTokens();
   const dates = Object.keys(groupedByDate.value).sort();
   const data: [number, number, number][] = [];

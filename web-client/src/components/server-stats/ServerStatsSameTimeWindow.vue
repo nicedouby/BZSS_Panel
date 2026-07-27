@@ -153,7 +153,7 @@
 
 <script setup lang="ts">
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
-import * as echarts from "echarts";
+import { echarts, type EChartsOption } from "../../utils/echarts";
 import { useUiStore } from "../../stores/ui.store";
 import { readChartThemeTokens } from "../../theme/chartTheme";
 import { STATS_THEME } from "./serverStatsTheme";
@@ -240,7 +240,7 @@ function offsetToClock(offsetMinutes: number) {
   return `${String(Math.floor(totalMinutes / 60)).padStart(2, "0")}:${String(totalMinutes % 60).padStart(2, "0")}`;
 }
 
-function buildOption(): echarts.EChartsOption {
+function buildOption(): EChartsOption {
   const tokens = readChartThemeTokens();
   const chartSeries = props.series.map((item, index) => {
     const color = item.isToday ? STATS_THEME.player : historyColors[index % historyColors.length];
