@@ -1,21 +1,5 @@
 <template>
   <div class="replay-workbench">
-    <header class="replay-header">
-      <div class="header-title-group">
-        <h1>战术回放播放器</h1>
-        <span class="header-tag">TACTICAL REPLAY</span>
-        <p class="subtitle">选择左侧档案，即时调阅地图轨迹、玩家状态与时间轴回放。</p>
-      </div>
-      <div class="header-actions">
-        <span class="source-chip" :class="{ live: status && status.enabled }">
-          <i></i>{{ status && status.enabled ? "在线" : "未启动" }}
-        </span>
-        <button class="ghost-button" type="button" :disabled="loadingSessions" @click="loadSessions">
-          {{ loadingSessions ? "刷新中…" : "刷新" }}
-        </button>
-      </div>
-    </header>
-
     <div v-if="errorText" class="error-banner">{{ errorText }}</div>
 
     <div v-if="!sessions.length && !loadingSessions" class="empty-state">
@@ -30,25 +14,27 @@
       <!-- 左侧：录制档案文件夹 / 列表 -->
       <aside class="session-rail panel">
         <div class="panel-heading">
-          <div><span class="panel-kicker">ARCHIVE</span><h2>录制档案</h2></div>
-          <span class="count-badge">{{ filteredSessions.length }} / {{ sessions.length }}</span>
+          <div class="panel-title-wrap">
+            <h2>战术回放档案</h2>
+            <span class="count-badge">{{ filteredSessions.length }} / {{ sessions.length }}</span>
+          </div>
+          <button class="ghost-button sm" type="button" :disabled="loadingSessions" @click="loadSessions">
+            {{ loadingSessions ? "刷新中" : "刷新" }}
+          </button>
         </div>
         <div class="archive-tools">
           <label class="search-box">
             <span>⌕</span>
-            <input v-model="searchText" type="search" placeholder="搜索地图或图层" />
+            <input v-model="searchText" type="search" placeholder="搜索地图/图层" />
           </label>
-          <label class="duration-filter">
-            <span>时长</span>
-            <select v-model="durationFilter">
-              <option value="all">全部</option>
-              <option value="short">少于 1 分钟</option>
-              <option value="1-5">1–5 分钟</option>
-              <option value="5-15">5–15 分钟</option>
-              <option value="15-30">15–30 分钟</option>
-              <option value="long">超过 30 分钟</option>
-            </select>
-          </label>
+          <select v-model="durationFilter" class="duration-select">
+            <option value="all">时长: 全部</option>
+            <option value="short">&lt; 1 分钟</option>
+            <option value="1-5">1–5 分钟</option>
+            <option value="5-15">5–15 分钟</option>
+            <option value="15-30">15–30 分钟</option>
+            <option value="long">&gt; 30 分钟</option>
+          </select>
         </div>
         <div class="session-list">
           <div
@@ -84,22 +70,8 @@
         </div>
       </aside>
 
-      <!-- 中间：轻量化播放器主体 (地图 + 紧凑时间轴) -->
+      <!-- 中间：轻量化播放器主体 (地图 + 一体化底部时间轴) -->
       <main class="stage panel">
-        <div class="stage-heading">
-          <div>
-            <span class="panel-kicker">RECONSTRUCTED SCENE</span>
-            <h2>{{ activeSession && activeSession.map || "选择左侧档案" }}</h2>
-            <span class="stage-layer">{{ activeSession && activeSession.layer || "等待选择战术档案" }}</span>
-          </div>
-          <div class="stage-actions">
-            <div class="stage-metrics">
-              <span><b>{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</b><small>当前/总时长</small></span>
-              <span><b>{{ visiblePlayers.length }}</b><small>场上玩家</small></span>
-            </div>
-          </div>
-        </div>
-
         <div
           ref="replayViewportRef"
           class="map-shell"
@@ -111,13 +83,23 @@
           @pointerleave="endDrag"
           @wheel="onWheel"
         >
+          <!-- 嵌入式顶部 HUD 栏 -->
           <div class="map-hud map-hud-top">
-            <b>REPLAY</b>
-            <span>{{ activeSession && activeSession.status === "recording" ? "实时录制中" : "历史档案" }}</span>
-            <i>/</i>
-            <span>{{ activeMapConfig.name }}</span>
-            <span v-if="isFollowingPlayer && selectedPlayer" class="follow-badge">🎯 跟随中: {{ selectedPlayer.name }}</span>
+            <div class="hud-left">
+              <b class="hud-tag">REPLAY</b>
+              <span class="hud-map-name">{{ activeSession && activeSession.map || activeMapConfig.name }}</span>
+              <span class="hud-layer-name">{{ activeSession && activeSession.layer || "NO LAYER" }}</span>
+              <span v-if="isFollowingPlayer && selectedPlayer" class="follow-badge">🎯 跟随: {{ selectedPlayer.name }}</span>
+            </div>
+            <div class="hud-right">
+              <span class="hud-clock">{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span>
+              <span class="hud-players"><b>{{ visiblePlayers.length }}</b> 玩家</span>
+              <span class="source-chip" :class="{ live: status && status.enabled }">
+                <i></i>{{ status && status.enabled ? "在线" : "未启动" }}
+              </span>
+            </div>
           </div>
+
           <div class="map-grid"></div>
           <div class="replay-map-transform" :style="camera.getTransform()">
             <div class="map-canvas" :style="{ opacity: hasMapResource ? 1 : 0 }">
@@ -163,6 +145,7 @@
             </div>
           </div>
 
+          <!-- 地图悬浮控制按钮组 -->
           <div class="map-controls" @pointerdown.stop>
             <button type="button" title="放大 (+)" @click="zoomBy(1.25)">＋</button>
             <button type="button" title="缩小 (-)" @click="zoomBy(0.8)">−</button>
@@ -189,57 +172,53 @@
                 title="调整玩家图标大小"
               />
               <div class="marker-size-actions">
-                <button type="button" title="缩小玩家图标" @click.stop="adjustPlayerMarkerScale(-0.05)">−</button>
-                <button type="button" title="恢复玩家图标大小" @click.stop="resetPlayerMarkerScale">↺</button>
-                <button type="button" title="放大玩家图标" @click.stop="adjustPlayerMarkerScale(0.05)">＋</button>
+                <button type="button" title="缩小" @click.stop="adjustPlayerMarkerScale(-0.05)">−</button>
+                <button type="button" title="重置" @click.stop="resetPlayerMarkerScale">↺</button>
+                <button type="button" title="放大" @click.stop="adjustPlayerMarkerScale(0.05)">＋</button>
               </div>
             </div>
           </div>
 
-          <div class="map-hud map-hud-bottom">
-            <span>{{ activeSession && activeSession.layer || "NO LAYER" }}</span>
-            <i>·</i>
-            <span>数据点 {{ state ? formatClock(state.resolvedAtMs) : "--:--" }}</span>
-            <span v-if="loadingState" class="state-sync">同步中</span>
-          </div>
           <div v-if="loadingState && !state" class="map-loading">正在载入回放状态…</div>
         </div>
 
-        <div class="timeline">
-          <div class="timeline-topline">
-            <span class="timeline-caption">时间轴控制</span>
-            <span>{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span>
+        <!-- 嵌入式紧凑底部时间轴及控制面板 -->
+        <div class="timeline-bar">
+          <div class="timeline-slider-row">
+            <input
+              v-model.number="currentMs"
+              class="timeline-range"
+              type="range"
+              min="0"
+              :max="Math.max(1, durationMs)"
+              step="100"
+              :disabled="!activeSession"
+              @pointerdown="beginTimelineSeek"
+              @pointerup="endTimelineSeek"
+            />
+            <span class="timeline-clock">{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span>
           </div>
-          <input
-            v-model.number="currentMs"
-            class="timeline-range"
-            type="range"
-            min="0"
-            :max="Math.max(1, durationMs)"
-            step="100"
-            :disabled="!activeSession"
-            @pointerdown="beginTimelineSeek"
-            @pointerup="endTimelineSeek"
-          />
-          <div class="timeline-controls">
-            <button class="play-button" type="button" :disabled="!activeSession" @click="togglePlaying">{{ playing ? "Ⅱ" : "▶" }}</button>
-            <button class="control-button" type="button" :disabled="!activeSession" @click="jump(-15)">−15s</button>
-            <button class="control-button" type="button" :disabled="!activeSession" @click="jump(-5)">−5s</button>
-            <button class="control-button" type="button" :disabled="!activeSession" @click="jump(5)">+5s</button>
-            <button class="control-button" type="button" :disabled="!activeSession" @click="jump(15)">+15s</button>
+
+          <div class="timeline-actions-row">
+            <div class="playback-btn-group">
+              <button class="play-button" type="button" :disabled="!activeSession" @click="togglePlaying">{{ playing ? "Ⅱ" : "▶" }}</button>
+              <button class="control-button" type="button" :disabled="!activeSession" @click="jump(-15)">−15s</button>
+              <button class="control-button" type="button" :disabled="!activeSession" @click="jump(-5)">−5s</button>
+              <button class="control-button" type="button" :disabled="!activeSession" @click="jump(5)">+5s</button>
+              <button class="control-button" type="button" :disabled="!activeSession" @click="jump(15)">+15s</button>
+            </div>
+
             <div class="speed-group">
               <button v-for="speed in speeds" :key="speed" class="speed-button" :class="{ active: playbackRate === speed }" type="button" @click="playbackRate = speed">{{ speed }}×</button>
             </div>
-            <span class="timeline-hint">{{ playing ? "播放中" : "已暂停" }}</span>
-          </div>
-          <div class="hotkey-hints">
-            <span class="hk-chip"><b>Space</b> 播放/暂停</span>
-            <span class="hk-chip"><b>←/→</b> ±5s</span>
-            <span class="hk-chip"><b>Shift+←/→</b> ±15s</span>
-            <span class="hk-chip"><b>↑/↓</b> 倍速</span>
-            <span class="hk-chip"><b>R</b> 重置</span>
-            <span class="hk-chip"><b>F</b> 跟随</span>
-            <span class="hk-chip"><b>Esc</b> 取消</span>
+
+            <div class="hotkey-inline-hints">
+              <span><b>Space</b> 播放/暂停</span>
+              <span><b>←/→</b> ±5s</span>
+              <span><b>↑/↓</b> 倍速</span>
+              <span><b>R</b> 视角</span>
+              <span><b>F</b> 跟随</span>
+            </div>
           </div>
         </div>
       </main>
@@ -266,9 +245,6 @@
         </div>
 
         <div v-if="inspectorTab === 'details'" class="inspector-content">
-          <div class="panel-heading">
-            <div><span class="panel-kicker">AT THIS MOMENT</span><h2>现场摘要</h2></div>
-          </div>
           <div class="summary-grid">
             <div><strong>{{ teamOneCount }}</strong><span>Team 1 玩家</span></div>
             <div><strong>{{ teamTwoCount }}</strong><span>Team 2 玩家</span></div>
@@ -306,10 +282,6 @@
             <span>◎</span>
             <p>点击地图上的单位</p>
             <small>查看该时刻状态，或切换名册全员</small>
-          </div>
-          <div class="inspector-footer">
-            <span class="health-dot"></span>
-            <span>数据来自原生 JSONL 战术录制</span>
           </div>
         </div>
 
@@ -885,182 +857,165 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-:global(body) { background: #07111f; }
-.replay-workbench { min-height: 100vh; padding: 12px 16px 16px; color: #e8f0fb; background: radial-gradient(circle at 18% 0%, rgba(22,101,137,.2), transparent 35%), #07111f; box-sizing: border-box; }
-.replay-header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 10px; }
-.header-title-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.replay-header h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
-.header-tag { color: #55ddb6; font-size: 10px; font-weight: 700; letter-spacing: .12em; background: rgba(85,221,182,.12); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(85,221,182,.25); }
-.subtitle { color: #7695aa; margin: 0; font-size: 11px; }
-.header-actions { display: flex; align-items: center; gap: 8px; }
-.source-chip, .ghost-button, .primary-button, .control-button, .speed-button, .play-button { border: 1px solid rgba(150,190,211,.2); border-radius: 8px; color: #cfe1ee; background: rgba(13,30,48,.8); }
-.source-chip { padding: 5px 9px; font-size: 11px; white-space: nowrap; }
-.source-chip.live { color: #8cf0c1; border-color: rgba(73,214,151,.35); }
-.source-chip i, .health-dot, .session-status { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #74879c; margin-right: 6px; }
-.source-chip.live i { background: #40dfa0; box-shadow: 0 0 10px #40dfa0; }
-.ghost-button, .primary-button, .control-button, .speed-button { padding: 5px 10px; cursor: pointer; font-size: 11px; }
-.primary-button { background: #2ec98b; color: #062117; border-color: #2ec98b; font-weight: 700; }
-.archive-path { display: block; max-width: min(100%, 720px); margin: 8px auto; overflow: auto; padding: 6px 8px; border: 1px solid rgba(150,190,211,.14); border-radius: 6px; color: #89a9b9; background: rgba(4,15,26,.45); font-size: 10px; text-align: left; }
-.error-banner { padding: 8px 12px; margin-bottom: 10px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 8px; font-size: 12px; }
-.panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 16px 50px rgba(0,0,0,.2); border-radius: 12px; }
+:global(body) { background: #07111f; margin: 0; }
+.replay-workbench { height: calc(100vh - 50px); max-height: calc(100vh - 50px); padding: 6px 8px; color: #e8f0fb; background: radial-gradient(circle at 18% 0%, rgba(22,101,137,.2), transparent 35%), #07111f; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
 
-/* 紧凑响应式三栏布局 */
-.replay-layout { display: grid; grid-template-columns: 270px minmax(0, 1fr) 250px; gap: 10px; align-items: stretch; height: calc(100vh - 75px); }
+.error-banner { padding: 6px 10px; margin-bottom: 6px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 6px; font-size: 11px; flex: 0 0 auto; }
+.panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 12px 40px rgba(0,0,0,.2); border-radius: 10px; }
 
-.session-rail, .inspector { padding: 10px; height: 100%; max-height: calc(100vh - 75px); box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
-.session-rail { position: relative; }
-.panel-heading, .stage-heading, .timeline-topline, .timeline-controls, .selected-top, .stage-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.panel-heading h2, .stage-heading h2 { margin: 2px 0 0; font-size: 15px; }
-.eyebrow, .panel-kicker { color: #6f9bb5; font-size: 9px; letter-spacing: .15em; font-weight: 700; }
-.count-badge { min-width: 22px; padding: 2px 6px; text-align: center; border-radius: 6px; background: rgba(65,151,191,.18); color: #9bcee2; font-size: 11px; }
-.archive-tools { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 6px; margin: 10px 0 8px; }
-.search-box { display: flex; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid rgba(150,190,211,.14); border-radius: 7px; color: #7a9ab0; background: rgba(5,15,26,.5); }
-.search-box input { width: 100%; border: 0; outline: 0; color: #e8f0fb; background: transparent; font-size: 11px; }
-.duration-filter { display: grid; gap: 2px; color: #6f8da0; font-size: 9px; }
-.duration-filter select { min-width: 0; padding: 5px 4px; border: 1px solid rgba(150,190,211,.14); border-radius: 6px; color: #cfe1ee; background: rgba(5,15,26,.7); font-size: 9px; }
-.session-list { display: grid; gap: 5px; flex: 1 1 auto; overflow-y: auto; padding-right: 2px; }
-.session-card { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 22px; width: 100%; padding: 0; text-align: left; color: #bad0df; border: 1px solid transparent; border-radius: 8px; background: rgba(4,13,24,.34); }
-.session-select { display: grid; grid-template-columns: 7px minmax(0,1fr) auto; gap: 8px; min-width: 0; padding: 9px 4px 9px 8px; text-align: left; color: inherit; border: 0; background: transparent; cursor: pointer; }
-.delete-session-button { align-self: center; width: 20px; height: 20px; margin-right: 2px; padding: 0; border: 1px solid transparent; border-radius: 5px; color: #7692a2; background: transparent; cursor: pointer; font-size: 15px; line-height: 1; }
+/* 核心视口严格高度约束：无页面级滚动 */
+.replay-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr) 240px; gap: 8px; align-items: stretch; flex: 1 1 0; min-height: 0; height: 100%; overflow: hidden; }
+
+.session-rail, .inspector { padding: 8px; height: 100%; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex: 0 0 auto; }
+.panel-title-wrap { display: flex; align-items: center; gap: 6px; }
+.panel-heading h2 { margin: 0; font-size: 14px; color: #f1fbff; }
+.count-badge { min-width: 20px; padding: 1px 5px; text-align: center; border-radius: 5px; background: rgba(65,151,191,.18); color: #9bcee2; font-size: 10px; }
+.ghost-button.sm { padding: 3px 7px; font-size: 10px; border-radius: 6px; border: 1px solid rgba(150,190,211,.2); color: #cfe1ee; background: rgba(13,30,48,.8); cursor: pointer; }
+
+.archive-tools { display: grid; grid-template-columns: minmax(0, 1fr) 85px; gap: 5px; margin: 6px 0; flex: 0 0 auto; }
+.search-box { display: flex; gap: 5px; align-items: center; padding: 4px 6px; border: 1px solid rgba(150,190,211,.14); border-radius: 6px; color: #7a9ab0; background: rgba(5,15,26,.5); }
+.search-box input { width: 100%; border: 0; outline: 0; color: #e8f0fb; background: transparent; font-size: 10px; }
+.duration-select { min-width: 0; padding: 4px 3px; border: 1px solid rgba(150,190,211,.14); border-radius: 6px; color: #cfe1ee; background: rgba(5,15,26,.7); font-size: 9px; }
+
+.session-list { display: grid; gap: 4px; flex: 1 1 0; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.session-card { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 20px; width: 100%; padding: 0; text-align: left; color: #bad0df; border: 1px solid transparent; border-radius: 7px; background: rgba(4,13,24,.34); }
+.session-select { display: grid; grid-template-columns: 6px minmax(0,1fr) auto; gap: 7px; min-width: 0; padding: 7px 4px 7px 7px; text-align: left; color: inherit; border: 0; background: transparent; cursor: pointer; }
+.delete-session-button { align-self: center; width: 18px; height: 18px; margin-right: 2px; padding: 0; border: 1px solid transparent; border-radius: 4px; color: #7692a2; background: transparent; cursor: pointer; font-size: 14px; line-height: 1; }
 .delete-session-button:hover { border-color: rgba(248,113,113,.42); color: #ff8d95; background: rgba(127,29,29,.28); }
 .session-card:hover, .session-card.selected { border-color: rgba(71,211,165,.45); background: rgba(23,81,79,.25); }
 .session-card.unreadable { cursor: not-allowed; opacity: .58; }
-.session-card.unreadable:hover { border-color: rgba(248,113,113,.45); background: rgba(127,29,29,.18); }
-.session-status { margin: 3px 0 0; background: #718298; }
-.session-status.recording { background: #40dfa0; box-shadow: 0 0 8px #40dfa0; }
-.session-body { min-width: 0; display: grid; gap: 2px; }
+.session-status { margin: 3px 0 0; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #718298; }
+.session-status.recording { background: #40dfa0; box-shadow: 0 0 6px #40dfa0; }
+.session-body { min-width: 0; display: grid; gap: 1px; }
 .session-card strong { overflow: hidden; color: #f2f7fb; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .session-card small { overflow: hidden; color: #7c9aaf; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
 .session-card em { display: flex; justify-content: space-between; color: #6c879a; font-size: 9px; font-style: normal; }
-.session-arrow { color: #5e879d; font-size: 16px; }
-.muted-empty, .inspector-placeholder { color: #6f8b9e; font-size: 11px; text-align: center; }
+.session-arrow { color: #5e879d; font-size: 14px; }
+.muted-empty, .inspector-placeholder { color: #6f8b9e; font-size: 10px; text-align: center; }
 
-.stage { min-width: 0; padding: 12px; height: 100%; max-height: calc(100vh - 75px); box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
-.stage-heading { flex: 0 0 auto; }
-.stage-layer { display: inline-block; margin-top: 2px; color: #7697ab; font-size: 10px; }
-.stage-actions { flex: 0 0 auto; }
-.stage-metrics { display: flex; gap: 14px; }
-.stage-metrics span { display: grid; gap: 2px; text-align: right; }
-.stage-metrics b { color: #eaf7f5; font-size: 14px; }
-.stage-metrics small { color: #6f8d9e; font-size: 9px; }
+/* Stage: 地图自适应填充父容器所有可用高度 */
+.stage { min-width: 0; padding: 8px; height: 100%; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
 
-/* 地图自适应收紧高度，确保下方播放控制完全在视口内 */
-.map-shell { position: relative; flex: 1 1 auto; min-height: clamp(240px, calc(100vh - 310px), 640px); margin-top: 8px; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 10px; background: #081827; cursor: grab; touch-action: none; user-select: none; transition: border-color .2s; }
+.map-shell { position: relative; flex: 1 1 0; min-height: 0; height: 100%; overflow: hidden; border: 1px solid rgba(164,209,224,.18); border-radius: 8px; background: #081827; cursor: grab; touch-action: none; user-select: none; transition: border-color .2s; }
 .map-shell.is-dragging { cursor: grabbing; }
 .map-shell.is-following { border-color: rgba(64,223,160,.5); }
 
 .replay-map-transform { position: absolute; top: 0; left: 0; width: 1000px; height: 1000px; transform-origin: 0 0; will-change: transform; z-index: 2; background: #020205; }
 .map-grid { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: .22; background-image: linear-gradient(rgba(120,183,203,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(120,183,203,.12) 1px, transparent 1px); background-size: 64px 64px; }
 .map-canvas { position: absolute; inset: 0; z-index: 0; transition: opacity .2s; }
-.map-placeholder { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; gap: 6px; text-align: center; color: #7498ab; letter-spacing: .12em; font-size: 11px; }
-.map-placeholder small { letter-spacing: 0; color: #547384; font-size: 10px; }
+.map-placeholder { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; gap: 4px; text-align: center; color: #7498ab; letter-spacing: .12em; font-size: 10px; }
+.map-placeholder small { letter-spacing: 0; color: #547384; font-size: 9px; }
 
-.map-hud { position: absolute; z-index: 10; display: flex; gap: 6px; align-items: center; padding: 5px 8px; border: 1px solid rgba(159,210,224,.18); background: rgba(4,16,28,.78); color: #aacbd6; font-size: 9px; backdrop-filter: blur(8px); }
-.map-hud-top { top: 10px; left: 10px; border-radius: 6px; }
-.map-hud-bottom { right: 10px; bottom: 10px; border-radius: 6px; }
-.map-hud b, .timeline-caption { color: #55ddb6; letter-spacing: .12em; }
-.map-hud i { color: #507080; font-style: normal; }
-.follow-badge { padding: 1px 5px; border-radius: 4px; background: rgba(64,223,160,.2); color: #6bf2c4; font-weight: 600; border: 1px solid rgba(64,223,160,.3); }
-.state-sync { color: #f6c76a; }
+/* 嵌入式顶部 HUD 栏 */
+.map-hud-top { position: absolute; top: 6px; left: 6px; right: 6px; z-index: 10; display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border: 1px solid rgba(159,210,224,.18); background: rgba(4,16,28,.82); color: #aacbd6; font-size: 10px; backdrop-filter: blur(8px); border-radius: 6px; pointer-events: none; }
+.hud-left, .hud-right { display: flex; align-items: center; gap: 8px; }
+.hud-tag { color: #55ddb6; font-size: 9px; letter-spacing: .12em; }
+.hud-map-name { font-weight: 700; color: #f1fbff; font-size: 11px; }
+.hud-layer-name { color: #789bb0; font-size: 9px; }
+.follow-badge { padding: 1px 4px; border-radius: 3px; background: rgba(64,223,160,.2); color: #6bf2c4; font-weight: 600; border: 1px solid rgba(64,223,160,.3); font-size: 9px; }
+.hud-clock { font-family: monospace; color: #55ddb6; font-weight: 700; font-size: 11px; }
+.hud-players b { color: #eaf7f5; }
+.source-chip { padding: 2px 5px; font-size: 9px; border-radius: 4px; border: 1px solid rgba(150,190,211,.2); background: rgba(13,30,48,.8); color: #cfe1ee; }
+.source-chip.live { color: #8cf0c1; border-color: rgba(73,214,151,.35); }
+.source-chip i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #74879c; margin-right: 4px; }
+.source-chip.live i { background: #40dfa0; box-shadow: 0 0 8px #40dfa0; }
 
 .player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 11px; }
 
-.map-controls { position: absolute; z-index: 12; right: 10px; top: 10px; display: grid; gap: 4px; }
-.map-controls button { width: 28px; height: 28px; border: 1px solid rgba(159,210,224,.2); border-radius: 6px; color: #bfeaf0; background: rgba(4,16,28,.78); cursor: pointer; font-size: 14px; display: grid; place-content: center; }
+.map-controls { position: absolute; z-index: 12; right: 8px; top: 40px; display: grid; gap: 4px; }
+.map-controls button { width: 26px; height: 26px; border: 1px solid rgba(159,210,224,.2); border-radius: 5px; color: #bfeaf0; background: rgba(4,16,28,.82); cursor: pointer; font-size: 13px; display: grid; place-content: center; }
 .map-controls button:hover { color: #fff; border-color: rgba(85,221,182,.7); background: rgba(24,92,83,.75); }
-.follow-button { font-size: 13px; }
+.follow-button { font-size: 12px; }
 .follow-button.active { border-color: #40dfa0 !important; background: rgba(64,223,160,.35) !important; color: #fff !important; }
 
-.marker-size-control { width: 82px; padding: 5px; border: 1px solid rgba(159,210,224,.2); border-radius: 6px; color: #91adba; background: rgba(4,16,28,.88); box-shadow: 0 6px 14px rgba(0,0,0,.22); }
-.marker-size-heading { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 3px; font-size: 8px; }
+.marker-size-control { width: 78px; padding: 4px; border: 1px solid rgba(159,210,224,.2); border-radius: 5px; color: #91adba; background: rgba(4,16,28,.92); box-shadow: 0 4px 12px rgba(0,0,0,.22); }
+.marker-size-heading { display: flex; justify-content: space-between; gap: 3px; margin-bottom: 2px; font-size: 8px; }
 .marker-size-heading output { color: #bfeaf0; font-family: monospace; }
-.marker-size-control input[type="range"] { display: block; width: 100%; height: 10px; margin: 0; accent-color: #40dfa0; cursor: pointer; }
-.marker-size-actions { display: flex; justify-content: space-between; gap: 3px; margin-top: 3px; }
-.marker-size-actions button { width: 20px; height: 18px; min-height: 18px; padding: 0; font-size: 11px; }
+.marker-size-control input[type="range"] { display: block; width: 100%; height: 8px; margin: 0; accent-color: #40dfa0; cursor: pointer; }
+.marker-size-actions { display: flex; justify-content: space-between; gap: 2px; margin-top: 2px; }
+.marker-size-actions button { width: 18px; height: 16px; min-height: 16px; padding: 0; font-size: 10px; }
 
-/* 紧凑时间轴与播放控制组件 */
-.timeline { flex: 0 0 auto; margin-top: 8px; padding: 4px 0 0; }
-.timeline-topline { color: #9ab4c0; font-size: 10px; }
-.timeline-range { width: 100%; margin: 4px 0 6px; accent-color: #3ed9a1; cursor: pointer; height: 14px; }
-.timeline-controls { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
-.play-button { width: 30px; height: 28px; padding: 0; color: #062117; background: #43dca5; border-color: #43dca5; font-weight: 800; cursor: pointer; border-radius: 6px; font-size: 12px; }
-.control-button, .speed-button { padding: 4px 7px; color: #9db9c6; background: rgba(6,19,32,.72); font-size: 10px; border-radius: 6px; }
+/* 紧凑固定底部控制面板 (Timeline Bar) */
+.timeline-bar { flex: 0 0 auto; margin-top: 6px; padding: 6px 8px; background: rgba(4,14,24,.6); border: 1px solid rgba(150,190,211,.12); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; }
+.timeline-slider-row { display: flex; align-items: center; gap: 8px; }
+.timeline-range { flex: 1 1 auto; margin: 0; accent-color: #3ed9a1; cursor: pointer; height: 12px; }
+.timeline-clock { font-family: monospace; color: #55ddb6; font-size: 10px; font-weight: 700; white-space: nowrap; }
+
+.timeline-actions-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.playback-btn-group { display: flex; gap: 4px; align-items: center; }
+.play-button { width: 28px; height: 24px; padding: 0; color: #062117; background: #43dca5; border-color: #43dca5; font-weight: 800; cursor: pointer; border-radius: 5px; font-size: 11px; }
+.control-button { padding: 3px 6px; color: #9db9c6; background: rgba(6,19,32,.72); font-size: 9px; border-radius: 5px; border: 1px solid rgba(150,190,211,.2); cursor: pointer; }
 .control-button:hover, .speed-button:hover { color: #eaf7f5; border-color: rgba(64,223,160,.4); }
-.speed-group { display: flex; gap: 3px; margin-left: auto; }
-.speed-button { padding: 4px 6px; }
-.speed-button.active { color: #071b18; border-color: #40dfa0; background: #40dfa0; font-weight: 700; }
-.timeline-hint { color: #668697; font-size: 9px; }
 
-.hotkey-hints { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(150,190,211,.12); }
-.hk-chip { color: #6a8b9f; font-size: 9px; background: rgba(5,15,26,.4); padding: 1px 4px; border-radius: 4px; border: 1px solid rgba(150,190,211,.1); }
-.hk-chip b { color: #9ecee0; font-weight: 600; font-family: monospace; }
+.speed-group { display: flex; gap: 2px; }
+.speed-button { padding: 3px 5px; color: #9db9c6; background: rgba(6,19,32,.72); font-size: 9px; border-radius: 4px; border: 1px solid rgba(150,190,211,.2); cursor: pointer; }
+.speed-button.active { color: #071b18; border-color: #40dfa0; background: #40dfa0; font-weight: 700; }
+
+.hotkey-inline-hints { display: flex; gap: 6px; font-size: 9px; color: #6a8b9f; }
+.hotkey-inline-hints b { color: #9ecee0; font-family: monospace; }
 
 .inspector { display: flex; flex-direction: column; }
-.inspector-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 2px; background: rgba(4,13,24,.4); border-radius: 8px; margin-bottom: 10px; border: 1px solid rgba(150,190,211,.1); flex: 0 0 auto; }
-.tab-button { padding: 6px; border: 0; background: transparent; color: #7897a7; border-radius: 6px; font-size: 10px; font-weight: 600; cursor: pointer; transition: all .15s; }
+.inspector-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 2px; background: rgba(4,13,24,.4); border-radius: 7px; margin-bottom: 6px; border: 1px solid rgba(150,190,211,.1); flex: 0 0 auto; }
+.tab-button { padding: 5px; border: 0; background: transparent; color: #7897a7; border-radius: 5px; font-size: 10px; font-weight: 600; cursor: pointer; transition: all .15s; }
 .tab-button.active { color: #eaf7f5; background: rgba(22,66,88,.6); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
 
-.inspector-content { display: flex; flex-direction: column; flex: 1 1 auto; overflow-y: auto; }
-.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
-.summary-grid div { display: grid; gap: 2px; padding: 8px; border-radius: 7px; background: rgba(5,17,29,.5); }
-.summary-grid strong { color: #ecfafa; font-size: 16px; }
+.inspector-content { display: flex; flex-direction: column; flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 4px; }
+.summary-grid div { display: grid; gap: 1px; padding: 6px; border-radius: 6px; background: rgba(5,17,29,.5); }
+.summary-grid strong { color: #ecfafa; font-size: 14px; }
 .summary-grid span { color: #7592a3; font-size: 9px; }
-.inspector-divider { height: 1px; margin: 10px 0; background: rgba(150,190,211,.12); }
-.selected-top { justify-content: flex-start; }
-.large-pip { width: 16px; height: 16px; flex: 0 0 auto; border-radius: 50%; background: #49c9ff; box-shadow: 0 0 12px rgba(73,201,255,.45); }
-.large-pip.team-2 { background: #ff6572; box-shadow: 0 0 12px rgba(255,101,114,.4); }
-.selected-player h3 { margin: 2px 0 0; color: #f1fbff; font-size: 13px; }
+.inspector-divider { height: 1px; margin: 8px 0; background: rgba(150,190,211,.12); }
+.selected-top { justify-content: flex-start; display: flex; align-items: center; gap: 6px; }
+.large-pip { width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; background: #49c9ff; box-shadow: 0 0 10px rgba(73,201,255,.45); }
+.large-pip.team-2 { background: #ff6572; box-shadow: 0 0 10px rgba(255,101,114,.4); }
+.selected-player h3 { margin: 0; color: #f1fbff; font-size: 12px; }
 
-.follow-action-row { margin-top: 8px; }
-.follow-toggle-btn { width: 100%; padding: 6px; border: 1px solid rgba(64,223,160,.4); border-radius: 7px; background: rgba(19,82,70,.25); color: #7df5c7; cursor: pointer; font-size: 10px; font-weight: 600; transition: all .15s; }
+.follow-action-row { margin-top: 6px; }
+.follow-toggle-btn { width: 100%; padding: 5px; border: 1px solid rgba(64,223,160,.4); border-radius: 6px; background: rgba(19,82,70,.25); color: #7df5c7; cursor: pointer; font-size: 10px; font-weight: 600; transition: all .15s; }
 .follow-toggle-btn:hover, .follow-toggle-btn.active { background: #2ec98b; color: #062117; border-color: #2ec98b; }
 
-.detail-list { display: grid; gap: 6px; margin: 10px 0; }
-.detail-list div { display: flex; justify-content: space-between; gap: 6px; color: #7897a7; font-size: 10px; }
+.detail-list { display: grid; gap: 5px; margin: 8px 0; }
+.detail-list div { display: flex; justify-content: space-between; gap: 5px; color: #7897a7; font-size: 10px; }
 .detail-list dd { margin: 0; color: #d0e4ed; text-align: right; }
 
-.roster-view { display: flex; flex-direction: column; gap: 8px; }
-.roster-search-bar { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid rgba(150,190,211,.15); border-radius: 7px; background: rgba(4,15,26,.5); color: #7696aa; }
+.roster-view { display: flex; flex-direction: column; gap: 6px; }
+.roster-search-bar { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid rgba(150,190,211,.15); border-radius: 6px; background: rgba(4,15,26,.5); color: #7696aa; }
 .roster-search-bar input { width: 100%; border: 0; outline: 0; background: transparent; color: #e8f0fb; font-size: 10px; }
-.roster-groups { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; overflow-y: auto; padding-right: 2px; }
-.roster-team-block { display: flex; flex-direction: column; gap: 4px; }
-.roster-team-header { display: flex; justify-content: space-between; padding: 4px 7px; border-radius: 5px; font-size: 10px; font-weight: 700; background: rgba(73,201,255,.12); color: #6bcfff; }
+.roster-groups { display: flex; flex-direction: column; gap: 6px; flex: 1 1 0; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.roster-team-block { display: flex; flex-direction: column; gap: 3px; }
+.roster-team-header { display: flex; justify-content: space-between; padding: 3px 6px; border-radius: 4px; font-size: 9px; font-weight: 700; background: rgba(73,201,255,.12); color: #6bcfff; }
 .roster-team-header.team-2 { background: rgba(255,101,114,.12); color: #ff8894; }
 .roster-badge { font-size: 9px; font-weight: normal; opacity: .8; }
-.roster-squad-block { display: flex; flex-direction: column; gap: 2px; padding-left: 3px; }
-.roster-squad-title { font-size: 9px; color: #618296; font-weight: 600; padding: 1px 3px; }
-.roster-player-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 5px; cursor: pointer; background: rgba(4,13,24,.3); border: 1px solid transparent; transition: background .12s, border-color .12s; }
+.roster-squad-block { display: flex; flex-direction: column; gap: 2px; padding-left: 2px; }
+.roster-squad-title { font-size: 9px; color: #618296; font-weight: 600; padding: 1px 2px; }
+.roster-player-row { display: flex; align-items: center; gap: 5px; padding: 3px 5px; border-radius: 4px; cursor: pointer; background: rgba(4,13,24,.3); border: 1px solid transparent; transition: background .12s, border-color .12s; }
 .roster-player-row:hover, .roster-player-row.selected { background: rgba(25,75,90,.35); border-color: rgba(64,223,160,.4); }
-.roster-player-pip { width: 6px; height: 6px; border-radius: 50%; background: #49c9ff; flex: 0 0 auto; }
+.roster-player-pip { width: 5px; height: 5px; border-radius: 50%; background: #49c9ff; flex: 0 0 auto; }
 .roster-player-pip.team-2 { background: #ff6572; }
 .roster-player-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #d6e8f2; }
 .leader-star { color: #ffc107; font-style: normal; margin-right: 2px; }
 .roster-player-role { font-size: 9px; color: #7293a7; white-space: nowrap; }
 
-.inspector-placeholder { display: grid; place-items: center; gap: 6px; min-height: 180px; }
-.inspector-placeholder span { color: #4cd8aa; font-size: 24px; }
-.inspector-placeholder p { margin: 0; color: #b6ced8; font-size: 11px; }
-.inspector-placeholder small { color: #648293; font-size: 10px; }
-.inspector-footer { display: flex; align-items: center; margin-top: auto; padding-top: 10px; color: #688799; font-size: 9px; }
-.health-dot { margin: 0 5px 0 0; background: #43dca5; box-shadow: 0 0 6px #43dca5; }
+.inspector-placeholder { display: grid; place-items: center; gap: 4px; padding: 20px 0; }
+.inspector-placeholder span { color: #4cd8aa; font-size: 20px; }
+.inspector-placeholder p { margin: 0; color: #b6ced8; font-size: 10px; }
+.inspector-placeholder small { color: #648293; font-size: 9px; }
 
-.empty-state { display: grid; place-items: center; gap: 8px; min-height: 60vh; text-align: center; border: 1px dashed rgba(126,178,198,.25); border-radius: 12px; background: rgba(9,25,41,.65); }
-.empty-icon { color: #55ddb6; font-size: 40px; }
-.empty-state h2 { margin: 0; font-size: 18px; }
-.empty-state p { margin: 0 0 6px; color: #7897a7; font-size: 12px; }
+.empty-state { display: grid; place-items: center; gap: 8px; min-height: 60vh; text-align: center; border: 1px dashed rgba(126,178,198,.25); border-radius: 10px; background: rgba(9,25,41,.65); }
+.empty-icon { color: #55ddb6; font-size: 36px; }
+.empty-state h2 { margin: 0; font-size: 16px; }
+.empty-state p { margin: 0 0 6px; color: #7897a7; font-size: 11px; }
 
-@media (max-width: 1200px) {
-  .replay-layout { grid-template-columns: 250px minmax(0, 1fr); height: auto; }
-  .session-rail, .stage, .inspector { max-height: none; }
-  .inspector { grid-column: 1 / -1; }
+@media (max-width: 1100px) {
+  .replay-layout { grid-template-columns: 240px minmax(0, 1fr); }
+  .inspector { display: none; }
 }
 @media (max-width: 768px) {
-  .replay-workbench { padding: 10px 10px 16px; }
-  .replay-header { display: grid; }
+  .replay-workbench { height: auto; max-height: none; overflow: auto; padding: 6px; }
   .replay-layout { display: flex; flex-direction: column; height: auto; }
-  .session-rail { width: 100%; }
-  .session-list { max-height: 200px; }
-  .map-shell { min-height: 300px; }
+  .session-rail { width: 100%; height: 220px; }
+  .map-shell { height: 320px; }
 }
 </style>
