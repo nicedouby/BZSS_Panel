@@ -7,6 +7,22 @@ function escapeHtml(text: string) {
     .replaceAll("'", "&#39;");
 }
 
+export function isResizeObserverError(error: unknown): boolean {
+  if (!error) return false;
+  const message = typeof error === "string"
+    ? error
+    : error instanceof Error
+      ? error.message
+      : typeof (error as any).message === "string"
+        ? (error as any).message
+        : String(error);
+
+  return (
+    message.includes("ResizeObserver loop completed with undelivered notifications") ||
+    message.includes("ResizeObserver loop limit exceeded")
+  );
+}
+
 export function renderFatalBootError(error: unknown) {
   const root = document.querySelector("#app");
   if (!root) return;
@@ -26,3 +42,4 @@ export function renderFatalBootError(error: unknown) {
     </div>
   `;
 }
+

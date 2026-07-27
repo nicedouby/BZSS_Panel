@@ -53,7 +53,9 @@ function ensureChart() {
 
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
-        chartInstance.value?.resize();
+        requestAnimationFrame(() => {
+          chartInstance.value?.resize();
+        });
       });
       resizeObserver.observe(chartRef.value);
     }

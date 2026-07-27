@@ -10,13 +10,16 @@ import "./styles/utilities.css";
 import "./styles/squad-admin.css";
 import "./styles/logpost-diagnostics-fixed.css";
 
-import { renderFatalBootError } from "./app/bootError";
+import { renderFatalBootError, isResizeObserverError } from "./app/bootError";
 
 window.addEventListener("error", (event) => {
-  renderFatalBootError(event.error ?? event.message);
+  const err = event.error ?? event.message;
+  if (isResizeObserverError(err)) return;
+  renderFatalBootError(err);
 });
 
 window.addEventListener("unhandledrejection", (event) => {
+  if (isResizeObserverError(event.reason)) return;
   renderFatalBootError(event.reason);
 });
 
@@ -37,6 +40,7 @@ async function bootstrap() {
     app.directive("backdrop-close", backdropCloseDirective);
 
     app.config.errorHandler = (error) => {
+      if (isResizeObserverError(error)) return;
       renderFatalBootError(error);
       console.error("[vue] unhandled error", error);
     };

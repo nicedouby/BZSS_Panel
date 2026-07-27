@@ -353,7 +353,11 @@ function ensureChart() {
   chartInstance.value = echarts.init(chartRef.value);
   chartInstance.value.setOption(buildOption());
   if (typeof ResizeObserver !== "undefined") {
-    resizeObserver = new ResizeObserver(() => chartInstance.value?.resize());
+    resizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => {
+        chartInstance.value?.resize();
+      });
+    });
     resizeObserver.observe(chartRef.value);
   }
 }

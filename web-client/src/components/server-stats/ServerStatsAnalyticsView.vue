@@ -302,7 +302,9 @@ function ensureHeatmap() {
 
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
-        heatmapInstance.value?.resize();
+        requestAnimationFrame(() => {
+          heatmapInstance.value?.resize();
+        });
       });
       resizeObserver.observe(heatmapRef.value);
     }
