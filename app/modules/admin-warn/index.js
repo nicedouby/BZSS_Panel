@@ -431,7 +431,7 @@ function buildCommandText(kind, { targetName = "", targetPlayerId = "", message 
 
 function sanitizeWarningMessage(message) {
   return String(message ?? "")
-    // 保留真实换行；把换行转成字面量 \\n 会让游戏直接显示 “/n”。
+    // 保留真实换行；转成转义文本会被游戏当作普通字符显示。
     .replace(/\r\n?/g, "\n")
     .replace(/"/g, "'")
     .trim()
