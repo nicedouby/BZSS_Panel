@@ -13,16 +13,15 @@ export function createStableNodeToolEnv(source = process.env) {
   delete env.NODE_COMPILE_CACHE;
   delete env.V8_COMPILE_CACHE_CACHE_DIR;
 
-  let options = String(env.NODE_OPTIONS || "");
-  for (const pattern of UNSAFE_NODE_OPTION_PATTERNS) {
-    options = options.replace(pattern, " ");
+  if (env.NODE_OPTIONS) {
+    let options = String(env.NODE_OPTIONS);
+    for (const pattern of UNSAFE_NODE_OPTION_PATTERNS) {
+      options = options.replace(pattern, " ");
+    }
+    options = options.replace(/\s+/g, " ").trim();
+    if (options) env.NODE_OPTIONS = options;
+    else delete env.NODE_OPTIONS;
   }
-  if (!options.includes("--max-old-space-size")) {
-    options += " --max-old-space-size=4096";
-  }
-  options = options.replace(/\s+/g, " ").trim();
-  if (options) env.NODE_OPTIONS = options;
-  else delete env.NODE_OPTIONS;
 
   return env;
 }
@@ -35,7 +34,7 @@ export async function runNodeTool({ label, entry, args = [] }) {
   console.log(`[client-build] Starting ${toolLabel} with Node ${nodeVersion}`);
 
   const code = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [entry, ...args], {
+    const child = spawn(process.execPath, ["--max-old-space-size=4096", "--no-maglev", entry, ...args], {
       stdio: "inherit",
       env: createStableNodeToolEnv(),
       windowsHide: false,
