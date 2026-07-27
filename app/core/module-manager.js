@@ -45,16 +45,17 @@ import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
 import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player-native/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
-import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer-native/index.js";
+// The native JSONL writer rewrites the complete tactical snapshot every 333 ms
+// and can grow to several gigabytes per round. Use the binary delta writer for
+// new recordings; the native player remains loaded for old native archives.
+import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer/index.js";
 
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
 import { createSquadBrowserPlayerLookupModule } from "../modules/squadbrowser-player-lookup/index.js";
 
 /**
- * Core: ModuleManager
- *
- * 鍔犺浇鐪嬩笉瑙佺殑涓氬姟鑳藉姏灞傘€?
+ * Core module registry and lifecycle manager.
  */
 export class ModuleManager {
   constructor({ core, logger, config }) {
