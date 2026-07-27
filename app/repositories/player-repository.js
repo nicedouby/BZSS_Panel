@@ -1000,7 +1000,7 @@ export class PlayerRepository {
         steamID, steamID, steamID, steamID, steamID, steamID, eosID, eosID, eosID, eosID, eosID, eosID),
       this.db.get("SELECT COUNT(*) AS count, MAX(created_at_ms) AS last_at FROM web_action_audit_records WHERE target_id = ?", String(id)),
     ]);
-    const keys = ["aliases", "ips", "sessions", "steam-friends", "tags", "violations", "reports", "commands", "matches", "ladder-history", "squad-records", "audit"];
+    const keys = ["aliases", "ips", "sessions", "steam-friends", "tags", "violations", "reports", "commands", "matches", "ladder-history", "squadbrowser-sessions", "squad-records", "audit"];
     return rows.map((row, index) => ({
       key: keys[index],
       count: Number(row?.count ?? 0),
