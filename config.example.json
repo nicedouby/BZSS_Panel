@@ -589,17 +589,61 @@
     "squadRestrictionMonitor": {
       "enabled": true,
       "typeRules": {
-        "matv": { "allowLock": true, "allowSoloLock": false, "maxPlayersWhenLocked": 3 },
-        "ifv": { "allowLock": true, "allowSoloLock": false, "maxPlayersWhenLocked": 3 },
-        "apc": { "allowLock": true, "allowSoloLock": false, "maxPlayersWhenLocked": 3 },
-        "tank": { "allowLock": true, "allowSoloLock": false, "maxPlayersWhenLocked": 3 },
-        "atgm_matv": { "allowLock": true, "allowSoloLock": true, "maxPlayersWhenLocked": 3 },
-        "artillery_vehicle": { "allowLock": true, "allowSoloLock": true, "maxPlayersWhenLocked": 3 },
-        "helicopter": { "allowLock": true, "allowSoloLock": true, "maxPlayersWhenLocked": 3 },
-        "attack_helicopter": { "allowLock": true, "allowSoloLock": true, "maxPlayersWhenLocked": 3 },
-        "infantry": { "allowLock": false, "allowSoloLock": false, "maxPlayersWhenLocked": null },
-        "logistics": { "allowLock": true, "allowSoloLock": true, "maxPlayersWhenLocked": 6 },
-        "mortar": { "allowLock": true, "allowSoloLock": true, "maxPlayersWhenLocked": 4 }
+        "matv": {
+          "allowLock": true,
+          "allowSoloLock": false,
+          "maxPlayersWhenLocked": 3
+        },
+        "ifv": {
+          "allowLock": true,
+          "allowSoloLock": false,
+          "maxPlayersWhenLocked": 3
+        },
+        "apc": {
+          "allowLock": true,
+          "allowSoloLock": false,
+          "maxPlayersWhenLocked": 3
+        },
+        "tank": {
+          "allowLock": true,
+          "allowSoloLock": false,
+          "maxPlayersWhenLocked": 3
+        },
+        "atgm_matv": {
+          "allowLock": true,
+          "allowSoloLock": true,
+          "maxPlayersWhenLocked": 3
+        },
+        "artillery_vehicle": {
+          "allowLock": true,
+          "allowSoloLock": true,
+          "maxPlayersWhenLocked": 3
+        },
+        "helicopter": {
+          "allowLock": true,
+          "allowSoloLock": true,
+          "maxPlayersWhenLocked": 3
+        },
+        "attack_helicopter": {
+          "allowLock": true,
+          "allowSoloLock": true,
+          "maxPlayersWhenLocked": 3
+        },
+        "infantry": {
+          "allowLock": false,
+          "allowSoloLock": false,
+          "maxPlayersWhenLocked": null
+        },
+        "logistics": {
+          "allowLock": true,
+          "allowSoloLock": true,
+          "maxPlayersWhenLocked": 6
+        },
+        "mortar": {
+          "allowLock": true,
+          "allowSoloLock": true,
+          "maxPlayersWhenLocked": 4
+        }
       }
     },
     "matchState": {
@@ -728,7 +772,7 @@
       "enabled": true,
       "refreshSquadsBeforeResolve": true,
       "dedupeWindowMs": 12000,
-      "messageTemplate": "[FOB预警] 警告${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB"
+      "messageTemplate": "[FOB预警] ${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB"
     },
     "seed-kill-warning": {
       "enabled": true,

@@ -864,7 +864,7 @@
       "enabled": true,
       "refreshSquadsBeforeResolve": true,
       "dedupeWindowMs": 12000,
-      "messageTemplate": "[FOB预警] 警告${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB"
+      "messageTemplate": "[FOB预警] ${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB"
     },
     "seed-kill-warning": {
       "enabled": true,
