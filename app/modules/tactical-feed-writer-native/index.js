@@ -167,6 +167,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     await state.segmentHandle.write(`${line}\n`);
 
     state.lastFrameAt = now;
+    state.session.lastFrameAt = now;
     state.recordCount += 1;
     state.session.frameCount += 1;
     if (hasPlayers(snapshot)) state.session.lastNonEmptySnapshot = snapshot;
@@ -193,9 +194,11 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     state.session.peakPlayerCount = Math.max(
       state.session.peakPlayerCount,
       state.session.currentPlayerCount,
-      Array.isArray(rconPlayers) ? rconPlayers.length : 0,
-      Array.isArray(presencePlayers) ? presencePlayers.filter((player) => player?.matchOnline === true || player?.online === true).length : 0,
+      state.session.uniquePlayers.size,
     );
+    if (hasPlayers(snapshot)) {
+      state.session.lastNonEmptySnapshot = snapshot;
+    }
   }
 
   async function flushSessionMetadata(status, now, reason = "") {
@@ -235,6 +238,9 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   async function endSession(reason, now = Date.now()) {
     if (!state.session) return;
 
+    if (state.session.lastNonEmptySnapshot) {
+      await writeSnapshot(state.session.lastNonEmptySnapshot, now, { force: true, terminal: true });
+    }
     await closeSegment();
     await flushSessionMetadata("closed", now, reason);
     await unlink(path.join(state.session.directory, "writer.lock")).catch(() => {});

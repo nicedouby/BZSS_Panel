@@ -123,8 +123,9 @@ async function main() {
       makePlayer("76561198000000003", "Charlie", 1000),
     ],
   });
+  await sleep(15);
   snapshotListener?.(currentSnapshot);
-  await sleep(30);
+  await sleep(40);
 
   currentSnapshot = makeSnapshot({ players: [], phase: "postmatch", playerCount: 0 });
   snapshotListener?.(currentSnapshot);
