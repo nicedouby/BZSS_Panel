@@ -11,7 +11,7 @@
     </div>
 
     <section v-else class="replay-layout">
-      <!-- 左侧：录制档案文件夹 / 列表 -->
+      <!-- 左侧：录制档案文件夹列表 -->
       <aside class="session-rail panel">
         <div class="panel-heading">
           <div class="panel-title-wrap">
@@ -70,7 +70,7 @@
         </div>
       </aside>
 
-      <!-- 中间：轻量化播放器主体 (地图 + 一体化底部时间轴) -->
+      <!-- 中间：轻量化战术地图播放器 (地图 Shell + 底部控制条) -->
       <main class="stage panel">
         <div
           ref="replayViewportRef"
@@ -92,8 +92,7 @@
               <span v-if="isFollowingPlayer && selectedPlayer" class="follow-badge">🎯 跟随: {{ selectedPlayer.name }}</span>
             </div>
             <div class="hud-right">
-              <span class="hud-clock">{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span>
-              <span class="hud-players"><b>{{ visiblePlayers.length }}</b> 玩家</span>
+              <span class="hud-players"><b>{{ visiblePlayers.length }}</b> 场上玩家</span>
               <span class="source-chip" :class="{ live: status && status.enabled }">
                 <i></i>{{ status && status.enabled ? "在线" : "未启动" }}
               </span>
@@ -145,7 +144,7 @@
             </div>
           </div>
 
-          <!-- 地图悬浮控制按钮组 -->
+          <!-- 地图悬浮缩放与跟随控件 -->
           <div class="map-controls" @pointerdown.stop>
             <button type="button" title="放大 (+)" @click="zoomBy(1.25)">＋</button>
             <button type="button" title="缩小 (-)" @click="zoomBy(0.8)">−</button>
@@ -182,24 +181,9 @@
           <div v-if="loadingState && !state" class="map-loading">正在载入回放状态…</div>
         </div>
 
-        <!-- 嵌入式紧凑底部时间轴及控制面板 -->
+        <!-- 重构：一体化紧凑底部播放控制面板 -->
         <div class="timeline-bar">
-          <div class="timeline-slider-row">
-            <input
-              v-model.number="currentMs"
-              class="timeline-range"
-              type="range"
-              min="0"
-              :max="Math.max(1, durationMs)"
-              step="100"
-              :disabled="!activeSession"
-              @pointerdown="beginTimelineSeek"
-              @pointerup="endTimelineSeek"
-            />
-            <span class="timeline-clock">{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span>
-          </div>
-
-          <div class="timeline-actions-row">
+          <div class="timeline-main-row">
             <div class="playback-btn-group">
               <button class="play-button" type="button" :disabled="!activeSession" @click="togglePlaying">{{ playing ? "Ⅱ" : "▶" }}</button>
               <button class="control-button" type="button" :disabled="!activeSession" @click="jump(-15)">−15s</button>
@@ -208,17 +192,35 @@
               <button class="control-button" type="button" :disabled="!activeSession" @click="jump(15)">+15s</button>
             </div>
 
+            <div class="timeline-slider-wrap">
+              <input
+                v-model.number="currentMs"
+                class="timeline-range"
+                type="range"
+                min="0"
+                :max="Math.max(1, durationMs)"
+                step="100"
+                :disabled="!activeSession"
+                @pointerdown="beginTimelineSeek"
+                @pointerup="endTimelineSeek"
+              />
+            </div>
+
+            <span class="timeline-clock">{{ formatClock(currentMs) }} / {{ formatClock(durationMs) }}</span>
+
             <div class="speed-group">
               <button v-for="speed in speeds" :key="speed" class="speed-button" :class="{ active: playbackRate === speed }" type="button" @click="playbackRate = speed">{{ speed }}×</button>
             </div>
+          </div>
 
-            <div class="hotkey-inline-hints">
-              <span><b>Space</b> 播放/暂停</span>
-              <span><b>←/→</b> ±5s</span>
-              <span><b>↑/↓</b> 倍速</span>
-              <span><b>R</b> 视角</span>
-              <span><b>F</b> 跟随</span>
-            </div>
+          <div class="hotkey-inline-hints">
+            <span><b>Space</b> 播放/暂停</span>
+            <span><b>←/→</b> ±5s</span>
+            <span><b>Shift+←/→</b> ±15s</span>
+            <span><b>↑/↓</b> 调倍速</span>
+            <span><b>R</b> 重置视角</span>
+            <span><b>F</b> 跟随</span>
+            <span><b>Esc</b> 取消选中</span>
           </div>
         </div>
       </main>
@@ -858,18 +860,19 @@ onBeforeUnmount(() => {
 
 <style scoped>
 :global(body) { background: #07111f; margin: 0; }
-.replay-workbench { height: calc(100vh - 50px); max-height: calc(100vh - 50px); padding: 6px 8px; color: #e8f0fb; background: radial-gradient(circle at 18% 0%, rgba(22,101,137,.2), transparent 35%), #07111f; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
+.replay-workbench { height: 100%; max-height: 100%; padding: 6px 8px; color: #e8f0fb; background: radial-gradient(circle at 18% 0%, rgba(22,101,137,.2), transparent 35%), #07111f; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; }
 
 .error-banner { padding: 6px 10px; margin-bottom: 6px; color: #ffc5c5; border: 1px solid rgba(248,113,113,.3); background: rgba(127,29,29,.2); border-radius: 6px; font-size: 11px; flex: 0 0 auto; }
 .panel { border: 1px solid rgba(141,182,205,.14); background: linear-gradient(145deg, rgba(16,35,54,.96), rgba(8,20,34,.96)); box-shadow: 0 12px 40px rgba(0,0,0,.2); border-radius: 10px; }
 
-/* 核心视口严格高度约束：无页面级滚动 */
+/* 核心视口严格 100% 高度约束：100% 无溢出页面滚动 */
 .replay-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr) 240px; gap: 8px; align-items: stretch; flex: 1 1 0; min-height: 0; height: 100%; overflow: hidden; }
 
 .session-rail, .inspector { padding: 8px; height: 100%; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex: 0 0 auto; }
 .panel-title-wrap { display: flex; align-items: center; gap: 6px; }
 .panel-heading h2 { margin: 0; font-size: 14px; color: #f1fbff; }
+.panel-kicker { color: #6f9bb5; font-size: 9px; letter-spacing: .15em; font-weight: 700; }
 .count-badge { min-width: 20px; padding: 1px 5px; text-align: center; border-radius: 5px; background: rgba(65,151,191,.18); color: #9bcee2; font-size: 10px; }
 .ghost-button.sm { padding: 3px 7px; font-size: 10px; border-radius: 6px; border: 1px solid rgba(150,190,211,.2); color: #cfe1ee; background: rgba(13,30,48,.8); cursor: pointer; }
 
@@ -914,7 +917,6 @@ onBeforeUnmount(() => {
 .hud-map-name { font-weight: 700; color: #f1fbff; font-size: 11px; }
 .hud-layer-name { color: #789bb0; font-size: 9px; }
 .follow-badge { padding: 1px 4px; border-radius: 3px; background: rgba(64,223,160,.2); color: #6bf2c4; font-weight: 600; border: 1px solid rgba(64,223,160,.3); font-size: 9px; }
-.hud-clock { font-family: monospace; color: #55ddb6; font-weight: 700; font-size: 11px; }
 .hud-players b { color: #eaf7f5; }
 .source-chip { padding: 2px 5px; font-size: 9px; border-radius: 4px; border: 1px solid rgba(150,190,211,.2); background: rgba(13,30,48,.8); color: #cfe1ee; }
 .source-chip.live { color: #8cf0c1; border-color: rgba(73,214,151,.35); }
@@ -924,7 +926,7 @@ onBeforeUnmount(() => {
 .player-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .map-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; color: #b8d5df; background: rgba(4,15,26,.35); backdrop-filter: blur(2px); font-size: 11px; }
 
-.map-controls { position: absolute; z-index: 12; right: 8px; top: 40px; display: grid; gap: 4px; }
+.map-controls { position: absolute; z-index: 12; right: 8px; top: 38px; display: grid; gap: 4px; }
 .map-controls button { width: 26px; height: 26px; border: 1px solid rgba(159,210,224,.2); border-radius: 5px; color: #bfeaf0; background: rgba(4,16,28,.82); cursor: pointer; font-size: 13px; display: grid; place-content: center; }
 .map-controls button:hover { color: #fff; border-color: rgba(85,221,182,.7); background: rgba(24,92,83,.75); }
 .follow-button { font-size: 12px; }
@@ -937,23 +939,23 @@ onBeforeUnmount(() => {
 .marker-size-actions { display: flex; justify-content: space-between; gap: 2px; margin-top: 2px; }
 .marker-size-actions button { width: 18px; height: 16px; min-height: 16px; padding: 0; font-size: 10px; }
 
-/* 紧凑固定底部控制面板 (Timeline Bar) */
+/* 重构：一体化紧凑单行播放控制面板 (Timeline Bar) */
 .timeline-bar { flex: 0 0 auto; margin-top: 6px; padding: 6px 8px; background: rgba(4,14,24,.6); border: 1px solid rgba(150,190,211,.12); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; }
-.timeline-slider-row { display: flex; align-items: center; gap: 8px; }
-.timeline-range { flex: 1 1 auto; margin: 0; accent-color: #3ed9a1; cursor: pointer; height: 12px; }
-.timeline-clock { font-family: monospace; color: #55ddb6; font-size: 10px; font-weight: 700; white-space: nowrap; }
-
-.timeline-actions-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
-.playback-btn-group { display: flex; gap: 4px; align-items: center; }
+.timeline-main-row { display: flex; align-items: center; gap: 8px; }
+.playback-btn-group { display: flex; gap: 3px; align-items: center; flex: 0 0 auto; }
 .play-button { width: 28px; height: 24px; padding: 0; color: #062117; background: #43dca5; border-color: #43dca5; font-weight: 800; cursor: pointer; border-radius: 5px; font-size: 11px; }
-.control-button { padding: 3px 6px; color: #9db9c6; background: rgba(6,19,32,.72); font-size: 9px; border-radius: 5px; border: 1px solid rgba(150,190,211,.2); cursor: pointer; }
+.control-button { padding: 3px 5px; color: #9db9c6; background: rgba(6,19,32,.72); font-size: 9px; border-radius: 5px; border: 1px solid rgba(150,190,211,.2); cursor: pointer; }
 .control-button:hover, .speed-button:hover { color: #eaf7f5; border-color: rgba(64,223,160,.4); }
 
-.speed-group { display: flex; gap: 2px; }
+.timeline-slider-wrap { flex: 1 1 0; min-width: 0; display: flex; align-items: center; }
+.timeline-range { width: 100%; margin: 0; accent-color: #3ed9a1; cursor: pointer; height: 12px; }
+.timeline-clock { font-family: monospace; color: #55ddb6; font-size: 10px; font-weight: 700; white-space: nowrap; flex: 0 0 auto; }
+
+.speed-group { display: flex; gap: 2px; flex: 0 0 auto; }
 .speed-button { padding: 3px 5px; color: #9db9c6; background: rgba(6,19,32,.72); font-size: 9px; border-radius: 4px; border: 1px solid rgba(150,190,211,.2); cursor: pointer; }
 .speed-button.active { color: #071b18; border-color: #40dfa0; background: #40dfa0; font-weight: 700; }
 
-.hotkey-inline-hints { display: flex; gap: 6px; font-size: 9px; color: #6a8b9f; }
+.hotkey-inline-hints { display: flex; gap: 8px; font-size: 9px; color: #6a8b9f; justify-content: center; border-top: 1px dashed rgba(150,190,211,.1); padding-top: 4px; }
 .hotkey-inline-hints b { color: #9ecee0; font-family: monospace; }
 
 .inspector { display: flex; flex-direction: column; }
