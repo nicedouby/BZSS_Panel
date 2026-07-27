@@ -710,6 +710,7 @@
       "./plugins/stepwise-squad-playtime-guard.js",
       "./plugins/squad-creation-broadcast.js",
       "./plugins/periodic-teamwork-warning.js",
+      "./app/plugins/fob-deploy-warning.js",
       "./plugins/seed-kill-warning.js"
     ],
     "squad-creation-broadcast": {
@@ -722,6 +723,12 @@
       "minIntervalMinutes": 10,
       "maxIntervalMinutes": 15,
       "message": "听从队长指挥是战术小队的核心，团队合作才能带来最终的共赢。"
+    },
+    "fob-deploy-warning": {
+      "enabled": true,
+      "refreshSquadsBeforeResolve": true,
+      "dedupeWindowMs": 12000,
+      "messageTemplate": "[FOB预警] 警告${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB"
     },
     "seed-kill-warning": {
       "enabled": true,
