@@ -500,6 +500,7 @@ export const pageRegistry: PageDefinition[] = [
   {
     name: "squad-leader-impeachment",
     path: "/plugins/squad-leader-impeachment",
+    aliases: ["/squad-leader-impeachment", "/pages/squad-leader-impeachment"],
     component: () => import("../pages/SquadLeaderImpeachmentPage.vue"),
     title: "弹劾队长",
     category: "plugin",
