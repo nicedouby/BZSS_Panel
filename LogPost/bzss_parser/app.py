@@ -17,6 +17,7 @@ from bzss_parser.identity_cache import IdentityCache
 from bzss_parser.logpost_writer import LogPostWriter
 from bzss_parser.matchers.auxiliary_identity_matcher import AuxiliaryIdentityMatcher
 from bzss_parser.matchers.combat_matcher import CombatMatcher
+from bzss_parser.matchers.fob_matcher import FobMatcher
 from bzss_parser.matchers.login_matcher import LoginMatcher
 from bzss_parser.matchers.round_end_matcher import RoundEndMatcher
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
@@ -64,6 +65,7 @@ class BzssLogParserApp:
             RoundEndMatcher(),
             SpawnMatcher(self.identity_cache),
             SquadMatcher(self.identity_cache),
+            FobMatcher(),
         ]
 
         self.blacklist = BlacklistFilter(self.config.get("blacklist_contains", []))

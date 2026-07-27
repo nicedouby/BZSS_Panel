@@ -3,6 +3,7 @@
 const PLUGIN_ID = "plugin.fob-deploy-warning";
 const CONFIG_KEY = "fob-deploy-warning";
 const RAW_EVENT_NAME = "On_RawLogLine";
+const PARSED_EVENT_NAME = "On_FobPlaced";
 const DEFAULT_MESSAGE_TEMPLATE = "[FOB预警] 警告${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB";
 
 export function createPlugin({ core, modules, config, logger } = {}) {
@@ -98,6 +99,42 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       teamId,
       squadId,
     };
+  }
+
+  function getEventValue(event = {}, name = "") {
+    const key = String(name || "").trim();
+    if (!key) return "";
+    if (event?.paramMap && event.paramMap[key] != null) return text(event.paramMap[key]);
+    if (event?.payload && event.payload[key] != null) return text(event.payload[key]);
+    if (event?.rawEvent && event.rawEvent[key] != null) return text(event.rawEvent[key]);
+    if (event && event[key] != null) return text(event[key]);
+    return "";
+  }
+
+  function parseFobPlacement(event = {}) {
+    const eventName = text(event?.eventName);
+
+    if (eventName === PARSED_EVENT_NAME) {
+      const playerName = getEventValue(event, "PlayerName");
+      const teamId = toInt(
+        getEventValue(event, "TeamID")
+        || getEventValue(event, "TeamId"),
+      );
+      const squadId = toInt(
+        getEventValue(event, "SquadID")
+        || getEventValue(event, "SquadId"),
+      );
+
+      if (teamId == null || squadId == null) return null;
+      return { playerName, teamId, squadId };
+    }
+
+    if (eventName === RAW_EVENT_NAME) {
+      const rawLog = text(event?.rawLog ?? event?.rawEvent?.Raw);
+      return parseRawFobPlacement(rawLog);
+    }
+
+    return null;
   }
 
   function getSquadState(serverId) {
@@ -253,14 +290,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     );
   }
 
-  async function handleRawLogLine(event = {}) {
+  async function handleFobEvent(event = {}) {
     state.receivedCount += 1;
     if (!isActive()) return;
 
-    const rawLog = text(event?.rawLog ?? event?.rawEvent?.Raw);
-    if (!rawLog) return;
-
-    const parsed = parseRawFobPlacement(rawLog);
+    const parsed = parseFobPlacement(event);
     if (!parsed) return;
 
     state.matchedCount += 1;
@@ -271,7 +305,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       resolveServerId(event),
       String(parsed.teamId),
       String(parsed.squadId),
-      text(event?.logTime) || rawLog,
+      text(event?.logTime) || text(event?.eventId),
     ].join("|");
 
     if (dedupeKeys.has(dedupeSignature)) {
@@ -324,7 +358,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
 
       unsubscribers.push(core.eventBus.onCoreEvent(RAW_EVENT_NAME, (event) => {
-        void enqueue(() => handleRawLogLine(event));
+        void enqueue(() => handleFobEvent(event));
+      }));
+
+      unsubscribers.push(core.eventBus.onCoreEvent(PARSED_EVENT_NAME, (event) => {
+        void enqueue(() => handleFobEvent(event));
       }));
 
       pluginLogger?.info?.("[FobDeployWarning] started.");

@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
 from bzss_parser.identity_cache import IdentityCache
 from bzss_parser.event_builder import EventBuilder
 from bzss_parser.matchers.combat_matcher import CombatMatcher
+from bzss_parser.matchers.fob_matcher import FobMatcher
 from bzss_parser.matchers.helpers import parse_online_ids
 from bzss_parser.matchers.server_tick_rate_matcher import ServerTickRateMatcher
 from bzss_parser.matchers.world_bring_up_matcher import WorldBringUpMatcher
@@ -180,6 +181,42 @@ class ServerTickRateMatcherTests(unittest.TestCase):
         self.assertEqual(data["TickRate"], "29.20")
         self.assertEqual(data["Unit"], "TPS")
         self.assertEqual(data["Status"], "good")
+
+
+class FobMatcherTests(unittest.TestCase):
+    def test_fob_placed_event_is_generated(self) -> None:
+        matcher = FobMatcher()
+        line = (
+            "[2026.07.27-06.23.42:554][317]PIE: Warning: Donald·DoubyBear "
+            "has placed FOB Team:2 Squad:1"
+        )
+
+        matched = matcher.match(line)
+        self.assertIsNotNone(matched)
+        event_name, params = matched
+        data = dict(params)
+
+        self.assertEqual(event_name, "On_FobPlaced")
+        self.assertEqual(data["PlayerName"], "Donald·DoubyBear")
+        self.assertEqual(data["TeamID"], "2")
+        self.assertEqual(data["SquadID"], "1")
+        self.assertEqual(data["ParseStatus"], "Full")
+
+    def test_fob_placed_accepts_missing_space_before_has(self) -> None:
+        matcher = FobMatcher()
+        line = (
+            "[2026.07.27-06.23.42:554][317]PIE: Warning: Donald·DoubyBear"
+            "has placed FOB Team:2 Squad:1"
+        )
+
+        matched = matcher.match(line)
+        self.assertIsNotNone(matched)
+        _, params = matched
+        data = dict(params)
+
+        self.assertEqual(data["PlayerName"], "Donald·DoubyBear")
+        self.assertEqual(data["TeamID"], "2")
+        self.assertEqual(data["SquadID"], "1")
 
 
 class WorldBringUpMatcherTests(unittest.TestCase):
