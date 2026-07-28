@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "apiToken": "",
+  "trustedIps": [],
+  "websocket": {
+    "enabled": true,
+    "path": "/ws/astrbot",
+    "heartbeatIntervalMs": 30000
+  },
+  "maxRecentEvents": 100
+}
