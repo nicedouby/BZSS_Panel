@@ -76,6 +76,17 @@ export const pageRegistry: PageDefinition[] = [
     ...documentPage,
   },
   {
+    name: "astrbot-bridge",
+    path: "/system/astrbot",
+    component: () => import("../pages/AstrbotBridgePage.vue"),
+    title: "AstrBot 网关",
+    category: "system",
+    refreshPolicy: "polling",
+    nav: { section: "system", label: "AstrBot 网关", icon: "🤖", order: 25 },
+    superAdminOnly: true,
+    ...workspacePage,
+  },
+  {
     name: "console",
     path: "/console",
     component: () => import("../pages/ConsolePage.vue"),
