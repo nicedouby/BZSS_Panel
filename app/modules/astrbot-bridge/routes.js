@@ -9,22 +9,8 @@ function getRequestIp(req) {
 
 function getBearerToken(req) {
   const authorization = String(req?.headers?.authorization ?? "").trim();
-  if (authorization.toLowerCase().startsWith("bearer ")) {
-    return authorization.slice(7).trim();
-  }
-
-  const headerToken = String(req?.headers?.["x-bzss-token"] ?? req?.headers?.["x-astrbot-token"] ?? "").trim();
-  if (headerToken) return headerToken;
-
-  const urlToken = String(
-    req?.url ? new URL(req.url, "http://localhost").searchParams.get("token") : ""
-  ).trim();
-  if (urlToken) return urlToken;
-
-  const apiToken = String(
-    req?.url ? new URL(req.url, "http://localhost").searchParams.get("apiToken") : ""
-  ).trim();
-  return apiToken;
+  if (!authorization.toLowerCase().startsWith("bearer ")) return "";
+  return authorization.slice(7).trim();
 }
 
 function normalizeList(values) {
