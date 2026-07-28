@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 
 import { handleAstrbotBridgeRoutes } from "./routes.js";
+import { createAstrbotWebSocketGateway } from "./websocket.js";
 
 const MODULE_ID = "module.astrbotBridge";
 const DEFAULT_ALLOWED_ACTIONS = ["bindProfile", "setWarmup", "toggleWarmup"];
@@ -95,10 +96,27 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     console;
 
   let runtimeConfig = readModuleConfig(config);
+  let websocketGateway = null;
+  let unsubscribeCoreEvents = null;
+  let heartbeatTimer = null;
+  let connectedAt = null;
+  let lastHeartbeat = null;
+  let eventsSent = 0;
+  let eventsFailed = 0;
+  let lastEvent = null;
+  const recentEvents = [];
 
   const api = {
     getState() {
       return buildState();
+    },
+
+    acceptWebSocket(req, socket, head) {
+      if (!runtimeConfig.websocket.enabled) {
+        socket.end("HTTP/1.1 503 Service Unavailable\\r\\nConnection: close\\r\\n\\r\\nAstrBot WebSocket disabled.");
+        return;
+      }
+      websocketGateway?.acceptUpgrade(req, socket, head);
     },
 
     refreshConfig() {
@@ -155,10 +173,36 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     },
 
     async start() {
-      moduleLogger?.info?.(`[AstrBotBridge] started. enabled=${Boolean(runtimeConfig.enabled)} tokenConfigured=${Boolean(runtimeConfig.apiToken)}`);
+      websocketGateway = createAstrbotWebSocketGateway({
+        getConfig: () => ({
+          enabled: runtimeConfig.enabled && runtimeConfig.websocket.enabled,
+          apiToken: runtimeConfig.apiToken,
+          trustedIps: runtimeConfig.trustedIps,
+        }),
+        getState: () => buildState(),
+        logger: moduleLogger,
+      });
+      unsubscribeCoreEvents = core?.eventBus?.onCoreEvent?.("*", publishEvent) ?? null;
+      connectedAt = new Date().toISOString();
+      lastHeartbeat = connectedAt;
+      heartbeatTimer = setInterval(() => {
+        lastHeartbeat = new Date().toISOString();
+        websocketGateway?.publish({
+          type: "astrbot.heartbeat",
+          data: { time: lastHeartbeat, connectedAt, eventsSent, eventsFailed },
+        });
+      }, runtimeConfig.websocket.heartbeatIntervalMs);
+      heartbeatTimer.unref?.();
+      moduleLogger?.info?.(`[AstrBotBridge] started. enabled=${Boolean(runtimeConfig.enabled)} tokenConfigured=${Boolean(runtimeConfig.apiToken)} websocket=${runtimeConfig.websocket.path}`);
     },
 
     async stop() {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+      unsubscribeCoreEvents?.();
+      unsubscribeCoreEvents = null;
+      websocketGateway?.closeAll?.();
+      websocketGateway = null;
       moduleLogger?.info?.("[AstrBotBridge] stopped.");
     },
   };
@@ -174,6 +218,12 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       apiToken: String(current.apiToken ?? "").trim(),
       trustedIps: normalizeList(current.trustedIps),
       allowedActions,
+      websocket: {
+        enabled: current.websocket?.enabled !== false,
+        path: String(current.websocket?.path ?? "/ws/astrbot").trim() || "/ws/astrbot",
+        heartbeatIntervalMs: Math.max(5000, Number(current.websocket?.heartbeatIntervalMs ?? 30000) || 30000),
+      },
+      maxRecentEvents: Math.max(10, Math.min(1000, Number(current.maxRecentEvents ?? 100) || 100)),
     };
   }
 
@@ -189,8 +239,39 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       tokenConfigured: Boolean(runtimeConfig.apiToken),
       trustedIps: [...runtimeConfig.trustedIps],
       allowedActions: [...runtimeConfig.allowedActions],
+      websocket: {
+        enabled: Boolean(runtimeConfig.websocket.enabled),
+        path: runtimeConfig.websocket.path,
+        connected: Boolean(websocketGateway?.getClientCount?.()),
+        clients: websocketGateway?.getClientCount?.() ?? 0,
+        connectedAt,
+        lastHeartbeat,
+      },
+      metrics: { eventsSent, eventsFailed, lastEvent, recentEvents: [...recentEvents] },
       ...extra,
     };
+  }
+
+  function publishEvent(event) {
+    const eventType = String(event?.type ?? event?.eventName ?? event?.name ?? event?.rawEvent?.EventName ?? "core.event").trim() || "core.event";
+    const record = {
+      time: new Date().toISOString(),
+      type: eventType,
+      serverId: String(event?.serverId ?? event?.payload?.serverId ?? "").trim(),
+      eventId: String(event?.eventId ?? event?.rawEvent?.EventId ?? "").trim(),
+      players: Array.isArray(event?.players) ? event.players.length : undefined,
+      squads: Array.isArray(event?.squads) ? event.squads.length : undefined,
+    };
+    recentEvents.unshift(record);
+    recentEvents.splice(runtimeConfig.maxRecentEvents);
+    lastEvent = eventType;
+    try {
+      websocketGateway?.publish({ type: "core.event", eventType, time: record.time, data: record });
+      eventsSent += 1;
+    } catch (error) {
+      eventsFailed += 1;
+      moduleLogger?.warn?.(`[AstrBotBridge] event publish failed: ${error.message}`);
+    }
   }
 
   function buildQueryResult(input = {}) {
