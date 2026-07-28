@@ -133,8 +133,7 @@ export function createAstrbotWebSocketGateway({
     const bearer = authorization.toLowerCase().startsWith("bearer ")
       ? authorization.slice(7).trim()
       : "";
-    const queryToken = String(url.searchParams.get("token") ?? "").trim();
-    if (!config.apiToken || (bearer !== config.apiToken && queryToken !== config.apiToken)) return false;
+    if (!config.apiToken || bearer !== config.apiToken) return false;
 
     const trustedIps = Array.isArray(config.trustedIps) ? config.trustedIps : [];
     if (!trustedIps.length) return true;
