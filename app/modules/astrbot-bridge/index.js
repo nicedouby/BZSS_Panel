@@ -152,6 +152,14 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       return readLatestServerInfoSnapshot();
     },
 
+    async readEndSnapshotImage(id, input = {}) {
+      return readEndSnapshotImage(id, input);
+    },
+
+    async readLatestEndSnapshotImage(input = {}) {
+      return readLatestEndSnapshotImage(input);
+    },
+
     async unbindMe(input = {}) {
       return unbindMe(input);
     },
@@ -252,26 +260,160 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     };
   }
 
-  function publishEvent(event) {
-    const eventType = String(event?.type ?? event?.eventName ?? event?.name ?? event?.rawEvent?.EventName ?? "core.event").trim() || "core.event";
+  const pendingFinishedRounds = new Set();
+  const publishedFinishedRounds = new Set();
+
+  function publishBridgeEvent(type, data = {}, sourceEvent = {}) {
+    const time = new Date().toISOString();
     const record = {
-      time: new Date().toISOString(),
-      type: eventType,
-      serverId: String(event?.serverId ?? event?.payload?.serverId ?? "").trim(),
-      eventId: String(event?.eventId ?? event?.rawEvent?.EventId ?? "").trim(),
-      players: Array.isArray(event?.players) ? event.players.length : undefined,
-      squads: Array.isArray(event?.squads) ? event.squads.length : undefined,
+      time,
+      type,
+      serverId: String(sourceEvent?.serverId ?? sourceEvent?.rawEvent?.ServerID ?? "").trim(),
+      eventId: String(sourceEvent?.eventId ?? sourceEvent?.rawEvent?.EventId ?? "").trim(),
+      ...data,
     };
     recentEvents.unshift(record);
     recentEvents.splice(runtimeConfig.maxRecentEvents);
-    lastEvent = eventType;
+    lastEvent = type;
     try {
-      websocketGateway?.publish({ type: "core.event", eventType, time: record.time, data: record });
+      websocketGateway?.publish({
+        type,
+        time,
+        data: sanitizeBridgeEventData(data),
+      });
       eventsSent += 1;
     } catch (error) {
       eventsFailed += 1;
       moduleLogger?.warn?.(`[AstrBotBridge] event publish failed: ${error.message}`);
     }
+  }
+
+  function publishEvent(event) {
+    const eventType = String(
+      event?.type
+      ?? event?.eventName
+      ?? event?.name
+      ?? event?.rawEvent?.Event
+      ?? event?.rawEvent?.EventName
+      ?? "core.event",
+    ).trim() || "core.event";
+    const normalized = event?.normalized ?? {};
+    const normalizedPayload = normalized?.roundWorldBringUp
+      ?? normalized?.roundMatchWinner
+      ?? normalized?.playerConnected
+      ?? normalized?.serverTickRate
+      ?? {};
+    const roundKey = String(
+      event?.roundKey
+      ?? event?.payload?.roundKey
+      ?? normalizedPayload?.roundKey
+      ?? `${event?.serverId ?? ""}:${eventType}`,
+    ).trim();
+
+    if (eventType === "round.world_bring_up") {
+      const serverInfo = buildServerInfo({ includePlayers: false });
+      publishBridgeEvent("match.started", {
+        map: firstText(normalizedPayload?.mapName, serverInfo?.match?.map),
+        mode: firstText(normalizedPayload?.gameMode, serverInfo?.match?.mode),
+        players: Number(serverInfo?.population?.players ?? 0),
+        serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
+      }, event);
+      return;
+    }
+
+    if (eventType === "match.snapshot.ready") {
+      void publishFinishedFromSnapshot(event, roundKey);
+      return;
+    }
+
+    if (eventType === "round.match_winner" || eventType === "MATCH_END") {
+      if (!pendingFinishedRounds.has(roundKey) && !publishedFinishedRounds.has(roundKey)) {
+        pendingFinishedRounds.add(roundKey);
+        const timer = setTimeout(() => {
+          pendingFinishedRounds.delete(roundKey);
+          if (!publishedFinishedRounds.has(roundKey)) {
+            void publishFinishedFromSnapshot(event, roundKey, true);
+          }
+        }, 5000);
+        timer.unref?.();
+      }
+      return;
+    }
+
+    if (eventType === "On_PlayerConnected" || eventType === "player.connected" || eventType === "player.join") {
+      const serverInfo = buildServerInfo({ includePlayers: false });
+      publishBridgeEvent("player.join", {
+        serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
+        players: Number(serverInfo?.population?.players ?? 0),
+      }, event);
+      return;
+    }
+
+    if (eventType === "On_PlayerDisconnected" || eventType === "player.disconnected" || eventType === "player.leave") {
+      const serverInfo = buildServerInfo({ includePlayers: false });
+      publishBridgeEvent("player.leave", {
+        serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
+        players: Number(serverInfo?.population?.players ?? 0),
+      }, event);
+      return;
+    }
+
+    if (normalized?.category === "server_status" || /server[._-].*(updated|status)|status[._-].*updated/i.test(eventType)) {
+      const serverInfo = buildServerInfo({ includePlayers: false });
+      publishBridgeEvent("server.updated", {
+        players: Number(serverInfo?.population?.players ?? 0),
+        maxPlayers: serverInfo?.population?.maxPlayers ?? null,
+        queue: Number(serverInfo?.population?.queue ?? 0),
+        map: serverInfo?.match?.map ?? "",
+        mode: serverInfo?.match?.mode ?? "",
+        serverId: serverInfo?.server?.serverId ?? "",
+      }, event);
+      return;
+    }
+
+    publishBridgeEvent("core.event", {
+      sourceType: eventType,
+      serverId: event?.serverId ?? "",
+    }, event);
+  }
+
+  async function publishFinishedFromSnapshot(sourceEvent, roundKey, allowLatestFallback = false) {
+    const snapshotApi = resolveMatchEndSnapshotApi();
+    let snapshot = null;
+    const snapshotId = String(sourceEvent?.snapshotId ?? sourceEvent?.data?.snapshotId ?? "").trim();
+    try {
+      if (snapshotApi?.readSnapshot && snapshotId) snapshot = await snapshotApi.readSnapshot(snapshotId);
+      if (!snapshot && allowLatestFallback && snapshotApi?.listSnapshots) {
+        const list = await snapshotApi.listSnapshots();
+        const latest = Array.isArray(list) ? list[0] : null;
+        if (latest?.id && snapshotApi.readSnapshot) snapshot = await snapshotApi.readSnapshot(latest.id);
+      }
+    } catch (error) {
+      moduleLogger?.warn?.(`[AstrBotBridge] failed to read finished snapshot: ${error.message}`);
+    }
+
+    const resolvedId = String(snapshot?.id ?? snapshotId).trim();
+    const key = String(roundKey || resolvedId || "finished").trim();
+    if (publishedFinishedRounds.has(key)) return;
+    publishedFinishedRounds.add(key);
+    pendingFinishedRounds.delete(key);
+    const serverInfo = buildServerInfo({ includePlayers: false });
+    publishBridgeEvent("match.finished", {
+      map: firstText(snapshot?.match?.map, snapshot?.match?.layer, serverInfo?.match?.map),
+      winner: firstText(snapshot?.trigger?.winner, sourceEvent?.winner, sourceEvent?.data?.winner),
+      snapshotId: resolvedId || null,
+      serverId: firstText(snapshot?.server?.serverId, sourceEvent?.serverId, serverInfo?.server?.serverId),
+      players: Number(snapshot?.summary?.recordedPlayerCount ?? snapshot?.server?.playerCount ?? serverInfo?.population?.players ?? 0),
+    }, sourceEvent);
+  }
+
+  function sanitizeBridgeEventData(data) {
+    const allowed = {};
+    for (const [key, value] of Object.entries(data ?? {})) {
+      if (value === undefined) continue;
+      if (["string", "number", "boolean"].includes(typeof value) || value === null) allowed[key] = value;
+    }
+    return allowed;
   }
 
   function buildQueryResult(input = {}) {
@@ -804,6 +946,46 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     }
 
     return null;
+  }
+
+  function resolveMatchEndSnapshotApi() {
+    const moduleCandidate = modules?.matchEndSnapshot;
+    const directApi = moduleCandidate?.api ?? moduleCandidate ?? null;
+    if (directApi?.listSnapshots && directApi?.readSnapshotImage) return directApi;
+
+    const pluginManager = core?.pluginManager;
+    const pluginInstance = Array.isArray(pluginManager?.instances)
+      ? pluginManager.instances.find((instance) => instance?.manifest?.id === "match-end-snapshot")
+      : null;
+    const pluginApi = pluginInstance?.api ?? pluginInstance ?? null;
+    return pluginApi?.listSnapshots && pluginApi?.readSnapshotImage ? pluginApi : null;
+  }
+
+  async function readEndSnapshotImage(id, input = {}) {
+    const api = resolveMatchEndSnapshotApi();
+    if (!api) return { ok: false, statusCode: 503, error: "MATCH_END_SNAPSHOT_UNAVAILABLE", message: "match-end-snapshot plugin is not loaded." };
+    try {
+      const image = await api.readSnapshotImage(id, {
+        combined: input.combined === true || input.combined === "1",
+        page: input.page,
+      });
+      return { ok: true, contentType: image.contentType ?? "image/png", fileName: image.fileName, png: Buffer.from(image.content ?? []) };
+    } catch (error) {
+      return { ok: false, statusCode: Number(error?.statusCode ?? 404) || 404, error: error?.code ?? "SNAPSHOT_NOT_FOUND", message: String(error?.message ?? error) };
+    }
+  }
+
+  async function readLatestEndSnapshotImage(input = {}) {
+    const api = resolveMatchEndSnapshotApi();
+    if (!api) return { ok: false, statusCode: 503, error: "MATCH_END_SNAPSHOT_UNAVAILABLE", message: "match-end-snapshot plugin is not loaded." };
+    try {
+      const list = await api.listSnapshots();
+      const latest = Array.isArray(list) ? list[0] : null;
+      if (!latest?.id) return { ok: false, statusCode: 404, error: "SNAPSHOT_NOT_FOUND", message: "No finished snapshot was found." };
+      return readEndSnapshotImage(latest.id, input);
+    } catch (error) {
+      return { ok: false, statusCode: Number(error?.statusCode ?? 404) || 404, error: error?.code ?? "SNAPSHOT_NOT_FOUND", message: String(error?.message ?? error) };
+    }
   }
 
   async function readLatestServerInfoSnapshot() {
