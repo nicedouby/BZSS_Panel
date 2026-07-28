@@ -414,6 +414,17 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/astrbot/panel-status" && req.method === "GET") {
+      const panelUser = this.core.authManager?.getUserFromRequest(req);
+      if (!panelUser) return this.json(res, 401, { error: "AuthenticationRequired" });
+      const bridge = this.modules.astrbotBridge;
+      if (!bridge?.getState) return this.json(res, 404, { error: "AstrBotBridgeUnavailable" });
+      return this.json(res, 200, {
+        ok: true,
+        data: bridge.getState(),
+      });
+    }
+
     const astrbotBridgeHandled = await handleAstrbotBridgeRoutes({
       core: this.core,
       modules: this.modules,
