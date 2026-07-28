@@ -146,19 +146,6 @@ export async function handleAstrbotBridgeRoutes({
     return true;
   }
 
-  const trustedIps = normalizeList(config?.get?.("modules.astrbotBridge.trustedIps", []) ?? []);
-  if (trustedIps.length > 0) {
-    const requestIp = getRequestIp(req);
-    if (!trustedIps.includes(requestIp)) {
-      bridgeLogger?.warn?.(`[AstrBotBridge] forbidden-ip path=${url.pathname} method=${req.method} ip=${requestIp}`);
-      json(403, {
-        error: "Forbidden",
-        message: "Request IP is not allowed.",
-      });
-      return true;
-    }
-  }
-
   if (url.pathname === "/api/astrbot/bind" && req.method === "POST") {
     const body = await readJsonBody(req);
     const identity = readIdentity(req, url, body ?? {});
@@ -255,6 +242,31 @@ export async function handleAstrbotBridgeRoutes({
     return true;
   }
 
+  if (url.pathname === "/api/astrbot/server-image" && req.method === "GET") {
+    const result = await bridge.queryServerInfoSnapshot?.({
+      includePlayers: true,
+    });
+    return writeAstrbotImageResponse(res, json, result, "server-info.png");
+  }
+
+  if (url.pathname === "/api/astrbot/end-snapshot/latest" && req.method === "GET") {
+    const result = await bridge.readLatestEndSnapshotImage?.({
+      combined: url.searchParams.get("combined") === "1",
+      page: url.searchParams.get("page") ?? undefined,
+    });
+    return writeAstrbotImageResponse(res, json, result, "end-snapshot.png");
+  }
+
+  const snapshotImageMatch = url.pathname.match(/^\/api\/astrbot\/snapshot\/([^/]+)\/image$/);
+  if (snapshotImageMatch && req.method === "GET") {
+    const snapshotId = decodeURIComponent(snapshotImageMatch[1]);
+    const result = await bridge.readEndSnapshotImage?.(snapshotId, {
+      combined: url.searchParams.get("combined") === "1",
+      page: url.searchParams.get("page") ?? undefined,
+    });
+    return writeAstrbotImageResponse(res, json, result, "end-snapshot.png");
+  }
+
   if (url.pathname === "/api/astrbot/query" && req.method === "POST") {
     const body = await readJsonBody(req);
     const identity = readIdentity(req, url, body ?? {});
@@ -339,5 +351,27 @@ export async function handleAstrbotBridgeRoutes({
     error: "ApiNotFound",
     message: "AstrBot bridge API route not found.",
   });
+  return true;
+}
+
+function writeAstrbotImageResponse(res, json, result, fallbackFileName) {
+  if (!result?.ok || !Buffer.isBuffer(result?.png) || result.png.length === 0) {
+    const statusCode = Number(result?.statusCode ?? 500);
+    json(statusCode >= 400 ? statusCode : 500, {
+      ok: false,
+      error: result?.error ?? "IMAGE_UNAVAILABLE",
+      message: result?.message ?? "Image is unavailable.",
+    });
+    return true;
+  }
+
+  const fileName = String(result?.fileName ?? fallbackFileName).replaceAll(""", "");
+  res.writeHead(200, {
+    "Content-Type": String(result?.contentType ?? "image/png"),
+    "Content-Length": String(result.png.length),
+    "Content-Disposition": `inline; filename="${fileName}"`,
+    "Cache-Control": "no-store",
+  });
+  res.end(result.png);
   return true;
 }
