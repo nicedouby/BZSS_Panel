@@ -428,6 +428,14 @@ export class WebServer {
       return;
     }
 
+    if (connectionKind === "astrbot") {
+      const bridge = this.modules.astrbotBridge;
+      if (!bridge?.acceptWebSocket) {
+        return this.rejectUpgrade(socket, 404, "AstrBot bridge unavailable.");
+      }
+      return bridge.acceptWebSocket(req, socket, head);
+    }
+
     const user = this.core.authManager?.getUserFromRequest(req);
 
     if (user && url.pathname === "/api/auth/change-password" && req.method === "POST") {
@@ -4683,7 +4691,9 @@ export class WebServer {
       ? "console"
       : url.pathname === "/ws/chat"
         ? "chat"
-        : null;
+        : url.pathname === "/ws/astrbot"
+          ? "astrbot"
+          : null;
 
     if (!connectionKind) {
       return this.rejectUpgrade(socket, 404, "Not Found");
