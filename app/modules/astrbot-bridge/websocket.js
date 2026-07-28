@@ -135,10 +135,7 @@ export function createAstrbotWebSocketGateway({
       : "";
     if (!config.apiToken || bearer !== config.apiToken) return false;
 
-    const trustedIps = Array.isArray(config.trustedIps) ? config.trustedIps : [];
-    if (!trustedIps.length) return true;
-    const remoteIp = String(req.socket?.remoteAddress ?? "").trim();
-    return trustedIps.includes(remoteIp);
+    return true;
   }
 
   function reject(socket, statusCode, message) {
