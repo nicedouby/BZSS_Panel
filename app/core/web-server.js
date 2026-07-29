@@ -440,13 +440,6 @@ export class WebServer {
       return;
     }
 
-    if (connectionKind === "astrbot") {
-      const bridge = this.modules.astrbotBridge;
-      if (!bridge?.acceptWebSocket) {
-        return this.rejectUpgrade(socket, 404, "AstrBot bridge unavailable.");
-      }
-      return bridge.acceptWebSocket(req, socket, head);
-    }
 
     const user = this.core.authManager?.getUserFromRequest(req);
 
