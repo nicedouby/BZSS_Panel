@@ -351,7 +351,7 @@ function writeAstrbotImageResponse(res, json, result, fallbackFileName) {
     return true;
   }
 
-  const fileName = String(result?.fileName ?? fallbackFileName).replaceAll(""", "");
+  const fileName = String(result?.fileName ?? fallbackFileName).replaceAll('"', '');
   res.writeHead(200, {
     "Content-Type": String(result?.contentType ?? "image/png"),
     "Content-Length": String(result.png.length),
