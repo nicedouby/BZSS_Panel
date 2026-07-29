@@ -78,7 +78,7 @@
       <MobileSegmentTabs
         v-if="isMobile"
         v-model="mobileTab"
-        aria-label="Match Status Sections"
+        ariaLabel="Match Status Sections"
         :items="mobileTabItems"
       />
       <div v-if="viewMode === 'list'" class="match-state-content">
