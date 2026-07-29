@@ -247,7 +247,7 @@
               :key="server.serverId"
               class="server-row"
             >
-              <span :class="['rank-badge', `rank-${idx + 1}`]">{{ idx + 1 }}</span>
+              <span :class="['rank-badge', `rank-${Number(idx) + 1}`]">{{ Number(idx) + 1 }}</span>
               <div class="server-info">
                 <strong>{{ cleanServerName(server.serverName) }}</strong>
                 <div class="progress-bar-wrap">
