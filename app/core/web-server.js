@@ -3700,15 +3700,16 @@ export class WebServer {
       const id = String(body?.id ?? "").trim();
       if (!id) return this.json(res, 400, { error: "MissingId" });
       const pluginApi = this.getPluginApi("match-end-snapshot");
-      if (!pluginApi?.readSnapshotImage) return this.json(res, 404, { error: "PluginNotLoaded" });
+      if (!pluginApi?.regenerateSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
 
       try {
-        const artifact = await pluginApi.readSnapshotImage(id, { force: true });
+        const manifest = await pluginApi.regenerateSnapshot(id);
         return this.json(res, 200, {
           ok: true,
           id,
-          fileName: artifact.fileName,
-          generatedAt: new Date().toISOString(),
+          fileName: manifest?.primaryImage ?? id + ".png",
+          manifest,
+          generatedAt: manifest?.generatedAt ?? new Date().toISOString(),
         });
       } catch (error) {
         if (error?.statusCode === 400) {
@@ -3718,12 +3719,15 @@ export class WebServer {
           });
         }
         if (error?.code === "ENOENT") {
-          return this.json(res, 404, { error: "SnapshotNotFound" });
+          return this.json(res, 404, {
+            error: "SnapshotNotFound",
+            message: "The historical snapshot JSON file was not found.",
+          });
         }
         this.core?.logger?.error?.("[MatchEndSnapshot] regenerate request failed: " + (error?.stack || error));
         return this.json(res, 500, {
-          error: "SnapshotImageGenerationFailed",
-          message: "The snapshot image could not be regenerated. Check the server log for details.",
+          error: error?.code ?? "SnapshotImageGenerationFailed",
+          message: "Historical snapshot rendering failed: " + (error?.message ?? "Unknown error"),
         });
       }
     }
