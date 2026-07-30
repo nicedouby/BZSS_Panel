@@ -512,6 +512,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       nextLayer,
       playtime: firstNumber(match.playtime, status.playtime, serverStatus.playtime, status.matchTimeSeconds),
       teamTickets: extractTeamTickets(matchState, overview, match, status, serverStatus),
+      factionIds: extractTeamFactionIds(matchState, overview, match, status, serverStatus),
     },
     summary: {
       playerCount,
@@ -534,6 +535,24 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       ),
     },
   };
+}
+
+function extractTeamFactionIds(...sources) {
+  for (const source of sources) {
+    const value = source?.factionIds ?? source?.factions ?? source?.teamFactionIds;
+    if (value && typeof value === "object") {
+      const team1 = firstText(value.team1, value["1"], value.teamOne, value.team1Id);
+      const team2 = firstText(value.team2, value["2"], value.teamTwo, value.team2Id);
+      if (team1 || team2) return { team1, team2 };
+    }
+    const fields = source?.fields;
+    if (fields && typeof fields === "object") {
+      const team1 = firstText(fields.TeamOneFaction_s, fields.TeamOneFactionID_s, fields.FactionOne_s);
+      const team2 = firstText(fields.TeamTwoFaction_s, fields.TeamTwoFactionID_s, fields.FactionTwo_s);
+      if (team1 || team2) return { team1, team2 };
+    }
+  }
+  return { team1: "", team2: "" };
 }
 
 function extractTeamTickets(...sources) {
