@@ -1721,6 +1721,13 @@ function mergeServerStatus(current, parsed, raw) {
     next.playerCountSource = "serverInfo";
   }
 
+  if (parsed.factionIds && (parsed.factionIds.team1 || parsed.factionIds.team2)) {
+    next.factionIds = {
+      ...(next.factionIds ?? {}),
+      ...parsed.factionIds,
+    };
+  }
+
   return next;
 }
 
