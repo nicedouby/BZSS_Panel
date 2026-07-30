@@ -196,7 +196,8 @@ function buildTeams(payload) {
       teamID,
       teamName,
       accent: TEAM_ACCENTS[teamID] ?? "#60a5fa",
-      factionCode: firstText(teamSquads.find((squad) => firstText(squad?.factionCode, squad?.faction))?.factionCode, teamSquads.find((squad) => firstText(squad?.faction))?.faction, teamPlayers.find((player) => firstText(player?.factionCode, player?.faction))?.factionCode, teamPlayers.find((player) => firstText(player?.faction))?.faction, ""),
+      factionId: firstText(payload?.match?.factionIds?.[`team${teamID}`], payload?.match?.factionIds?.[String(teamID)], teamSquads.find((squad) => firstText(squad?.factionId))?.factionId),
+      factionCode: firstText(teamSquads.find((squad) => firstText(squad?.factionCode, squad?.faction))?.factionCode, teamSquads.find((squad) => firstText(squad?.faction))?.faction, teamPlayers.find((player) => firstText(player?.factionCode, player?.faction))?.factionCode, teamPlayers.find((player) => firstText(player?.faction))?.faction, payload?.match?.factionIds?.[`team${teamID}`], ""),
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
@@ -365,6 +366,8 @@ async function resolveLocalFactionAsset(fileName, factionCode) {
   if (localAssetSearchCache.has(key)) return localAssetSearchCache.get(key);
   const directCandidates = [
     path.resolve(process.cwd(), "web-client", "public", fileName),
+    path.resolve(process.cwd(), "web-client", "public", `${String(factionCode ?? "").trim()}.PNG`),
+    path.resolve(process.cwd(), "web-client", "public", `${String(factionCode ?? "").trim()}.png`),
     path.resolve(process.cwd(), "web-client", "public", "assets", "flags", fileName),
     path.resolve(process.cwd(), "web-client", "public", "assets", "factions", fileName),
     path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", fileName),
@@ -514,12 +517,16 @@ function renderTeamColumn(team) {
   svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
   svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · TICKETS ${team.tickets == null ? "--" : team.tickets} · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
   if (team.commanderPlayer) {
-  const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
-  svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
-  svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
-  if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
-  svg.push(`<text x="${x + team.width - 174}" y="${y + 52}" text-anchor="middle" class="commander-caption">${escapeXml(clip(team.commanderName, 12))}</text>`);
-  svg.push(`<text x="${x + team.width - 218}" y="${y + 25}" text-anchor="end" class="commander-label">Commander</text>`);
+    const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
+    const commanderCenterX = x + team.width - 34;
+    const commanderCenterY = y + 27;
+    svg.push(\`<circle cx="\${commanderCenterX}" cy="\${commanderCenterY}" r="27" class="commander-glow"/>\`);
+    svg.push(\`<circle cx="\${commanderCenterX}" cy="\${commanderCenterY}" r="18" fill="\${team.accent}" fill-opacity=".20" stroke="\${team.accent}" stroke-opacity=".9"/>\`);
+    svg.push(\`<circle cx="\${commanderCenterX}" cy="\${commanderCenterY}" r="14" fill="#0b1422" stroke="\${team.accent}" stroke-opacity=".75"/>\`);
+    svg.push(\`<text x="\${commanderCenterX}" y="\${y + 31}" text-anchor="middle" class="commander-initial">\${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>\`);
+    if (commanderAvatar) svg.push(\`<image href="\${escapeXml(commanderAvatar)}" x="\${commanderCenterX - 14}" y="\${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>\`);
+    svg.push(\`<text x="\${commanderCenterX - 24}" y="\${y + 52}" text-anchor="end" class="commander-caption">\${escapeXml(clip(team.commanderName, 12))}</text>\`);
+    svg.push(\`<text x="\${commanderCenterX - 24}" y="\${y + 25}" text-anchor="end" class="commander-label">Commander</text>\`);
   }
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
@@ -700,7 +707,7 @@ function renderDefs() {
       .card-value{font-size:14px;font-weight:900}
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
-      .commander-initial{font-size:12px;font-weight:900}.commander-label{font-size:9px;font-weight:900;fill:#dce8f3}.commander-caption{font-size:7px;font-weight:800;fill:#b9c9d8}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
+      .commander-glow{fill:#7dd3fc;fill-opacity:.30;filter:url(#commanderGlow)}.commander-initial{font-size:12px;font-weight:900}.commander-label{font-size:9px;font-weight:900;fill:#dce8f3}.commander-caption{font-size:7px;font-weight:800;fill:#b9c9d8}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
       .squad-title{font-size:8px;font-weight:900}
       .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
       .role-badge{font-size:8px;font-weight:900}
@@ -721,6 +728,7 @@ function emptyTeam(teamID) {
     accent: TEAM_ACCENTS[teamID] ?? "#60a5fa",
     playerCount: 0,
     squadCount: 0,
+    factionId: "",
     averagePing: null,
     commanderName: "Pending",
     groups: [],
