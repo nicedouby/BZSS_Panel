@@ -200,6 +200,7 @@ function buildTeams(payload) {
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
+      tickets: readTeamTickets(payload, teamID),
       commanderName: firstText(commander?.name, ""),
       commanderPlayer: commander,
       groups,
@@ -337,7 +338,11 @@ async function attachMapMinimapData(model, payload) {
     // file in the SVG: libxml2 (used by Sharp) rejects oversized XML buffers.
     const sharp = await loadSharp();
     const buffer = await sharp(candidate)
-      .resize(160, 80, { fit: "inside", withoutEnlargement: true })
+      .resize(160, 160, {
+        fit: "contain",
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+        withoutEnlargement: true,
+      })
       .png()
       .toBuffer();
     model.minimapData = `data:image/png;base64,${buffer.toString("base64")}`;
@@ -353,17 +358,98 @@ function resolveMinimapPath(payload) {
   return candidates.find((candidate) => existsSync(candidate)) ?? "";
 }
 
+const localAssetSearchCache = new Map();
+
+async function resolveLocalFactionAsset(fileName, factionCode) {
+  const key = String(factionCode || fileName || "").toLowerCase();
+  if (localAssetSearchCache.has(key)) return localAssetSearchCache.get(key);
+  const directCandidates = [
+    path.resolve(process.cwd(), "web-client", "public", fileName),
+    path.resolve(process.cwd(), "web-client", "public", "assets", "flags", fileName),
+    path.resolve(process.cwd(), "web-client", "public", "assets", "factions", fileName),
+    path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", fileName),
+    path.resolve(process.cwd(), "web-client", "src", "assets", fileName),
+  ];
+  let found = directCandidates.find((item) => existsSync(item)) ?? "";
+  if (!found) {
+    const roots = [
+      path.resolve(process.cwd(), "web-client", "public"),
+      path.resolve(process.cwd(), "web-client", "src"),
+    ];
+    const wanted = new Set([
+      fileName.toLowerCase(),
+      `flag_${String(factionCode).toLowerCase()}.png`,
+      `faction_${String(factionCode).toLowerCase()}.png`,
+      `t_faction_${String(factionCode).toLowerCase()}.png`,
+    ]);
+    for (const root of roots) {
+      try {
+        const entries = await fs.readdir(root, { recursive: true });
+        const match = entries.find((entry) => wanted.has(path.basename(String(entry)).toLowerCase()));
+        if (match) {
+          found = path.join(root, String(match));
+          break;
+        }
+      } catch {}
+    }
+  }
+  localAssetSearchCache.set(key, found);
+  return found;
+}
+
+function readTeamTickets(payload, teamID) {
+  const values = [
+    payload?.match?.teamTickets,
+    payload?.match?.tickets,
+    payload?.summary?.teamTickets,
+    payload?.summary?.tickets,
+    payload?.tickets,
+  ];
+  for (const source of values) {
+    const value = readTicketValue(source, teamID);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+function readTicketValue(source, teamID) {
+  if (source == null) return null;
+  if (Array.isArray(source)) {
+    for (const item of source) {
+      const itemTeam = nullableNumber(item?.teamID ?? item?.teamId ?? item?.id);
+      if (itemTeam === teamID) {
+        return firstFiniteNumber(item?.tickets, item?.ticket, item?.value, item?.count);
+      }
+    }
+    return firstFiniteNumber(source[teamID - 1]);
+  }
+  if (typeof source === "object") {
+    const keys = [String(teamID), `team${teamID}`, `team_${teamID}`, `team${teamID}Tickets`, `team${teamID}tickets`];
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) {
+        const value = source[key];
+        return typeof value === "object"
+          ? firstFiniteNumber(value?.tickets, value?.ticket, value?.value, value?.count)
+          : firstFiniteNumber(value);
+      }
+    }
+  }
+  return null;
+}
+
 async function attachTeamVisuals(model) {
   const flagFiles = { ADF: "ADF.PNG", AFU: "AFU.PNG", BAF: "BAF.PNG", CAF: "CAF.PNG", CRF: "CRF.PNG", GFI: "GFI.PNG", IMF: "IMF.PNG", MEA: "MEA.PNG", MEI: "MEI.PNG", PLA: "PLA.PNG", PLAAGF: "PLAAGF.PNG", PLANMC: "PLANMC.png", RGF: "RGF.PNG", TLF: "TLF.PNG", USA: "USA.PNG", USMC: "USMC.PNG", VDV: "VDV.png", WPMC: "WPMC.PNG" };
   for (const team of model.teams ?? []) {
     const code = String(team.factionCode ?? team.teamName ?? "").toUpperCase().match(/ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|PLAAGF|PLANMC|PLA|RGF|TLF|USA|USMC|VDV|WPMC/)?.[0];
     const file = flagFiles[code];
     if (file) {
-      const candidate = path.resolve(process.cwd(), "web-client", "public", "assets", "flags", file);
-      const fallback = path.resolve(process.cwd(), "web-client", "public", "assets", "factions", file);
-      const sourceAsset = path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", file);
-      const found = [candidate, fallback, sourceAsset].find((item) => existsSync(item));
-      if (found) try { team.flagData = `data:image/png;base64,${(await fs.readFile(found)).toString("base64")}`; } catch {}
+      const found = await resolveLocalFactionAsset(file, code);
+      if (found) {
+        try {
+          const contentType = /\.jpe?g$/i.test(found) ? "image/jpeg" : "image/png";
+          team.flagData = `data:${contentType};base64,${(await fs.readFile(found)).toString("base64")}`;
+        } catch {}
+      }
     }
     const commander = team.commanderPlayer ?? {};
     const avatar = commander.avatarUrl ?? commander.avatar ?? commander.steamAvatar ?? commander.steamAvatarUrl ?? commander.steam_avatar ?? commander.steamAvatar ?? commander.avatar_full ?? commander.avatar_medium ?? commander.steamProfile?.avatar ?? commander.steamProfile?.avatar_full ?? commander.steam?.avatar ?? commander.profile?.avatar ?? "";
@@ -384,7 +470,7 @@ function renderOverviewSvg(model) {
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
   svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
-  if (model.minimapData) svg.push(`<image href="${model.minimapData}" x="48" y="45" width="148" height="66" preserveAspectRatio="xMidYMid slice" opacity=".94"/>`);
+  if (model.minimapData) svg.push(`<image href="${model.minimapData}" x="48" y="45" width="148" height="66" preserveAspectRatio="xMidYMid meet" opacity=".94"/>`);
   svg.push('<text x="220" y="62" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
   svg.push(`<text x="220" y="90" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
   svg.push(`<text x="222" y="112" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
@@ -426,7 +512,7 @@ function renderTeamColumn(team) {
 
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
   svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
-  svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
+  svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · TICKETS ${team.tickets == null ? "--" : team.tickets} · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
   if (team.commanderPlayer) {
   const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
   svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
