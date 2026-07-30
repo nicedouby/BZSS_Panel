@@ -251,6 +251,7 @@ function buildTeams(payload) {
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
       tickets: readTeamTickets(payload, teamID),
+      combatTotals: sumTeamPlayerCombatStats(teamPlayers),
       commanderName: firstText(commander?.name, ""),
       commanderPlayer: commander,
       groups,
@@ -465,6 +466,47 @@ function readTeamTickets(payload, teamID) {
   return null;
 }
 
+function sumTeamPlayerCombatStats(players) {
+  const totals = {
+    deaths: 0,
+    revives: 0,
+    teamKills: 0,
+    source: "players",
+  };
+  for (const player of players) {
+    const core = player?.bzssCore ?? {};
+    const scoreboard = player?.playerScoreboard?.stats ?? {};
+    totals.deaths += readNonNegativeStat(
+      core.deaths,
+      core.numDeaths,
+      scoreboard.numDeaths,
+      player?.deaths,
+      player?.death,
+    );
+    totals.revives += readNonNegativeStat(
+      core.revives,
+      core.revivedPoints,
+      scoreboard.revivedPoints,
+      player?.revives,
+      player?.revivedPoints,
+    );
+    totals.teamKills += readNonNegativeStat(
+      core.teamKills,
+      core.tk,
+      core.numTeamKills,
+      scoreboard.numTeamKills,
+      player?.teamKills,
+      player?.tk,
+    );
+  }
+  return totals;
+}
+
+function readNonNegativeStat(...values) {
+  const value = firstFiniteNumber(...values);
+  return value == null ? 0 : Math.max(0, Math.round(value));
+}
+
 function readTicketValue(source, teamID) {
   if (source == null) return null;
   if (Array.isArray(source)) {
@@ -561,9 +603,10 @@ function renderOverviewSvg(model) {
 
   svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
   if (model.minimapData) svg.push(`<image href="${model.minimapData}" x="48" y="45" width="148" height="66" preserveAspectRatio="xMidYMid meet" opacity=".94"/>`);
-  svg.push('<text x="220" y="62" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
-  svg.push(`<text x="220" y="90" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
-  svg.push(`<text x="222" y="112" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
+  svg.push('<text x="220" y="58" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
+  svg.push(`<text x="220" y="86" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
+  svg.push(`<text x="222" y="105" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
+  svg.push(renderGlobalMatchMetrics(model));
   svg.push(`<text x="1530" y="39" text-anchor="end" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
   svg.push(renderServerBattleStrip(model));
 
@@ -581,48 +624,63 @@ function renderServerBattleStrip(model) {
   const team1 = model.teams.find((team) => team.teamID === 1) ?? emptyTeam(1);
   const team2 = model.teams.find((team) => team.teamID === 2) ?? emptyTeam(2);
   return [
-    renderTicketPanel(team1, 888, "left"),
-    '<path d="M1048 48 H1358 L1368 58 V112 H1038 V58 Z" fill="#020817" fill-opacity=".84" stroke="#b9d0e5" stroke-opacity=".28"/>',
-    '<path d="M1055 55 H1351" stroke="#d9e9f8" stroke-opacity=".12"/>',
-    `<text x="1203" y="65" text-anchor="middle" class="server-name">${escapeXml(clip(model.serverName, 42))}</text>`,
-    '<path d="M1055 72 H1351" stroke="#d9e9f8" stroke-opacity=".12"/>',
-    renderCompactMetric("PLAYERS", String(model.playerCount), 1091),
-    '<path d="M1148 78 V105" stroke="#d9e9f8" stroke-opacity=".14"/>',
-    renderCompactMetric("QUEUE", String(model.queueCount), 1203),
-    '<path d="M1258 78 V105" stroke="#d9e9f8" stroke-opacity=".14"/>',
-    renderCompactMetric("DURATION", model.playtime, 1314),
-    renderTicketPanel(team2, 1378, "right"),
+    renderTeamCombatPanel(team1, 888, "left"),
+    renderTeamCombatPanel(team2, 1213, "right"),
   ].join("");
 }
 
-function renderCompactMetric(label, value, centerX) {
+function renderGlobalMatchMetrics(model) {
   return [
-    `<text x="${centerX}" y="86" text-anchor="middle" class="server-metric-label">${escapeXml(label)}</text>`,
-    `<text x="${centerX}" y="104" text-anchor="middle" class="server-metric-value mono">${escapeXml(value)}</text>`,
+    `<text x="222" y="122" class="global-server">${escapeXml(clip(model.serverName, 42))}</text>`,
+    '<circle cx="544" cy="118.5" r="2.5" fill="#37c8ff"/>',
+    '<text x="553" y="122" class="global-metric-label">PLAYERS</text>',
+    `<text x="607" y="122" class="global-metric-value mono">${escapeXml(String(model.playerCount))}</text>`,
+    '<circle cx="650" cy="118.5" r="2.5" fill="#f8bd55"/>',
+    '<text x="659" y="122" class="global-metric-label">QUEUE</text>',
+    `<text x="702" y="122" class="global-metric-value mono">${escapeXml(String(model.queueCount))}</text>`,
+    '<circle cx="744" cy="118.5" r="2.5" fill="#52e79b"/>',
+    '<text x="753" y="122" class="global-metric-label">TIME</text>',
+    `<text x="788" y="122" class="global-metric-value mono">${escapeXml(model.playtime)}</text>`,
   ].join("");
 }
 
-function renderTicketPanel(team, x, side) {
-  const direction = side === "right" ? -1 : 1;
+function renderTeamCombatPanel(team, x, side) {
+  const isRight = side === "right";
   const panelPath = side === "right"
-    ? `M${x + 10} 48 H${x + 150} V112 H${x} V58 Z`
-    : `M${x} 48 H${x + 140} L${x + 150} 58 V112 H${x} Z`;
-  const flagX = side === "right" ? x + 90 : x + 12;
-  const textX = side === "right" ? x + 78 : x + 72;
-  const textAnchor = side === "right" ? "end" : "start";
+    ? `M${x + 10} 48 H${x + 315} V128 H${x} V58 Z`
+    : `M${x} 48 H${x + 305} L${x + 315} 58 V128 H${x} Z`;
+  const flagX = isRight ? x + 251 : x + 12;
+  const textX = isRight ? x + 241 : x + 74;
+  const textAnchor = isRight ? "end" : "start";
+  const dividerX = isRight ? x + 158 : x + 157;
+  const statCenters = isRight
+    ? [x + 27, x + 79, x + 131]
+    : [x + 184, x + 236, x + 288];
   const ticket = team.tickets == null ? "--" : String(team.tickets);
   const factionLabel = firstText(team.factionCode, team.factionId, `TEAM ${team.teamID}`);
+  const totals = team.combatTotals ?? { deaths: 0, revives: 0, teamKills: 0 };
   const flag = team.flagData
-    ? `<image href="${team.flagData}" x="${flagX}" y="55" width="48" height="25" preserveAspectRatio="xMidYMid meet"/>`
-    : `<text x="${flagX + 24}" y="71" text-anchor="middle" class="ticket-flag-fallback">${escapeXml(clip(factionLabel, 8))}</text>`;
+    ? `<image href="${team.flagData}" x="${flagX}" y="56" width="52" height="29" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${flagX + 26}" y="74" text-anchor="middle" class="ticket-flag-fallback">${escapeXml(clip(factionLabel, 8))}</text>`;
   return [
     `<path d="${panelPath}" fill="url(#team${team.teamID}TicketPanel)" stroke="${team.accent}" stroke-opacity=".68"/>`,
-    `<path d="M${x + (direction > 0 ? 1 : 149)} 57 V104" stroke="${team.accent}" stroke-width="3" stroke-linecap="round"/>`,
-    `<path d="M${x + 11} 107 H${x + 139}" stroke="${team.accent}" stroke-opacity=".46"/>`,
+    `<path d="M${x + (isRight ? 314 : 1)} 57 V119" stroke="${team.accent}" stroke-width="3" stroke-linecap="round"/>`,
+    `<path d="M${x + 12} 122 H${x + 303}" stroke="${team.accent}" stroke-opacity=".46"/>`,
+    `<path d="M${dividerX} 57 V118" stroke="${team.accent}" stroke-opacity=".28"/>`,
     flag,
-    `<text x="${textX}" y="65" text-anchor="${textAnchor}" class="ticket-team">TEAM ${team.teamID} · ${escapeXml(clip(factionLabel, 10))}</text>`,
-    `<text x="${textX}" y="80" text-anchor="${textAnchor}" class="ticket-label">TICKETS</text>`,
-    `<text x="${textX}" y="105" text-anchor="${textAnchor}" class="ticket-value mono" fill="${team.accent}">${escapeXml(ticket)}</text>`,
+    `<text x="${textX}" y="65" text-anchor="${textAnchor}" class="ticket-team">TEAM ${team.teamID} · ${escapeXml(clip(factionLabel, 12))}</text>`,
+    `<text x="${textX}" y="83" text-anchor="${textAnchor}" class="ticket-label">TICKETS</text>`,
+    `<text x="${textX}" y="113" text-anchor="${textAnchor}" class="ticket-value mono" fill="${team.accent}">${escapeXml(ticket)}</text>`,
+    renderBattleStat("DEATHS", totals.deaths, statCenters[0], "#ff6b76"),
+    renderBattleStat("REVIVES", totals.revives, statCenters[1], "#52e79b"),
+    renderBattleStat("TK", totals.teamKills, statCenters[2], "#f8bd55"),
+  ].join("");
+}
+
+function renderBattleStat(label, value, centerX, color) {
+  return [
+    `<text x="${centerX}" y="78" text-anchor="middle" class="battle-stat-label">${escapeXml(label)}</text>`,
+    `<text x="${centerX}" y="108" text-anchor="middle" class="battle-stat-value mono" fill="${color}">${escapeXml(String(value ?? 0))}</text>`,
   ].join("");
 }
 
@@ -852,13 +910,14 @@ function renderDefs() {
       .hero-title{font-size:32px;font-weight:900}
       .hero-sub{font-size:11px;fill:#d4e1ee}
       .meta{font-size:8px;fill:#b7c8d8}
-      .server-name{font-size:8px;font-weight:900;letter-spacing:.75px;fill:#d9e7f5}
-      .server-metric-label{font-size:6px;font-weight:900;letter-spacing:.8px;fill:#8398ad}
-      .server-metric-value{font-size:13px;font-weight:900;fill:#f3f8fd}
+      .global-server{font-size:7px;font-weight:900;letter-spacing:.55px;fill:#aebfd0}
+      .global-metric-label{font-size:7px;font-weight:900;fill:#8398ad;letter-spacing:.35px}.global-metric-value{font-size:7px;font-weight:900;fill:#eef7ff}
       .ticket-team{font-size:6.5px;font-weight:900;letter-spacing:.4px;fill:#dce9f5}
       .ticket-label{font-size:5.5px;font-weight:900;letter-spacing:1px;fill:#8ea4b8}
-      .ticket-value{font-size:20px;font-weight:900}
+      .ticket-value{font-size:23px;font-weight:900}
       .ticket-flag-fallback{font-size:7px;font-weight:900;fill:#d6e5f2}
+      .battle-stat-label{font-size:5.5px;font-weight:900;letter-spacing:.55px;fill:#91a5b9}
+      .battle-stat-value{font-size:17px;font-weight:900}
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
       .commander-initial{font-size:13px;font-weight:900}.commander-orbit{stroke-linecap:round}.commander-caption{font-size:7px;font-weight:900;letter-spacing:.35px;fill:#d9e9f6}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
@@ -884,6 +943,8 @@ function emptyTeam(teamID) {
     squadCount: 0,
     factionId: "",
     averagePing: null,
+    tickets: null,
+    combatTotals: { deaths: 0, revives: 0, teamKills: 0, source: "players" },
     commanderName: "Pending",
     groups: [],
   };
