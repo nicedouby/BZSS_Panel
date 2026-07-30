@@ -520,13 +520,21 @@ function renderTeamColumn(team) {
     const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
     const commanderCenterX = x + team.width - 34;
     const commanderCenterY = y + 27;
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="27" class="commander-glow"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".9"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="14" fill="#0b1422" stroke="${team.accent}" stroke-opacity=".75"/>`);
+    const commanderClipId = `commander-avatar-${team.teamID}`;
+    svg.push(`<defs><clipPath id="${commanderClipId}"><circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18"/></clipPath></defs>`);
+    // The commander is a focal marker, so use a layered bloom, tactical rings,
+    // and a rim-lit portrait rather than a single weak halo.
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="39" fill="${team.accent}" fill-opacity=".13" filter="url(#commanderBloom)"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="32" fill="none" stroke="${team.accent}" stroke-width="1.2" stroke-opacity=".34" stroke-dasharray="2 3" class="commander-orbit"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="27" fill="none" stroke="${team.accent}" stroke-width=".8" stroke-opacity=".66" filter="url(#commanderGlow)"/>`);
+    svg.push(`<path d="M${commanderCenterX - 25} ${commanderCenterY}H${commanderCenterX - 19} M${commanderCenterX + 19} ${commanderCenterY}H${commanderCenterX + 25} M${commanderCenterX} ${commanderCenterY - 25}V${commanderCenterX ? commanderCenterY - 19 : commanderCenterY} M${commanderCenterX} ${commanderCenterY + 19}V${commanderCenterY + 25}" stroke="${team.accent}" stroke-width="1.2" stroke-linecap="round" stroke-opacity=".78"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="22" fill="#07111f" fill-opacity=".92" stroke="${team.accent}" stroke-width="1.5" filter="url(#commanderGlow)"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="19" fill="#0b1422" stroke="#eef8ff" stroke-opacity=".42"/>`);
     svg.push(`<text x="${commanderCenterX}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
-    if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 14}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
-    svg.push(`<text x="${commanderCenterX - 24}" y="${y + 52}" text-anchor="end" class="commander-caption">${escapeXml(clip(team.commanderName, 12))}</text>`);
-    svg.push(`<text x="${commanderCenterX - 24}" y="${y + 25}" text-anchor="end" class="commander-label">Commander</text>`);
+    if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18.5" fill="none" stroke="${team.accent}" stroke-width="1.4" stroke-opacity=".96"/>`);
+    svg.push(`<path d="M${commanderCenterX - 13} ${commanderCenterY - 13}A18.5 18.5 0 0 1 ${commanderCenterX + 13} ${commanderCenterY - 13}" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-opacity=".72"/>`);
+    svg.push(`<text x="${commanderCenterX - 32}" y="${y + 52}" text-anchor="end" class="commander-caption">${escapeXml(clip(team.commanderName, 14))}</text>`);
   }
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
@@ -696,6 +704,13 @@ function renderDefs() {
       <stop offset="55%" stop-color="#10243c" stop-opacity=".78"/>
       <stop offset="100%" stop-color="#061020" stop-opacity=".90"/>
     </linearGradient>
+    <filter id="commanderGlow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="2.1" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="commanderBloom" x="-130%" y="-130%" width="360%" height="360%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
       .mono{font-family:'Cascadia Mono','Consolas',monospace}
@@ -707,7 +722,7 @@ function renderDefs() {
       .card-value{font-size:14px;font-weight:900}
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
-      .commander-glow{fill:#7dd3fc;fill-opacity:.30;filter:url(#commanderGlow)}.commander-initial{font-size:12px;font-weight:900}.commander-label{font-size:9px;font-weight:900;fill:#dce8f3}.commander-caption{font-size:7px;font-weight:800;fill:#b9c9d8}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
+      .commander-initial{font-size:13px;font-weight:900}.commander-orbit{stroke-linecap:round}.commander-caption{font-size:7px;font-weight:900;letter-spacing:.35px;fill:#d9e9f6}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
       .squad-title{font-size:8px;font-weight:900}
       .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
       .role-badge{font-size:8px;font-weight:900}
