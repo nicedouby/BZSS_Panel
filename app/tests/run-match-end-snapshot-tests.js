@@ -274,7 +274,29 @@ function testFullFactionNamesResolveForSnapshotFlags() {
   assert.equal(model.teams[1].factionCode, "VDV");
   assert.equal(model.teams[0].tickets, 318);
   assert.equal(model.teams[1].tickets, 241);
+  assert.deepEqual(model.teams[0].combatTotals, {
+    deaths: 1,
+    revives: 0,
+    teamKills: 0,
+    source: "players",
+  });
   assert.equal(Object.hasOwn(model, "winner"), false);
+}
+
+function testTeamCombatTotalsUsePlayerSums() {
+  const model = buildMatchEndOverviewModel(makePayload(3, 2));
+  assert.deepEqual(model.teams[0].combatTotals, {
+    deaths: 3,
+    revives: 3,
+    teamKills: 1,
+    source: "players",
+  });
+  assert.deepEqual(model.teams[1].combatTotals, {
+    deaths: 2,
+    revives: 1,
+    teamKills: 1,
+    source: "players",
+  });
 }
 
 async function testHundredPlayersStayInOneImage() {
@@ -382,6 +404,7 @@ function testSourceAwareFireteamResolution() {
 
 testSourceAwareFireteamResolution();
 testFullFactionNamesResolveForSnapshotFlags();
+testTeamCombatTotalsUsePlayerSums();
 await testFireteamAccentPixels();
 await testServerBattleStripUsesTeamColors();
 await testSingleOverviewSnapshot();
