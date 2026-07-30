@@ -520,13 +520,13 @@ function renderTeamColumn(team) {
     const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
     const commanderCenterX = x + team.width - 34;
     const commanderCenterY = y + 27;
-    svg.push(\`<circle cx="\${commanderCenterX}" cy="\${commanderCenterY}" r="27" class="commander-glow"/>\`);
-    svg.push(\`<circle cx="\${commanderCenterX}" cy="\${commanderCenterY}" r="18" fill="\${team.accent}" fill-opacity=".20" stroke="\${team.accent}" stroke-opacity=".9"/>\`);
-    svg.push(\`<circle cx="\${commanderCenterX}" cy="\${commanderCenterY}" r="14" fill="#0b1422" stroke="\${team.accent}" stroke-opacity=".75"/>\`);
-    svg.push(\`<text x="\${commanderCenterX}" y="\${y + 31}" text-anchor="middle" class="commander-initial">\${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>\`);
-    if (commanderAvatar) svg.push(\`<image href="\${escapeXml(commanderAvatar)}" x="\${commanderCenterX - 14}" y="\${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>\`);
-    svg.push(\`<text x="\${commanderCenterX - 24}" y="\${y + 52}" text-anchor="end" class="commander-caption">\${escapeXml(clip(team.commanderName, 12))}</text>\`);
-    svg.push(\`<text x="\${commanderCenterX - 24}" y="\${y + 25}" text-anchor="end" class="commander-label">Commander</text>\`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="27" class="commander-glow"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".9"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="14" fill="#0b1422" stroke="${team.accent}" stroke-opacity=".75"/>`);
+    svg.push(`<text x="${commanderCenterX}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
+    if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 14}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
+    svg.push(`<text x="${commanderCenterX - 24}" y="${y + 52}" text-anchor="end" class="commander-caption">${escapeXml(clip(team.commanderName, 12))}</text>`);
+    svg.push(`<text x="${commanderCenterX - 24}" y="${y + 25}" text-anchor="end" class="commander-label">Commander</text>`);
   }
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
