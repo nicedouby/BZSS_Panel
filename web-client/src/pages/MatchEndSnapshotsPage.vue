@@ -9,6 +9,9 @@
         <button type="button" class="action-btn ghost" :disabled="loading" @click="loadSnapshots">
           {{ loading ? "刷新中..." : "刷新记录" }}
         </button>
+        <button type="button" class="action-btn accent" :disabled="debugCapturing" @click="captureDebugSnapshot">
+          {{ debugCapturing ? "写入中..." : "写入调试快照" }}
+        </button>
       </template>
     </AppPageHeader>
 
@@ -262,6 +265,7 @@ const loading = ref(true);
 const detailLoading = ref(false);
 const busy = ref(false);
 const regenerating = ref(false);
+const debugCapturing = ref(false);
 const imagePreviewOpen = ref(false);
 const imageVersion = ref(String(Date.now()));
 const errorMessage = ref("");
@@ -333,6 +337,19 @@ function downloadImage() {
     "_blank",
     "noopener,noreferrer",
   );
+}
+
+async function captureDebugSnapshot() {
+  if (debugCapturing.value) return;
+  debugCapturing.value = true;
+  try {
+    const result = await apiPost("/api/match-end-snapshot/debug/capture", {}, {}, { timeoutMs: 120_000 });
+    ui.pushToast({ title: "调试快照已写入", message: "已独立保存 " + (result?.snapshot?.id ?? "当前对局") + "，不会混入正式结束快照。", tone: "ok" });
+  } catch (error) {
+    ui.pushToast({ title: "调试快照写入失败", message: error instanceof Error ? error.message : String(error), tone: "error" });
+  } finally {
+    debugCapturing.value = false;
+  }
 }
 
 async function regenerateImage() {

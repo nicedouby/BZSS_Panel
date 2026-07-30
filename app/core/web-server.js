@@ -3694,6 +3694,28 @@ export class WebServer {
       return this.json(res, 200, { ok: true, snapshot });
     }
 
+    if (url.pathname === "/api/match-end-snapshot/debug/capture" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.takeDebugSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
+      try {
+        const snapshot = await pluginApi.takeDebugSnapshot();
+        return this.json(res, 200, { ok: true, snapshot });
+      } catch (error) {
+        return this.json(res, error?.statusCode === 409 ? 409 : 500, {
+          error: error?.code ?? "DebugSnapshotFailed",
+          message: error?.message ?? String(error),
+        });
+      }
+    }
+
+    if (url.pathname === "/api/match-end-snapshot/debug/list" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.listDebugSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
+      return this.json(res, 200, await pluginApi.listDebugSnapshots());
+    }
+
     if (url.pathname === "/api/match-end-snapshot/regenerate" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);

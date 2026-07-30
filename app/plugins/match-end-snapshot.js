@@ -6,6 +6,7 @@ import { resolvePlayerFireTeam } from "./match-end-snapshot-fireteam.js";
 
 const PLUGIN_ID = "match-end-snapshot";
 const SNAPSHOT_DIR = path.join("data", "match-end-snapshots");
+const DEBUG_SNAPSHOT_DIR = path.join("data", "match-end-snapshot-debug");
 const AUTO_DEDUPE_MS = 30_000;
 const AUTO_SETTLE_MS = 1_800;
 
@@ -107,6 +108,41 @@ export function createPlugin({ core, modules, logger } = {}) {
     );
 
     return item;
+  }
+
+  async function captureDebugSnapshot() {
+    const overview = getCurrentOverview();
+    if (!overview) {
+      const error = new Error("match-state overview is unavailable.");
+      error.code = "MatchStateUnavailable";
+      error.statusCode = 409;
+      throw error;
+    }
+    const payload = await buildSnapshotPayload({
+      overview,
+      triggerEvent: { eventName: "DEBUG_MANUAL_TRIGGER" },
+      capturedAt: new Date().toISOString(),
+      modules,
+    });
+    payload.snapshotType = "match-end-debug";
+    payload.debug = { purpose: "manual-current-match-debug", capturedAt: payload.capturedAt };
+    const id = "debug_" + buildSnapshotId(payload);
+    const debugDir = resolveSnapshotDir(DEBUG_SNAPSHOT_DIR);
+    await fs.mkdir(debugDir, { recursive: true });
+    const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: id });
+    await persistBundle(id, bundle, DEBUG_SNAPSHOT_DIR);
+    payload.artifacts = {
+      format: "single-scoreboard",
+      status: "done",
+      pageCount: bundle.pages?.length ?? 0,
+      primaryImage: id + ".png",
+      combinedImage: id + "-combined.png",
+      manifest: id + "-manifest.json",
+      pages: bundle.manifest?.pages ?? [],
+    };
+    await writeJsonAtomic(path.join(debugDir, id + ".json"), payload);
+    pluginLogger.info?.("[MatchEndSnapshot] debug snapshot written: " + id);
+    return { ...describePayload(id, payload), snapshotType: payload.snapshotType, debug: true };
   }
 
   function captureAutomatic(triggerEvent = {}) {
@@ -306,6 +342,20 @@ export function createPlugin({ core, modules, logger } = {}) {
   async function regenerateSnapshot(id) {
     return regenerateBundle(id);
   }
+
+  async function listDebugSnapshots() {
+    const debugDir = resolveSnapshotDir(DEBUG_SNAPSHOT_DIR);
+    await fs.mkdir(debugDir, { recursive: true });
+    const names = await fs.readdir(debugDir);
+    const items = [];
+    for (const name of names.filter((item) => item.endsWith(".json"))) {
+      try {
+        const payload = JSON.parse(await fs.readFile(path.join(debugDir, name), "utf8"));
+        items.push({ ...describePayload(name.slice(0, -5), payload), snapshotType: payload.snapshotType, debug: true });
+      } catch {}
+    }
+    return items.sort((left, right) => String(right.capturedAt).localeCompare(String(left.capturedAt)));
+  }
   async function deleteSnapshot(id) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
@@ -348,6 +398,8 @@ export function createPlugin({ core, modules, logger } = {}) {
       readSnapshotImage,
       regenerateSnapshot,
       deleteSnapshot,
+      takeDebugSnapshot: captureDebugSnapshot,
+      listDebugSnapshots,
     },
 
     async start() {
@@ -460,6 +512,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       nextLayer,
       playtime: firstNumber(match.playtime, status.playtime, serverStatus.playtime, status.matchTimeSeconds),
       teamTickets: extractTeamTickets(matchState, overview, match, status, serverStatus),
+      factionIds: extractTeamFactionIds(matchState, overview, match, status, serverStatus),
     },
     summary: {
       playerCount,
@@ -482,6 +535,24 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       ),
     },
   };
+}
+
+function extractTeamFactionIds(...sources) {
+  for (const source of sources) {
+    const value = source?.factionIds ?? source?.factions ?? source?.teamFactionIds;
+    if (value && typeof value === "object") {
+      const team1 = firstText(value.team1, value["1"], value.teamOne, value.team1Id);
+      const team2 = firstText(value.team2, value["2"], value.teamTwo, value.team2Id);
+      if (team1 || team2) return { team1, team2 };
+    }
+    const fields = source?.fields;
+    if (fields && typeof fields === "object") {
+      const team1 = firstText(fields.TeamOneFaction_s, fields.TeamOneFactionID_s, fields.FactionOne_s);
+      const team2 = firstText(fields.TeamTwoFaction_s, fields.TeamTwoFactionID_s, fields.FactionTwo_s);
+      if (team1 || team2) return { team1, team2 };
+    }
+  }
+  return { team1: "", team2: "" };
 }
 
 function extractTeamTickets(...sources) {
@@ -752,8 +823,8 @@ function attachSquadInfo(players, squads) {
   });
 }
 
-async function persistBundle(id, bundle) {
-  const dir = resolveSnapshotDir();
+async function persistBundle(id, bundle, directory = SNAPSHOT_DIR) {
+  const dir = resolveSnapshotDir(directory);
   for (const page of bundle.pages) {
     await writeBufferAtomic(path.join(dir, page.fileName), page.buffer);
   }
@@ -901,12 +972,12 @@ function cloneJsonSafe(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function resolveSnapshotDir() {
-  return path.resolve(process.cwd(), SNAPSHOT_DIR);
+function resolveSnapshotDir(directory = SNAPSHOT_DIR) {
+  return path.resolve(process.cwd(), directory);
 }
 
-async function ensureSnapshotDir() {
-  await fs.mkdir(resolveSnapshotDir(), { recursive: true });
+async function ensureSnapshotDir(directory = SNAPSHOT_DIR) {
+  await fs.mkdir(resolveSnapshotDir(directory), { recursive: true });
 }
 
 async function writeJsonAtomic(filePath, payload) {

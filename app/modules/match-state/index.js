@@ -95,6 +95,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       tpsStatus: "unknown",
       raw: "",
       fields: {},
+      factionIds: { team1: "", team2: "" },
       lastUpdatedAt: "",
     },
     match: {
@@ -107,6 +108,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         team1: null,
         team2: null,
       },
+      factionIds: { team1: "", team2: "" },
       phase: "unknown", // 预热、进行中、结算中
       lastUpdatedAt: "",
     },
@@ -162,8 +164,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     const snapshot = {
       ...state,
-      serverStatus: { ...state.serverStatus, fields: { ...state.serverStatus.fields } },
-      match: { ...state.match, tickets: { ...state.match.tickets } },
+      serverStatus: { ...state.serverStatus, fields: { ...state.serverStatus.fields }, factionIds: { ...state.serverStatus.factionIds } },
+      match: { ...state.match, tickets: { ...state.match.tickets }, factionIds: { ...state.match.factionIds } },
       round: {
         current: state.round.current ? clone(state.round.current) : null,
         history: state.round.history.map(clone),
@@ -1669,6 +1671,7 @@ function parseShowServerInfo(raw) {
     playtime: pickNumber(fields, ["PLAYTIME_I", "PlayTime_I", "Playtime_I", "PlayTime", "Playtime", "ElapsedTime_I", "RoundTime_I", "GameTime_I"]),
     tps,
     tpsStatus: resolveTpsStatus(tps),
+    factionIds: parseTeamFactionIds(fields),
     fields,
   };
 }
@@ -1718,6 +1721,13 @@ function mergeServerStatus(current, parsed, raw) {
     next.playerCountSource = "serverInfo";
   }
 
+  if (parsed.factionIds && (parsed.factionIds.team1 || parsed.factionIds.team2)) {
+    next.factionIds = {
+      ...(next.factionIds ?? {}),
+      ...parsed.factionIds,
+    };
+  }
+
   return next;
 }
 
@@ -1725,6 +1735,8 @@ function extractServerInfoFields(raw) {
   const fields = {};
   const knownKeys = [
     "MapName_s",
+    "TeamOneFaction_s", "TeamTwoFaction_s", "TeamOneFactionID_s", "TeamTwoFactionID_s",
+    "TeamOneFactionId_s", "TeamTwoFactionId_s", "FactionOne_s", "FactionTwo_s",
     "Layer_s",
     "GameMode_s",
     "NextLayer_s",
@@ -1776,6 +1788,20 @@ function extractServerInfoFields(raw) {
   }
 
   return fields;
+}
+
+function parseTeamFactionIds(fields) {
+  const result = { team1: "", team2: "" };
+  for (const [key, value] of Object.entries(fields ?? {})) {
+    const normalized = String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const text = String(value ?? "").trim();
+    if (!text || !normalized.includes("faction")) continue;
+    if (/teamone|team1|factionone|faction1/.test(normalized)) result.team1 = text;
+    if (/teamtwo|team2|factiontwo|faction2/.test(normalized)) result.team2 = text;
+  }
+  result.team1 ||= String(fields?.TeamOne_s ?? "").trim();
+  result.team2 ||= String(fields?.TeamTwo_s ?? "").trim();
+  return result;
 }
 
 function parseServerInfoJson(text) {
