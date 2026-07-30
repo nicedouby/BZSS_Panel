@@ -6,6 +6,7 @@ import { resolvePlayerFireTeam } from "./match-end-snapshot-fireteam.js";
 
 const PLUGIN_ID = "match-end-snapshot";
 const SNAPSHOT_DIR = path.join("data", "match-end-snapshots");
+const DEBUG_SNAPSHOT_DIR = path.join("data", "match-end-snapshot-debug");
 const AUTO_DEDUPE_MS = 30_000;
 const AUTO_SETTLE_MS = 1_800;
 
@@ -107,6 +108,41 @@ export function createPlugin({ core, modules, logger } = {}) {
     );
 
     return item;
+  }
+
+  async function captureDebugSnapshot() {
+    const overview = getCurrentOverview();
+    if (!overview) {
+      const error = new Error("match-state overview is unavailable.");
+      error.code = "MatchStateUnavailable";
+      error.statusCode = 409;
+      throw error;
+    }
+    const payload = await buildSnapshotPayload({
+      overview,
+      triggerEvent: { eventName: "DEBUG_MANUAL_TRIGGER" },
+      capturedAt: new Date().toISOString(),
+      modules,
+    });
+    payload.snapshotType = "match-end-debug";
+    payload.debug = { purpose: "manual-current-match-debug", capturedAt: payload.capturedAt };
+    const id = "debug_" + buildSnapshotId(payload);
+    const debugDir = resolveSnapshotDir(DEBUG_SNAPSHOT_DIR);
+    await fs.mkdir(debugDir, { recursive: true });
+    const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: id });
+    await persistBundle(id, bundle, DEBUG_SNAPSHOT_DIR);
+    payload.artifacts = {
+      format: "single-scoreboard",
+      status: "done",
+      pageCount: bundle.pages?.length ?? 0,
+      primaryImage: id + ".png",
+      combinedImage: id + "-combined.png",
+      manifest: id + "-manifest.json",
+      pages: bundle.manifest?.pages ?? [],
+    };
+    await writeJsonAtomic(path.join(debugDir, id + ".json"), payload);
+    pluginLogger.info?.("[MatchEndSnapshot] debug snapshot written: " + id);
+    return { ...describePayload(id, payload), snapshotType: payload.snapshotType, debug: true };
   }
 
   function captureAutomatic(triggerEvent = {}) {
@@ -306,6 +342,20 @@ export function createPlugin({ core, modules, logger } = {}) {
   async function regenerateSnapshot(id) {
     return regenerateBundle(id);
   }
+
+  async function listDebugSnapshots() {
+    const debugDir = resolveSnapshotDir(DEBUG_SNAPSHOT_DIR);
+    await fs.mkdir(debugDir, { recursive: true });
+    const names = await fs.readdir(debugDir);
+    const items = [];
+    for (const name of names.filter((item) => item.endsWith(".json"))) {
+      try {
+        const payload = JSON.parse(await fs.readFile(path.join(debugDir, name), "utf8"));
+        items.push({ ...describePayload(name.slice(0, -5), payload), snapshotType: payload.snapshotType, debug: true });
+      } catch {}
+    }
+    return items.sort((left, right) => String(right.capturedAt).localeCompare(String(left.capturedAt)));
+  }
   async function deleteSnapshot(id) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
@@ -348,6 +398,8 @@ export function createPlugin({ core, modules, logger } = {}) {
       readSnapshotImage,
       regenerateSnapshot,
       deleteSnapshot,
+      takeDebugSnapshot: captureDebugSnapshot,
+      listDebugSnapshots,
     },
 
     async start() {
@@ -763,6 +815,18 @@ async function persistBundle(id, bundle) {
   await writeJsonAtomic(path.join(dir, id + "-manifest.json"), bundle.manifest);
 }
 
+async function persistBundle(id, bundle, directory = SNAPSHOT_DIR) {
+  const dir = resolveSnapshotDir(directory);
+  await fs.mkdir(dir, { recursive: true });
+  for (const page of bundle.pages ?? []) {
+    await writeBufferAtomic(path.join(dir, page.fileName), page.buffer);
+  }
+  const primary = bundle.pages?.[0];
+  if (primary?.buffer) await writeBufferAtomic(path.join(dir, id + ".png"), primary.buffer);
+  if (bundle.combinedBuffer) await writeBufferAtomic(path.join(dir, id + "-combined.png"), bundle.combinedBuffer);
+  if (bundle.manifest) await writeJsonAtomic(path.join(dir, id + "-manifest.json"), bundle.manifest);
+}
+
 async function readManifestIfExists(id) {
   try {
     const text = await fs.readFile(path.join(resolveSnapshotDir(), id + "-manifest.json"), "utf8");
@@ -901,12 +965,12 @@ function cloneJsonSafe(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function resolveSnapshotDir() {
-  return path.resolve(process.cwd(), SNAPSHOT_DIR);
+function resolveSnapshotDir(directory = SNAPSHOT_DIR) {
+  return path.resolve(process.cwd(), directory);
 }
 
-async function ensureSnapshotDir() {
-  await fs.mkdir(resolveSnapshotDir(), { recursive: true });
+async function ensureSnapshotDir(directory = SNAPSHOT_DIR) {
+  await fs.mkdir(resolveSnapshotDir(directory), { recursive: true });
 }
 
 async function writeJsonAtomic(filePath, payload) {
