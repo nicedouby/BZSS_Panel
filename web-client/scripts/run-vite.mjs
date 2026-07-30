@@ -9,7 +9,9 @@ const vitePath = fileURLToPath(
 
 const nodeMajor = Number.parseInt(String(process.versions.node ?? "0").split(".")[0], 10);
 const nodeArgs = nodeMajor >= 24
-  ? ["--jitless", "--no-experimental-require-module"]
+  // Vite's import-analysis parser initializes a WebAssembly module. --jitless
+  // disables WebAssembly entirely on Node 24, so it cannot be used for builds.
+  ? ["--no-experimental-require-module"]
   : [];
 
 try {

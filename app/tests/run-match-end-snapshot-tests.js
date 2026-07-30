@@ -169,7 +169,31 @@ async function testSingleOverviewSnapshot() {
     const names = await fs.readdir(dir);
     assert.equal(names.some((name) => name.endsWith("-00-scoreboard.png")), true);
     assert.equal(names.some((name) => name.endsWith("-combined.png")), true);
+    assert.equal(names.some((name) => name.endsWith("-thumb.png")), true);
     assert.equal(names.some((name) => name.endsWith("-manifest.json")), true);
+
+    const debug = await plugin.api.takeDebugSnapshot();
+    assert.equal(debug.source, "debug");
+    assert.equal(debug.imageAvailable, true);
+    const debugItems = await plugin.api.listDebugSnapshots();
+    assert.equal(debugItems.length, 1);
+    assert.equal(debugItems[0].source, "debug");
+    assert.equal(debugItems[0].thumbnailAvailable, true);
+
+    const allItems = await plugin.api.listSnapshots({ scope: "all" });
+    assert.equal(allItems.length, 2);
+    const statistics = await plugin.api.getStatistics({ scope: "all" });
+    assert.equal(statistics.total, 2);
+    assert.equal(statistics.official, 1);
+    assert.equal(statistics.debug, 1);
+    assert.ok(statistics.size > 0);
+
+    const debugThumbnail = await plugin.api.readSnapshotThumbnail(debug.id, { scope: "debug" });
+    assert.equal(debugThumbnail.content.readUInt32BE(16), 640);
+    assert.equal(debugThumbnail.content.readUInt32BE(20), 360);
+
+    const batchDeleted = await plugin.api.deleteSnapshots([{ id: debug.id, scope: "debug" }]);
+    assert.equal(batchDeleted.removed, 1);
 
     const deleted = await plugin.api.deleteSnapshot(item.id);
     assert.equal(deleted.removed, true);
@@ -315,7 +339,7 @@ function readPngPixel(buffer, x, y) {
 async function testFireteamAccentPixels() {
   const bundle = await generateMatchEndSnapshotBundle(makePayload(3, 0), { snapshotId: "fireteam-pixels" });
   // Team 1 first lane: rows A/B/C have an unmasked 7px fireteam bar on the far left.
-  const samples = [[74, 524], [74, 556], [74, 588]];
+  const samples = [[74, 480], [74, 520], [74, 560]];
   const expected = [[53, 208, 127], [167, 139, 250], [34, 211, 238]];
   samples.forEach(([x, y], index) => {
     const [red, green, blue] = readPngPixel(bundle.combinedBuffer, x, y);
