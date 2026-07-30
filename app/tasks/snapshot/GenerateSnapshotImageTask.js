@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { generateMatchEndSnapshotBundle } from "../../plugins/match-end-snapshot-pages.js";
-import { applyMatchEndSnapshotVisualTheme } from "./MatchEndSnapshotVisualTheme.js";
 
 export async function execute(task, { reportProgress } = {}) {
   const payload = task.payload?.payload;
@@ -12,9 +11,9 @@ export async function execute(task, { reportProgress } = {}) {
   await fs.mkdir(directory, { recursive: true });
   reportProgress?.(5);
 
-  const rawBundle = await generateMatchEndSnapshotBundle(payload, { snapshotId });
-  reportProgress?.(68);
-  const bundle = await applyMatchEndSnapshotVisualTheme(rawBundle, payload);
+  // Keep the image output identical to the fireteam-display snapshot renderer.
+  // Do not apply the later AAR visual overlay here.
+  const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId });
   reportProgress?.(84);
 
   for (const page of bundle.pages ?? []) {

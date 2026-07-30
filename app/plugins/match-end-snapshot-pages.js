@@ -9,33 +9,18 @@ const HEIGHT = 1800;
 const BASE_WIDTH = 1600;
 const BASE_HEIGHT = 900;
 const TEAM_COLUMN_WIDTH = 775;
-const TEAM_CONTENT_TOP = 238;
+const TEAM_CONTENT_TOP = 220;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 8;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
 const SQUAD_HEADER_HEIGHT = 16;
 const SQUAD_GAP = 4;
-const DEFAULT_PLAYER_ROW_HEIGHT = 16;
-const MIN_PLAYER_ROW_HEIGHT = 13;
-const COMPACT_PLAYER_LAYOUT = Object.freeze({
-  infoWidth: 145,
-  stats: Object.freeze([
-    ["K", 16], ["W", 16], ["D", 16], ["TK", 18], ["VK", 18], ["R", 18],
-    ["H", 24], ["C", 24], ["O", 24], ["T", 24], ["P", 24],
-  ]),
-});
+const DEFAULT_PLAYER_ROW_HEIGHT = 20;
+const MIN_PLAYER_ROW_HEIGHT = 12;
 
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
 let sharpLoaderPromise = null;
-let snapshotRenderQueue = Promise.resolve();
-let sharpConfigured = false;
-
-function enqueueSnapshotRender(task) {
-  const render = snapshotRenderQueue.then(task, task);
-  snapshotRenderQueue = render.catch(() => {});
-  return render;
-}
 
 const MAP_SCENE_FILE_BY_KEY = {
   AlBasrah: "LoadingScreen_AlBasrah_DQHD.PNG",
@@ -90,20 +75,21 @@ const ROLE_META = [
 export async function generateMatchEndSnapshotBundle(payload, options = {}) {
   const snapshotId = sanitizeFileToken(options.snapshotId || "match");
   const buffer = await generateMatchEndOverviewPng(payload);
+  const playerCount = Number(payload?.summary?.recordedPlayerCount ?? payload?.players?.length ?? 0);
   const page = {
     index: 0,
-    type: "match-status-scoreboard",
+    type: "match-status-overview",
     teamId: null,
     teamPage: null,
     teamPageCount: null,
-    fileName: `${snapshotId}-00-scoreboard.png`,
+    fileName: `${snapshotId}-00-overview.png`,
     width: WIDTH,
     height: HEIGHT,
-    playerCount: Number(payload?.summary?.recordedPlayerCount ?? payload?.players?.length ?? 0),
+    playerCount,
     buffer,
   };
   const manifest = {
-    schemaVersion: 3,
+    schemaVersion: 1,
     snapshotId,
     generatedAt: new Date().toISOString(),
     sourceCapturedAt: String(payload?.capturedAt ?? ""),
@@ -115,52 +101,26 @@ export async function generateMatchEndSnapshotBundle(payload, options = {}) {
     pages: [{ ...page, buffer: undefined }],
   };
   delete manifest.pages[0].buffer;
-  return { width: WIDTH, height: HEIGHT, pages: [page], combinedBuffer: buffer, manifest };
-}
-
-export function generateMatchEndOverviewPng(payload) {
-  // A 3200×1800 composition needs several native pixel buffers.  Serialize jobs so
-  // automatic capture, manual refresh and image recovery never multiply that peak.
-  return enqueueSnapshotRender(async () => {
-    const sharp = await loadSharp();
-    const model = buildMatchEndOverviewModel(payload);
-    await attachRoleIconData(model);
-    await attachTeamVisuals(model);
-    const background = await buildBackground(sharp, payload);
-    const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
-    return sharp(background)
-      .composite([{ input: overlay }])
-      .png()
-      .toBuffer();
-  });
-}
-
-function formatMetric(value) {
-  const number = Number(value);
-  return Number.isFinite(number) ? String(Math.round(number)) : "—";
-}
-
-function detailMetric(core, ...keys) {
-  for (const key of keys) {
-    if (core?.[key] !== undefined && core?.[key] !== null && core?.[key] !== "") return core[key];
-  }
-  return null;
-}
-
-function playerDetailStats(player) {
-  const core = player?.bzssCore ?? {};
   return {
-    kills: formatMetric(detailMetric(core, "kills", "kill", "numKills")),
-    wounds: formatMetric(detailMetric(core, "downs", "wounds", "numWoundeds")),
-    deaths: formatMetric(detailMetric(core, "deaths", "death", "numDeaths")),
-    teamKills: formatMetric(detailMetric(core, "teamKills", "tk", "numTeamKills")),
-    vehicleKills: formatMetric(detailMetric(core, "vehicleKills", "vehicleKill")),
-    revives: formatMetric(detailMetric(core, "revives", "revive", "revivedPoints")),
-    healScore: formatMetric(detailMetric(core, "healPoints", "healing")),
-    combatScore: formatMetric(detailMetric(core, "combatScore", "combat")),
-    objectiveScore: formatMetric(detailMetric(core, "objectiveScore", "objective")),
-    teamworkScore: formatMetric(detailMetric(core, "teamworkScore", "teamwork")),
+    width: WIDTH,
+    height: HEIGHT,
+    pages: [page],
+    combinedBuffer: buffer,
+    manifest,
   };
+}
+
+export async function generateMatchEndOverviewPng(payload) {
+  const sharp = await loadSharp();
+  const model = buildMatchEndOverviewModel(payload);
+  await attachRoleIconData(model);
+  await attachTeamVisuals(model);
+  const background = await buildBackground(sharp, payload);
+  const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
+  return sharp(background)
+    .composite([{ input: overlay }])
+    .png()
+    .toBuffer();
 }
 
 export function buildMatchEndOverviewModel(payload) {
@@ -191,7 +151,7 @@ export function buildMatchEndOverviewModel(payload) {
     playtime,
     teams: [
       buildTeamColumnModel(teams.find((team) => team.teamID === 1) ?? emptyTeam(1), 24),
-      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 813),
+      buildTeamColumnModel(teams.find((team) => team.teamID === 2) ?? emptyTeam(2), 801),
     ],
   };
 }
@@ -334,7 +294,6 @@ function buildTeamColumnModel(team, x) {
 async function attachRoleIconData(model) {
   const players = [];
   for (const team of model.teams ?? []) {
-    for (const group of team.groups ?? []) players.push(...(group.players ?? []));
     for (const lane of team.lanes ?? []) {
       for (const group of lane) players.push(...(group.players ?? []));
     }
@@ -346,8 +305,6 @@ async function attachRoleIconData(model) {
     const candidates = [
       path.resolve(process.cwd(), "web-client", "public", "assets", "icons", fileName),
       path.resolve(process.cwd(), "web-client", "public", "Icon", fileName),
-      path.resolve(process.cwd(), "web-client", "src", "assets", "icons", fileName),
-      path.resolve(process.cwd(), "assets", "icons", fileName),
     ];
     const candidate = candidates.find((item) => existsSync(item));
     if (!candidate) return;
@@ -382,45 +339,13 @@ async function attachTeamVisuals(model) {
       if (found) try { team.flagData = `data:image/png;base64,${(await fs.readFile(found)).toString("base64")}`; } catch {}
     }
     const commander = team.commanderPlayer ?? {};
-    const avatar = firstText(
-      commander?.steamAvatar,
-      commander?.steam_avatar,
-      commander?.avatarUrl,
-      commander?.steamAvatarUrl,
-      commander?.avatar,
-      commander?.avatar_full,
-      commander?.avatar_medium,
-      commander?.steamProfile?.avatarFull,
-      commander?.steamProfile?.avatar_full,
-      commander?.steamProfile?.avatar,
-      commander?.steam?.avatar,
-      commander?.profile?.avatar,
-    );
-    team.commanderAvatarData = await loadAvatarDataUri(avatar);
-  }
-}
-
-async function loadAvatarDataUri(value) {
-  const avatar = String(value ?? "").trim();
-  if (!avatar) return "";
-  if (avatar.startsWith("data:image/")) return avatar;
-  if (!/^https?:\/\//i.test(avatar)) return "";
-
-  try {
-    const response = await fetch(avatar, {
-      headers: {
-        "User-Agent": "BZSS-Panel/1.0 Match-End-Snapshot",
-        Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      },
-    });
-    if (!response.ok) return "";
-    const bytes = Buffer.from(await response.arrayBuffer());
-    if (!bytes.length) return "";
-    const contentType = String(response.headers.get("content-type") ?? "").split(";")[0].trim();
-    const mimeType = /^image\//i.test(contentType) ? contentType : "image/jpeg";
-    return `data:${mimeType};base64,${bytes.toString("base64")}`;
-  } catch {
-    return "";
+    const avatar = commander.avatarUrl ?? commander.avatar ?? commander.steamAvatar ?? commander.steamAvatarUrl ?? commander.steam_avatar ?? commander.steamAvatar ?? commander.avatar_full ?? commander.avatar_medium ?? commander.steamProfile?.avatar ?? commander.steamProfile?.avatar_full ?? commander.steam?.avatar ?? commander.profile?.avatar ?? "";
+    if (typeof avatar === "string" && avatar.startsWith("http")) {
+      try {
+        const response = await fetch(avatar);
+        if (response.ok) team.commanderAvatarData = `data:image/jpeg;base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+      } catch {}
+    }
   }
 }
 
@@ -445,7 +370,7 @@ function renderOverviewSvg(model) {
   ];
   cards.forEach(([label, value], index) => {
     const x = 920 + index * 156;
-    svg.push(`<path d="M${x} 50 H${x + 138} V100 H${x} Z" fill="#020817" fill-opacity=".30" stroke="#d7e7f7" stroke-opacity=".30"/>`);
+    svg.push(`<path d="M${x} 50 H${x + 138} V100 H${x} Z" fill="#020817" fill-opacity=".72" stroke="#d7e7f7" stroke-opacity=".24"/>`);
     svg.push(`<text x="${x + 12}" y="62" class="card-label">${escapeXml(label)}</text>`);
     svg.push(`<text x="${x + 12}" y="88" class="card-value mono">${escapeXml(value)}</text>`);
   });
@@ -454,7 +379,7 @@ function renderOverviewSvg(model) {
     svg.push(renderTeamColumn(team));
   }
 
-  svg.push('<text x="48" y="880" class="footer">K=击杀  W=击倒  D=死亡  TK=友军击杀  VK=载具击杀  R=复苏  H=治疗分  C=战斗分  O=目标分  T=团队分  P=Ping</text>');
+  svg.push('<text x="48" y="880" class="footer">对局结束总览仅展示玩家基础状态；详细击杀、击倒、治疗和分数保留在个人详情中。</text>');
   svg.push(`<text x="1552" y="880" text-anchor="end" class="footer mono">${escapeXml(model.serverName)}</text>`);
   svg.push("</g>");
   svg.push("</svg>");
@@ -467,32 +392,14 @@ function renderTeamColumn(team) {
   const y = 158;
   const headerHeight = 58;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".10" stroke="${team.accent}" stroke-opacity=".46"/>`);
-  if (team.flagData) {
-    svg.push(`<image href="${team.flagData}" x="${x + 34}" y="${y + 68}" width="${team.width - 68}" height="${TEAM_CONTENT_BOTTOM - y - 84}" opacity=".28" preserveAspectRatio="xMidYMid meet"/>`);
-    svg.push(`<rect x="${x + 12}" y="${y + 64}" width="${team.width - 24}" height="${TEAM_CONTENT_BOTTOM - y - 72}" fill="${team.accent}" fill-opacity=".045"/>`);
-  }
-  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".50"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".46" stroke="${team.accent}" stroke-opacity=".34"/>`);
+  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".58" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
   svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
   svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
-  const commanderAvatar = firstText(
-    team.commanderAvatarData,
-    team.commanderPlayer?.steamAvatar,
-    team.commanderPlayer?.steam_avatar,
-    team.commanderPlayer?.avatarUrl,
-    team.commanderPlayer?.steamAvatarUrl,
-    team.commanderPlayer?.avatar,
-    team.commanderPlayer?.avatar_full,
-    team.commanderPlayer?.avatar_medium,
-    team.commanderPlayer?.steamProfile?.avatarFull,
-    team.commanderPlayer?.steamProfile?.avatar_full,
-    team.commanderPlayer?.steamProfile?.avatar,
-    team.commanderPlayer?.steam?.avatar,
-    team.commanderPlayer?.profile?.avatar,
-  );
+  const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
   svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
   svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
   if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
@@ -501,7 +408,6 @@ function renderTeamColumn(team) {
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
   team.lanes.forEach((groups, laneIndex) => {
-    svg.push(renderLaneColumnHeader(team, laneXs[laneIndex], team.contentTop - 18));
     let cursorY = team.contentTop;
     for (const group of groups) {
       svg.push(renderSquadCard(team, group, laneXs[laneIndex], cursorY));
@@ -512,21 +418,6 @@ function renderTeamColumn(team) {
   return svg.join("");
 }
 
-function renderLaneColumnHeader(team, x, y) {
-  const { infoWidth, stats } = COMPACT_PLAYER_LAYOUT;
-  const svg = [
-    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="14" fill="#071426" fill-opacity=".34" stroke="${team.accent}" stroke-opacity=".62"/>`,
-    `<text x="${x + 9}" y="${y + 10}" class="column-head">PLAYER</text>`,
-  ];
-  let cursor = x + infoWidth;
-  for (const [label, width] of stats) {
-    svg.push(`<path d="M${cursor} ${y} V${y + 14}" stroke="#b9d9f1" stroke-opacity=".28"/>`);
-    svg.push(`<text x="${cursor + width / 2}" y="${y + 10}" text-anchor="middle" class="column-head">${label}</text>`);
-    cursor += width;
-  }
-  return svg.join("");
-}
-
 function renderSquadCard(team, group, x, y) {
   const svg = [];
   const height = SQUAD_HEADER_HEIGHT + group.players.length * team.rowHeight;
@@ -534,8 +425,8 @@ function renderSquadCard(team, group, x, y) {
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
   const creator = firstText(group.creatorName, "-");
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".12" stroke="#ffffff" stroke-opacity=".13"/>`);
-  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".12" stroke="${team.accent}" stroke-opacity=".48"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".62" stroke="#ffffff" stroke-opacity=".10"/>`);
+  svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
   svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}</text>`);
   svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
@@ -552,33 +443,21 @@ function renderSquadCard(team, group, x, y) {
 function renderPlayerRow(team, player, x, y, index) {
   const role = resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass));
   const rowHeight = team.rowHeight;
+  const health = null;
   const ping = readPing(player);
   const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
-  const stats = playerDetailStats(player);
-  const values = [
-    stats.kills, stats.wounds, stats.deaths, stats.teamKills, stats.vehicleKills,
-    stats.revives, stats.healScore, stats.combatScore, stats.objectiveScore,
-    stats.teamworkScore, ping == null ? "--" : String(ping),
-  ];
-  const { infoWidth, stats: columns } = COMPACT_PLAYER_LAYOUT;
-  const backgroundOpacity = index % 2 === 0 ? ".16" : ".07";
-  let cursor = x + infoWidth;
-  const parts = [
-    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".07"/>`,
-    `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".7"}"/>`,
-    player.roleIconData
-      ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + Math.max(1, Math.floor((rowHeight - 12) / 2))}" width="12" height="12" preserveAspectRatio="xMidYMid meet"/>`
-      : `<rect x="${x + 10}" y="${y + Math.max(2, Math.floor((rowHeight - 10) / 2))}" width="10" height="10" fill="${role.tone}" fill-opacity=".86" stroke="#e6f4ff" stroke-opacity=".55"/>`,
-    `<text x="${x + 25}" y="${y + rowHeight - 4}" class="compact-player-name">${escapeXml(clip(player?.name, 16))}</text>`,
-  ];
-  columns.forEach(([label, width], columnIndex) => {
-    const value = values[columnIndex];
-    const className = label === "P" ? "compact-ping" : "compact-stat";
-    const fill = label === "P" ? ` fill="${pingColor(ping)}"` : "";
-    parts.push(`<text x="${cursor + width / 2}" y="${y + rowHeight - 4}" text-anchor="middle" class="${className}"${fill}>${escapeXml(value)}</text>`);
-    cursor += width;
-  });
-  return parts.join("");
+  const leaderLabel = "";
+  const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
+  return [
+    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
+    `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".65"}"/>`,
+    `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
+    `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
+    player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
+    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
+
+    `<text x="${x + team.laneWidth - 4}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
+  ].join("");
 }
 
 function comparePlayers(left, right) {
@@ -640,8 +519,8 @@ async function buildBackground(sharp, payload) {
     try {
       return await sharp(assetPath)
         .resize(WIDTH, HEIGHT, { fit: "cover", position: "centre" })
-        .modulate({ brightness: 0.72, saturation: 0.90 })
-        .blur(0.45)
+        .modulate({ brightness: 0.52, saturation: 0.60 })
+        .blur(1.4)
         .png()
         .toBuffer();
     } catch {}
@@ -685,14 +564,14 @@ function resolveMapKey(value) {
 function renderDefs() {
   return `<defs>
     <linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#020611" stop-opacity=".08"/>
-      <stop offset="42%" stop-color="#020611" stop-opacity=".22"/>
-      <stop offset="100%" stop-color="#020611" stop-opacity=".46"/>
+      <stop offset="0%" stop-color="#020611" stop-opacity=".28"/>
+      <stop offset="42%" stop-color="#020611" stop-opacity=".52"/>
+      <stop offset="100%" stop-color="#020611" stop-opacity=".82"/>
     </linearGradient>
     <linearGradient id="headerPlate" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#061426" stop-opacity=".46"/>
-      <stop offset="55%" stop-color="#10243c" stop-opacity=".34"/>
-      <stop offset="100%" stop-color="#061020" stop-opacity=".44"/>
+      <stop offset="0%" stop-color="#061426" stop-opacity=".92"/>
+      <stop offset="55%" stop-color="#10243c" stop-opacity=".78"/>
+      <stop offset="100%" stop-color="#061020" stop-opacity=".90"/>
     </linearGradient>
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
@@ -713,18 +592,8 @@ function renderDefs() {
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}
-      .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}.overview-stat{font-size:6.5px;font-weight:800;fill:#f4f8fc}
-      .column-head{font-family:'Cascadia Mono','Consolas',monospace;font-size:6.3px;font-weight:900;fill:#d9ebfa}
-      .compact-role{font-family:'Cascadia Mono','Consolas',monospace;font-size:5.7px;font-weight:900;fill:#bcd3e6}
-      .compact-player-name{font-size:7px;font-weight:900;fill:#edf6ff}
-      .compact-stat{font-family:'Cascadia Mono','Consolas',monospace;font-size:6.4px;font-weight:900;fill:#f4f8fc}
-      .compact-ping{font-family:'Cascadia Mono','Consolas',monospace;font-size:6.3px;font-weight:900}
+      .combat-stats{font-size:6.2px;font-weight:800;fill:#d7e5f2;letter-spacing:-.15px}
       .footer{font-size:10px;fill:#91a4b7}
-      .detail-title{font-size:28px;font-weight:900}.detail-sub{font-size:11px;fill:#c7d8e8}
-      .detail-head{font-size:8px;font-weight:900;fill:#d9ebfa}.detail-squad{font-size:9px;font-weight:900}
-      .detail-squad-meta{font-size:8px;font-family:'Cascadia Mono','Consolas',monospace;fill:#c9dbea}
-      .detail-name{font-size:8px;font-weight:700;fill:#e8f0f8}.detail-stat{font-family:'Cascadia Mono','Consolas',monospace;font-size:8.4px;font-weight:800;fill:#f4f8fc}
-      .detail-ping{font-family:'Cascadia Mono','Consolas',monospace;font-size:8px;font-weight:800}
     ]]></style>
   </defs>`;
 }
@@ -822,31 +691,21 @@ function nullableNumber(value) {
 async function loadSharp() {
   if (!sharpLoaderPromise) {
     sharpLoaderPromise = (async () => {
-      let sharp;
       try {
         const imported = await import("sharp");
-        sharp = imported.default ?? imported;
+        return imported.default ?? imported;
       } catch (importError) {
         try {
-          sharp = sharpRequire("sharp");
+          return sharpRequire("sharp");
         } catch {}
-        if (!sharp) {
-          try {
-            sharp = sharpRequire(path.join(SHARP_BUNDLE_ROOT, "sharp"));
-          } catch {
-            const error = new Error(`sharp is unavailable: ${importError?.message ?? importError}`);
-            error.code = "SharpUnavailable";
-            throw error;
-          }
+        try {
+          return sharpRequire(path.join(SHARP_BUNDLE_ROOT, "sharp"));
+        } catch {
+          const error = new Error(`sharp is unavailable: ${importError?.message ?? importError}`);
+          error.code = "SharpUnavailable";
+          throw error;
         }
       }
-      if (!sharpConfigured) {
-        // Keep libvips' native cache well below the normal Node working set.
-        sharp.cache({ memory: 16, files: 0, items: 16 });
-        sharp.concurrency(1);
-        sharpConfigured = true;
-      }
-      return sharp;
     })();
   }
   return sharpLoaderPromise;
