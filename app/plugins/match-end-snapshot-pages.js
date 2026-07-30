@@ -50,6 +50,8 @@ const MAP_SCENE_FILE_BY_KEY = {
   Yehorivka: "LoadingScreen_Yehorivka_DQHD.PNG",
 };
 
+const MAP_MINIMAP_EXTENSIONS = [".PNG", ".png", ".JPG", ".jpg", ".JPEG", ".jpeg"];
+
 const TEAM_ACCENTS = {
   1: "#37c8ff",
   2: "#ef3b4f",
@@ -115,6 +117,7 @@ export async function generateMatchEndOverviewPng(payload) {
   const model = buildMatchEndOverviewModel(payload);
   await attachRoleIconData(model);
   await attachTeamVisuals(model);
+  await attachMapMinimapData(model, payload);
   const background = await buildBackground(sharp, payload);
   const overlay = Buffer.from(renderOverviewSvg(model), "utf8");
   return sharp(background)
@@ -197,7 +200,7 @@ function buildTeams(payload) {
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
-      commanderName: firstText(commander?.name, "Pending"),
+      commanderName: firstText(commander?.name, ""),
       commanderPlayer: commander,
       groups,
     };
@@ -328,6 +331,23 @@ function roleIconFileName(label) {
 
 async function attachTeamVisuals(model) {
   const flagFiles = { ADF: "ADF.PNG", AFU: "AFU.PNG", BAF: "BAF.PNG", CAF: "CAF.PNG", CRF: "CRF.PNG", GFI: "GFI.PNG", IMF: "IMF.PNG", MEA: "MEA.PNG", MEI: "MEI.PNG", PLA: "PLA.PNG", PLAAGF: "PLAAGF.PNG", PLANMC: "PLANMC.png", RGF: "RGF.PNG", TLF: "TLF.PNG", USA: "USA.PNG", USMC: "USMC.PNG", VDV: "VDV.png", WPMC: "WPMC.PNG" };
+async function attachMapMinimapData(model, payload) {
+  const candidate = resolveMinimapPath(payload);
+  if (!candidate) return;
+  try {
+    model.minimapData = `data:image/png;base64,${(await fs.readFile(candidate)).toString("base64")}`;
+  } catch {}
+}
+
+function resolveMinimapPath(payload) {
+  const key = resolveMapKey(firstText(payload?.match?.layer, payload?.match?.map));
+  const candidates = [];
+  for (const extension of MAP_MINIMAP_EXTENSIONS) {
+    candidates.push(path.resolve(process.cwd(), "web-client", "public", `${key}_Minimap${extension}`));
+  }
+  return candidates.find((candidate) => existsSync(candidate)) ?? "";
+}
+
   for (const team of model.teams ?? []) {
     const code = String(team.factionCode ?? team.teamName ?? "").toUpperCase().match(/ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|PLAAGF|PLANMC|PLA|RGF|TLF|USA|USMC|VDV|WPMC/)?.[0];
     const file = flagFiles[code];
@@ -357,9 +377,10 @@ function renderOverviewSvg(model) {
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
   svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
-  svg.push('<text x="64" y="62" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
-  svg.push(`<text x="64" y="90" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
-  svg.push(`<text x="66" y="112" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
+  if (model.minimapData) svg.push(`<image href="${model.minimapData}" x="48" y="45" width="148" height="66" preserveAspectRatio="xMidYMid slice" opacity=".94"/>`);
+  svg.push('<text x="220" y="62" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
+  svg.push(`<text x="220" y="90" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
+  svg.push(`<text x="222" y="112" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
   svg.push(`<text x="1218" y="114" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
 
   const cards = [
@@ -399,12 +420,14 @@ function renderTeamColumn(team) {
   if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
   svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
   svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
+  if (team.commanderPlayer) {
   const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
   svg.push(`<circle cx="${x + team.width - 174}" cy="${y + 27}" r="14" fill="${team.accent}" fill-opacity=".24" stroke="${team.accent}" stroke-opacity=".7"/>`);
   svg.push(`<text x="${x + team.width - 174}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
   if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${x + team.width - 188}" y="${y + 13}" width="28" height="28" preserveAspectRatio="xMidYMid slice"/>`);
   svg.push(`<text x="${x + team.width - 174}" y="${y + 52}" text-anchor="middle" class="commander-caption">${escapeXml(clip(team.commanderName, 12))}</text>`);
   svg.push(`<text x="${x + team.width - 218}" y="${y + 25}" text-anchor="end" class="commander-label">Commander</text>`);
+  }
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
   team.lanes.forEach((groups, laneIndex) => {
