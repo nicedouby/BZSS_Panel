@@ -176,7 +176,6 @@ export function buildMatchEndOverviewModel(payload) {
   const modeTitle = firstText(payload?.match?.mode, "-");
   const nextLayer = firstText(payload?.match?.nextLayer, payload?.match?.nextMap, "-");
   const serverName = firstText(payload?.server?.serverName, payload?.server?.serverId, "BZSS Server");
-  const winner = firstText(payload?.trigger?.winner, "");
   const capturedAt = formatDateTime(payload?.capturedAt);
   const playerCount = Number(payload?.summary?.recordedPlayerCount ?? payload?.players?.length ?? payload?.server?.playerCount ?? 0);
   const queueCount = Number(payload?.server?.queueCount ?? 0);
@@ -190,7 +189,6 @@ export function buildMatchEndOverviewModel(payload) {
     modeTitle,
     nextLayer,
     serverName,
-    winner,
     capturedAt,
     playerCount,
     queueCount,
@@ -566,30 +564,66 @@ function renderOverviewSvg(model) {
   svg.push('<text x="220" y="62" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
   svg.push(`<text x="220" y="90" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
   svg.push(`<text x="222" y="112" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
-  svg.push(`<text x="1218" y="114" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
-
-  const cards = [
-    ["PLAYERS", String(model.playerCount)],
-    ["QUEUE", String(model.queueCount)],
-    ["TIME", model.playtime],
-    ["WINNER", model.winner || "-"],
-  ];
-  cards.forEach(([label, value], index) => {
-    const x = 920 + index * 156;
-    svg.push(`<path d="M${x} 50 H${x + 138} V100 H${x} Z" fill="#020817" fill-opacity=".72" stroke="#d7e7f7" stroke-opacity=".24"/>`);
-    svg.push(`<text x="${x + 12}" y="62" class="card-label">${escapeXml(label)}</text>`);
-    svg.push(`<text x="${x + 12}" y="88" class="card-value mono">${escapeXml(value)}</text>`);
-  });
+  svg.push(`<text x="1530" y="39" text-anchor="end" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
+  svg.push(renderServerBattleStrip(model));
 
   for (const team of model.teams) {
     svg.push(renderTeamColumn(team));
   }
 
   svg.push('<text x="48" y="880" class="footer">对局结束总览仅展示玩家基础状态；详细击杀、击倒、治疗和分数保留在个人详情中。</text>');
-  svg.push(`<text x="1552" y="880" text-anchor="end" class="footer mono">${escapeXml(model.serverName)}</text>`);
   svg.push("</g>");
   svg.push("</svg>");
   return svg.join("");
+}
+
+function renderServerBattleStrip(model) {
+  const team1 = model.teams.find((team) => team.teamID === 1) ?? emptyTeam(1);
+  const team2 = model.teams.find((team) => team.teamID === 2) ?? emptyTeam(2);
+  return [
+    renderTicketPanel(team1, 888, "left"),
+    '<path d="M1048 48 H1358 L1368 58 V112 H1038 V58 Z" fill="#020817" fill-opacity=".84" stroke="#b9d0e5" stroke-opacity=".28"/>',
+    '<path d="M1055 55 H1351" stroke="#d9e9f8" stroke-opacity=".12"/>',
+    `<text x="1203" y="65" text-anchor="middle" class="server-name">${escapeXml(clip(model.serverName, 42))}</text>`,
+    '<path d="M1055 72 H1351" stroke="#d9e9f8" stroke-opacity=".12"/>',
+    renderCompactMetric("PLAYERS", String(model.playerCount), 1091),
+    '<path d="M1148 78 V105" stroke="#d9e9f8" stroke-opacity=".14"/>',
+    renderCompactMetric("QUEUE", String(model.queueCount), 1203),
+    '<path d="M1258 78 V105" stroke="#d9e9f8" stroke-opacity=".14"/>',
+    renderCompactMetric("DURATION", model.playtime, 1314),
+    renderTicketPanel(team2, 1378, "right"),
+  ].join("");
+}
+
+function renderCompactMetric(label, value, centerX) {
+  return [
+    `<text x="${centerX}" y="86" text-anchor="middle" class="server-metric-label">${escapeXml(label)}</text>`,
+    `<text x="${centerX}" y="104" text-anchor="middle" class="server-metric-value mono">${escapeXml(value)}</text>`,
+  ].join("");
+}
+
+function renderTicketPanel(team, x, side) {
+  const direction = side === "right" ? -1 : 1;
+  const panelPath = side === "right"
+    ? `M${x + 10} 48 H${x + 150} V112 H${x} V58 Z`
+    : `M${x} 48 H${x + 140} L${x + 150} 58 V112 H${x} Z`;
+  const flagX = side === "right" ? x + 90 : x + 12;
+  const textX = side === "right" ? x + 78 : x + 72;
+  const textAnchor = side === "right" ? "end" : "start";
+  const ticket = team.tickets == null ? "--" : String(team.tickets);
+  const factionLabel = firstText(team.factionCode, team.factionId, `TEAM ${team.teamID}`);
+  const flag = team.flagData
+    ? `<image href="${team.flagData}" x="${flagX}" y="55" width="48" height="25" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${flagX + 24}" y="71" text-anchor="middle" class="ticket-flag-fallback">${escapeXml(clip(factionLabel, 8))}</text>`;
+  return [
+    `<path d="${panelPath}" fill="url(#team${team.teamID}TicketPanel)" stroke="${team.accent}" stroke-opacity=".68"/>`,
+    `<path d="M${x + (direction > 0 ? 1 : 149)} 57 V104" stroke="${team.accent}" stroke-width="3" stroke-linecap="round"/>`,
+    `<path d="M${x + 11} 107 H${x + 139}" stroke="${team.accent}" stroke-opacity=".46"/>`,
+    flag,
+    `<text x="${textX}" y="65" text-anchor="${textAnchor}" class="ticket-team">TEAM ${team.teamID} · ${escapeXml(clip(factionLabel, 10))}</text>`,
+    `<text x="${textX}" y="80" text-anchor="${textAnchor}" class="ticket-label">TICKETS</text>`,
+    `<text x="${textX}" y="105" text-anchor="${textAnchor}" class="ticket-value mono" fill="${team.accent}">${escapeXml(ticket)}</text>`,
+  ].join("");
 }
 
 function renderTeamColumn(team) {
@@ -602,9 +636,8 @@ function renderTeamColumn(team) {
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".58" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
 
-  if (team.flagData) svg.push(`<image href="${team.flagData}" x="${x + 28}" y="${y + 14}" width="42" height="22" preserveAspectRatio="xMidYMid meet"/>`);
-  svg.push(`<text x="${x + 78}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 32))}</text>`);
-  svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · TICKETS ${team.tickets == null ? "--" : team.tickets} · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
+  svg.push(`<text x="${x + 28}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 38))}</text>`);
+  svg.push(`<text x="${x + 28}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
   if (team.commanderPlayer) {
     const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
     const commanderSize = 38;
@@ -796,6 +829,16 @@ function renderDefs() {
       <stop offset="55%" stop-color="#10243c" stop-opacity=".78"/>
       <stop offset="100%" stop-color="#061020" stop-opacity=".90"/>
     </linearGradient>
+    <linearGradient id="team1TicketPanel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#062d4b" stop-opacity=".96"/>
+      <stop offset="62%" stop-color="#07182b" stop-opacity=".92"/>
+      <stop offset="100%" stop-color="#04101e" stop-opacity=".96"/>
+    </linearGradient>
+    <linearGradient id="team2TicketPanel" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#48111b" stop-opacity=".96"/>
+      <stop offset="62%" stop-color="#21101a" stop-opacity=".92"/>
+      <stop offset="100%" stop-color="#100812" stop-opacity=".96"/>
+    </linearGradient>
     <filter id="commanderAvatarDiffuseWide" x="-150%" y="-150%" width="400%" height="400%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="8.5"/>
     </filter>
@@ -809,8 +852,13 @@ function renderDefs() {
       .hero-title{font-size:32px;font-weight:900}
       .hero-sub{font-size:11px;fill:#d4e1ee}
       .meta{font-size:8px;fill:#b7c8d8}
-      .card-label{font-size:7px;font-weight:900;fill:#aabbd0}
-      .card-value{font-size:14px;font-weight:900}
+      .server-name{font-size:8px;font-weight:900;letter-spacing:.75px;fill:#d9e7f5}
+      .server-metric-label{font-size:6px;font-weight:900;letter-spacing:.8px;fill:#8398ad}
+      .server-metric-value{font-size:13px;font-weight:900;fill:#f3f8fd}
+      .ticket-team{font-size:6.5px;font-weight:900;letter-spacing:.4px;fill:#dce9f5}
+      .ticket-label{font-size:5.5px;font-weight:900;letter-spacing:1px;fill:#8ea4b8}
+      .ticket-value{font-size:20px;font-weight:900}
+      .ticket-flag-fallback{font-size:7px;font-weight:900;fill:#d6e5f2}
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
       .commander-initial{font-size:13px;font-weight:900}.commander-orbit{stroke-linecap:round}.commander-caption{font-size:7px;font-weight:900;letter-spacing:.35px;fill:#d9e9f6}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
