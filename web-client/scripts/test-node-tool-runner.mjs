@@ -3,7 +3,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { createStableNodeToolEnv, runNodeTool } from "./node-tool-runner.mjs";
+import {
+  createNodeToolExecArgs,
+  createStableNodeToolEnv,
+  runNodeTool,
+} from "./node-tool-runner.mjs";
 
 const env = createStableNodeToolEnv({
   NODE_OPTIONS: "--max-old-space-size=4096 --disallow-code-generation-from-strings",
@@ -17,6 +21,25 @@ assert.equal(env.DISABLE_V8_COMPILE_CACHE, "1");
 assert.equal("NODE_COMPILE_CACHE" in env, false);
 assert.equal("V8_COMPILE_CACHE_CACHE_DIR" in env, false);
 
+assert.deepEqual(
+  createNodeToolExecArgs({
+    entry: "tool.mjs",
+    args: ["build", "--config", "vite.config.mjs"],
+    nodeArgs: ["--jitless", "--no-experimental-require-module"],
+    maxOldSpaceSizeMb: 8192,
+  }),
+  [
+    "--max-old-space-size=8192",
+    "--no-maglev",
+    "--jitless",
+    "--no-experimental-require-module",
+    "tool.mjs",
+    "build",
+    "--config",
+    "vite.config.mjs",
+  ],
+);
+
 const directory = await mkdtemp(path.join(os.tmpdir(), "bzss-node-tool-"));
 const childPath = path.join(directory, "verify-child.mjs");
 
@@ -25,11 +48,13 @@ try {
     "if (process.env.NODE_DISABLE_COMPILE_CACHE !== '1') process.exit(2);",
     "if (process.env.DISABLE_V8_COMPILE_CACHE !== '1') process.exit(3);",
     "if (process.env.NODE_COMPILE_CACHE) process.exit(4);",
+    "if (!process.execArgv.includes('--no-experimental-require-module')) process.exit(5);",
   ].join("\n"), "utf8");
 
   const exitCode = await runNodeTool({
     label: "build runner environment test",
     entry: childPath,
+    nodeArgs: ["--no-experimental-require-module"],
   });
   assert.equal(exitCode, 0);
 } finally {
