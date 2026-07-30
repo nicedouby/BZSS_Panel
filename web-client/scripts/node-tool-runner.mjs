@@ -26,15 +26,58 @@ export function createStableNodeToolEnv(source = process.env) {
   return env;
 }
 
-export async function runNodeTool({ label, entry, args = [] }) {
+export function createNodeToolExecArgs({
+  entry,
+  args = [],
+  nodeArgs = [],
+  maxOldSpaceSizeMb = 4096,
+} = {}) {
+  const normalizedEntry = String(entry ?? "").trim();
+  if (!normalizedEntry) throw new Error("Node tool entry is required.");
+
+  const requestedHeap = Number(maxOldSpaceSizeMb);
+  const heapSize = Number.isFinite(requestedHeap)
+    ? Math.max(1024, Math.round(requestedHeap))
+    : 4096;
+
+  const extraNodeArgs = Array.isArray(nodeArgs)
+    ? nodeArgs.map((value) => String(value ?? "").trim()).filter(Boolean)
+    : [];
+  const toolArgs = Array.isArray(args)
+    ? args.map((value) => String(value))
+    : [];
+
+  return [
+    `--max-old-space-size=${heapSize}`,
+    "--no-maglev",
+    ...extraNodeArgs,
+    normalizedEntry,
+    ...toolArgs,
+  ];
+}
+
+export async function runNodeTool({
+  label,
+  entry,
+  args = [],
+  nodeArgs = [],
+  maxOldSpaceSizeMb = 4096,
+}) {
   const toolLabel = String(label || "Node tool");
   const startedAt = Date.now();
   const nodeVersion = process.version;
+  const execArgs = createNodeToolExecArgs({
+    entry,
+    args,
+    nodeArgs,
+    maxOldSpaceSizeMb,
+  });
 
   console.log(`[client-build] Starting ${toolLabel} with Node ${nodeVersion}`);
+  console.log(`[client-build] Runtime flags: ${execArgs.slice(0, -1 - args.length).join(" ")}`);
 
   const code = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--max-old-space-size=4096", "--no-maglev", entry, ...args], {
+    const child = spawn(process.execPath, execArgs, {
       stdio: "inherit",
       env: createStableNodeToolEnv(),
       windowsHide: false,
