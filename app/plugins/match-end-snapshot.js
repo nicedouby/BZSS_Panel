@@ -277,55 +277,35 @@ export function createPlugin({ core, modules, logger } = {}) {
   async function regenerateBundle(id) {
     const safeId = sanitizeId(id);
     const payload = await readSnapshot(safeId);
+
+    // Historical snapshots must be rendered from their frozen JSON payload.
+    // Do not enqueue a background task here: the HTTP caller needs a deterministic
+    // result and the task event can race the manifest read during regeneration.
     payload.players = await enrichPlayersWithDatabaseAvatar(
       Array.isArray(payload?.players) ? payload.players : [],
       modules,
     );
 
-    if (taskManager) {
-      const task = await taskManager.enqueue({
-        type: "snapshot.generate",
-        priority: 5,
-        maxRetry: 2,
-        payload: {
-          payload,
-          snapshotId: safeId,
-          snapshotDirectory: SNAPSHOT_DIR,
-        },
-      });
-      await taskManager.waitForTask(task.taskId);
-      const manifest = JSON.parse(await fs.readFile(
-        path.join(resolveSnapshotDir(), safeId + "-manifest.json"),
-        "utf8",
-      ));
-      payload.artifacts = {
-        format: "single-scoreboard",
-        status: "done",
-        pageCount: manifest.pageCount ?? manifest.pages?.length ?? 0,
-        primaryImage: safeId + ".png",
-        combinedImage: safeId + "-combined.png",
-        manifest: safeId + "-manifest.json",
-        pages: manifest.pages ?? [],
-      };
-      await writeJsonAtomic(path.join(resolveSnapshotDir(), safeId + ".json"), payload);
-      return manifest;
-    }
-
     const bundle = await generateMatchEndSnapshotBundle(payload, { snapshotId: safeId });
     await persistBundle(safeId, bundle);
+
     payload.artifacts = {
       format: "single-scoreboard",
       status: "done",
-      pageCount: bundle.pages.length,
+      pageCount: bundle.pages?.length ?? 0,
       primaryImage: safeId + ".png",
       combinedImage: safeId + "-combined.png",
       manifest: safeId + "-manifest.json",
-      pages: bundle.manifest.pages,
+      pages: bundle.manifest?.pages ?? [],
+      regeneratedAt: new Date().toISOString(),
     };
     await writeJsonAtomic(path.join(resolveSnapshotDir(), safeId + ".json"), payload);
-    return bundle;
+    return bundle.manifest;
   }
 
+  async function regenerateSnapshot(id) {
+    return regenerateBundle(id);
+  }
   async function deleteSnapshot(id) {
     await ensureSnapshotDir();
     const safeId = sanitizeId(id);
@@ -366,6 +346,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       readSnapshotManifest,
       readSnapshotPage,
       readSnapshotImage,
+      regenerateSnapshot,
       deleteSnapshot,
     },
 
