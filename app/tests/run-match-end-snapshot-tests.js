@@ -8,7 +8,9 @@ import { createPlugin } from "../plugins/match-end-snapshot.js";
 import { FIRETEAM_COLORS, resolvePlayerFireTeam } from "../plugins/match-end-snapshot-fireteam.js";
 import {
   buildMatchEndOverviewModel,
+  buildSnapshotPlayerMetrics,
   generateMatchEndSnapshotBundle,
+  renderOverviewSvg,
 } from "../plugins/match-end-snapshot-pages.js";
 
 function createHarness() {
@@ -299,6 +301,33 @@ function testTeamCombatTotalsUsePlayerSums() {
   });
 }
 
+function testPlayerCombatMetricsAndLaneHeaders() {
+  const player = makeTeam(1, 1)[0];
+  const metrics = buildSnapshotPlayerMetrics(player);
+  assert.deepEqual(metrics, {
+    kills: 0,
+    downs: 1,
+    deaths: 1,
+    teamKills: 0,
+    vehicleKills: 0,
+    revives: 0,
+    healPoints: 100,
+    combatScore: 200,
+    objectiveScore: 300,
+    teamworkScore: 400,
+    ping: 35,
+  });
+
+  const model = buildMatchEndOverviewModel(makePayload(2, 2));
+  assert.equal(model.teams[0].laneHeaderTop, 220);
+  assert.equal(model.teams[0].contentTop, 242);
+  const svg = renderOverviewSvg(model);
+  assert.equal((svg.match(/class="scoreboard-header-title">PLAYER/g) ?? []).length, 4);
+  for (const label of ["K", "W", "D", "TK", "VK", "R", "H", "C", "O", "T", "P"]) {
+    assert.equal((svg.match(new RegExp(`class="scoreboard-header-stat"[^>]*>${label}<\\/text>`, "g")) ?? []).length, 4);
+  }
+}
+
 async function testHundredPlayersStayInOneImage() {
   const payload = makePayload(50, 50);
   const model = buildMatchEndOverviewModel(payload);
@@ -365,7 +394,7 @@ function readPngPixel(buffer, x, y) {
 async function testFireteamAccentPixels() {
   const bundle = await generateMatchEndSnapshotBundle(makePayload(3, 0), { snapshotId: "fireteam-pixels" });
   // Team 1 first lane: rows A/B/C have an unmasked 7px fireteam bar on the far left.
-  const samples = [[74, 480], [74, 520], [74, 560]];
+  const samples = [[74, 524], [74, 564], [74, 604]];
   const expected = [[53, 208, 127], [167, 139, 250], [34, 211, 238]];
   samples.forEach(([x, y], index) => {
     const [red, green, blue] = readPngPixel(bundle.combinedBuffer, x, y);
@@ -405,6 +434,7 @@ function testSourceAwareFireteamResolution() {
 testSourceAwareFireteamResolution();
 testFullFactionNamesResolveForSnapshotFlags();
 testTeamCombatTotalsUsePlayerSums();
+testPlayerCombatMetricsAndLaneHeaders();
 await testFireteamAccentPixels();
 await testServerBattleStripUsesTeamColors();
 await testSingleOverviewSnapshot();
