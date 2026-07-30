@@ -52,6 +52,28 @@ const MAP_SCENE_FILE_BY_KEY = {
 
 const MAP_MINIMAP_EXTENSIONS = [".PNG", ".png", ".JPG", ".jpg", ".JPEG", ".jpeg"];
 
+const FACTION_FLAG_FILES = Object.freeze({
+  ADF: "ADF.PNG",
+  AFU: "AFU.PNG",
+  BAF: "BAF.PNG",
+  CAF: "CAF.PNG",
+  CRF: "CRF.PNG",
+  GFI: "GFI.PNG",
+  IMF: "IMF.PNG",
+  MEA: "MEA.PNG",
+  MEI: "MEI.PNG",
+  PLA: "PLA.PNG",
+  PLAAGF: "PLAAGF.PNG",
+  PLANMC: "PLANMC.png",
+  RGF: "RGF.PNG",
+  TLF: "TLF.PNG",
+  USA: "USA.PNG",
+  USMC: "USMC.PNG",
+  VDV: "VDV.png",
+  WPMC: "WPMC.PNG",
+});
+const FACTION_CODES_BY_LENGTH = Object.keys(FACTION_FLAG_FILES).sort((left, right) => right.length - left.length);
+
 const TEAM_ACCENTS = {
   1: "#37c8ff",
   2: "#ef3b4f",
@@ -368,6 +390,7 @@ async function resolveLocalFactionAsset(fileName, factionCode) {
     path.resolve(process.cwd(), "web-client", "public", fileName),
     path.resolve(process.cwd(), "web-client", "public", `${String(factionCode ?? "").trim()}.PNG`),
     path.resolve(process.cwd(), "web-client", "public", `${String(factionCode ?? "").trim()}.png`),
+    path.resolve(process.cwd(), "web-client", "public", "assets", "faction-assets", fileName),
     path.resolve(process.cwd(), "web-client", "public", "assets", "flags", fileName),
     path.resolve(process.cwd(), "web-client", "public", "assets", "factions", fileName),
     path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", fileName),
@@ -440,26 +463,59 @@ function readTicketValue(source, teamID) {
   return null;
 }
 
+function resolveFactionCode(...values) {
+  for (const value of values) {
+    const normalized = normalizeToken(value).toUpperCase();
+    if (!normalized) continue;
+    const exact = FACTION_CODES_BY_LENGTH.find((code) => normalized === code);
+    if (exact) return exact;
+    const embedded = FACTION_CODES_BY_LENGTH.find((code) => normalized.includes(code));
+    if (embedded) return embedded;
+  }
+  return "";
+}
+
+function colorToHex(color, fallback = "#d8f3ff") {
+  if (!color) return fallback;
+  const channels = [color.r, color.g, color.b].map((value) => Math.max(0, Math.min(255, Math.round(Number(value) || 0))));
+  const brightest = Math.max(...channels);
+  const lifted = brightest < 96
+    ? channels.map((value) => Math.min(255, Math.round(value + (96 - brightest) * 0.82)))
+    : channels;
+  return `#${lifted.map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
 async function attachTeamVisuals(model) {
-  const flagFiles = { ADF: "ADF.PNG", AFU: "AFU.PNG", BAF: "BAF.PNG", CAF: "CAF.PNG", CRF: "CRF.PNG", GFI: "GFI.PNG", IMF: "IMF.PNG", MEA: "MEA.PNG", MEI: "MEI.PNG", PLA: "PLA.PNG", PLAAGF: "PLAAGF.PNG", PLANMC: "PLANMC.png", RGF: "RGF.PNG", TLF: "TLF.PNG", USA: "USA.PNG", USMC: "USMC.PNG", VDV: "VDV.png", WPMC: "WPMC.PNG" };
+  const sharp = await loadSharp();
   for (const team of model.teams ?? []) {
-    const code = String(team.factionCode ?? team.teamName ?? "").toUpperCase().match(/ADF|AFU|BAF|CAF|CRF|GFI|IMF|MEA|MEI|PLAAGF|PLANMC|PLA|RGF|TLF|USA|USMC|VDV|WPMC/)?.[0];
-    const file = flagFiles[code];
+    const code = resolveFactionCode(team.factionId, team.factionCode, team.teamName);
+    const file = FACTION_FLAG_FILES[code];
     if (file) {
       const found = await resolveLocalFactionAsset(file, code);
       if (found) {
         try {
-          const contentType = /\.jpe?g$/i.test(found) ? "image/jpeg" : "image/png";
-          team.flagData = `data:${contentType};base64,${(await fs.readFile(found)).toString("base64")}`;
+          const normalizedFlag = await sharp(found)
+            .resize(168, 88, { fit: "inside", withoutEnlargement: true })
+            .png()
+            .toBuffer();
+          team.flagData = `data:image/png;base64,${normalizedFlag.toString("base64")}`;
         } catch {}
       }
     }
+
     const commander = team.commanderPlayer ?? {};
-    const avatar = commander.avatarUrl ?? commander.avatar ?? commander.steamAvatar ?? commander.steamAvatarUrl ?? commander.steam_avatar ?? commander.steamAvatar ?? commander.avatar_full ?? commander.avatar_medium ?? commander.steamProfile?.avatar ?? commander.steamProfile?.avatar_full ?? commander.steam?.avatar ?? commander.profile?.avatar ?? "";
+    const avatar = commander.avatarUrl ?? commander.avatar ?? commander.steamAvatar ?? commander.steamAvatarUrl ?? commander.steam_avatar ?? commander.avatar_full ?? commander.avatar_medium ?? commander.steamProfile?.avatar ?? commander.steamProfile?.avatar_full ?? commander.steam?.avatar ?? commander.profile?.avatar ?? "";
     if (typeof avatar === "string" && avatar.startsWith("http")) {
       try {
         const response = await fetch(avatar);
-        if (response.ok) team.commanderAvatarData = `data:image/jpeg;base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+        if (!response.ok) continue;
+        const avatarBuffer = await sharp(Buffer.from(await response.arrayBuffer()))
+          .resize(96, 96, { fit: "cover", position: "centre" })
+          .png()
+          .toBuffer();
+        const stats = await sharp(avatarBuffer).stats();
+        team.commanderAvatarData = `data:image/png;base64,${avatarBuffer.toString("base64")}`;
+        team.commanderGlowColor = colorToHex(stats?.dominant, team.accent);
       } catch {}
     }
   }
@@ -521,19 +577,19 @@ function renderTeamColumn(team) {
     const commanderCenterX = x + team.width - 34;
     const commanderCenterY = y + 27;
     const commanderClipId = `commander-avatar-${team.teamID}`;
+    const commanderGlowColor = team.commanderGlowColor ?? team.accent;
     svg.push(`<defs><clipPath id="${commanderClipId}"><circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18"/></clipPath></defs>`);
-    // The commander is a focal marker, so use a layered bloom, tactical rings,
-    // and a rim-lit portrait rather than a single weak halo.
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="39" fill="${team.accent}" fill-opacity=".13" filter="url(#commanderBloom)"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="32" fill="none" stroke="${team.accent}" stroke-width="1.2" stroke-opacity=".34" stroke-dasharray="2 3" class="commander-orbit"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="27" fill="none" stroke="${team.accent}" stroke-width=".8" stroke-opacity=".66" filter="url(#commanderGlow)"/>`);
-    svg.push(`<path d="M${commanderCenterX - 25} ${commanderCenterY}H${commanderCenterX - 19} M${commanderCenterX + 19} ${commanderCenterY}H${commanderCenterX + 25} M${commanderCenterX} ${commanderCenterY - 25}V${commanderCenterX ? commanderCenterY - 19 : commanderCenterY} M${commanderCenterX} ${commanderCenterY + 19}V${commanderCenterY + 25}" stroke="${team.accent}" stroke-width="1.2" stroke-linecap="round" stroke-opacity=".78"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="22" fill="#07111f" fill-opacity=".92" stroke="${team.accent}" stroke-width="1.5" filter="url(#commanderGlow)"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="19" fill="#0b1422" stroke="#eef8ff" stroke-opacity=".42"/>`);
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="19" fill="#0b1422" stroke="#eef8ff" stroke-opacity=".24"/>`);
     svg.push(`<text x="${commanderCenterX}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
-    if (commanderAvatar) svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18.5" fill="none" stroke="${team.accent}" stroke-width="1.4" stroke-opacity=".96"/>`);
-    svg.push(`<path d="M${commanderCenterX - 13} ${commanderCenterY - 13}A18.5 18.5 0 0 1 ${commanderCenterX + 13} ${commanderCenterY - 13}" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-opacity=".72"/>`);
+    if (commanderAvatar) {
+      // The portrait itself is the light source. Blurred masked copies preserve
+      // the avatar's real colors and spread outward from its silhouette.
+      svg.push(`<g filter="url(#commanderAvatarDiffuseWide)" opacity=".52"><image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/></g>`);
+      svg.push(`<g filter="url(#commanderAvatarDiffuseTight)" opacity=".84"><image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/></g>`);
+      svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/>`);
+    }
+    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18.5" fill="none" stroke="${commanderGlowColor}" stroke-width="1.4" stroke-opacity=".92"/>`);
+    svg.push(`<path d="M${commanderCenterX - 13} ${commanderCenterY - 13}A18.5 18.5 0 0 1 ${commanderCenterX + 13} ${commanderCenterY - 13}" fill="none" stroke="#ffffff" stroke-width="1.25" stroke-linecap="round" stroke-opacity=".56"/>`);
     svg.push(`<text x="${commanderCenterX - 32}" y="${y + 52}" text-anchor="end" class="commander-caption">${escapeXml(clip(team.commanderName, 14))}</text>`);
   }
 
@@ -704,12 +760,11 @@ function renderDefs() {
       <stop offset="55%" stop-color="#10243c" stop-opacity=".78"/>
       <stop offset="100%" stop-color="#061020" stop-opacity=".90"/>
     </linearGradient>
-    <filter id="commanderGlow" x="-120%" y="-120%" width="340%" height="340%">
-      <feGaussianBlur stdDeviation="2.1" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="commanderAvatarDiffuseWide" x="-150%" y="-150%" width="400%" height="400%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="8.5"/>
     </filter>
-    <filter id="commanderBloom" x="-130%" y="-130%" width="360%" height="360%">
-      <feGaussianBlur stdDeviation="8"/>
+    <filter id="commanderAvatarDiffuseTight" x="-90%" y="-90%" width="280%" height="280%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="3.2"/>
     </filter>
     <style><![CDATA[
       text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Arial Narrow','Microsoft YaHei',sans-serif;fill:#eef6ff}
