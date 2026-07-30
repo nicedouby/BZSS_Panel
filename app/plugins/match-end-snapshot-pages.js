@@ -13,10 +13,25 @@ const TEAM_CONTENT_TOP = 220;
 const TEAM_CONTENT_BOTTOM = 844;
 const TEAM_LANE_GAP = 8;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
+const TEAM_LANE_HEADER_HEIGHT = 18;
+const TEAM_LANE_HEADER_GAP = 4;
 const SQUAD_HEADER_HEIGHT = 16;
 const SQUAD_GAP = 4;
 const DEFAULT_PLAYER_ROW_HEIGHT = 20;
 const MIN_PLAYER_ROW_HEIGHT = 12;
+const PLAYER_STAT_COLUMNS = Object.freeze([
+  { key: "kills", label: "K", width: 16, tone: "#e8f4ff" },
+  { key: "downs", label: "W", width: 16, tone: "#d8ecff" },
+  { key: "deaths", label: "D", width: 16, tone: "#ff7c87" },
+  { key: "teamKills", label: "TK", width: 19, tone: "#ff9b75" },
+  { key: "vehicleKills", label: "VK", width: 20, tone: "#f8bd55" },
+  { key: "revives", label: "R", width: 16, tone: "#52e79b" },
+  { key: "healPoints", label: "H", width: 20, tone: "#67e8f9" },
+  { key: "combatScore", label: "C", width: 20, tone: "#7dd3fc" },
+  { key: "objectiveScore", label: "O", width: 20, tone: "#93c5fd" },
+  { key: "teamworkScore", label: "T", width: 20, tone: "#a5b4fc" },
+  { key: "ping", label: "P", width: 25, tone: "#cbd5e1" },
+]);
 
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
@@ -307,7 +322,9 @@ function buildSquadGroups(players, squads) {
 }
 
 function buildTeamColumnModel(team, x) {
-  const availableHeight = TEAM_CONTENT_BOTTOM - TEAM_CONTENT_TOP;
+  const laneHeaderTop = TEAM_CONTENT_TOP;
+  const contentTop = laneHeaderTop + TEAM_LANE_HEADER_HEIGHT + TEAM_LANE_HEADER_GAP;
+  const availableHeight = TEAM_CONTENT_BOTTOM - contentTop;
   const lanes = [[], []];
   const laneWeights = [0, 0];
 
@@ -337,7 +354,8 @@ function buildTeamColumnModel(team, x) {
     ...team,
     x,
     width: TEAM_COLUMN_WIDTH,
-    contentTop: TEAM_CONTENT_TOP,
+    laneHeaderTop,
+    contentTop,
     contentBottom: TEAM_CONTENT_BOTTOM,
     laneWidth: TEAM_LANE_WIDTH,
     laneGap: TEAM_LANE_GAP,
@@ -594,7 +612,7 @@ async function attachTeamVisuals(model) {
   }
 }
 
-function renderOverviewSvg(model) {
+export function renderOverviewSvg(model) {
   const svg = [];
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">`);
   svg.push(renderDefs());
@@ -614,7 +632,7 @@ function renderOverviewSvg(model) {
     svg.push(renderTeamColumn(team));
   }
 
-  svg.push('<text x="48" y="880" class="footer">对局结束总览仅展示玩家基础状态；详细击杀、击倒、治疗和分数保留在个人详情中。</text>');
+  svg.push('<text x="48" y="880" class="footer">K 击杀 · W 击倒 · D 死亡 · TK 友军击杀 · VK 载具击杀 · R 复苏 · H 治疗 · C 战斗分 · O 目标分 · T 团队分 · P 延迟</text>');
   svg.push("</g>");
   svg.push("</svg>");
   return svg.join("");
@@ -722,6 +740,7 @@ function renderTeamColumn(team) {
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];
   team.lanes.forEach((groups, laneIndex) => {
+    svg.push(renderLaneScoreboardHeader(team, laneXs[laneIndex], team.laneHeaderTop));
     let cursorY = team.contentTop;
     for (const group of groups) {
       svg.push(renderSquadCard(team, group, laneXs[laneIndex], cursorY));
@@ -729,6 +748,21 @@ function renderTeamColumn(team) {
     }
   });
 
+  return svg.join("");
+}
+
+function renderLaneScoreboardHeader(team, x, y) {
+  const layout = buildPlayerStatLayout(x, team.laneWidth);
+  const svg = [
+    `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${TEAM_LANE_HEADER_HEIGHT}" rx="3" fill="#071426" fill-opacity=".90" stroke="${team.accent}" stroke-opacity=".34"/>`,
+    `<rect x="${x}" y="${y}" width="5" height="${TEAM_LANE_HEADER_HEIGHT}" rx="2" fill="${team.accent}"/>`,
+    `<text x="${x + 31}" y="${y + 12}" class="scoreboard-header-title">PLAYER</text>`,
+    `<path d="M${layout.metricsStart - 3} ${y + 3}V${y + TEAM_LANE_HEADER_HEIGHT - 3}" stroke="${team.accent}" stroke-opacity=".34"/>`,
+  ];
+  for (const column of layout.columns) {
+    svg.push(`<rect x="${column.x + 1}" y="${y + 3}" width="${column.width - 2}" height="${TEAM_LANE_HEADER_HEIGHT - 6}" rx="2" fill="${column.tone}" fill-opacity=".075"/>`);
+    svg.push(`<text x="${column.center}" y="${y + 12}" text-anchor="middle" class="scoreboard-header-stat" fill="${column.tone}">${column.label}</text>`);
+  }
   return svg.join("");
 }
 
@@ -757,21 +791,67 @@ function renderSquadCard(team, group, x, y) {
 function renderPlayerRow(team, player, x, y, index) {
   const role = resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass));
   const rowHeight = team.rowHeight;
-  const health = null;
-  const ping = readPing(player);
   const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
-  const leaderLabel = "";
   const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
-  return [
+  const metrics = buildSnapshotPlayerMetrics(player);
+  const layout = buildPlayerStatLayout(x, team.laneWidth);
+  const nameClipId = `player-name-${team.teamID}-${Math.round(x)}-${Math.round(y)}`;
+  const svg = [
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
     `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".65"}"/>`,
     `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
     `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
-    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name">${escapeXml(clip(player?.name, 17))}</text>`,
+    `<defs><clipPath id="${nameClipId}"><rect x="${x + 29}" y="${y}" width="${Math.max(20, layout.metricsStart - x - 34)}" height="${rowHeight}"/></clipPath></defs>`,
+    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name" clip-path="url(#${nameClipId})">${escapeXml(firstText(player?.name, "Unknown"))}</text>`,
+    `<path d="M${layout.metricsStart - 3} ${y + 2}V${y + rowHeight - 2}" stroke="#ffffff" stroke-opacity=".08"/>`,
+  ];
+  for (const column of layout.columns) {
+    const value = metrics[column.key];
+    const color = column.key === "ping" ? pingColor(value === "--" ? null : value) : column.tone;
+    svg.push(`<text x="${column.center}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-stat mono" fill="${color}">${escapeXml(String(value))}</text>`);
+  }
+  return svg.join("");
+}
 
-    `<text x="${x + team.laneWidth - 4}" y="${y + rowHeight - 6}" text-anchor="end" class="player-ping mono" fill="${pingColor(ping)}">${ping == null ? "--" : `${ping}<tspan class="ping-unit">ms</tspan>`}</text>`,
-  ].join("");
+function buildPlayerStatLayout(x, laneWidth) {
+  const metricsWidth = PLAYER_STAT_COLUMNS.reduce((sum, column) => sum + column.width, 0);
+  const metricsStart = x + laneWidth - metricsWidth;
+  let cursor = metricsStart;
+  const columns = PLAYER_STAT_COLUMNS.map((column) => {
+    const resolved = {
+      ...column,
+      x: cursor,
+      center: cursor + column.width / 2,
+    };
+    cursor += column.width;
+    return resolved;
+  });
+  return { metricsStart, columns };
+}
+
+export function buildSnapshotPlayerMetrics(player) {
+  const core = player?.bzssCore ?? {};
+  const scoreboard = player?.playerScoreboard?.stats ?? {};
+  const ping = readPing(player);
+  return {
+    kills: readNonNegativeStat(core.kills, core.numKills, scoreboard.numKills, player?.kills),
+    downs: readNonNegativeStat(core.downs, core.numWoundeds, scoreboard.numWoundeds, player?.downs, player?.woundeds),
+    deaths: readNonNegativeStat(core.deaths, core.numDeaths, scoreboard.numDeaths, player?.deaths),
+    teamKills: readNonNegativeStat(core.teamKills, core.tk, core.numTeamKills, scoreboard.numTeamKills, player?.teamKills, player?.tk),
+    vehicleKills: readNonNegativeStat(core.vehicleKills, scoreboard.vehicleKills, player?.vehicleKills),
+    revives: readNonNegativeStat(core.revives, core.revivedPoints, scoreboard.revivedPoints, player?.revives, player?.revivedPoints),
+    healPoints: readRoundedStat(core.healPoints, scoreboard.healPoints, player?.healPoints),
+    combatScore: readRoundedStat(core.combatScore, scoreboard.combatScore, player?.combatScore),
+    objectiveScore: readRoundedStat(core.objectiveScore, scoreboard.objectiveScore, player?.objectiveScore),
+    teamworkScore: readRoundedStat(core.teamworkScore, scoreboard.teamworkScore, player?.teamworkScore),
+    ping: ping == null ? "--" : ping,
+  };
+}
+
+function readRoundedStat(...values) {
+  const value = firstFiniteNumber(...values);
+  return value == null ? 0 : Math.round(value);
 }
 
 function comparePlayers(left, right) {
@@ -923,8 +1003,11 @@ function renderDefs() {
       .commander-initial{font-size:13px;font-weight:900}.commander-orbit{stroke-linecap:round}.commander-caption{font-size:7px;font-weight:900;letter-spacing:.35px;fill:#d9e9f6}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
       .squad-title{font-size:8px;font-weight:900}
       .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
+      .scoreboard-header-title{font-size:6px;font-weight:900;letter-spacing:.65px;fill:#a9bed1}
+      .scoreboard-header-stat{font-size:6px;font-weight:900}
       .role-badge{font-size:8px;font-weight:900}
-      .player-name{font-size:8.5px;font-weight:900}
+      .player-name{font-size:7.5px;font-weight:900}
+      .player-stat{font-size:6.1px;font-weight:900}
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}
