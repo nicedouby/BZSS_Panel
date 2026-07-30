@@ -823,8 +823,8 @@ function attachSquadInfo(players, squads) {
   });
 }
 
-async function persistBundle(id, bundle) {
-  const dir = resolveSnapshotDir();
+async function persistBundle(id, bundle, directory = SNAPSHOT_DIR) {
+  const dir = resolveSnapshotDir(directory);
   for (const page of bundle.pages) {
     await writeBufferAtomic(path.join(dir, page.fileName), page.buffer);
   }
@@ -832,18 +832,6 @@ async function persistBundle(id, bundle) {
   if (cover?.buffer) await writeBufferAtomic(path.join(dir, id + ".png"), cover.buffer);
   await writeBufferAtomic(path.join(dir, id + "-combined.png"), bundle.combinedBuffer);
   await writeJsonAtomic(path.join(dir, id + "-manifest.json"), bundle.manifest);
-}
-
-async function persistBundle(id, bundle, directory = SNAPSHOT_DIR) {
-  const dir = resolveSnapshotDir(directory);
-  await fs.mkdir(dir, { recursive: true });
-  for (const page of bundle.pages ?? []) {
-    await writeBufferAtomic(path.join(dir, page.fileName), page.buffer);
-  }
-  const primary = bundle.pages?.[0];
-  if (primary?.buffer) await writeBufferAtomic(path.join(dir, id + ".png"), primary.buffer);
-  if (bundle.combinedBuffer) await writeBufferAtomic(path.join(dir, id + "-combined.png"), bundle.combinedBuffer);
-  if (bundle.manifest) await writeJsonAtomic(path.join(dir, id + "-manifest.json"), bundle.manifest);
 }
 
 async function readManifestIfExists(id) {
