@@ -3630,6 +3630,22 @@ async function testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots() {
                   content: Buffer.from([137, 80, 78, 71]),
                 };
               },
+              async readSnapshotThumbnail(id) {
+                calls.push("thumbnail:" + id);
+                return {
+                  id,
+                  fileName: id + "-thumb.png",
+                  contentType: "image/png",
+                  content: Buffer.from([137, 80, 78, 71]),
+                };
+              },
+              async getStatistics() {
+                return { total: 1, size: 1024, thisMonth: 1, averageSize: 1024, earliest: "2026-07-30T00:00:00.000Z" };
+              },
+              async deleteSnapshots(records) {
+                calls.push("delete-batch:" + records.map((item) => item.id).join(","));
+                return { requested: records.length, removed: records.length, results: [] };
+              },
               async deleteSnapshot(id) {
                 calls.push("delete:" + id);
                 return { id, removed: true };
@@ -3673,6 +3689,26 @@ async function testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots() {
   assert.equal(imageRecorder.state.headers["Content-Type"], "image/png");
   assert.ok(calls.includes("image:End-Test"));
 
+  const thumbnailRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-end-snapshot/thumbnail?id=End-Test&scope=debug",
+    headers: { host: "localhost" },
+    socket: {},
+  }, thumbnailRecorder.res);
+  assert.equal(thumbnailRecorder.state.status, 200);
+  assert.ok(calls.includes("thumbnail:End-Test"));
+
+  const statisticsRecorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/match-end-snapshot/statistics?scope=all",
+    headers: { host: "localhost" },
+    socket: {},
+  }, statisticsRecorder.res);
+  assert.equal(statisticsRecorder.state.status, 200);
+  assert.equal(JSON.parse(statisticsRecorder.state.body).total, 1);
+
   const captureRecorder = createRecorder();
   const captureReq = Readable.from([JSON.stringify({ overview: { serverId: "server-1" } })]);
   captureReq.method = "POST";
@@ -3683,6 +3719,16 @@ async function testMatchEndSnapshotRoutesStaySeparateFromImageSnapshots() {
   assert.equal(captureRecorder.state.status, 200);
   assert.equal(JSON.parse(captureRecorder.state.body).snapshot.id, "End-Test");
   assert.ok(calls.some((item) => item.startsWith("capture:")));
+
+  const batchRecorder = createRecorder();
+  const batchReq = Readable.from([JSON.stringify({ records: [{ id: "End-Test", scope: "official" }] })]);
+  batchReq.method = "POST";
+  batchReq.url = "/api/match-end-snapshot/delete-batch";
+  batchReq.headers = { host: "localhost", "content-type": "application/json" };
+  batchReq.socket = {};
+  await server.handleRequest(batchReq, batchRecorder.res);
+  assert.equal(batchRecorder.state.status, 200);
+  assert.ok(calls.includes("delete-batch:End-Test"));
 
   const deleteRecorder = createRecorder();
   await server.handleRequest({

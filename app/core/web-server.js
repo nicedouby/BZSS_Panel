@@ -3680,7 +3680,27 @@ export class WebServer {
       if (!this.requireSuperAdmin(user, res)) return;
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.listSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
-      return this.json(res, 200, await pluginApi.listSnapshots());
+      return this.json(res, 200, await pluginApi.listSnapshots({
+        scope: url.searchParams.get("scope") ?? "official",
+        search: url.searchParams.get("search") ?? "",
+        map: url.searchParams.get("map") ?? "",
+        mode: url.searchParams.get("mode") ?? "",
+        winner: url.searchParams.get("winner") ?? "",
+        from: url.searchParams.get("from") ?? "",
+        to: url.searchParams.get("to") ?? "",
+        minPlayers: url.searchParams.get("minPlayers"),
+        maxPlayers: url.searchParams.get("maxPlayers"),
+        sort: url.searchParams.get("sort") ?? "newest",
+      }));
+    }
+
+    if (url.pathname === "/api/match-end-snapshot/statistics" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.getStatistics) return this.json(res, 404, { error: "PluginNotLoaded" });
+      return this.json(res, 200, await pluginApi.getStatistics({
+        scope: url.searchParams.get("scope") ?? "all",
+      }));
     }
 
     if (url.pathname === "/api/match-end-snapshot/capture" && req.method === "POST") {
@@ -3705,6 +3725,7 @@ export class WebServer {
         return this.json(res, error?.statusCode === 409 ? 409 : 500, {
           error: error?.code ?? "DebugSnapshotFailed",
           message: error?.message ?? String(error),
+          snapshotId: error?.debugSnapshotId ?? null,
         });
       }
     }
@@ -3725,7 +3746,8 @@ export class WebServer {
       if (!pluginApi?.regenerateSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
 
       try {
-        const manifest = await pluginApi.regenerateSnapshot(id);
+        const scope = body?.scope ?? body?.source ?? "official";
+        const manifest = await pluginApi.regenerateSnapshot(id, { scope });
         return this.json(res, 200, {
           ok: true,
           id,
@@ -3760,9 +3782,26 @@ export class WebServer {
       if (!id) return this.json(res, 400, { error: "MissingId" });
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.deleteSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
-      const result = await pluginApi.deleteSnapshot(id);
+      const result = await pluginApi.deleteSnapshot(id, {
+        scope: url.searchParams.get("scope") ?? "official",
+      });
       if (!result?.removed) return this.json(res, 404, { error: "SnapshotNotFound" });
       return this.json(res, 200, { ok: true, snapshot: result });
+    }
+
+    if (url.pathname === "/api/match-end-snapshot/delete-batch" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const records = Array.isArray(body?.records)
+        ? body.records
+        : Array.isArray(body?.ids)
+          ? body.ids.map((id) => ({ id, scope: body?.scope ?? "official" }))
+          : [];
+      if (!records.length) return this.json(res, 400, { error: "MissingSnapshotIds" });
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.deleteSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
+      const result = await pluginApi.deleteSnapshots(records);
+      return this.json(res, 200, { ok: true, ...result });
     }
 
     if (url.pathname === "/api/match-end-snapshot/image" && req.method === "GET") {
@@ -3775,6 +3814,7 @@ export class WebServer {
       try {
         const artifact = await pluginApi.readSnapshotImage(id, {
           force: url.searchParams.get("refresh") === "1",
+          scope: url.searchParams.get("scope") ?? "official",
         });
         const headers = {
           "Content-Type": artifact.contentType,
@@ -3803,6 +3843,32 @@ export class WebServer {
       }
     }
 
+    if (url.pathname === "/api/match-end-snapshot/thumbnail" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const id = url.searchParams.get("id");
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.readSnapshotThumbnail) return this.json(res, 404, { error: "PluginNotLoaded" });
+      try {
+        const artifact = await pluginApi.readSnapshotThumbnail(id, {
+          scope: url.searchParams.get("scope") ?? "official",
+        });
+        res.writeHead(200, {
+          "Content-Type": artifact.contentType,
+          "Cache-Control": "private, max-age=300",
+        });
+        return res.end(artifact.content);
+      } catch (error) {
+        if (error?.statusCode === 400) {
+          return this.json(res, 400, {
+            error: error.code ?? "InvalidSnapshotId",
+            message: error.message,
+          });
+        }
+        return this.json(res, 404, { error: "SnapshotThumbnailNotFound" });
+      }
+    }
+
     if (url.pathname === "/api/match-end-snapshot/view" && req.method === "GET") {
       if (!this.requireSuperAdmin(user, res)) return;
       const id = url.searchParams.get("id");
@@ -3811,7 +3877,9 @@ export class WebServer {
       if (!pluginApi?.readSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
 
       try {
-        const snapshot = await pluginApi.readSnapshot(id);
+        const snapshot = await pluginApi.readSnapshot(id, {
+          scope: url.searchParams.get("scope") ?? "official",
+        });
         if (url.searchParams.get("download") === "1") {
           const fileName = safeHeaderFileName(path.basename(String(id)).replace(/\.json$/i, "") + ".json");
           res.writeHead(200, {

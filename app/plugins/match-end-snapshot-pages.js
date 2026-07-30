@@ -73,6 +73,20 @@ const FACTION_FLAG_FILES = Object.freeze({
   WPMC: "WPMC.PNG",
 });
 const FACTION_CODES_BY_LENGTH = Object.keys(FACTION_FLAG_FILES).sort((left, right) => right.length - left.length);
+const FACTION_NAME_ALIASES = Object.freeze({
+  peoplesliberationarmynavymarinecorps: "PLANMC",
+  peoplesliberationarmyairforce: "PLAAGF",
+  unitedstatesmarinecorps: "USMC",
+  russianairborneforces: "VDV",
+  australiandefenceforce: "ADF",
+  canadianarmedforces: "CAF",
+  britisharmedforces: "BAF",
+  peoplesliberationarmy: "PLA",
+  unitedstatesarmy: "USA",
+  russiangroundforces: "RGF",
+  middleeasternalliance: "MEA",
+  turkishlandforces: "TLF",
+});
 
 const TEAM_ACCENTS = {
   1: "#37c8ff",
@@ -99,14 +113,19 @@ const ROLE_META = [
 export async function generateMatchEndSnapshotBundle(payload, options = {}) {
   const snapshotId = sanitizeFileToken(options.snapshotId || "match");
   const buffer = await generateMatchEndOverviewPng(payload);
+  const sharp = await loadSharp();
+  const thumbnailBuffer = await sharp(buffer)
+    .resize(640, 360, { fit: "cover", position: "centre" })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
   const playerCount = Number(payload?.summary?.recordedPlayerCount ?? payload?.players?.length ?? 0);
   const page = {
     index: 0,
-    type: "match-status-overview",
+    type: "match-status-scoreboard",
     teamId: null,
     teamPage: null,
     teamPageCount: null,
-    fileName: `${snapshotId}-00-overview.png`,
+    fileName: `${snapshotId}-00-scoreboard.png`,
     width: WIDTH,
     height: HEIGHT,
     playerCount,
@@ -122,6 +141,7 @@ export async function generateMatchEndSnapshotBundle(payload, options = {}) {
     pageCount: 1,
     primaryImage: `${snapshotId}.png`,
     combinedImage: `${snapshotId}-combined.png`,
+    thumbnailImage: `${snapshotId}-thumb.png`,
     pages: [{ ...page, buffer: undefined }],
   };
   delete manifest.pages[0].buffer;
@@ -130,6 +150,7 @@ export async function generateMatchEndSnapshotBundle(payload, options = {}) {
     height: HEIGHT,
     pages: [page],
     combinedBuffer: buffer,
+    thumbnailBuffer,
     manifest,
   };
 }
@@ -219,7 +240,15 @@ function buildTeams(payload) {
       teamName,
       accent: TEAM_ACCENTS[teamID] ?? "#60a5fa",
       factionId: firstText(payload?.match?.factionIds?.[`team${teamID}`], payload?.match?.factionIds?.[String(teamID)], teamSquads.find((squad) => firstText(squad?.factionId))?.factionId),
-      factionCode: firstText(teamSquads.find((squad) => firstText(squad?.factionCode, squad?.faction))?.factionCode, teamSquads.find((squad) => firstText(squad?.faction))?.faction, teamPlayers.find((player) => firstText(player?.factionCode, player?.faction))?.factionCode, teamPlayers.find((player) => firstText(player?.faction))?.faction, payload?.match?.factionIds?.[`team${teamID}`], ""),
+      factionCode: resolveFactionCode(
+        payload?.match?.factionIds?.[`team${teamID}`],
+        payload?.match?.factionIds?.[String(teamID)],
+        teamSquads.find((squad) => firstText(squad?.factionCode, squad?.faction))?.factionCode,
+        teamSquads.find((squad) => firstText(squad?.faction))?.faction,
+        teamPlayers.find((player) => firstText(player?.factionCode, player?.faction))?.factionCode,
+        teamPlayers.find((player) => firstText(player?.faction))?.faction,
+        teamName,
+      ),
       playerCount: teamPlayers.length,
       squadCount: groups.filter((group) => group.squadID != null).length,
       averagePing,
@@ -467,6 +496,10 @@ function resolveFactionCode(...values) {
   for (const value of values) {
     const normalized = normalizeToken(value).toUpperCase();
     if (!normalized) continue;
+    const normalizedLower = normalized.toLowerCase();
+    const namedAlias = Object.entries(FACTION_NAME_ALIASES)
+      .find(([name]) => normalizedLower.includes(name))?.[1];
+    if (namedAlias) return namedAlias;
     const exact = FACTION_CODES_BY_LENGTH.find((code) => normalized === code);
     if (exact) return exact;
     const embedded = FACTION_CODES_BY_LENGTH.find((code) => normalized.includes(code));
@@ -574,23 +607,26 @@ function renderTeamColumn(team) {
   svg.push(`<text x="${x + 78}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · TICKETS ${team.tickets == null ? "--" : team.tickets} · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
   if (team.commanderPlayer) {
     const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
-    const commanderCenterX = x + team.width - 34;
-    const commanderCenterY = y + 27;
+    const commanderSize = 38;
+    const commanderX = x + team.width - commanderSize - 15;
+    const commanderY = y + 11;
+    const commanderCenterX = commanderX + commanderSize / 2;
+    const commanderCenterY = commanderY + commanderSize / 2;
     const commanderClipId = `commander-avatar-${team.teamID}`;
     const commanderGlowColor = team.commanderGlowColor ?? team.accent;
-    svg.push(`<defs><clipPath id="${commanderClipId}"><circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18"/></clipPath></defs>`);
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="19" fill="#0b1422" stroke="#eef8ff" stroke-opacity=".24"/>`);
+    svg.push(`<defs><clipPath id="${commanderClipId}"><rect x="${commanderX}" y="${commanderY}" width="${commanderSize}" height="${commanderSize}" rx="3"/></clipPath></defs>`);
+    svg.push(`<rect x="${commanderX - 1}" y="${commanderY - 1}" width="${commanderSize + 2}" height="${commanderSize + 2}" rx="4" fill="#0b1422" stroke="#eef8ff" stroke-opacity=".24"/>`);
     svg.push(`<text x="${commanderCenterX}" y="${y + 31}" text-anchor="middle" class="commander-initial">${escapeXml(String(team.commanderName || "?").trim().slice(0, 1))}</text>`);
     if (commanderAvatar) {
       // The portrait itself is the light source. Blurred masked copies preserve
       // the avatar's real colors and spread outward from its silhouette.
-      svg.push(`<g filter="url(#commanderAvatarDiffuseWide)" opacity=".52"><image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/></g>`);
-      svg.push(`<g filter="url(#commanderAvatarDiffuseTight)" opacity=".84"><image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/></g>`);
-      svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderCenterX - 18}" y="${commanderCenterY - 18}" width="36" height="36" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/>`);
+      svg.push(`<g filter="url(#commanderAvatarDiffuseWide)" opacity=".52"><image href="${escapeXml(commanderAvatar)}" x="${commanderX}" y="${commanderY}" width="${commanderSize}" height="${commanderSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/></g>`);
+      svg.push(`<g filter="url(#commanderAvatarDiffuseTight)" opacity=".84"><image href="${escapeXml(commanderAvatar)}" x="${commanderX}" y="${commanderY}" width="${commanderSize}" height="${commanderSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/></g>`);
+      svg.push(`<image href="${escapeXml(commanderAvatar)}" x="${commanderX}" y="${commanderY}" width="${commanderSize}" height="${commanderSize}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${commanderClipId})"/>`);
     }
-    svg.push(`<circle cx="${commanderCenterX}" cy="${commanderCenterY}" r="18.5" fill="none" stroke="${commanderGlowColor}" stroke-width="1.4" stroke-opacity=".92"/>`);
-    svg.push(`<path d="M${commanderCenterX - 13} ${commanderCenterY - 13}A18.5 18.5 0 0 1 ${commanderCenterX + 13} ${commanderCenterY - 13}" fill="none" stroke="#ffffff" stroke-width="1.25" stroke-linecap="round" stroke-opacity=".56"/>`);
-    svg.push(`<text x="${commanderCenterX - 32}" y="${y + 52}" text-anchor="end" class="commander-caption">${escapeXml(clip(team.commanderName, 14))}</text>`);
+    svg.push(`<rect x="${commanderX - .5}" y="${commanderY - .5}" width="${commanderSize + 1}" height="${commanderSize + 1}" rx="3.5" fill="none" stroke="${commanderGlowColor}" stroke-width="1.4" stroke-opacity=".92"/>`);
+    svg.push(`<path d="M${commanderX + 3} ${commanderY + 1}H${commanderX + commanderSize - 3}" fill="none" stroke="#ffffff" stroke-width="1.25" stroke-linecap="round" stroke-opacity=".56"/>`);
+    svg.push(`<text x="${commanderX - 8}" y="${y + 48}" text-anchor="end" class="commander-caption">${escapeXml(clip(team.commanderName, 14))}</text>`);
   }
 
   const laneXs = [x + 10, x + 10 + team.laneWidth + team.laneGap];

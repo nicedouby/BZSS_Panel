@@ -22,6 +22,9 @@ export async function execute(task, { reportProgress } = {}) {
   const cover = bundle.pages?.find((page) => page.type === "cover") ?? bundle.pages?.[0];
   if (cover?.buffer) await writeBufferAtomic(path.join(directory, snapshotId + ".png"), cover.buffer);
   await writeBufferAtomic(path.join(directory, snapshotId + "-combined.png"), bundle.combinedBuffer);
+  if (bundle.thumbnailBuffer) {
+    await writeBufferAtomic(path.join(directory, snapshotId + "-thumb.png"), bundle.thumbnailBuffer);
+  }
   await writeJsonAtomic(path.join(directory, snapshotId + "-manifest.json"), bundle.manifest);
   reportProgress?.(100);
   return {
@@ -29,6 +32,7 @@ export async function execute(task, { reportProgress } = {}) {
     pageCount: bundle.pages?.length ?? 0,
     primaryImage: snapshotId + ".png",
     combinedImage: snapshotId + "-combined.png",
+    thumbnailImage: snapshotId + "-thumb.png",
     manifest: snapshotId + "-manifest.json",
     pages: bundle.manifest?.pages ?? [],
   };
