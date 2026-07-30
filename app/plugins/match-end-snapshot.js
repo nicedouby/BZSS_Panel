@@ -459,6 +459,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       nextMap,
       nextLayer,
       playtime: firstNumber(match.playtime, status.playtime, serverStatus.playtime, status.matchTimeSeconds),
+      teamTickets: extractTeamTickets(matchState, overview, match, status, serverStatus),
     },
     summary: {
       playerCount,
@@ -481,6 +482,66 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       ),
     },
   };
+}
+
+function extractTeamTickets(...sources) {
+  for (const source of sources) {
+    const result = findTeamTicketContainer(source);
+    if (result != null) return result;
+  }
+  return null;
+}
+
+function findTeamTicketContainer(value, depth = 0) {
+  if (depth > 5 || value == null || typeof value !== "object") return null;
+  if (Array.isArray(value)) {
+    const parsed = value
+      .map((item) => ({
+        teamID: nullableNumber(item?.teamID ?? item?.teamId ?? item?.id),
+        tickets: firstNumber(item?.tickets, item?.ticket, item?.value, item?.count),
+      }))
+      .filter((item) => item.teamID != null && item.tickets != null);
+    return parsed.length ? Object.fromEntries(parsed.map((item) => [String(item.teamID), item.tickets])) : null;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    const normalized = String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (normalized.includes("ticket")) {
+      const parsed = parseTeamTicketContainer(entry);
+      if (parsed != null) return parsed;
+    }
+  }
+  for (const entry of Object.values(value)) {
+    const nested = findTeamTicketContainer(entry, depth + 1);
+    if (nested != null) return nested;
+  }
+  return null;
+}
+
+function parseTeamTicketContainer(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return null;
+  if (Array.isArray(value)) {
+    const parsed = value
+      .map((item, index) => ({
+        teamID: nullableNumber(item?.teamID ?? item?.teamId ?? item?.id ?? index + 1),
+        tickets: firstNumber(item?.tickets, item?.ticket, item?.value, item?.count, typeof item === "number" ? item : null),
+      }))
+      .filter((item) => item.tickets != null);
+    return parsed.length ? Object.fromEntries(parsed.map((item) => [String(item.teamID), item.tickets])) : null;
+  }
+  if (value && typeof value === "object") {
+    const result = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const teamMatch = String(key).match(/(?:team)?[_ -]?(1|2)(?:tickets?)?$/i);
+      if (teamMatch) {
+        const tickets = typeof entry === "object"
+          ? firstNumber(entry?.tickets, entry?.ticket, entry?.value, entry?.count)
+          : firstNumber(entry);
+        if (tickets != null) result[teamMatch[1]] = tickets;
+      }
+    }
+    return Object.keys(result).length ? result : null;
+  }
+  return null;
 }
 
 function normalizePlayers(players) {
