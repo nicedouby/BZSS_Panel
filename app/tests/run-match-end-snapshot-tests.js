@@ -251,6 +251,7 @@ function makePayload(team1Count, team2Count) {
       nextMap: "Fallujah",
       nextLayer: "Fallujah_RAAS_v2",
       playtime: 3600,
+      teamTickets: { team1: 318, team2: 241 },
     },
     summary: {
       recordedPlayerCount: players.length,
@@ -271,6 +272,9 @@ function testFullFactionNamesResolveForSnapshotFlags() {
   const model = buildMatchEndOverviewModel(payload);
   assert.equal(model.teams[0].factionCode, "USMC");
   assert.equal(model.teams[1].factionCode, "VDV");
+  assert.equal(model.teams[0].tickets, 318);
+  assert.equal(model.teams[1].tickets, 241);
+  assert.equal(Object.hasOwn(model, "winner"), false);
 }
 
 async function testHundredPlayersStayInOneImage() {
@@ -349,6 +353,16 @@ async function testFireteamAccentPixels() {
   });
 }
 
+async function testServerBattleStripUsesTeamColors() {
+  const bundle = await generateMatchEndSnapshotBundle(makePayload(1, 1), { snapshotId: "server-battle-strip" });
+  const [team1Red, team1Green, team1Blue] = readPngPixel(bundle.combinedBuffer, 1778, 160);
+  const [team2Red, team2Green, team2Blue] = readPngPixel(bundle.combinedBuffer, 3054, 160);
+  assert.ok(team1Blue > team1Red && team1Green > team1Red,
+    "team 1 ticket rail should use the blue accent");
+  assert.ok(team2Red > team2Green && team2Red > team2Blue,
+    "team 2 ticket rail should use the red accent");
+}
+
 function testSourceAwareFireteamResolution() {
   assert.equal(resolvePlayerFireTeam({ fireTeam: "A" }).fireTeam, "A");
   assert.equal(resolvePlayerFireTeam({ fireTeam: "BRAVO" }).fireTeam, "B");
@@ -369,6 +383,7 @@ function testSourceAwareFireteamResolution() {
 testSourceAwareFireteamResolution();
 testFullFactionNamesResolveForSnapshotFlags();
 await testFireteamAccentPixels();
+await testServerBattleStripUsesTeamColors();
 await testSingleOverviewSnapshot();
 await testHundredPlayersStayInOneImage();
 console.log("match end snapshot overview tests passed");
