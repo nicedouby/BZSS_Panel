@@ -333,7 +333,14 @@ async function attachMapMinimapData(model, payload) {
   const candidate = resolveMinimapPath(payload);
   if (!candidate) return;
   try {
-    model.minimapData = `data:image/png;base64,${(await fs.readFile(candidate)).toString("base64")}`;
+    // Minimap source files can be tens of megabytes. Never embed the original
+    // file in the SVG: libxml2 (used by Sharp) rejects oversized XML buffers.
+    const sharp = await loadSharp();
+    const buffer = await sharp(candidate)
+      .resize(160, 80, { fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer();
+    model.minimapData = `data:image/png;base64,${buffer.toString("base64")}`;
   } catch {}
 }
 
