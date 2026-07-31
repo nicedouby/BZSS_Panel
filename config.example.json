@@ -701,7 +701,23 @@
         "bindProfile",
         "setWarmup",
         "toggleWarmup"
-      ]
+      ],
+      "websocket": {
+        "enabled": true,
+        "path": "/ws/astrbot",
+        "heartbeatIntervalMs": 30000
+      },
+      "matchFinished": {
+        "enabled": true,
+        "snapshotWaitMs": 30000,
+        "dedupeTtlMs": 86400000,
+        "dedupeMax": 500,
+        "allowTextFallback": true
+      },
+      "deliveryAck": {
+        "enabled": true,
+        "maxRecent": 100
+      }
     },
     "playerTimeStats": {
       "enabled": true,
