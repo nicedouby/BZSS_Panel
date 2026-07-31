@@ -17,9 +17,9 @@ export const SQUAD_RESTRICTION_MESSAGE_COPY = Object.freeze({
     final: "[小队规则最后警告] 你的小队仍然违规，",
   }),
   violation: Object.freeze({
-    infantryLockForbidden: "当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
-    vehicleSoloLockForbidden: "当前小队为载具队，载具队禁止单载，请立即整改。",
-    vehiclePlayerLimitExceeded: "当前载具小队已经超员，请控制小队规模或打开队锁。",
+    infantryLockForbidden: "小队性质为战斗步兵，禁止锁队，请立即整改。",
+    vehicleSoloLockForbidden: "战斗载具队禁止单人锁队或单载，请立即整改。",
+    vehiclePlayerLimitExceeded: "当前小队已经超员，请控制小队规模或打开队锁。",
     logisticsPlayerLimitExceeded: "当前后勤小队已经超员，请控制小队规模或打开队锁。",
     mortarPlayerLimitExceeded: "当前迫击炮小队已经超员，请控制小队规模或打开队锁。",
     genericPlayerLimitExceeded: "当前小队已经超员，请控制小队规模或打开队锁。",
