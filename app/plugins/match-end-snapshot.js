@@ -106,6 +106,7 @@ export function createPlugin({ core, modules, logger } = {}) {
           generatedAt: bundle.manifest?.generatedAt ?? new Date().toISOString(),
         };
         core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
+          eventName: "match.snapshot.ready",
           snapshotId: id,
           roundKey: buildRoundKey(payload),
           pageCount: payload.artifacts.pageCount,
@@ -248,6 +249,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       };
       await writeJsonAtomic(snapshotPath, payload);
       core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
+          eventName: "match.snapshot.ready",
         snapshotId: safeId,
         roundKey: buildRoundKey(payload),
         pageCount: payload.artifacts.pageCount,
