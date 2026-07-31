@@ -18,11 +18,8 @@ export const SQUAD_RESTRICTION_MESSAGE_COPY = Object.freeze({
   }),
   violation: Object.freeze({
     infantryLockForbidden: "小队性质为战斗步兵，禁止锁队，请立即整改。",
-    vehicleSoloLockForbidden: "战斗载具队禁止单人锁队或单载，请立即整改。",
-    vehiclePlayerLimitExceeded: "当前小队已经超员，请控制小队规模或打开队锁。",
-    logisticsPlayerLimitExceeded: "当前后勤小队已经超员，请控制小队规模或打开队锁。",
-    mortarPlayerLimitExceeded: "当前迫击炮小队已经超员，请控制小队规模或打开队锁。",
-    genericPlayerLimitExceeded: "当前小队已经超员，请控制小队规模或打开队锁。",
+    vehicleSoloLockForbidden: "战斗载具队禁止单人锁队或单载，请打开队锁，或将小队人数增加至至少 2 人。",
+    playerLimitExceeded: "当前{label}已经超员，请将小队人数控制在最多 {limit} 人，或打开队锁。",
     genericViolation: "当前小队违反锁队规则，请立即整改。",
   }),
   disbandReasonPrefix: "小队规则自动处罚：两次警告后仍未整改。违规原因：",
@@ -34,6 +31,7 @@ export function buildSquadRestrictionWarning({
   squadTypeId = "",
   squadTypeLabel = "",
   restrictionReasons = [],
+  ruleSnapshot = null,
 } = {}) {
   const prefix = Number(stage) === 1
     ? SQUAD_RESTRICTION_MESSAGE_COPY.warningPrefix.first
@@ -43,6 +41,7 @@ export function buildSquadRestrictionWarning({
     squadTypeId,
     squadTypeLabel,
     restrictionReasons,
+    ruleSnapshot,
   })}`;
 }
 
@@ -56,6 +55,7 @@ export function buildViolationMessage({
   squadTypeId = "",
   squadTypeLabel = "",
   restrictionReasons = [],
+  ruleSnapshot = null,
 } = {}) {
   const codes = new Set((Array.isArray(violationCodes) ? violationCodes : [])
     .map((value) => String(value ?? "").trim())
@@ -76,16 +76,14 @@ export function buildViolationMessage({
   }
 
   if (codes.has("locked_player_limit_exceeded")) {
-    if (typeId === "logistics") {
-      return SQUAD_RESTRICTION_MESSAGE_COPY.violation.logisticsPlayerLimitExceeded;
+    const limit = positiveInteger(ruleSnapshot?.maxPlayersWhenLocked);
+    const label = squadLimitLabel(typeId, typeLabel);
+    if (limit) {
+      return SQUAD_RESTRICTION_MESSAGE_COPY.violation.playerLimitExceeded
+        .replace("{label}", label)
+        .replace("{limit}", String(limit));
     }
-    if (typeId === "mortar") {
-      return SQUAD_RESTRICTION_MESSAGE_COPY.violation.mortarPlayerLimitExceeded;
-    }
-    if (VEHICLE_TYPE_IDS.has(typeId)) {
-      return SQUAD_RESTRICTION_MESSAGE_COPY.violation.vehiclePlayerLimitExceeded;
-    }
-    return SQUAD_RESTRICTION_MESSAGE_COPY.violation.genericPlayerLimitExceeded;
+    return `当前${label}已经超员，请控制小队规模或打开队锁。`;
   }
 
   const fallback = firstText(restrictionReasons);
@@ -100,4 +98,16 @@ function firstText(values) {
 
 function cleanSentence(value) {
   return String(value ?? "").trim().replace(/[。！？!?；;，,：:]+$/u, "");
+}
+
+function squadLimitLabel(typeId, typeLabel) {
+  if (typeId === "logistics") return "后勤小队";
+  if (typeId === "mortar") return "迫击炮小队";
+  if (VEHICLE_TYPE_IDS.has(typeId)) return "载具小队";
+  return typeLabel || "小队";
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
