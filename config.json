@@ -671,7 +671,7 @@
         "snapshotWaitMs": 30000,
         "dedupeTtlMs": 86400000,
         "dedupeMax": 500,
-        "allowTextFallback": true
+        "allowTextFallback": false
       },
       "deliveryAck": {
         "enabled": true,
