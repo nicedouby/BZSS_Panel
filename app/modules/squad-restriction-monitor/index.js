@@ -106,6 +106,7 @@ export function createSquadRestrictionMonitorModule({ core, config, logger }) {
           enabled: runtimeConfig.enabled,
           enforcementEnabled: false,
           serverId: text(event.serverId),
+          matchId: text(event.matchId ?? evaluations.find((squad) => text(squad?.matchId))?.matchId),
           updatedAt: new Date().toISOString(),
           squadCount: evaluations.length,
           evaluatedCount: evaluations.filter((squad) => squad?.squadRestriction?.evaluated).length,
@@ -226,6 +227,8 @@ export function evaluateRestriction({ enabled = true, typeId = "", typeLabel = "
     allowLock: normalizedRule?.allowLock ?? null,
     allowSoloLock: normalizedRule?.allowSoloLock ?? null,
     maxPlayersWhenLocked: normalizedRule?.maxPlayersWhenLocked ?? null,
+    ruleSnapshot: normalizedRule ? clone(normalizedRule) : null,
+    violationCodes: [],
     violations: [],
     reasons: [],
   };
@@ -265,6 +268,7 @@ export function evaluateRestriction({ enabled = true, typeId = "", typeLabel = "
     ...base,
     status: violations.length > 0 ? "violation" : "compliant",
     isViolation: violations.length > 0,
+    violationCodes: violations.map((item) => item.code),
     violations,
     reasons: violations.map((item) => item.message),
   };
@@ -304,18 +308,29 @@ function normalizeRule(rule) {
 }
 
 function toStateRecord(squad = {}) {
+  const restriction = clone(squad?.squadRestriction ?? null);
   return {
     key: text(squad?.key) || buildSquadKey(squad),
+    matchId: text(squad?.matchId),
     teamId: nullableNumber(squad?.teamID ?? squad?.teamId),
     squadId: nullableNumber(squad?.squadID ?? squad?.squadId),
     squadName: text(squad?.squadName ?? squad?.name),
+    creatorName: text(squad?.creatorName),
+    creatorSteamId: text(squad?.creatorSteamId ?? squad?.creatorSteamID),
+    creatorEosId: text(squad?.creatorEosId ?? squad?.creatorEOSID),
+    generation: nullableNumber(squad?.generation),
     locked: Boolean(squad?.locked ?? squad?.isLocked),
     playerCount: normalizePlayerCount(squad?.size ?? squad?.memberCount ?? squad?.playerCount),
     squadNature: text(squad?.squadNature),
     squadTypeId: text(squad?.squadTypeId),
     squadTypeLabel: text(squad?.squadTypeLabel),
     squadRuleId: text(squad?.squadRuleId),
-    restriction: clone(squad?.squadRestriction ?? null),
+    violationCodes: Array.isArray(restriction?.violationCodes)
+      ? [...restriction.violationCodes]
+      : (restriction?.violations ?? []).map((item) => text(item?.code)).filter(Boolean),
+    restrictionReasons: Array.isArray(restriction?.reasons) ? [...restriction.reasons] : [],
+    ruleSnapshot: clone(restriction?.ruleSnapshot ?? null),
+    restriction,
   };
 }
 
@@ -324,6 +339,7 @@ function makeEmptyState(enabled) {
     enabled: Boolean(enabled),
     enforcementEnabled: false,
     serverId: "",
+    matchId: "",
     updatedAt: "",
     squadCount: 0,
     evaluatedCount: 0,

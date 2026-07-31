@@ -147,6 +147,13 @@ async function testStateTracksViolationsWithoutEnforcement() {
   assert.equal(state.evaluatedCount, 3);
   assert.equal(state.violationCount, 1);
   assert.equal(state.violations[0].squadTypeId, "ifv");
+  assert.deepEqual(state.violations[0].violationCodes, ["solo_lock_forbidden"]);
+  assert.equal(state.violations[0].restrictionReasons.length, 1);
+  assert.deepEqual(state.violations[0].ruleSnapshot, {
+    allowLock: true,
+    allowSoloLock: false,
+    maxPlayersWhenLocked: 3,
+  });
   assert.equal(state.enforcementEnabled, false);
   assert.equal(harness.emitted.some((item) => item.moduleId === "module.squadRestrictionMonitor" && item.eventName === "updated"), true);
   await harness.module.stop();

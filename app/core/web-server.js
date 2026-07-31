@@ -725,6 +725,61 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/modules/squad-restriction-enforcement/state") {
+      if (req.method !== "GET") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only GET is supported.",
+        });
+      }
+      const api = this.modules.squadRestrictionEnforcement;
+      if (!api?.getState) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadRestrictionEnforcement module is not available.",
+        });
+      }
+      return this.json(res, 200, {
+        ok: true,
+        data: api.getState(),
+      });
+    }
+
+    const enforcementCaseActionMatch = url.pathname.match(
+      /^\/api\/modules\/squad-restriction-enforcement\/cases\/([^/]+)\/(cancel|exemption)$/,
+    );
+    if (enforcementCaseActionMatch) {
+      if (req.method !== "POST" && !(req.method === "DELETE" && enforcementCaseActionMatch[2] === "exemption")) {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported; exemptions also support DELETE.",
+        });
+      }
+      if (!this.requireSuperAdmin(user, res)) return;
+      const api = this.modules.squadRestrictionEnforcement;
+      if (!api?.getState) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadRestrictionEnforcement module is not available.",
+        });
+      }
+      const caseKey = decodeURIComponent(enforcementCaseActionMatch[1]);
+      if (req.method === "DELETE") {
+        const result = await api.clearExemption?.(caseKey);
+        return this.json(res, result?.ok ? 200 : 404, result ?? { ok: false, error: "operation_unavailable" });
+      }
+      const body = await this.readJsonBody(req);
+      const actor = {
+        id: user?.id ?? user?.userId ?? "",
+        username: user?.username ?? user?.name ?? "",
+        role: user?.role ?? "",
+      };
+      const result = enforcementCaseActionMatch[2] === "cancel"
+        ? await api.cancelCase?.(caseKey, { ...body, actor })
+        : await api.setExemption?.(caseKey, { ...body, actor });
+      return this.json(res, result?.ok ? 200 : 404, result ?? { ok: false, error: "operation_unavailable" });
+    }
+
     if (url.pathname === "/api/modules/squad-name-policy-guard/state") {
       if (req.method !== "GET") {
         return this.json(res, 405, {

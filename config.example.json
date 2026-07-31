@@ -646,6 +646,22 @@
         }
       }
     },
+    "squadRestrictionEnforcement": {
+      "enabled": true,
+      "enforcementMode": "dry_run",
+      "startAfterSeconds": 300,
+      "firstWarningDelaySeconds": 30,
+      "secondWarningDelaySeconds": 60,
+      "disbandDelaySeconds": 90,
+      "resolutionConfirmSeconds": 10,
+      "schedulerIntervalMs": 1000,
+      "requireTrustedRoundClock": true,
+      "targetCurrentLeader": true,
+      "refreshBeforeDisband": true,
+      "recordDirectory": "./data/squad-restriction-enforcement",
+      "maxDisbandRetries": 3,
+      "disbandRetryDelaySeconds": 5
+    },
     "matchState": {
       "enabled": true,
       "polling": {
