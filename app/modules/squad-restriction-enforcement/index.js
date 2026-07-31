@@ -3,6 +3,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import {
+  buildSquadRestrictionDisbandReason,
+  buildSquadRestrictionWarning,
+} from "./messages.js";
+
 const MODULE_ID = "module.squadRestrictionEnforcement";
 const API_NAME = "squadRestrictionEnforcement";
 const TERMINAL_STATUSES = new Set(["disbanded", "resolved", "cancelled"]);
@@ -391,6 +396,8 @@ export function createSquadRestrictionEnforcementModule({
       item.violationCodes = [...current.violationCodes];
       item.restrictionReasons = [...current.restrictionReasons];
       item.reason = current.restrictionReasons.join("；");
+      item.squadTypeId = current.squadTypeId;
+      item.squadTypeLabel = current.squadTypeLabel;
       item.ruleSnapshot = clone(current.ruleSnapshot);
       if (item.status === "pending_resolution") {
         item.status = item.statusBeforePending || deriveProgressStatus(item);
@@ -449,6 +456,8 @@ export function createSquadRestrictionEnforcementModule({
         violationCodes: [...squad.violationCodes],
         restrictionReasons: [...squad.restrictionReasons],
         reason: squad.restrictionReasons.join("；"),
+        squadTypeId: squad.squadTypeId,
+        squadTypeLabel: squad.squadTypeLabel,
         ruleSnapshot: clone(squad.ruleSnapshot),
         detectedAt: iso(now),
         detectedAtMs: now,
@@ -537,9 +546,13 @@ export function createSquadRestrictionEnforcementModule({
       return;
     }
 
-    const message = stage === 1
-      ? `[小队规则警告] 你的小队“${item.squadName}”当前违规：${item.reason}。请在60秒内整改，30秒后将再次检查。`
-      : `[小队规则最后警告] 你的小队“${item.squadName}”仍然违规：${item.reason}。请在30秒内整改，否则该小队将被自动解散。`;
+    const message = buildSquadRestrictionWarning({
+      stage,
+      violationCodes: item.violationCodes,
+      squadTypeId: item.squadTypeId,
+      squadTypeLabel: item.squadTypeLabel,
+      restrictionReasons: item.restrictionReasons,
+    });
     try {
       const result = await sender.call(modules.adminWarn, {
         targetPlayerId: leader.playerId,
@@ -612,7 +625,10 @@ export function createSquadRestrictionEnforcementModule({
 
     item.status = "disbanding";
     dirty = true;
-    const reason = `小队规则自动处罚：两次警告后仍未整改。违规原因：${item.reason}`;
+    const reason = buildSquadRestrictionDisbandReason({
+      restrictionReasons: item.restrictionReasons,
+      fallbackReason: item.reason,
+    });
     try {
       const result = await disband.call(modules.squadManagement, {
         serverId: item.serverId,
@@ -700,6 +716,8 @@ export function createSquadRestrictionEnforcementModule({
     item.violationCodes = [...current.violationCodes];
     item.restrictionReasons = [...current.restrictionReasons];
     item.reason = current.restrictionReasons.join("；");
+    item.squadTypeId = current.squadTypeId;
+    item.squadTypeLabel = current.squadTypeLabel;
     item.ruleSnapshot = clone(current.ruleSnapshot);
     item.lastError = "";
     dirty = true;
@@ -894,6 +912,8 @@ export function createSquadRestrictionEnforcementModule({
       isViolation: Boolean(restriction?.isViolation),
       violationCodes,
       restrictionReasons,
+      squadTypeId: text(evaluated?.squadTypeId ?? restriction?.typeId),
+      squadTypeLabel: text(evaluated?.squadTypeLabel ?? restriction?.typeLabel),
       ruleSnapshot: clone(restriction?.ruleSnapshot ?? raw?.ruleSnapshot ?? null),
     };
   }
