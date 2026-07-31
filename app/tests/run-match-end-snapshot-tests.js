@@ -165,6 +165,7 @@ async function testSingleOverviewSnapshot() {
 
     assert.equal(emitted.length, 1);
     assert.equal(emitted[0].name, "match.snapshot.ready");
+    assert.equal(emitted[0].payload.eventName, "match.snapshot.ready");
     assert.equal(emitted[0].payload.pageCount, 1);
 
     const dir = path.join(tempDir, "data", "match-end-snapshots");
