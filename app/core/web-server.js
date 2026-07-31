@@ -4941,6 +4941,17 @@ export class WebServer {
       return this.rejectUpgrade(socket, 404, "Not Found");
     }
 
+    // AstrBot is an external machine-to-machine client. It must be
+    // authenticated by the bridge Bearer token, not by the Panel session
+    // cookie used by the browser WebSocket channels.
+    if (connectionKind === "astrbot") {
+      const bridge = this.modules.astrbotBridge;
+      if (!bridge?.acceptWebSocket) {
+        return this.rejectUpgrade(socket, 503, "AstrBot bridge unavailable.");
+      }
+      return bridge.acceptWebSocket(req, socket, head);
+    }
+
     const user = this.core.authManager?.getUserFromRequest(req);
     if (!user) {
       return this.rejectUpgrade(socket, 401, "Authentication required.");
