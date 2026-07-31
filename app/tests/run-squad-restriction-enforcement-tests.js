@@ -544,6 +544,41 @@ async function testOffModeAndAdministratorExemption() {
   }
 }
 
+async function testDiagnosticsExplainInactiveBehavior() {
+  {
+    const h = await createHarness({ mode: "dry_run", logClockSeconds: 299 });
+    await h.ingest();
+    const state = h.module.api.getState();
+    assert.equal(state.logClockHasAnchor, true);
+    assert.equal(state.logClockManual, false);
+    assert.equal(state.diagnostics.status, "blocked");
+    assert.equal(state.diagnostics.caseCreationReady, false);
+    assert.equal(state.diagnostics.latestSquadCount, 1);
+    assert.equal(state.diagnostics.violationCount, 1);
+    assert.equal(state.diagnostics.eligibleViolationCount, 1);
+    assert.equal(state.diagnostics.protectionRemainingSeconds, 1);
+    assert.equal(state.diagnostics.blockers.some((item) => item.code === "dry_run"), true);
+    assert.equal(state.diagnostics.blockers.some((item) => item.code === "opening_protection"), true);
+    assert.equal(state.latestSquads[0].identityComplete, true);
+    assert.equal(Object.hasOwn(state.latestSquads[0], "raw"), false);
+    await h.close();
+  }
+
+  {
+    const h = await createHarness({
+      logClockHasAnchor: false,
+      squads: [makeSquad({ classificationMissing: true })],
+    });
+    await h.ingest();
+    const diagnostics = h.module.api.getState().diagnostics;
+    assert.equal(diagnostics.status, "blocked");
+    assert.equal(diagnostics.classificationMissingCount, 1);
+    assert.equal(diagnostics.blockers.some((item) => item.code === "clock_anchor_missing"), true);
+    assert.equal(diagnostics.blockers.some((item) => item.code === "classification_missing"), true);
+    await h.close();
+  }
+}
+
 await testOpeningWindowAndTimeline();
 await testRemediationAtEachStage();
 await testShortUnlockDoesNotResetAndResolvedReoffenseIsNew();
@@ -553,5 +588,6 @@ await testClockAndClassificationGuards();
 await testRefreshBeforeDisbandAndRetries();
 await testDryRunAndWarnOnlyModes();
 await testOffModeAndAdministratorExemption();
+await testDiagnosticsExplainInactiveBehavior();
 
 console.log("run-squad-restriction-enforcement-tests: ok");
