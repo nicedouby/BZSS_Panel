@@ -662,6 +662,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
     match.playerCount,
     players.length,
   ) ?? players.length;
+  const remoteTeamTickets = extractRemoteTelemetryTeamTickets(modules);
 
   return {
     schemaVersion: 2,
@@ -685,7 +686,11 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       nextMap,
       nextLayer,
       playtime: firstNumber(match.playtime, status.playtime, serverStatus.playtime, status.matchTimeSeconds),
-      teamTickets: extractTeamTickets(matchState, overview, match, status, serverStatus),
+      // The remote telemetry sender is the same authoritative source used by
+      // MatchStatusPage. Freeze its latest sample into the snapshot instead of
+      // guessing ticket-shaped fields from match-state.
+      teamTickets: remoteTeamTickets ?? extractTeamTickets(matchState, overview, match, status, serverStatus),
+      teamTicketsSource: remoteTeamTickets ? "remoteTelemetry.currentSample" : "matchState",
       factionIds: extractTeamFactionIds(matchState, overview, match, status, serverStatus),
     },
     summary: {
@@ -735,6 +740,26 @@ function extractTeamFactionIds(...sources) {
     }
   }
   return { team1: "", team2: "" };
+}
+
+function extractRemoteTelemetryTeamTickets(modules) {
+  const api = modules?.remoteTelemetry?.api ?? modules?.remoteTelemetry;
+  const state = typeof api?.getState === "function" ? api.getState() : null;
+  const sample = state?.currentSample ?? state?.currentSource?.latest ?? null;
+  const team1 = firstNumber(
+    sample?.tickets?.team1,
+    sample?.tickets?.t1,
+    sample?.team1,
+    sample?.t1,
+  );
+  const team2 = firstNumber(
+    sample?.tickets?.team2,
+    sample?.tickets?.t2,
+    sample?.team2,
+    sample?.t2,
+  );
+  if (team1 == null && team2 == null) return null;
+  return { team1, team2 };
 }
 
 function extractTeamTickets(...sources) {
