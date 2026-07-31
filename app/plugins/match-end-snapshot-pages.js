@@ -15,21 +15,21 @@ const TEAM_LANE_GAP = 8;
 const TEAM_LANE_WIDTH = Math.floor((TEAM_COLUMN_WIDTH - 20 - TEAM_LANE_GAP) / 2);
 const TEAM_LANE_HEADER_HEIGHT = 18;
 const TEAM_LANE_HEADER_GAP = 4;
-const SQUAD_HEADER_HEIGHT = 16;
-const SQUAD_GAP = 4;
-const DEFAULT_PLAYER_ROW_HEIGHT = 20;
-const MIN_PLAYER_ROW_HEIGHT = 12;
+const SQUAD_HEADER_HEIGHT = 14;
+const SQUAD_GAP = 3;
+const DEFAULT_PLAYER_ROW_HEIGHT = 17;
+const MIN_PLAYER_ROW_HEIGHT = 13;
 const PLAYER_STAT_COLUMNS = Object.freeze([
-  { key: "kills", label: "K", width: 16, tone: "#e8f4ff" },
-  { key: "downs", label: "W", width: 16, tone: "#d8ecff" },
-  { key: "deaths", label: "D", width: 16, tone: "#ff7c87" },
-  { key: "teamKills", label: "TK", width: 19, tone: "#ff9b75" },
-  { key: "vehicleKills", label: "VK", width: 20, tone: "#f8bd55" },
-  { key: "revives", label: "R", width: 16, tone: "#52e79b" },
-  { key: "healPoints", label: "H", width: 20, tone: "#67e8f9" },
-  { key: "combatScore", label: "C", width: 20, tone: "#7dd3fc" },
-  { key: "objectiveScore", label: "O", width: 20, tone: "#93c5fd" },
-  { key: "teamworkScore", label: "T", width: 20, tone: "#a5b4fc" },
+  { key: "kills", label: "K", width: 16, tone: "#63e6be" },
+  { key: "downs", label: "W", width: 16, tone: "#38bdf8" },
+  { key: "deaths", label: "D", width: 16, tone: "#fb7185" },
+  { key: "teamKills", label: "TK", width: 19, tone: "#ff8a65" },
+  { key: "vehicleKills", label: "VK", width: 20, tone: "#fbbf24" },
+  { key: "revives", label: "R", width: 16, tone: "#4ade80" },
+  { key: "healPoints", label: "H", width: 20, tone: "#22d3ee" },
+  { key: "combatScore", label: "C", width: 20, tone: "#60a5fa" },
+  { key: "objectiveScore", label: "O", width: 20, tone: "#c084fc" },
+  { key: "teamworkScore", label: "T", width: 20, tone: "#f472b6" },
   { key: "ping", label: "P", width: 25, tone: "#cbd5e1" },
 ]);
 
@@ -620,10 +620,10 @@ export function renderOverviewSvg(model) {
   svg.push('<rect width="1600" height="900" fill="url(#pageShade)"/>');
 
   svg.push('<path d="M36 32 H1112 L1162 68 H1564 V126 H36 Z" fill="url(#headerPlate)" stroke="#dce9f7" stroke-opacity=".22"/>');
-  if (model.minimapData) svg.push(`<image href="${model.minimapData}" x="48" y="45" width="148" height="66" preserveAspectRatio="xMidYMid meet" opacity=".94"/>`);
-  svg.push('<text x="220" y="58" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
-  svg.push(`<text x="220" y="86" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
-  svg.push(`<text x="222" y="105" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
+  if (model.minimapData) svg.push(`<image href="${model.minimapData}" x="44" y="39" width="174" height="80" preserveAspectRatio="xMidYMid meet" opacity=".98"/>`);
+  svg.push('<text x="232" y="58" class="eyebrow">BZSS PANEL / MATCH END OVERVIEW</text>');
+  svg.push(`<text x="232" y="86" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
+  svg.push(`<text x="234" y="105" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
   svg.push(renderGlobalMatchMetrics(model));
   svg.push(`<text x="1530" y="39" text-anchor="end" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
   svg.push(renderServerBattleStrip(model));
@@ -708,12 +708,16 @@ function renderTeamColumn(team) {
   const y = 158;
   const headerHeight = 58;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".46" stroke="${team.accent}" stroke-opacity=".34"/>`);
-  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".58" stroke="${team.accent}" stroke-opacity=".42"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.width}" height="${TEAM_CONTENT_BOTTOM - y + 8}" rx="12" fill="#030b18" fill-opacity=".30" stroke="${team.accent}" stroke-opacity=".34"/>`);
+  svg.push(`<rect x="${x + 8}" y="${y + 8}" width="${team.width - 16}" height="${headerHeight - 8}" rx="9" fill="#071426" fill-opacity=".42" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x + 8}" y="${y + 8}" width="5" height="${headerHeight - 8}" rx="2" fill="${team.accent}"/>`);
+  if (team.flagData) {
+    svg.push(`<image href="${team.flagData}" x="${x + 20}" y="${y + 14}" width="48" height="34" preserveAspectRatio="xMidYMid meet" opacity=".96"/>`);
+  }
 
-  svg.push(`<text x="${x + 28}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 38))}</text>`);
-  svg.push(`<text x="${x + 28}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
+  const teamTextX = team.flagData ? x + 78 : x + 28;
+  svg.push(`<text x="${teamTextX}" y="${y + 31}" class="team-title">TEAM ${team.teamID} · ${escapeXml(clip(team.teamName, 34))}</text>`);
+  svg.push(`<text x="${teamTextX}" y="${y + 49}" class="team-meta mono">${team.playerCount} PLAYERS · ${team.squadCount} SQUADS · AVG ${team.averagePing == null ? "--" : `${team.averagePing}ms`}</text>`);
   if (team.commanderPlayer) {
     const commanderAvatar = team.commanderAvatarData ?? team.commanderPlayer?.avatarUrl ?? team.commanderPlayer?.avatar ?? team.commanderPlayer?.steamAvatar ?? team.commanderPlayer?.steamAvatarUrl ?? team.commanderPlayer?.steam_avatar ?? team.commanderPlayer?.avatar_full ?? team.commanderPlayer?.avatar_medium ?? team.commanderPlayer?.steamProfile?.avatar ?? team.commanderPlayer?.steamProfile?.avatar_full ?? team.commanderPlayer?.steam?.avatar ?? team.commanderPlayer?.profile?.avatar ?? "";
     const commanderSize = 38;
@@ -760,7 +764,7 @@ function renderLaneScoreboardHeader(team, x, y) {
     `<path d="M${layout.metricsStart - 3} ${y + 3}V${y + TEAM_LANE_HEADER_HEIGHT - 3}" stroke="${team.accent}" stroke-opacity=".34"/>`,
   ];
   for (const column of layout.columns) {
-    svg.push(`<rect x="${column.x + 1}" y="${y + 3}" width="${column.width - 2}" height="${TEAM_LANE_HEADER_HEIGHT - 6}" rx="2" fill="${column.tone}" fill-opacity=".075"/>`);
+    svg.push(`<rect x="${column.x + 1}" y="${y + 3}" width="${column.width - 2}" height="${TEAM_LANE_HEADER_HEIGHT - 6}" rx="2" fill="${column.tone}" fill-opacity=".18" stroke="${column.tone}" stroke-opacity=".22"/>`);
     svg.push(`<text x="${column.center}" y="${y + 12}" text-anchor="middle" class="scoreboard-header-stat" fill="${column.tone}">${column.label}</text>`);
   }
   return svg.join("");
@@ -771,14 +775,15 @@ function renderSquadCard(team, group, x, y) {
   const height = SQUAD_HEADER_HEIGHT + group.players.length * team.rowHeight;
   const badge = group.locked ? "🔒" : `${group.players.length}/9`;
   const title = `${group.squadID == null ? "-" : `#${group.squadID}`} ${group.squadName}`;
-  const creator = firstText(group.creatorName, "-");
+  const creator = firstText(group.creatorName);
+  const titleClipId = `squad-title-${team.teamID}-${Math.round(x)}-${Math.round(y)}`;
 
-  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".62" stroke="#ffffff" stroke-opacity=".10"/>`);
+  svg.push(`<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${height}" rx="0" fill="#061020" fill-opacity=".46" stroke="#ffffff" stroke-opacity=".10"/>`);
   svg.push(`<path d="M${x} ${y} H${x + team.laneWidth - 12} L${x + team.laneWidth} ${y + 6} V${y + SQUAD_HEADER_HEIGHT} H${x} Z" fill="${team.accent}" fill-opacity=".20" stroke="${team.accent}" stroke-opacity=".42"/>`);
   svg.push(`<rect x="${x}" y="${y}" width="4" height="${SQUAD_HEADER_HEIGHT}" rx="2" fill="${team.accent}" opacity=".90"/>`);
-  svg.push(`<text x="${x + 12}" y="${y + 13}" class="squad-title">${escapeXml(clip(title, 28))}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 82}" y="${y + 13}" text-anchor="end" class="squad-meta mono">${escapeXml(clip(creator, 12))}</text>`);
-  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 13}" text-anchor="end" class="${group.locked ? "squad-locked" : "squad-meta"} mono">${escapeXml(badge)}</text>`);
+  svg.push(`<defs><clipPath id="${titleClipId}"><rect x="${x + 10}" y="${y}" width="${team.laneWidth - 64}" height="${SQUAD_HEADER_HEIGHT}"/></clipPath></defs>`);
+  svg.push(`<text x="${x + 12}" y="${y + 11}" clip-path="url(#${titleClipId})"><tspan class="squad-title">${escapeXml(clip(title, 28))}</tspan>${creator ? `<tspan dx="5" class="squad-creator">${escapeXml(clip(creator, 14))}</tspan>` : ""}</text>`);
+  svg.push(`<text x="${x + team.laneWidth - 10}" y="${y + 11}" text-anchor="end" class="${group.locked ? "squad-locked" : "squad-meta"} mono">${escapeXml(badge)}</text>`);
 
   group.players.forEach((player, index) => {
     const rowY = y + SQUAD_HEADER_HEIGHT + index * team.rowHeight;
@@ -792,7 +797,7 @@ function renderPlayerRow(team, player, x, y, index) {
   const role = resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass));
   const rowHeight = team.rowHeight;
   const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
-  const backgroundOpacity = index % 2 === 0 ? ".64" : ".48";
+  const backgroundOpacity = index % 2 === 0 ? ".50" : ".36";
   const metrics = buildSnapshotPlayerMetrics(player);
   const layout = buildPlayerStatLayout(x, team.laneWidth);
   const nameClipId = `player-name-${team.teamID}-${Math.round(x)}-${Math.round(y)}`;
@@ -913,8 +918,8 @@ async function buildBackground(sharp, payload) {
     try {
       return await sharp(assetPath)
         .resize(WIDTH, HEIGHT, { fit: "cover", position: "centre" })
-        .modulate({ brightness: 0.52, saturation: 0.60 })
-        .blur(1.4)
+        .modulate({ brightness: 0.68, saturation: 0.78 })
+        .blur(0.6)
         .png()
         .toBuffer();
     } catch {}
@@ -958,24 +963,24 @@ function resolveMapKey(value) {
 function renderDefs() {
   return `<defs>
     <linearGradient id="pageShade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#020611" stop-opacity=".28"/>
-      <stop offset="42%" stop-color="#020611" stop-opacity=".52"/>
-      <stop offset="100%" stop-color="#020611" stop-opacity=".82"/>
+      <stop offset="0%" stop-color="#020611" stop-opacity=".14"/>
+      <stop offset="42%" stop-color="#020611" stop-opacity=".30"/>
+      <stop offset="100%" stop-color="#020611" stop-opacity=".55"/>
     </linearGradient>
     <linearGradient id="headerPlate" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#061426" stop-opacity=".92"/>
-      <stop offset="55%" stop-color="#10243c" stop-opacity=".78"/>
-      <stop offset="100%" stop-color="#061020" stop-opacity=".90"/>
+      <stop offset="0%" stop-color="#061426" stop-opacity=".72"/>
+      <stop offset="55%" stop-color="#10243c" stop-opacity=".58"/>
+      <stop offset="100%" stop-color="#061020" stop-opacity=".70"/>
     </linearGradient>
     <linearGradient id="team1TicketPanel" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#062d4b" stop-opacity=".96"/>
-      <stop offset="62%" stop-color="#07182b" stop-opacity=".92"/>
-      <stop offset="100%" stop-color="#04101e" stop-opacity=".96"/>
+      <stop offset="0%" stop-color="#062d4b" stop-opacity=".76"/>
+      <stop offset="62%" stop-color="#07182b" stop-opacity=".68"/>
+      <stop offset="100%" stop-color="#04101e" stop-opacity=".76"/>
     </linearGradient>
     <linearGradient id="team2TicketPanel" x1="1" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#48111b" stop-opacity=".96"/>
-      <stop offset="62%" stop-color="#21101a" stop-opacity=".92"/>
-      <stop offset="100%" stop-color="#100812" stop-opacity=".96"/>
+      <stop offset="0%" stop-color="#48111b" stop-opacity=".76"/>
+      <stop offset="62%" stop-color="#21101a" stop-opacity=".68"/>
+      <stop offset="100%" stop-color="#100812" stop-opacity=".76"/>
     </linearGradient>
     <filter id="commanderAvatarDiffuseWide" x="-150%" y="-150%" width="400%" height="400%" color-interpolation-filters="sRGB">
       <feGaussianBlur stdDeviation="8.5"/>
@@ -1001,8 +1006,8 @@ function renderDefs() {
       .team-title{font-size:19px;font-weight:900}
       .team-meta{font-size:10px;font-weight:800;fill:#b9c9d8}
       .commander-initial{font-size:13px;font-weight:900}.commander-orbit{stroke-linecap:round}.commander-caption{font-size:7px;font-weight:900;letter-spacing:.35px;fill:#d9e9f6}.team-commander{font-size:9px;font-weight:900;fill:#dce8f3}
-      .squad-title{font-size:8px;font-weight:900}
-      .squad-meta{font-size:7px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:10px;font-weight:900;fill:#ff5d6c}
+      .squad-title{font-size:7.5px;font-weight:900}.squad-creator{font-size:5.8px;font-weight:700;fill:#9fb2c4;letter-spacing:.1px}
+      .squad-meta{font-size:6.5px;font-weight:800;fill:#b6c5d3}.squad-locked{font-size:9px;font-weight:900;fill:#ff5d6c}
       .scoreboard-header-title{font-size:6px;font-weight:900;letter-spacing:.65px;fill:#a9bed1}
       .scoreboard-header-stat{font-size:6px;font-weight:900}
       .role-badge{font-size:8px;font-weight:900}
