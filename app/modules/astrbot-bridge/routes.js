@@ -56,6 +56,66 @@ function readIdentity(req, url, body = {}) {
   return { qqNumber, qqName, steam64 };
 }
 
+function normalizeDeliveryAck(body = {}) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw createValidationError("InvalidAck", "ACK body must be a JSON object.");
+  }
+  const eventId = limitedText(body.eventId, 512, "eventId", true);
+  const eventType = limitedText(body.eventType, 128, "eventType");
+  const error = body.error == null ? null : limitedText(body.error, 1000, "error");
+  const rawTargets = body.targets == null ? [] : body.targets;
+  if (!Array.isArray(rawTargets)) {
+    throw createValidationError("InvalidAckTargets", "targets must be an array.");
+  }
+  if (rawTargets.length > 20) {
+    throw createValidationError("TooManyAckTargets", "targets cannot contain more than 20 items.");
+  }
+  const targets = rawTargets.map((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw createValidationError("InvalidAckTarget", `targets[${index}] must be an object.`);
+    }
+    return {
+      target: limitedText(item.target, 256, `targets[${index}].target`),
+      ok: item.ok === true,
+      error: item.error == null ? null : limitedText(item.error, 1000, `targets[${index}].error`),
+    };
+  });
+  return {
+    eventId,
+    eventType,
+    received: body.received === true,
+    delivered: body.delivered === true,
+    successCount: limitedCount(body.successCount),
+    failureCount: limitedCount(body.failureCount),
+    targets,
+    error,
+  };
+}
+
+function limitedText(value, maxLength, field, required = false) {
+  const text = String(value ?? "").trim();
+  if (required && !text) {
+    throw createValidationError("AckEventIdRequired", `${field} is required.`);
+  }
+  if (text.length > maxLength) {
+    throw createValidationError("AckFieldTooLong", `${field} cannot exceed ${maxLength} characters.`);
+  }
+  return text;
+}
+
+function limitedCount(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(100_000, Math.floor(number)));
+}
+
+function createValidationError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  error.statusCode = 400;
+  return error;
+}
+
 export async function handleAstrbotBridgeRoutes({
   core,
   modules,
@@ -129,6 +189,25 @@ export async function handleAstrbotBridgeRoutes({
       error: "Unauthorized",
       message: "Invalid AstrBot API token.",
     });
+    return true;
+  }
+
+  if (url.pathname === "/api/astrbot/event-ack" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const ack = normalizeDeliveryAck(body ?? {});
+      bridge.recordDeliveryAck?.(ack);
+      bridgeLogger?.info?.(
+        `[AstrBotBridge] event-ack eventId=${ack.eventId} delivered=${ack.delivered} success=${ack.successCount} failed=${ack.failureCount} ip=${getRequestIp(req)}`,
+      );
+      json(200, { ok: true });
+    } catch (error) {
+      json(Number(error?.statusCode ?? 400) || 400, {
+        ok: false,
+        error: error?.code ?? "InvalidAck",
+        message: String(error?.message ?? "Invalid delivery ACK."),
+      });
+    }
     return true;
   }
 
