@@ -374,6 +374,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "squad-restriction-enforcement-debug",
+    path: "/debug/squad-restriction-enforcement",
+    component: () => import("../pages/SquadRestrictionEnforcementDebugPage.vue"),
+    title: "小队锁队处罚调试",
+    category: "debug",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "锁队处罚调试", icon: "🧭", order: 55 },
+    superAdminOnly: true,
+    ...workspacePage,
+  },
+  {
     name: "team-shuffle",
     path: "/team-shuffle",
     component: () => import("../pages/TeamShufflePage.vue"),
