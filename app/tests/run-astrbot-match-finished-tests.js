@@ -83,7 +83,7 @@ async function main() {
           snapshotWaitMs: 20,
           dedupeTtlMs: 100,
           dedupeMax: 2,
-          allowTextFallback: true,
+          allowTextFallback: false,
         },
         deliveryAck: { enabled: true, maxRecent: 2 },
       },
@@ -226,11 +226,7 @@ async function main() {
   const timeoutEvent = bridge.getState().metrics.recentEvents.find(
     (event) => event.type === "match.finished" && event.data?.roundKey === "BZSS_Main:round-timeout",
   );
-  assert.ok(timeoutEvent);
-  assert.equal(timeoutEvent.data.snapshotReady, false);
-  assert.equal(timeoutEvent.data.snapshotId, null);
-  assert.equal(timeoutEvent.data.source, "round.match_winner.timeout");
-  assert.notEqual(timeoutEvent.data.snapshotId, "snapshot-old");
+  assert.equal(timeoutEvent, undefined);
 
   const authManager = {
     getUserFromRequest(req) {

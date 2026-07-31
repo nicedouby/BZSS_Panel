@@ -261,7 +261,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         snapshotWaitMs: clampNumber(current.matchFinished?.snapshotWaitMs, 10, 300_000, 30_000),
         dedupeTtlMs: clampNumber(current.matchFinished?.dedupeTtlMs, 100, 7 * 24 * 60 * 60_000, 86_400_000),
         dedupeMax: clampNumber(current.matchFinished?.dedupeMax, 1, 5000, 500),
-        allowTextFallback: current.matchFinished?.allowTextFallback !== false,
+        allowTextFallback: current.matchFinished?.allowTextFallback === true,
       },
       deliveryAck: {
         enabled: current.deliveryAck?.enabled !== false,

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 
 import { createSquadRestrictionEnforcementModule } from "../modules/squad-restriction-enforcement/index.js";
+import {
+  buildSquadRestrictionWarning,
+} from "../modules/squad-restriction-enforcement/messages.js";
 
 const START_MS = Date.UTC(2026, 6, 31, 0, 0, 0);
 
@@ -15,6 +18,8 @@ function makeSquad(overrides = {}) {
     creatorSteamId: "76561198000000001",
     creatorEosId: "eos-creator",
     generation: 1,
+    squadTypeId: "infantry",
+    squadTypeLabel: "战斗步兵",
     locked: true,
     size: 9,
     ...overrides,
@@ -256,16 +261,60 @@ async function testOpeningWindowAndTimeline() {
   h.advance(1);
   await h.tick();
   assert.equal(h.warnings.length, 1, "T+30 must send warning one");
+  assert.equal(
+    h.warnings[0].message,
+    "[小队规则警告] 你的小队已经违规，当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
+  );
 
   h.advance(30);
   await h.tick();
   assert.equal(h.warnings.length, 2, "T+60 must send warning two");
+  assert.equal(
+    h.warnings[1].message,
+    "[小队规则最后警告] 你的小队仍然违规，当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
+  );
 
   h.advance(30);
   await h.tick();
   assert.equal(h.disbands.length, 1, "T+90 must disband after revalidation");
   assert.equal(h.module.api.getHistory()[0].status, "disbanded");
   await h.close();
+}
+
+function testCentralizedWarningCopy() {
+  const infantryWarning = buildSquadRestrictionWarning({
+    stage: 1,
+    violationCodes: ["lock_forbidden"],
+    squadTypeId: "infantry",
+  });
+  assert.equal(
+    infantryWarning,
+    "[小队规则警告] 你的小队已经违规，当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
+  );
+
+  const soloVehicleWarning = buildSquadRestrictionWarning({
+    stage: 2,
+    violationCodes: ["solo_lock_forbidden"],
+    squadTypeId: "tank",
+  });
+  assert.equal(
+    soloVehicleWarning,
+    "[小队规则最后警告] 你的小队仍然违规，当前小队为载具队，载具队禁止单载，请立即整改。",
+  );
+
+  const oversizedVehicleWarning = buildSquadRestrictionWarning({
+    stage: 1,
+    violationCodes: ["locked_player_limit_exceeded"],
+    squadTypeId: "ifv",
+  });
+  assert.equal(
+    oversizedVehicleWarning,
+    "[小队规则警告] 你的小队已经违规，当前载具小队已经超员，请控制小队规模或打开队锁。",
+  );
+
+  for (const message of [infantryWarning, soloVehicleWarning, oversizedVehicleWarning]) {
+    assert.equal(/(?:\d+\s*秒|\d+\s*分钟|再次检查|自动解散)/u.test(message), false);
+  }
 }
 
 async function testRemediationAtEachStage() {
@@ -640,6 +689,7 @@ async function testRuntimeControlAndForcedClockOverride() {
   }
 }
 
+testCentralizedWarningCopy();
 await testOpeningWindowAndTimeline();
 await testRemediationAtEachStage();
 await testShortUnlockDoesNotResetAndResolvedReoffenseIsNew();
