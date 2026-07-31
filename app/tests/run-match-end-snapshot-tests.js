@@ -71,6 +71,17 @@ function createHarness() {
           },
         },
       },
+      remoteTelemetry: {
+        api: {
+          getState() {
+            return {
+              currentSample: {
+                tickets: { team1: 287, team2: 143 },
+              },
+            };
+          },
+        },
+      },
       bzssCoreMonitor: {
         api: {
           getState() {
@@ -144,6 +155,8 @@ async function testSingleOverviewSnapshot() {
     assert.equal(snapshot.players[0].health, 64.5);
     assert.equal(snapshot.players[0].bzssCore.kills, 9);
     assert.equal(snapshot.players[0].bzssCore.ping, 38);
+    assert.deepEqual(snapshot.match.teamTickets, { team1: 287, team2: 143 });
+    assert.equal(snapshot.match.teamTicketsSource, "remoteTelemetry.currentSample");
 
     const manifest = await plugin.api.readSnapshotManifest(item.id);
     assert.equal(manifest.pageCount, 1);
@@ -241,6 +254,7 @@ function makePayload(team1Count, team2Count) {
     squadID: index + 1,
     squadName: index === 0 ? "Command Squad" : `Squad ${index + 1}`,
     teamName: teamID === 1 ? "USA" : "RGF",
+    creatorName: `Creator ${teamID}-${index + 1}`,
     locked: index % 2 === 0,
   })));
   return {
@@ -327,6 +341,10 @@ function testPlayerCombatMetricsAndLaneHeaders() {
   for (const label of ["K", "W", "D", "TK", "VK", "R", "H", "C", "O", "T", "P"]) {
     assert.equal((svg.match(new RegExp(`class="scoreboard-header-stat"[^>]*>${label}<\\/text>`, "g")) ?? []).length, 4);
   }
+  for (const tone of ["#63e6be", "#38bdf8", "#fb7185", "#ff8a65", "#fbbf24", "#4ade80", "#22d3ee", "#60a5fa", "#c084fc", "#f472b6"]) {
+    assert.equal(svg.includes(`fill="${tone}"`), true);
+  }
+  assert.equal(svg.includes('class="squad-creator"'), true);
 }
 
 async function testHundredPlayersStayInOneImage() {
