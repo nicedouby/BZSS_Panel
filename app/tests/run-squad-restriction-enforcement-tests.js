@@ -263,7 +263,7 @@ async function testOpeningWindowAndTimeline() {
   assert.equal(h.warnings.length, 1, "T+30 must send warning one");
   assert.equal(
     h.warnings[0].message,
-    "[小队规则警告] 你的小队已经违规，当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
+    "[小队规则警告] 你的小队已经违规，小队性质为战斗步兵，禁止锁队，请立即整改。",
   );
 
   h.advance(30);
@@ -271,7 +271,7 @@ async function testOpeningWindowAndTimeline() {
   assert.equal(h.warnings.length, 2, "T+60 must send warning two");
   assert.equal(
     h.warnings[1].message,
-    "[小队规则最后警告] 你的小队仍然违规，当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
+    "[小队规则最后警告] 你的小队仍然违规，小队性质为战斗步兵，禁止锁队，请立即整改。",
   );
 
   h.advance(30);
@@ -289,7 +289,7 @@ function testCentralizedWarningCopy() {
   });
   assert.equal(
     infantryWarning,
-    "[小队规则警告] 你的小队已经违规，当前小队为战斗步兵，战斗步兵禁止锁队，请立即整改。",
+    "[小队规则警告] 你的小队已经违规，小队性质为战斗步兵，禁止锁队，请立即整改。",
   );
 
   const soloVehicleWarning = buildSquadRestrictionWarning({
@@ -299,20 +299,32 @@ function testCentralizedWarningCopy() {
   });
   assert.equal(
     soloVehicleWarning,
-    "[小队规则最后警告] 你的小队仍然违规，当前小队为载具队，载具队禁止单载，请立即整改。",
+    "[小队规则最后警告] 你的小队仍然违规，战斗载具队禁止单人锁队或单载，请打开队锁，或将小队人数增加至至少 2 人。",
   );
 
   const oversizedVehicleWarning = buildSquadRestrictionWarning({
     stage: 1,
     violationCodes: ["locked_player_limit_exceeded"],
     squadTypeId: "ifv",
+    ruleSnapshot: { maxPlayersWhenLocked: 3 },
   });
   assert.equal(
     oversizedVehicleWarning,
-    "[小队规则警告] 你的小队已经违规，当前载具小队已经超员，请控制小队规模或打开队锁。",
+    "[小队规则警告] 你的小队已经违规，当前载具小队已经超员，请将小队人数控制在最多 3 人，或打开队锁。",
   );
 
-  for (const message of [infantryWarning, soloVehicleWarning, oversizedVehicleWarning]) {
+  const oversizedLogisticsWarning = buildSquadRestrictionWarning({
+    stage: 1,
+    violationCodes: ["locked_player_limit_exceeded"],
+    squadTypeId: "logistics",
+    ruleSnapshot: { maxPlayersWhenLocked: 6 },
+  });
+  assert.equal(
+    oversizedLogisticsWarning,
+    "[小队规则警告] 你的小队已经违规，当前后勤小队已经超员，请将小队人数控制在最多 6 人，或打开队锁。",
+  );
+
+  for (const message of [infantryWarning, soloVehicleWarning, oversizedVehicleWarning, oversizedLogisticsWarning]) {
     assert.equal(/(?:\d+\s*秒|\d+\s*分钟|再次检查|自动解散)/u.test(message), false);
   }
 }

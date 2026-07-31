@@ -552,6 +552,7 @@ export function createSquadRestrictionEnforcementModule({
       squadTypeId: item.squadTypeId,
       squadTypeLabel: item.squadTypeLabel,
       restrictionReasons: item.restrictionReasons,
+      ruleSnapshot: item.ruleSnapshot,
     });
     try {
       const result = await sender.call(modules.adminWarn, {
