@@ -5,7 +5,7 @@
       <div>
         <p class="eyebrow">PLAYER INTELLIGENCE</p>
         <h1>查成分</h1>
-        <p class="subtitle">输入 Steam64，查询 SquadBrowser 上的玩家档案与最近服务器游玩记录。</p>
+        <p class="subtitle">输入玩家名称检索本地数据库，或使用 Steam64 直接查询 SquadBrowser 档案与最近游玩记录。</p>
       </div>
       <a class="source-link" :href="result?.sourceUrl || 'https://squadbrowser.app/players'" target="_blank" rel="noreferrer">
         <span>打开 SquadBrowser</span>
@@ -56,11 +56,13 @@
     <form class="lookup-form" @submit.prevent="lookup">
       <div class="form-header">
         <label for="player-query">玩家名称或 Steam64</label>
-        <span v-if="steam64Valid" class="valid-badge">✓ 已识别 17 位 Steam64</span>
+        <span v-if="steam64Valid" class="valid-badge">
+          {{ /^\d{17}$/.test(queryInput.trim()) ? "✓ Steam64 已就绪" : "✓ 已选择数据库玩家" }}
+        </span>
       </div>
 
       <div class="form-row search-row">
-        <div class="query-box">
+        <div ref="queryBoxRef" class="query-box">
           <div class="input-wrapper">
             <span class="search-icon">🔍</span>
             <input
@@ -70,8 +72,13 @@
               autocomplete="off"
               placeholder="输入玩家名称自动联想，或直接输入 17 位 Steam64"
               :disabled="loading"
+              aria-autocomplete="list"
+              aria-controls="player-suggestions"
+              :aria-expanded="suggestionPanelVisible"
+              :aria-activedescendant="activeSuggestionId"
               @input="onQueryInput"
-              @keydown.esc="suggestions = []"
+              @focus="onSearchFocus"
+              @keydown="onSearchKeydown"
             />
             <button
               v-if="queryInput"
@@ -85,26 +92,59 @@
           </div>
 
           <!-- Autocomplete Dropdown -->
-          <div v-if="suggestions.length" class="suggestions" role="listbox">
-            <button
-              v-for="candidate in suggestions"
-              :key="candidate.id"
-              type="button"
-              class="suggestion"
-              @click="selectPlayer(candidate)"
+          <div
+            v-if="suggestionPanelVisible"
+            id="player-suggestions"
+            class="suggestions"
+            role="listbox"
+            aria-label="数据库玩家候选"
+          >
+            <div v-if="suggestionsLoading" class="suggestion-state" role="status">
+              <span class="spin-icon">↻</span>
+              <span>正在检索玩家数据库…</span>
+            </div>
+            <template v-else>
+              <button
+                v-for="(candidate, index) in suggestions"
+                :id="`player-suggestion-${index}`"
+                :key="candidate.id"
+                type="button"
+                :class="['suggestion', { active: index === activeSuggestionIndex }]"
+                role="option"
+                :aria-selected="index === activeSuggestionIndex"
+                @mouseenter="activeSuggestionIndex = index"
+                @click="selectPlayer(candidate)"
+              >
+                <img
+                  v-if="candidate.avatar"
+                  class="suggestion-avatar suggestion-avatar-image"
+                  :src="candidate.avatar"
+                  alt=""
+                  loading="lazy"
+                />
+                <span v-else class="suggestion-avatar">
+                  {{ String(candidate.name || "?").slice(0, 1).toUpperCase() }}
+                </span>
+                <span class="suggestion-main">
+                  <strong>{{ candidate.name || "未命名玩家" }}</strong>
+                  <small>
+                    <code>{{ candidate.steam64 || "无 Steam64" }}</code>
+                    <span v-if="candidate.eos" class="eos-tag"> · EOS: {{ candidate.eos }}</span>
+                  </small>
+                </span>
+                <span class="suggestion-time">{{ formatDate(candidate.updatedAt) }}</span>
+              </button>
+            </template>
+            <div v-if="!suggestionsLoading && suggestionsError" class="suggestion-state error-inline" role="status">
+              {{ suggestionsError }}
+            </div>
+            <div
+              v-else-if="!suggestionsLoading && searchedName === queryInput.trim() && !suggestions.length"
+              class="suggestion-state"
+              role="status"
             >
-              <span class="suggestion-avatar">
-                {{ String(candidate.name || "?").slice(0, 1).toUpperCase() }}
-              </span>
-              <span class="suggestion-main">
-                <strong>{{ candidate.name || "未命名玩家" }}</strong>
-                <small>
-                  <code>{{ candidate.steam64 || "无 Steam64" }}</code>
-                  <span v-if="candidate.eos" class="eos-tag"> · EOS: {{ candidate.eos }}</span>
-                </small>
-              </span>
-              <span class="suggestion-time">{{ formatDate(candidate.updatedAt) }}</span>
-            </button>
+              数据库中没有匹配的玩家；也可以直接输入 17 位 Steam64。
+            </div>
           </div>
         </div>
 
@@ -119,7 +159,7 @@
       </div>
 
       <p class="hint">
-        💡 提示：输入玩家名后从下拉列表选择，系统会自动填入 Steam64；亦可直接黏贴 17 位 Steam64。数据来源于 SquadBrowser。
+        💡 支持当前名字和历史曾用名的模糊检索。可用 ↑ ↓ 选择候选、Enter 确认、Esc 关闭；最终档案数据来源于 SquadBrowser。
       </p>
     </form>
 
@@ -358,7 +398,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import { apiGet } from "../app/apiClient";
 import { renderApiError } from "../app/errors";
 
@@ -370,11 +410,27 @@ type LookupResult = {
   database?: { playerId?: number; avatar?: string | null; savedSessions?: number } | null;
 };
 
+type PlayerCandidate = {
+  id: number | string;
+  name: string;
+  steam64: string;
+  eos: string;
+  avatar: string;
+  updatedAt: string | number | null;
+};
+
 const route = useRoute();
+const router = useRouter();
 const steam64 = ref(String(route.query.steam64 ?? ""));
 const queryInput = ref(steam64.value);
-const suggestions = ref<Array<any>>([]);
+const queryBoxRef = ref<HTMLElement | null>(null);
+const suggestions = ref<PlayerCandidate[]>([]);
+const suggestionsLoading = ref(false);
+const suggestionsError = ref("");
+const searchedName = ref("");
+const activeSuggestionIndex = ref(-1);
 let suggestionTimer: ReturnType<typeof setTimeout> | null = null;
+let suggestionRequestSerial = 0;
 const result = ref<LookupResult | null>(null);
 const loading = ref(false);
 const error = ref("");
@@ -382,7 +438,18 @@ const copiedField = ref("");
 
 const player = computed(() => result.value?.player ?? {});
 const initials = computed(() => String(player.value.displayName || "?").trim().slice(0, 1).toUpperCase());
-const steam64Valid = computed(() => /^\d{17}$/.test(queryInput.value.trim()));
+const steam64Valid = computed(() => /^\d{17}$/.test(steam64.value));
+const suggestionPanelVisible = computed(() => {
+  const value = queryInput.value.trim();
+  if (!value || /^\d{17}$/.test(value) || steam64Valid.value) return false;
+  return suggestionsLoading.value
+    || suggestions.value.length > 0
+    || searchedName.value === value
+    || Boolean(suggestionsError.value);
+});
+const activeSuggestionId = computed(() => (
+  activeSuggestionIndex.value >= 0 ? `player-suggestion-${activeSuggestionIndex.value}` : undefined
+));
 const statEntries = computed(() => Object.entries(player.value.stats || {}));
 const profileEntries = computed(() => Object.entries(player.value || {}).filter(([key]) => !["steamAvatar", "stats"].includes(key)));
 
@@ -402,16 +469,25 @@ const maxFavoritePlaytime = computed(() => {
 
 onMounted(() => {
   if (/^\d{17}$/.test(steam64.value)) void lookup();
+  document.addEventListener("pointerdown", onDocumentPointerDown);
 });
 
 onBeforeUnmount(() => {
   if (suggestionTimer) clearTimeout(suggestionTimer);
+  suggestionRequestSerial += 1;
+  document.removeEventListener("pointerdown", onDocumentPointerDown);
 });
 
 function clearInput() {
+  suggestionRequestSerial += 1;
   queryInput.value = "";
   steam64.value = "";
   suggestions.value = [];
+  suggestionsLoading.value = false;
+  suggestionsError.value = "";
+  searchedName.value = "";
+  activeSuggestionIndex.value = -1;
+  error.value = "";
 }
 
 function copyText(text: string, label: string) {
@@ -424,40 +500,112 @@ function copyText(text: string, label: string) {
 
 function onQueryInput() {
   const value = queryInput.value.trim();
+  suggestionRequestSerial += 1;
   steam64.value = /^\d{17}$/.test(value) ? value : "";
   suggestions.value = [];
+  suggestionsLoading.value = false;
+  suggestionsError.value = "";
+  searchedName.value = "";
+  activeSuggestionIndex.value = -1;
   if (suggestionTimer) clearTimeout(suggestionTimer);
   if (!value || /^\d{17}$/.test(value)) return;
-  suggestionTimer = setTimeout(() => void searchPlayers(value), 220);
+  const requestSerial = suggestionRequestSerial;
+  suggestionTimer = setTimeout(() => void searchPlayers(value, requestSerial), 220);
 }
 
-async function searchPlayers(value: string) {
+function onSearchFocus() {
+  const value = queryInput.value.trim();
+  if (!value || /^\d{17}$/.test(value) || steam64Valid.value) return;
+  if (searchedName.value !== value && !suggestionsLoading.value) onQueryInput();
+}
+
+function onSearchKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
+    suggestions.value = [];
+    searchedName.value = "";
+    activeSuggestionIndex.value = -1;
+    return;
+  }
+  if (!suggestionPanelVisible.value) return;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    if (!suggestions.value.length) return;
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    const current = activeSuggestionIndex.value;
+    activeSuggestionIndex.value = current < 0
+      ? (step > 0 ? 0 : suggestions.value.length - 1)
+      : (current + step + suggestions.value.length) % suggestions.value.length;
+    return;
+  }
+  if (event.key === "Enter" && suggestions.value.length) {
+    event.preventDefault();
+    selectPlayer(suggestions.value[Math.max(0, activeSuggestionIndex.value)]);
+  }
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (queryBoxRef.value?.contains(event.target as Node)) return;
+  suggestions.value = [];
+  searchedName.value = "";
+  activeSuggestionIndex.value = -1;
+}
+
+async function searchPlayers(value: string, requestSerial: number) {
+  suggestionsLoading.value = true;
+  suggestionsError.value = "";
   try {
     const response = await apiGet<any>(`/api/player-database/list?q=${encodeURIComponent(value)}&limit=12&offset=0&sort=name_asc`, {}, { timeoutMs: 5_000 });
-    const rows = Array.isArray(response?.players) ? response.players : (Array.isArray(response?.items) ? response.items : []);
-    suggestions.value = rows.filter((row: any) => row?.steam64 || row?.steamID).slice(0, 12).map((row: any) => ({
-      id: row.id,
-      name: row.name ?? row.current_name,
-      steam64: row.steam64 ?? row.steamID ?? row.steam_id,
-      eos: row.eos ?? row.eosID ?? row.eos_id,
-      updatedAt: row.updatedAt ?? row.updated_at,
-    }));
-  } catch { suggestions.value = []; }
+    if (requestSerial !== suggestionRequestSerial || queryInput.value.trim() !== value) return;
+    const rows = Array.isArray(response)
+      ? response
+      : (Array.isArray(response?.players) ? response.players : (Array.isArray(response?.items) ? response.items : []));
+    suggestions.value = rows
+      .filter((row: any) => row?.steam64 || row?.steamID || row?.steam_id)
+      .slice(0, 12)
+      .map((row: any) => ({
+        id: row.id ?? row.steam64 ?? row.steamID ?? row.steam_id,
+        name: String(row.name ?? row.currentName ?? row.current_name ?? "未命名玩家"),
+        steam64: String(row.steam64 ?? row.steamID ?? row.steam_id ?? ""),
+        eos: String(row.eos ?? row.eosID ?? row.eos_id ?? ""),
+        avatar: String(row.avatar ?? row.steamAvatar ?? row.steam_avatar ?? ""),
+        updatedAt: row.updatedAt ?? row.updated_at ?? null,
+      }));
+    searchedName.value = value;
+    activeSuggestionIndex.value = suggestions.value.length ? 0 : -1;
+  } catch {
+    if (requestSerial !== suggestionRequestSerial || queryInput.value.trim() !== value) return;
+    suggestions.value = [];
+    searchedName.value = value;
+    suggestionsError.value = "玩家数据库检索失败，请稍后重试。";
+  } finally {
+    if (requestSerial === suggestionRequestSerial) suggestionsLoading.value = false;
+  }
 }
 
-function selectPlayer(candidate: any) {
+function selectPlayer(candidate: PlayerCandidate) {
   const id = String(candidate.steam64 ?? "").trim();
   if (!/^\d{17}$/.test(id)) return;
   queryInput.value = candidate.name || id;
   steam64.value = id;
   suggestions.value = [];
+  suggestionsError.value = "";
+  searchedName.value = "";
+  activeSuggestionIndex.value = -1;
   void lookup();
 }
 
 async function lookup() {
-  if (!/^\d{17}$/.test(steam64.value)) { error.value = "请输入正确的 17 位 Steam64。"; return; }
+  if (!/^\d{17}$/.test(steam64.value)) {
+    error.value = queryInput.value.trim()
+      ? "请先从数据库候选列表中选择玩家，或输入正确的 17 位 Steam64。"
+      : "请输入玩家名称或 17 位 Steam64。";
+    return;
+  }
   loading.value = true; error.value = "";
-  try { result.value = await apiGet<LookupResult>(`/api/squadbrowser/player?steam64=${encodeURIComponent(steam64.value)}`, {}, { timeoutMs: 15_000 }); }
+  try {
+    result.value = await apiGet<LookupResult>(`/api/squadbrowser/player?steam64=${encodeURIComponent(steam64.value)}`, {}, { timeoutMs: 15_000 });
+    void router.replace({ query: { ...route.query, steam64: steam64.value } }).catch(() => {});
+  }
   catch (err) { result.value = null; error.value = renderApiError(err, "查询 SquadBrowser 失败，请稍后重试。"); }
   finally { loading.value = false; }
 }
@@ -759,7 +907,8 @@ function extraSessionFields(session: any) { const known = new Set(["id", "server
   transition: background-color 0.12s ease;
 }
 
-.suggestion:hover {
+.suggestion:hover,
+.suggestion.active {
   background: rgba(56, 189, 248, 0.12);
 }
 
@@ -773,6 +922,28 @@ function extraSessionFields(session: any) { const known = new Set(["id", "server
   color: #fff;
   font-weight: 800;
   font-size: 14px;
+  flex: none;
+}
+
+.suggestion-avatar-image {
+  object-fit: cover;
+  background: #111827;
+}
+
+.suggestion-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 10px 14px;
+  color: #94a3b8;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+.suggestion-state.error-inline {
+  color: #fca5a5;
 }
 
 .suggestion-main {
@@ -1489,6 +1660,10 @@ function extraSessionFields(session: any) { const known = new Set(["id", "server
   .profile-meta {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+  .suggestion-time,
+  .eos-tag {
+    display: none;
   }
 }
 </style>
