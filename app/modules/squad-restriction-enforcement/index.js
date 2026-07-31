@@ -45,6 +45,7 @@ export function createSquadRestrictionEnforcementModule({
   let persistenceQueue = Promise.resolve();
   let snapshotReceived = false;
   let currentRoundKey = "";
+  let lastRoundContext = null;
   let lastMonitorAt = "";
   let lastTickAt = "";
   let lastError = "";
@@ -178,6 +179,7 @@ export function createSquadRestrictionEnforcementModule({
               snapshotReceived = false;
               latestSquads.clear();
               currentRoundKey = "";
+              lastRoundContext = null;
               await commitState();
             }).catch(logFailure);
           }));
@@ -223,6 +225,7 @@ export function createSquadRestrictionEnforcementModule({
   async function ingestMonitorSnapshot(event = {}) {
     runtimeConfig = readConfig(config);
     const context = getRoundContext(event.serverId, event);
+    lastRoundContext = { ...context };
     syncRound(context.roundKey, "monitor_snapshot");
     latestSquads.clear();
     for (const raw of Array.isArray(event.squads) ? event.squads : []) {
@@ -818,7 +821,8 @@ export function createSquadRestrictionEnforcementModule({
       serverIdInput
       || event?.serverId
       || status?.serverId
-      || core?.webStatus?.serverId,
+      || core?.webStatus?.serverId
+      || lastRoundContext?.serverId,
     );
     const managementState = getManagementState(serverId);
     const matchState = modules?.matchState?.getState?.() ?? {};
@@ -827,15 +831,19 @@ export function createSquadRestrictionEnforcementModule({
       ?? managementState?.matchId
       ?? managementState?.currentMatchId
       ?? matchState?.round?.current?.sessionId
-      ?? matchState?.round?.current?.matchId,
+      ?? matchState?.round?.current?.matchId
+      ?? lastRoundContext?.matchId,
     );
     const roundKey = text(managementState?.roundKey)
-      || (serverId && matchId ? `${serverId}:${matchId}` : "");
+      || (serverId && matchId ? `${serverId}:${matchId}` : "")
+      || text(lastRoundContext?.roundKey)
+      || currentRoundKey;
     const polling = status?.rconPolling ?? matchState?.rconPolling ?? {};
     const logClockSeconds = numeric(
       status?.logClockSeconds
       ?? polling?.logClockSeconds
       ?? managementState?.logClockSeconds
+      ?? lastRoundContext?.logClockSeconds
       ?? 0,
       0,
     );
@@ -843,12 +851,14 @@ export function createSquadRestrictionEnforcementModule({
       status?.logClockHasAnchor
       ?? polling?.logClockHasAnchor
       ?? managementState?.logClockHasAnchor
+      ?? lastRoundContext?.logClockHasAnchor
       ?? false,
     );
     const logClockManual = Boolean(
       status?.logClockManual
       ?? polling?.logClockManual
       ?? managementState?.logClockManual
+      ?? lastRoundContext?.logClockManual
       ?? false,
     );
     return {
@@ -969,17 +979,24 @@ export function createSquadRestrictionEnforcementModule({
 
   function buildState() {
     const context = getRoundContext();
+    const diagnostics = buildDiagnostics(context);
     return {
       enabled: runtimeConfig.enabled,
       enforcementMode: runtimeConfig.enforcementMode,
       currentRoundKey,
+      serverId: context.serverId,
+      matchId: context.matchId,
       clockTrusted: clockTrusted(context),
       enforcementWindowOpen: enforcementWindowOpen(context),
       logClockSeconds: context.logClockSeconds,
+      logClockHasAnchor: context.logClockHasAnchor,
+      logClockManual: context.logClockManual,
       snapshotReceived,
       lastMonitorAt,
       lastTickAt,
       lastError,
+      diagnostics,
+      latestSquads: [...latestSquads.values()].map(toDiagnosticSquad),
       activeCaseCount: activeCases.size,
       historyCount: history.length,
       recordCount: actionRecords.length,
@@ -988,6 +1005,120 @@ export function createSquadRestrictionEnforcementModule({
       records: actionRecords.slice(-500).reverse().map(clone),
       exemptions: [...exemptions.values()].map(clone),
       config: clone(runtimeConfig),
+    };
+  }
+
+  function buildDiagnostics(context) {
+    const squads = [...latestSquads.values()];
+    const evaluated = squads.filter((squad) => squad.restrictionEvaluated);
+    const violations = evaluated.filter((squad) => squad.isViolation);
+    const eligibleViolations = violations.filter((squad) => squad.identityComplete);
+    const blockers = [];
+    const add = (code, severity, message, detail = "") => {
+      blockers.push({ code, severity, message, detail });
+    };
+
+    if (!runtimeConfig.enabled) {
+      add("module_disabled", "blocking", "执法模块已禁用。");
+    }
+    if (runtimeConfig.enforcementMode === "off") {
+      add("mode_off", "blocking", "当前模式为 off，不会建立案件。");
+    } else if (runtimeConfig.enforcementMode === "dry_run") {
+      add("dry_run", "warning", "当前为 dry_run，只记录模拟动作，不会发送警告或解散。");
+    } else if (runtimeConfig.enforcementMode === "warn_only") {
+      add("warn_only", "warning", "当前为 warn_only，只发送警告，不会解散小队。");
+    }
+    if (!snapshotReceived) {
+      add("snapshot_missing", "blocking", "尚未收到小队限制监控快照。");
+    }
+    if (!context.roundKey) {
+      add("round_key_missing", "blocking", "无法确定当前对局标识，自动处罚保持关闭。");
+    }
+    if (runtimeConfig.requireTrustedRoundClock && !context.logClockHasAnchor) {
+      add("clock_anchor_missing", "blocking", "日志时钟没有对局锚点。");
+    }
+    if (runtimeConfig.requireTrustedRoundClock && context.logClockManual) {
+      add("clock_manual", "blocking", "日志时钟处于手动模式。");
+    }
+    if (
+      context.logClockHasAnchor
+      && !context.logClockManual
+      && context.logClockSeconds < runtimeConfig.startAfterSeconds
+    ) {
+      add(
+        "opening_protection",
+        "blocking",
+        "仍处于开局保护时间。",
+        `还需 ${Math.max(0, runtimeConfig.startAfterSeconds - context.logClockSeconds)} 秒`,
+      );
+    }
+    if (snapshotReceived && squads.length === 0) {
+      add("no_squads", "info", "当前快照没有小队。");
+    } else if (snapshotReceived && evaluated.length === 0) {
+      add("classification_missing", "blocking", "当前小队均未匹配可执行的锁队分类规则。");
+    } else if (snapshotReceived && violations.length === 0) {
+      add("no_current_violation", "info", "当前没有持续性锁队违规。");
+    } else if (violations.length > 0 && eligibleViolations.length === 0) {
+      add("identity_unresolved", "blocking", "已识别违规，但小队创建者或生命周期身份不完整。");
+    }
+    if (lastError) {
+      add("runtime_error", "blocking", "模块记录了运行错误。", lastError);
+    }
+
+    const hardBlocked = blockers.some((item) => item.severity === "blocking");
+    const caseCreationReady = Boolean(
+      runtimeConfig.enabled
+      && runtimeConfig.enforcementMode !== "off"
+      && snapshotReceived
+      && enforcementWindowOpen(context)
+      && !hardBlocked,
+    );
+    return {
+      status: !runtimeConfig.enabled || runtimeConfig.enforcementMode === "off"
+        ? "stopped"
+        : hardBlocked
+          ? "blocked"
+          : runtimeConfig.enforcementMode === "dry_run"
+            ? "dry_run"
+            : runtimeConfig.enforcementMode === "warn_only"
+              ? "warn_only"
+              : "enforcing",
+      caseCreationReady,
+      canSendWarnings: ["warn_only", "enforce"].includes(runtimeConfig.enforcementMode),
+      canDisband: runtimeConfig.enforcementMode === "enforce",
+      protectionRemainingSeconds: Math.max(
+        0,
+        runtimeConfig.startAfterSeconds - context.logClockSeconds,
+      ),
+      latestSquadCount: squads.length,
+      evaluatedSquadCount: evaluated.length,
+      classificationMissingCount: squads.length - evaluated.length,
+      violationCount: violations.length,
+      eligibleViolationCount: eligibleViolations.length,
+      identityUnresolvedCount: violations.length - eligibleViolations.length,
+      blockers,
+    };
+  }
+
+  function toDiagnosticSquad(squad) {
+    return {
+      slotKey: squad.slotKey,
+      identityKey: squad.identityKey,
+      identityComplete: squad.identityComplete,
+      roundKey: squad.roundKey,
+      serverId: squad.serverId,
+      matchId: squad.matchId,
+      teamId: squad.teamId,
+      squadId: squad.squadId,
+      squadName: squad.squadName,
+      creatorName: squad.creatorName,
+      creatorSteamId: squad.creatorSteamId,
+      generation: squad.generation,
+      restrictionEvaluated: squad.restrictionEvaluated,
+      isViolation: squad.isViolation,
+      violationCodes: [...squad.violationCodes],
+      restrictionReasons: [...squad.restrictionReasons],
+      ruleSnapshot: clone(squad.ruleSnapshot),
     };
   }
 
