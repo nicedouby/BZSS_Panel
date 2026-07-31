@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
 import { handleAstrbotBridgeRoutes } from "./routes.js";
 import { createAstrbotWebSocketGateway } from "./websocket.js";
@@ -105,6 +106,14 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   let eventsFailed = 0;
   let lastEvent = null;
   const recentEvents = [];
+  const recentAcks = [];
+  const pendingFinishedRounds = new Map();
+  const publishedFinishedEvents = new Map();
+  let ackReceived = 0;
+  let delivered = 0;
+  let deliveryFailed = 0;
+  let lastAckAt = null;
+  let lastDeliveredEventId = null;
 
   const api = {
     getState() {
@@ -163,6 +172,18 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     async unbindMe(input = {}) {
       return unbindMe(input);
     },
+
+    async dispatchMatchFinished(input = {}) {
+      return dispatchMatchFinishedEvent(input);
+    },
+
+    getWebSocketClientCount() {
+      return websocketGateway?.getClientCount?.() ?? 0;
+    },
+
+    recordDeliveryAck(input = {}) {
+      return recordDeliveryAck(input);
+    },
   };
 
   return {
@@ -207,6 +228,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     async stop() {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
+      for (const pending of pendingFinishedRounds.values()) {
+        if (pending?.timeout) clearTimeout(pending.timeout);
+      }
+      pendingFinishedRounds.clear();
       unsubscribeCoreEvents?.();
       unsubscribeCoreEvents = null;
       websocketGateway?.closeAll?.();
@@ -230,6 +255,17 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         enabled: current.websocket?.enabled !== false,
         path: String(current.websocket?.path ?? "/ws/astrbot").trim() || "/ws/astrbot",
         heartbeatIntervalMs: Math.max(5000, Number(current.websocket?.heartbeatIntervalMs ?? 30000) || 30000),
+      },
+      matchFinished: {
+        enabled: current.matchFinished?.enabled !== false,
+        snapshotWaitMs: clampNumber(current.matchFinished?.snapshotWaitMs, 10, 300_000, 30_000),
+        dedupeTtlMs: clampNumber(current.matchFinished?.dedupeTtlMs, 100, 7 * 24 * 60 * 60_000, 86_400_000),
+        dedupeMax: clampNumber(current.matchFinished?.dedupeMax, 1, 5000, 500),
+        allowTextFallback: current.matchFinished?.allowTextFallback !== false,
+      },
+      deliveryAck: {
+        enabled: current.deliveryAck?.enabled !== false,
+        maxRecent: clampNumber(current.deliveryAck?.maxRecent, 1, 1000, 100),
       },
       maxRecentEvents: Math.max(10, Math.min(1000, Number(current.maxRecentEvents ?? 100) || 100)),
     };
@@ -256,36 +292,57 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         lastHeartbeat,
       },
       metrics: { eventsSent, eventsFailed, lastEvent, recentEvents: [...recentEvents] },
+      matchFinished: {
+        enabled: Boolean(runtimeConfig.matchFinished.enabled),
+        snapshotWaitMs: runtimeConfig.matchFinished.snapshotWaitMs,
+        pending: pendingFinishedRounds.size,
+        dedupeSize: publishedFinishedEvents.size,
+      },
+      delivery: {
+        enabled: Boolean(runtimeConfig.deliveryAck.enabled),
+        ackReceived,
+        delivered,
+        failed: deliveryFailed,
+        lastAckAt,
+        lastDeliveredEventId,
+        recentAcks: [...recentAcks],
+      },
       ...extra,
     };
   }
 
-  const pendingFinishedRounds = new Set();
-  const publishedFinishedRounds = new Set();
-
-  function publishBridgeEvent(type, data = {}, sourceEvent = {}) {
-    const time = new Date().toISOString();
-    const record = {
-      time,
-      type,
-      serverId: String(sourceEvent?.serverId ?? sourceEvent?.rawEvent?.ServerID ?? "").trim(),
-      eventId: String(sourceEvent?.eventId ?? sourceEvent?.rawEvent?.EventId ?? "").trim(),
-      ...data,
+  function publishBridgeEvent({
+    type,
+    version = 1,
+    eventId,
+    time = new Date().toISOString(),
+    data = {},
+  } = {}) {
+    const normalizedType = firstText(type, "core.event");
+    const normalizedTime = normalizeIsoTime(time);
+    const normalizedEventId = firstText(
+      eventId,
+      `${normalizedType}:${normalizedTime}:${randomBytes(4).toString("hex")}`,
+    );
+    const event = {
+      type: normalizedType,
+      version: Number(version) || 1,
+      eventId: normalizedEventId,
+      time: normalizedTime,
+      data: sanitizeBridgeEventData(data),
     };
-    recentEvents.unshift(record);
+    recentEvents.unshift(event);
     recentEvents.splice(runtimeConfig.maxRecentEvents);
-    lastEvent = type;
+    lastEvent = normalizedType;
+    const websocketClients = websocketGateway?.getClientCount?.() ?? 0;
     try {
-      websocketGateway?.publish({
-        type,
-        time,
-        data: sanitizeBridgeEventData(data),
-      });
+      websocketGateway?.publish(event);
       eventsSent += 1;
     } catch (error) {
       eventsFailed += 1;
       moduleLogger?.warn?.(`[AstrBotBridge] event publish failed: ${error.message}`);
     }
+    return { event, websocketClients };
   }
 
   function publishEvent(event) {
@@ -303,108 +360,404 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       ?? normalized?.playerConnected
       ?? normalized?.serverTickRate
       ?? {};
-    const roundKey = String(
-      event?.roundKey
-      ?? event?.payload?.roundKey
-      ?? normalizedPayload?.roundKey
-      ?? `${event?.serverId ?? ""}:${eventType}`,
-    ).trim();
 
     if (eventType === "round.world_bring_up") {
       const serverInfo = buildServerInfo({ includePlayers: false });
-      publishBridgeEvent("match.started", {
-        map: firstText(normalizedPayload?.mapName, serverInfo?.match?.map),
-        mode: firstText(normalizedPayload?.gameMode, serverInfo?.match?.mode),
-        players: Number(serverInfo?.population?.players ?? 0),
-        serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
-      }, event);
+      publishBridgeEvent({
+        type: "match.started",
+        eventId: firstText(event?.eventId, event?.rawEvent?.EventId),
+        time: firstText(event?.time, event?.logTime),
+        data: {
+          map: firstText(normalizedPayload?.mapName, serverInfo?.match?.map),
+          mode: firstText(normalizedPayload?.gameMode, serverInfo?.match?.mode),
+          players: Number(serverInfo?.population?.players ?? 0),
+          serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
+        },
+      });
       return;
     }
 
     if (eventType === "match.snapshot.ready") {
-      void publishFinishedFromSnapshot(event, roundKey);
+      void handleFinishedSnapshotReady(event);
       return;
     }
 
     if (eventType === "round.match_winner" || eventType === "MATCH_END") {
-      if (!pendingFinishedRounds.has(roundKey) && !publishedFinishedRounds.has(roundKey)) {
-        pendingFinishedRounds.add(roundKey);
-        const timer = setTimeout(() => {
-          pendingFinishedRounds.delete(roundKey);
-          if (!publishedFinishedRounds.has(roundKey)) {
-            void publishFinishedFromSnapshot(event, roundKey, true);
-          }
-        }, 5000);
-        timer.unref?.();
-      }
+      queueFinishedRound(event, normalizedPayload);
       return;
     }
 
     if (eventType === "On_PlayerConnected" || eventType === "player.connected" || eventType === "player.join") {
       const serverInfo = buildServerInfo({ includePlayers: false });
-      publishBridgeEvent("player.join", {
-        serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
-        players: Number(serverInfo?.population?.players ?? 0),
-      }, event);
+      publishBridgeEvent({
+        type: "player.join",
+        eventId: firstText(event?.eventId, event?.rawEvent?.EventId),
+        time: firstText(event?.time, event?.logTime),
+        data: {
+          serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
+          players: Number(serverInfo?.population?.players ?? 0),
+        },
+      });
       return;
     }
 
     if (eventType === "On_PlayerDisconnected" || eventType === "player.disconnected" || eventType === "player.leave") {
       const serverInfo = buildServerInfo({ includePlayers: false });
-      publishBridgeEvent("player.leave", {
-        serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
-        players: Number(serverInfo?.population?.players ?? 0),
-      }, event);
+      publishBridgeEvent({
+        type: "player.leave",
+        eventId: firstText(event?.eventId, event?.rawEvent?.EventId),
+        time: firstText(event?.time, event?.logTime),
+        data: {
+          serverId: firstText(event?.serverId, serverInfo?.server?.serverId),
+          players: Number(serverInfo?.population?.players ?? 0),
+        },
+      });
       return;
     }
 
     if (normalized?.category === "server_status" || /server[._-].*(updated|status)|status[._-].*updated/i.test(eventType)) {
       const serverInfo = buildServerInfo({ includePlayers: false });
-      publishBridgeEvent("server.updated", {
-        players: Number(serverInfo?.population?.players ?? 0),
-        maxPlayers: serverInfo?.population?.maxPlayers ?? null,
-        queue: Number(serverInfo?.population?.queue ?? 0),
-        map: serverInfo?.match?.map ?? "",
-        mode: serverInfo?.match?.mode ?? "",
-        serverId: serverInfo?.server?.serverId ?? "",
-      }, event);
+      publishBridgeEvent({
+        type: "server.updated",
+        eventId: firstText(event?.eventId, event?.rawEvent?.EventId),
+        time: firstText(event?.time, event?.logTime),
+        data: {
+          players: Number(serverInfo?.population?.players ?? 0),
+          maxPlayers: serverInfo?.population?.maxPlayers ?? null,
+          queue: Number(serverInfo?.population?.queue ?? 0),
+          map: serverInfo?.match?.map ?? "",
+          mode: serverInfo?.match?.mode ?? "",
+          serverId: serverInfo?.server?.serverId ?? "",
+        },
+      });
       return;
     }
 
-    publishBridgeEvent("core.event", {
-      sourceType: eventType,
-      serverId: event?.serverId ?? "",
-    }, event);
+    publishBridgeEvent({
+      type: "core.event",
+      eventId: firstText(event?.eventId, event?.rawEvent?.EventId),
+      time: firstText(event?.time, event?.logTime),
+      data: {
+        sourceType: eventType,
+        serverId: event?.serverId ?? "",
+      },
+    });
   }
 
-  async function publishFinishedFromSnapshot(sourceEvent, roundKey, allowLatestFallback = false) {
+  function queueFinishedRound(sourceEvent = {}, normalizedPayload = {}) {
+    if (!runtimeConfig.matchFinished.enabled) return;
+    prunePublishedFinishedEvents();
+    const serverInfo = buildServerInfo({ includePlayers: false });
+    const roundKey = resolveRoundKey(sourceEvent, normalizedPayload, serverInfo);
+    const sourceType = firstText(sourceEvent?.eventName, sourceEvent?.type, sourceEvent?.name, "round.match_winner");
+    const serverId = firstText(sourceEvent?.serverId, normalizedPayload?.serverId, serverInfo?.server?.serverId, "server");
+    const duplicateWindowMs = Math.max(60_000, runtimeConfig.matchFinished.snapshotWaitMs);
+    const now = Date.now();
+    const alternatePending = [...pendingFinishedRounds.values()].some((item) =>
+      item.serverId === serverId
+      && item.sourceType !== sourceType
+      && now - Date.parse(item.receivedAt) <= duplicateWindowMs
+    );
+    const alternatePublished = [...publishedFinishedEvents.values()].some((item) =>
+      item.serverId === serverId
+      && !item.simulated
+      && item.sourceType
+      && item.sourceType !== sourceType
+      && now - Date.parse(item.publishedAt) <= duplicateWindowMs
+    );
+    if (
+      !roundKey
+      || hasPublishedRound(roundKey)
+      || pendingFinishedRounds.has(roundKey)
+      || alternatePending
+      || alternatePublished
+    ) return;
+
+    const pending = {
+      roundKey,
+      serverId,
+      sourceType,
+      winner: firstText(
+        normalizedPayload?.winner,
+        sourceEvent?.winner,
+        sourceEvent?.data?.winner,
+        sourceEvent?.payload?.winner,
+      ),
+      receivedAt: new Date().toISOString(),
+      sourceEvent,
+      timeout: null,
+    };
+    pending.timeout = setTimeout(() => {
+      const current = pendingFinishedRounds.get(roundKey);
+      if (current !== pending) return;
+      pendingFinishedRounds.delete(roundKey);
+      if (!runtimeConfig.matchFinished.allowTextFallback || hasPublishedRound(roundKey)) return;
+      void dispatchMatchFinishedEvent({
+        sourceEvent,
+        roundKey,
+        serverId: pending.serverId,
+        winner: pending.winner,
+        snapshotId: null,
+        snapshotReady: false,
+        simulated: false,
+        source: "round.match_winner.timeout",
+      });
+    }, runtimeConfig.matchFinished.snapshotWaitMs);
+    pending.timeout.unref?.();
+    pendingFinishedRounds.set(roundKey, pending);
+  }
+
+  async function handleFinishedSnapshotReady(sourceEvent = {}) {
+    if (!runtimeConfig.matchFinished.enabled) return;
+    const roundKey = firstText(
+      sourceEvent?.roundKey,
+      sourceEvent?.data?.roundKey,
+      sourceEvent?.payload?.roundKey,
+    );
+    const pending = pendingFinishedRounds.get(roundKey);
+    if (!roundKey || !pending) return;
+
     const snapshotApi = resolveMatchEndSnapshotApi();
-    let snapshot = null;
     const snapshotId = String(sourceEvent?.snapshotId ?? sourceEvent?.data?.snapshotId ?? "").trim();
+    if (!snapshotId || !snapshotApi?.readSnapshot) return;
+    let snapshot = null;
     try {
-      if (snapshotApi?.readSnapshot && snapshotId) snapshot = await snapshotApi.readSnapshot(snapshotId);
-      if (!snapshot && allowLatestFallback && snapshotApi?.listSnapshots) {
-        const list = await snapshotApi.listSnapshots();
-        const latest = Array.isArray(list) ? list[0] : null;
-        if (latest?.id && snapshotApi.readSnapshot) snapshot = await snapshotApi.readSnapshot(latest.id);
-      }
+      snapshot = await snapshotApi.readSnapshot(snapshotId);
     } catch (error) {
       moduleLogger?.warn?.(`[AstrBotBridge] failed to read finished snapshot: ${error.message}`);
+      return;
     }
 
-    const resolvedId = String(snapshot?.id ?? snapshotId).trim();
-    const key = String(roundKey || resolvedId || "finished").trim();
-    if (publishedFinishedRounds.has(key)) return;
-    publishedFinishedRounds.add(key);
-    pendingFinishedRounds.delete(key);
+    const snapshotRoundKey = firstText(
+      snapshot?.roundKey,
+      snapshot?.source?.roundKey,
+      snapshot?.trigger?.raw?.roundKey,
+      sourceEvent?.roundKey,
+    );
+    if (snapshotRoundKey !== roundKey) {
+      moduleLogger?.warn?.(`[AstrBotBridge] ignored snapshot ${snapshotId}: roundKey mismatch expected=${roundKey} actual=${snapshotRoundKey || "-"}`);
+      return;
+    }
+
+    if (pending.timeout) clearTimeout(pending.timeout);
+    pendingFinishedRounds.delete(roundKey);
+    await dispatchMatchFinishedEvent({
+      sourceEvent: pending.sourceEvent,
+      roundKey,
+      serverId: pending.serverId,
+      winner: pending.winner,
+      snapshotId,
+      snapshot,
+      snapshotReady: true,
+      simulated: false,
+      source: "match.snapshot.ready",
+    });
+  }
+
+  async function dispatchMatchFinishedEvent(input = {}) {
+    prunePublishedFinishedEvents();
     const serverInfo = buildServerInfo({ includePlayers: false });
-    publishBridgeEvent("match.finished", {
-      map: firstText(snapshot?.match?.map, snapshot?.match?.layer, serverInfo?.match?.map),
-      winner: firstText(snapshot?.trigger?.winner, sourceEvent?.winner, sourceEvent?.data?.winner),
-      snapshotId: resolvedId || null,
-      serverId: firstText(snapshot?.server?.serverId, sourceEvent?.serverId, serverInfo?.server?.serverId),
-      players: Number(snapshot?.summary?.recordedPlayerCount ?? snapshot?.server?.playerCount ?? serverInfo?.population?.players ?? 0),
-    }, sourceEvent);
+    const simulated = input?.simulated === true;
+    const snapshotApi = resolveMatchEndSnapshotApi();
+    let snapshot = input?.snapshot && typeof input.snapshot === "object" ? input.snapshot : null;
+    let snapshotId = firstText(input?.snapshotId);
+
+    if (!snapshot && snapshotId && snapshotApi?.readSnapshot) {
+      try {
+        snapshot = await snapshotApi.readSnapshot(snapshotId);
+      } catch (error) {
+        moduleLogger?.warn?.(`[AstrBotBridge] failed to read snapshot ${snapshotId}: ${error.message}`);
+      }
+    }
+
+    if (!snapshot && simulated && input?.useLatestSnapshot === true && snapshotApi?.listSnapshots && snapshotApi?.readSnapshot) {
+      try {
+        const snapshots = await snapshotApi.listSnapshots({ scope: "official", sort: "newest" });
+        const latest = Array.isArray(snapshots) ? snapshots[0] : null;
+        if (latest?.id) {
+          snapshotId = firstText(latest.id);
+          snapshot = await snapshotApi.readSnapshot(snapshotId);
+        }
+      } catch (error) {
+        moduleLogger?.warn?.(`[AstrBotBridge] failed to read simulation snapshot template: ${error.message}`);
+      }
+    }
+
+    const sourceEvent = input?.sourceEvent ?? {};
+    const serverId = firstText(
+      input?.serverId,
+      snapshot?.server?.serverId,
+      sourceEvent?.serverId,
+      serverInfo?.server?.serverId,
+      "server",
+    );
+    const randomId = randomBytes(6).toString("hex");
+    const time = normalizeIsoTime(input?.time);
+    const roundKey = firstText(
+      input?.roundKey,
+      simulated ? `test:${time}:${randomId}` : "",
+      snapshot?.roundKey,
+      snapshot?.source?.roundKey,
+      snapshotId ? `${serverId}:${snapshotId}` : "",
+    );
+    if (!roundKey) {
+      const error = new Error("A stable roundKey is required for match.finished.");
+      error.code = "RoundKeyRequired";
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const eventId = firstText(
+      input?.eventId,
+      simulated
+        ? `test_match_finished:${serverId}:${Date.parse(time) || Date.now()}:${randomId}`
+        : `match_finished:${serverId}:${roundKey}`,
+    );
+    const duplicate = findPublishedFinishedEvent(eventId, roundKey, simulated);
+    if (duplicate) {
+      return {
+        ok: true,
+        published: false,
+        duplicate: true,
+        event: duplicate.event,
+        websocketClients: websocketGateway?.getClientCount?.() ?? 0,
+      };
+    }
+
+    const snapshotReady = (input?.snapshotReady == null ? true : input.snapshotReady === true)
+      && Boolean(snapshot && snapshotId);
+    if (!snapshotReady) snapshotId = "";
+    const data = {
+      serverId,
+      serverName: firstText(input?.serverName, snapshot?.server?.serverName, serverInfo?.server?.serverName),
+      roundKey,
+      map: firstText(input?.map, snapshot?.match?.map, serverInfo?.match?.map),
+      layer: firstText(input?.layer, snapshot?.match?.layer, serverInfo?.match?.layer),
+      mode: firstText(input?.mode, snapshot?.match?.mode, snapshot?.match?.gameMode, serverInfo?.match?.mode),
+      winner: firstText(input?.winner, snapshot?.trigger?.winner, sourceEvent?.winner, sourceEvent?.data?.winner),
+      players: Number(
+        input?.players
+        ?? snapshot?.summary?.recordedPlayerCount
+        ?? snapshot?.summary?.playerCount
+        ?? snapshot?.server?.playerCount
+        ?? serverInfo?.population?.players
+        ?? 0
+      ),
+      snapshotId: snapshotId || null,
+      snapshotReady,
+      simulated,
+      source: firstText(input?.source, simulated ? "panel.manual-test" : "match.snapshot.ready"),
+    };
+    const published = publishBridgeEvent({
+      type: "match.finished",
+      version: 1,
+      eventId,
+      time,
+      data,
+    });
+    publishedFinishedEvents.set(eventId, {
+      eventId,
+      roundKey,
+      serverId,
+      sourceType: firstText(
+        sourceEvent?.eventName,
+        sourceEvent?.type,
+        sourceEvent?.name,
+      ),
+      snapshotId: data.snapshotId,
+      publishedAt: time,
+      simulated,
+      event: published.event,
+    });
+    prunePublishedFinishedEvents();
+    return {
+      ok: true,
+      published: true,
+      duplicate: false,
+      event: published.event,
+      websocketClients: published.websocketClients,
+    };
+  }
+
+  function resolveRoundKey(event = {}, normalizedPayload = {}, serverInfo = {}) {
+    const explicit = firstText(
+      event?.roundKey,
+      event?.payload?.roundKey,
+      event?.data?.roundKey,
+      normalizedPayload?.roundKey,
+      event?.eventId,
+      event?.rawEvent?.EventId,
+    );
+    if (explicit) return explicit;
+
+    const serverId = firstText(event?.serverId, normalizedPayload?.serverId, serverInfo?.server?.serverId, "server");
+    const layer = firstText(
+      event?.layerName,
+      normalizedPayload?.layer,
+      normalizedPayload?.mapName,
+      serverInfo?.match?.layer,
+      serverInfo?.match?.map,
+      "unknown",
+    );
+    const eventTimeMs = Date.parse(firstText(event?.time, event?.logTime, new Date().toISOString()));
+    const playtimeMs = Math.max(0, Number(serverInfo?.match?.rconTimeSeconds ?? 0) || 0) * 1000;
+    const anchorMs = Math.floor(((Number.isFinite(eventTimeMs) ? eventTimeMs : Date.now()) - playtimeMs) / 60_000) * 60_000;
+    return `${serverId}:${layer}:${new Date(anchorMs).toISOString().slice(0, 16)}`;
+  }
+
+  function findPublishedFinishedEvent(eventId, roundKey, simulated = false) {
+    const byId = publishedFinishedEvents.get(eventId);
+    if (byId) return byId;
+    if (simulated) return null;
+    for (const record of publishedFinishedEvents.values()) {
+      if (!record.simulated && record.roundKey === roundKey) return record;
+    }
+    return null;
+  }
+
+  function hasPublishedRound(roundKey) {
+    return Boolean(findPublishedFinishedEvent("", roundKey, false));
+  }
+
+  function prunePublishedFinishedEvents(now = Date.now()) {
+    const ttlMs = runtimeConfig.matchFinished.dedupeTtlMs;
+    for (const [eventId, record] of publishedFinishedEvents) {
+      const publishedMs = Date.parse(record?.publishedAt ?? "");
+      if (!Number.isFinite(publishedMs) || now - publishedMs > ttlMs) {
+        publishedFinishedEvents.delete(eventId);
+      }
+    }
+    while (publishedFinishedEvents.size > runtimeConfig.matchFinished.dedupeMax) {
+      const oldestKey = publishedFinishedEvents.keys().next().value;
+      if (!oldestKey) break;
+      publishedFinishedEvents.delete(oldestKey);
+    }
+  }
+
+  function recordDeliveryAck(input = {}) {
+    const receivedAt = new Date().toISOString();
+    const ack = {
+      eventId: firstText(input?.eventId),
+      eventType: firstText(input?.eventType),
+      receivedAt,
+      received: input?.received === true,
+      delivered: input?.delivered === true,
+      successCount: Math.max(0, Number(input?.successCount ?? 0) || 0),
+      failureCount: Math.max(0, Number(input?.failureCount ?? 0) || 0),
+      targets: Array.isArray(input?.targets) ? input.targets.map((item) => ({ ...item })) : [],
+      error: input?.error == null ? null : String(input.error),
+    };
+    recentAcks.unshift(ack);
+    recentAcks.splice(runtimeConfig.deliveryAck.maxRecent);
+    ackReceived += 1;
+    lastAckAt = receivedAt;
+    if (ack.delivered) {
+      delivered += 1;
+      lastDeliveredEventId = ack.eventId;
+    } else {
+      deliveryFailed += 1;
+    }
+    return ack;
   }
 
   function sanitizeBridgeEventData(data) {
@@ -1229,6 +1582,17 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     return "";
   }
 
+  function clampNumber(value, min, max, fallback) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(number)));
+  }
+
+  function normalizeIsoTime(value) {
+    const parsed = Date.parse(String(value ?? ""));
+    return new Date(Number.isFinite(parsed) ? parsed : Date.now()).toISOString();
+  }
+
   function firstFiniteNumber(...values) {
     for (const value of values) {
       const number = Number(value);
@@ -1934,10 +2298,17 @@ async function resolveAvatarDataUrl(url) {
 
 async function loadSharp() {
   if (!sharpLoaderPromise) {
-    const bundlePnpmNodeModules = `${SHARP_BUNDLE_ROOT}/.pnpm/node_modules`;
-    process.env.NODE_PATH = [SHARP_BUNDLE_ROOT, bundlePnpmNodeModules, process.env.NODE_PATH || ""]
+    const sharpRoots = [
+      String(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES ?? "").trim(),
+      SHARP_BUNDLE_ROOT,
+    ].filter(Boolean);
+    process.env.NODE_PATH = [
+      ...sharpRoots,
+      ...sharpRoots.map((root) => path.join(root, ".pnpm", "node_modules")),
+      process.env.NODE_PATH || "",
+    ]
       .filter(Boolean)
-      .join(";");
+      .join(path.delimiter);
     sharpRequire("module")._initPaths();
     sharpLoaderPromise = Promise.resolve().then(() => sharpRequire("sharp"));
   }
