@@ -648,7 +648,7 @@
     },
     "squadRestrictionEnforcement": {
       "enabled": true,
-      "enforcementMode": "dry_run",
+      "enforcementMode": "enforce",
       "startAfterSeconds": 300,
       "firstWarningDelaySeconds": 30,
       "secondWarningDelaySeconds": 60,
@@ -656,6 +656,7 @@
       "resolutionConfirmSeconds": 10,
       "schedulerIntervalMs": 1000,
       "requireTrustedRoundClock": true,
+      "forceOpenWithoutTrustedClock": false,
       "targetCurrentLeader": true,
       "refreshBeforeDisband": true,
       "recordDirectory": "./data/squad-restriction-enforcement",
