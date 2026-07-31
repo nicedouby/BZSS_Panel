@@ -5,6 +5,7 @@ import { createServerStatusModule } from "../modules/server-status/index.js";
 import { createPlayerStateModule } from "../modules/player-state/index.js";
 import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js";
 import { createSquadRestrictionMonitorModule } from "../modules/squad-restriction-monitor/index.js";
+import { createSquadRestrictionEnforcementModule } from "../modules/squad-restriction-enforcement/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
 import { createMatchCacheModule } from "../modules/match-cache/index.js";
 import { createMatchPlayerPresenceModule } from "../modules/match-player-presence/index.js";
@@ -98,6 +99,7 @@ export class ModuleManager {
       createBattleLogModule,
       createCombatLogModule,
       createAdminWarnModule,
+      createSquadRestrictionEnforcementModule,
       createSquadRuleChainModule,
       createSquadNamePolicyGuardModule,
       createSquadNamePolicyPatrolModule,
