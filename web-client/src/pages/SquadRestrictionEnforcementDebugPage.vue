@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import AppPage from "../components/common/AppPage.vue";
 
+type EnforcementMode = "off" | "dry_run" | "warn_only" | "enforce";
+
 type DiagnosticBlocker = {
   code?: string;
   severity?: "blocking" | "warning" | "info";
@@ -27,11 +29,13 @@ type DiagnosticSquad = {
 
 type EnforcementState = {
   enabled?: boolean;
-  enforcementMode?: "off" | "dry_run" | "warn_only" | "enforce";
+  enforcementMode?: EnforcementMode;
   currentRoundKey?: string;
   serverId?: string;
   matchId?: string;
   clockTrusted?: boolean;
+  clockGateSatisfied?: boolean;
+  forceOpenWithoutTrustedClock?: boolean;
   enforcementWindowOpen?: boolean;
   logClockSeconds?: number;
   logClockHasAnchor?: boolean;
@@ -47,11 +51,19 @@ type EnforcementState = {
   history?: any[];
   records?: any[];
   latestSquads?: DiagnosticSquad[];
+  runtimeControl?: {
+    enforcementMode?: EnforcementMode;
+    forceOpenWithoutTrustedClock?: boolean | null;
+    updatedAt?: string;
+    reason?: string;
+    actor?: Record<string, unknown> | null;
+  };
   diagnostics?: {
     status?: string;
     caseCreationReady?: boolean;
     canSendWarnings?: boolean;
     canDisband?: boolean;
+    clockOverrideActive?: boolean;
     protectionRemainingSeconds?: number;
     latestSquadCount?: number;
     evaluatedSquadCount?: number;
@@ -83,6 +95,10 @@ const error = ref("");
 const autoRefresh = ref(true);
 const showJson = ref(false);
 const lastLoadedAt = ref("");
+const selectedMode = ref<EnforcementMode>("enforce");
+const forceOpenWithoutTrustedClock = ref(false);
+const controlDirty = ref(false);
+const controlSaving = ref(false);
 let timer: ReturnType<typeof setInterval> | null = null;
 
 const modeLabel = computed(() => ({
@@ -149,12 +165,58 @@ async function load() {
     ]);
     enforcement.value = enforcementPayload.data ?? null;
     monitor.value = monitorPayload.data ?? null;
+    if (!controlDirty.value && enforcement.value) {
+      selectedMode.value = enforcement.value.enforcementMode ?? "enforce";
+      forceOpenWithoutTrustedClock.value = Boolean(enforcement.value.forceOpenWithoutTrustedClock);
+    }
     lastLoadedAt.value = new Date().toISOString();
     error.value = "";
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "读取调试状态失败";
   } finally {
     loading.value = false;
+  }
+}
+
+function markControlDirty() {
+  controlDirty.value = true;
+}
+
+async function applyRuntimeControl() {
+  const dangerous = selectedMode.value === "enforce" || forceOpenWithoutTrustedClock.value;
+  if (
+    dangerous
+    && !window.confirm(
+      forceOpenWithoutTrustedClock.value
+        ? "强制开启会跳过日志锚点、手动时钟和开局五分钟保护。确认应用？"
+        : "自动处罚模式会在两次警告后解散持续违规的小队。确认应用？",
+    )
+  ) {
+    return;
+  }
+
+  controlSaving.value = true;
+  try {
+    const response = await fetch("/api/modules/squad-restriction-enforcement/control", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enforcementMode: selectedMode.value,
+        forceOpenWithoutTrustedClock: forceOpenWithoutTrustedClock.value,
+        reason: "debug_page_runtime_control",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok !== true) {
+      throw new Error(payload?.error || `控制接口返回 HTTP ${response.status}`);
+    }
+    controlDirty.value = false;
+    await load();
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : "更新运行控制失败";
+  } finally {
+    controlSaving.value = false;
   }
 }
 
@@ -240,6 +302,43 @@ onUnmounted(stopTimer);
         <p v-else>模块当前不会建立或推进处罚案件。</p>
       </section>
 
+      <section class="control-panel" :data-force-open="forceOpenWithoutTrustedClock">
+        <div class="control-copy">
+          <p class="eyebrow">RUNTIME CONTROL / SUPER ADMIN</p>
+          <h2>实用版运行控制</h2>
+          <p>设置会保存到处罚模块状态，重启后继续生效。切换处罚模式时，旧模式案件会取消并重新开始完整倒计时。</p>
+        </div>
+        <label class="control-field">
+          <span>处罚模式</span>
+          <select v-model="selectedMode" :disabled="controlSaving" @change="markControlDirty">
+            <option value="off">off · 关闭</option>
+            <option value="dry_run">dry_run · 演练</option>
+            <option value="warn_only">warn_only · 仅警告</option>
+            <option value="enforce">enforce · 自动警告并解散</option>
+          </select>
+        </label>
+        <label class="force-toggle">
+          <input
+            v-model="forceOpenWithoutTrustedClock"
+            type="checkbox"
+            :disabled="controlSaving"
+            @change="markControlDirty"
+          >
+          <span>
+            <strong>强制开启，无视日志锚定时间</strong>
+            <small>跳过锚点、手动时钟与开局五分钟保护；仍要求本局标识，并保留每次动作前的违规复核。</small>
+          </span>
+        </label>
+        <button
+          type="button"
+          class="button danger-button"
+          :disabled="controlSaving || !controlDirty"
+          @click="applyRuntimeControl"
+        >
+          {{ controlSaving ? "应用中…" : controlDirty ? "应用运行设置" : "设置已生效" }}
+        </button>
+      </section>
+
       <section class="metric-grid">
         <article class="metric-card">
           <span>监控快照</span>
@@ -253,6 +352,7 @@ onUnmounted(stopTimer);
             锚点 {{ enforcement.logClockHasAnchor ? "有" : "无" }} /
             手动 {{ enforcement.logClockManual ? "是" : "否" }}
           </small>
+          <small v-if="enforcement.forceOpenWithoutTrustedClock" class="force-text">强制覆盖已启用</small>
         </article>
         <article class="metric-card">
           <span>案件创建窗口</span>
@@ -494,6 +594,52 @@ onUnmounted(stopTimer);
 .mode-banner strong { display: block; margin-top: 4px; font-size: 21px; }
 .mode-banner p { margin: 0; color: #cbd5e1; }
 
+.control-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(210px, 0.55fr) minmax(330px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(56, 189, 248, 0.26);
+  border-radius: 12px;
+  background: rgba(8, 47, 73, 0.24);
+}
+.control-panel[data-force-open="true"] {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(127, 29, 29, 0.25);
+  box-shadow: inset 4px 0 #ef4444;
+}
+.control-copy h2 { margin: 0; font-size: 17px; }
+.control-copy p:last-child { margin: 7px 0 0; color: #94a3b8; font-size: 12px; line-height: 1.5; }
+.control-field { display: grid; gap: 7px; }
+.control-field > span { color: #94a3b8; font-size: 12px; }
+.control-field select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  outline: none;
+  background: #0f172a;
+  color: #e5edf7;
+}
+.force-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 8px;
+  background: rgba(69, 10, 10, 0.28);
+  cursor: pointer;
+}
+.force-toggle input { margin-top: 3px; accent-color: #ef4444; }
+.force-toggle strong, .force-toggle small { display: block; }
+.force-toggle strong { color: #fecaca; font-size: 13px; }
+.force-toggle small { margin-top: 4px; color: #fca5a5; font-size: 11px; line-height: 1.45; }
+.danger-button { border-color: rgba(248, 113, 113, 0.5); background: rgba(153, 27, 27, 0.42); white-space: nowrap; }
+.force-text { margin-top: 4px; color: #fda4af !important; font-weight: 700; }
+
 .metric-grid { display: grid; grid-template-columns: repeat(6, minmax(145px, 1fr)); gap: 10px; margin: 12px 0; }
 .metric-card, .panel {
   border: 1px solid rgba(148, 163, 184, 0.18);
@@ -565,10 +711,12 @@ footer { padding: 5px 0 20px; color: #64748b; font-size: 12px; text-align: right
 
 @media (max-width: 1320px) {
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
+  .control-panel { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 900px) {
   .page-header, .mode-banner { grid-template-columns: 1fr; }
   .page-header { flex-direction: column; }
+  .control-panel { grid-template-columns: 1fr; }
   .two-column { grid-template-columns: 1fr; }
   .blocker { grid-template-columns: 1fr; }
 }

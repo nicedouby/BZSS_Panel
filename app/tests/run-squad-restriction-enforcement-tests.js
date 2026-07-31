@@ -579,6 +579,67 @@ async function testDiagnosticsExplainInactiveBehavior() {
   }
 }
 
+async function testRuntimeControlAndForcedClockOverride() {
+  {
+    const h = await createHarness({
+      logClockSeconds: 0,
+      logClockHasAnchor: false,
+      logClockManual: true,
+    });
+    await h.ingest();
+    assert.equal(h.module.api.getState().activeCaseCount, 0);
+
+    const result = await h.module.api.setRuntimeControl({
+      enforcementMode: "enforce",
+      forceOpenWithoutTrustedClock: true,
+      reason: "test_force_open",
+      actor: { username: "root" },
+    });
+    assert.equal(result.ok, true);
+
+    const state = h.module.api.getState();
+    assert.equal(state.clockTrusted, false, "forced mode must not disguise the real clock trust state");
+    assert.equal(state.clockGateSatisfied, true);
+    assert.equal(state.forceOpenWithoutTrustedClock, true);
+    assert.equal(state.enforcementWindowOpen, true);
+    assert.equal(state.activeCaseCount, 1);
+    assert.equal(state.diagnostics.clockOverrideActive, true);
+    assert.equal(state.diagnostics.protectionRemainingSeconds, 0);
+    assert.equal(state.diagnostics.blockers.some((item) => item.code === "clock_override_active"), true);
+    assert.equal(state.diagnostics.blockers.some((item) => item.code === "clock_anchor_missing"), false);
+
+    h.advance(30);
+    await h.tick();
+    assert.equal(h.warnings.length, 1, "forced clock override must allow the warning timeline to run");
+    await h.close();
+  }
+
+  {
+    const h = await createHarness({ mode: "dry_run" });
+    await h.ingest();
+    const originalCaseKey = h.module.api.getCases()[0].caseKey;
+    const result = await h.module.api.setRuntimeControl({
+      enforcementMode: "enforce",
+      forceOpenWithoutTrustedClock: false,
+      reason: "test_enable_production",
+    });
+    assert.equal(result.ok, true);
+    assert.equal(h.module.api.getState().enforcementMode, "enforce");
+    assert.equal(
+      h.module.api.getHistory().some((item) => (
+        item.caseKey === originalCaseKey
+        && item.resolutionReason === "enforcement_mode_changed"
+      )),
+      true,
+      "mode changes must cancel old-mode cases instead of escalating their existing timer",
+    );
+    assert.equal(h.module.api.getCases().length, 1);
+    assert.notEqual(h.module.api.getCases()[0].caseKey, originalCaseKey);
+    assert.equal(h.module.api.getCases()[0].enforcementMode, "enforce");
+    await h.close();
+  }
+}
+
 await testOpeningWindowAndTimeline();
 await testRemediationAtEachStage();
 await testShortUnlockDoesNotResetAndResolvedReoffenseIsNew();
@@ -589,5 +650,6 @@ await testRefreshBeforeDisbandAndRetries();
 await testDryRunAndWarnOnlyModes();
 await testOffModeAndAdministratorExemption();
 await testDiagnosticsExplainInactiveBehavior();
+await testRuntimeControlAndForcedClockOverride();
 
 console.log("run-squad-restriction-enforcement-tests: ok");

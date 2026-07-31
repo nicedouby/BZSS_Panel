@@ -745,6 +745,34 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/modules/squad-restriction-enforcement/control") {
+      if (req.method !== "POST") {
+        return this.json(res, 405, {
+          error: "MethodNotAllowed",
+          message: "Only POST is supported.",
+        });
+      }
+      if (!this.requireSuperAdmin(user, res)) return;
+      const api = this.modules.squadRestrictionEnforcement;
+      if (!api?.setRuntimeControl) {
+        return this.json(res, 404, {
+          error: "ModuleNotFound",
+          message: "squadRestrictionEnforcement runtime control is not available.",
+        });
+      }
+      const body = await this.readJsonBody(req);
+      const actor = {
+        id: user?.id ?? user?.userId ?? "",
+        username: user?.username ?? user?.name ?? "",
+        role: user?.role ?? "",
+      };
+      const result = await api.setRuntimeControl({ ...body, actor });
+      return this.json(res, result?.ok ? 200 : 400, result ?? {
+        ok: false,
+        error: "operation_unavailable",
+      });
+    }
+
     const enforcementCaseActionMatch = url.pathname.match(
       /^\/api\/modules\/squad-restriction-enforcement\/cases\/([^/]+)\/(cancel|exemption)$/,
     );

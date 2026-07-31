@@ -8,7 +8,7 @@
 
 ## 处罚时间线
 
-系统只在可信的本局日志时钟达到 300 秒后建立案件：
+正常模式只在可信的本局日志时钟达到 300 秒后建立案件。超级管理员可以在调试页显式开启“强制开启，无视日志锚定时间”；开启后会跳过日志锚点、手动时钟和开局五分钟保护，但仍要求存在本局标识，并保留每次动作前的违规复核：
 
 | 时间 | 操作 |
 | --- | --- |
@@ -35,7 +35,8 @@
 
 ## 安全保护
 
-- 日志时钟没有锚点或处于手动模式时，不建立案件，也不执行已有案件的动作。
+- 日志时钟没有锚点或处于手动模式时，默认不建立案件，也不执行已有案件的动作。
+- `forceOpenWithoutTrustedClock` 只能由超级管理员显式开启。它会跳过日志时钟与五分钟保护，但不会跳过对局标识、小队身份、分类、持续违规、豁免和解散前刷新检查。
 - 案件身份由本局、小队槽位、创建者身份和生命周期 `generation` 共同确定。
 - 小队消失、换图、换局或相同编号被新创建者复用时，旧案件立即取消。
 - 每次警告都会重新确认当前违规，并查找操作时的当前小队长。
@@ -51,7 +52,7 @@
   "modules": {
     "squadRestrictionEnforcement": {
       "enabled": true,
-      "enforcementMode": "dry_run",
+      "enforcementMode": "enforce",
       "startAfterSeconds": 300,
       "firstWarningDelaySeconds": 30,
       "secondWarningDelaySeconds": 60,
@@ -59,6 +60,7 @@
       "resolutionConfirmSeconds": 10,
       "schedulerIntervalMs": 1000,
       "requireTrustedRoundClock": true,
+      "forceOpenWithoutTrustedClock": false,
       "targetCurrentLeader": true,
       "refreshBeforeDisband": true,
       "recordDirectory": "./data/squad-restriction-enforcement",
@@ -78,7 +80,16 @@
 | `warn_only` | 发送两次定向警告，不解散 |
 | `enforce` | 发送两次定向警告，持续违规时自动解散 |
 
-首次部署必须从 `dry_run` 开始。确认案件识别、当前队长解析和换局清理均正常后，再依次切换至 `warn_only`、`enforce`。
+实用版默认使用 `enforce`。已有 `config.json` 如果仍显式配置为 `dry_run`，可以在“玩家与小队 → 锁队处罚调试”中切换为 `enforce`；运行时设置会持久化，重启后继续生效。
+
+切换处罚模式时，旧模式下的活动案件会以 `enforcement_mode_changed` 取消，再按新模式重新建立案件并从 T+0 开始完整倒计时，避免把已运行很久的演练案件直接升级为立即处罚。
+
+“强制开启，无视日志锚定时间”属于管理员覆盖：
+
+- 关闭：仍要求可信锚点、非手动时钟且达到 300 秒。
+- 开启：无视上述三个时间条件，立即允许建案。
+- 无论是否开启，仍必须有 `roundKey`，且警告与解散前都重新确认小队身份和违规状态。
+- 调试页、状态 JSON 和动作记录都会明确标记覆盖已启用。
 
 ## 状态与记录接口
 
@@ -91,11 +102,13 @@
 - `cancelCase(caseKey, options)`：管理员取消指定案件。
 - `setExemption(caseKey, options)`：为案件身份设置临时豁免。
 - `clearExemption(key)`：移除临时豁免。
+- `setRuntimeControl(options)`：切换处罚模式和强制时钟覆盖；切换记录操作者、原因和更新时间。
 - `tick()`：立即运行一次调度，主要用于测试和诊断。
 
 管理页面可以使用以下 HTTP API：
 
 - `GET /api/modules/squad-restriction-enforcement/state`
+- `POST /api/modules/squad-restriction-enforcement/control`
 - `POST /api/modules/squad-restriction-enforcement/cases/{caseKey}/cancel`
 - `POST /api/modules/squad-restriction-enforcement/cases/{caseKey}/exemption`
 - `DELETE /api/modules/squad-restriction-enforcement/cases/{caseKey}/exemption`

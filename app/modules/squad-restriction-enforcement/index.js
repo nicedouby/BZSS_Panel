@@ -11,7 +11,7 @@ const ROUND_RESET_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED",
 
 export const DEFAULT_SQUAD_RESTRICTION_ENFORCEMENT_CONFIG = Object.freeze({
   enabled: true,
-  enforcementMode: "dry_run",
+  enforcementMode: "enforce",
   startAfterSeconds: 300,
   firstWarningDelaySeconds: 30,
   secondWarningDelaySeconds: 60,
@@ -19,6 +19,7 @@ export const DEFAULT_SQUAD_RESTRICTION_ENFORCEMENT_CONFIG = Object.freeze({
   resolutionConfirmSeconds: 10,
   schedulerIntervalMs: 1000,
   requireTrustedRoundClock: true,
+  forceOpenWithoutTrustedClock: false,
   targetCurrentLeader: true,
   refreshBeforeDisband: true,
   recordDirectory: "./data/squad-restriction-enforcement",
@@ -50,6 +51,13 @@ export function createSquadRestrictionEnforcementModule({
   let lastTickAt = "";
   let lastError = "";
   let dirty = false;
+  let runtimeControl = {
+    enforcementMode: "",
+    forceOpenWithoutTrustedClock: null,
+    updatedAt: "",
+    reason: "",
+    actor: null,
+  };
 
   const activeCases = new Map();
   const latestSquads = new Map();
@@ -140,8 +148,66 @@ export function createSquadRestrictionEnforcementModule({
       });
     },
 
+    async setRuntimeControl(options = {}) {
+      return enqueue(async () => {
+        const hasMode = Object.hasOwn(options, "enforcementMode");
+        const hasForceOpen = Object.hasOwn(options, "forceOpenWithoutTrustedClock");
+        const nextMode = hasMode ? text(options.enforcementMode) : runtimeConfig.enforcementMode;
+        if (!MODES.has(nextMode)) {
+          return { ok: false, error: "invalid_enforcement_mode" };
+        }
+        if (hasForceOpen && typeof options.forceOpenWithoutTrustedClock !== "boolean") {
+          return { ok: false, error: "invalid_force_open_value" };
+        }
+
+        const nextForceOpen = hasForceOpen
+          ? options.forceOpenWithoutTrustedClock
+          : runtimeConfig.forceOpenWithoutTrustedClock;
+        const previous = {
+          enforcementMode: runtimeConfig.enforcementMode,
+          forceOpenWithoutTrustedClock: runtimeConfig.forceOpenWithoutTrustedClock,
+        };
+        const modeChanged = previous.enforcementMode !== nextMode;
+        const now = nowMs();
+        runtimeControl = {
+          enforcementMode: nextMode,
+          forceOpenWithoutTrustedClock: nextForceOpen,
+          updatedAt: iso(now),
+          reason: text(options.reason) || "administrator_runtime_control",
+          actor: clone(options.actor),
+        };
+        reloadRuntimeConfig();
+
+        if (modeChanged) {
+          cancelAllActive("enforcement_mode_changed", {
+            previousMode: previous.enforcementMode,
+            nextMode,
+            actor: clone(options.actor),
+          });
+        }
+        recordControlAction("runtime_control_updated", {
+          success: true,
+          previous,
+          current: {
+            enforcementMode: runtimeConfig.enforcementMode,
+            forceOpenWithoutTrustedClock: runtimeConfig.forceOpenWithoutTrustedClock,
+          },
+          reason: runtimeControl.reason,
+          actor: clone(options.actor),
+        });
+        dirty = true;
+        await commitState();
+        await runTick();
+        return {
+          ok: true,
+          control: clone(runtimeControl),
+          state: buildState(),
+        };
+      });
+    },
+
     reload() {
-      runtimeConfig = readConfig(config);
+      reloadRuntimeConfig();
       return clone(runtimeConfig);
     },
   };
@@ -151,7 +217,7 @@ export function createSquadRestrictionEnforcementModule({
       id: MODULE_ID,
       name: "Squad Restriction Enforcement",
       kind: "module",
-      version: "1.0.0",
+      version: "1.1.0",
       description: "Progressive, clock-gated enforcement for persistent locked-squad violations.",
     },
     apiName: API_NAME,
@@ -160,6 +226,7 @@ export function createSquadRestrictionEnforcementModule({
     async start() {
       runtimeConfig = readConfig(config);
       await loadPersistedState();
+      reloadRuntimeConfig();
 
       if (typeof core?.eventBus?.onModuleEvent === "function") {
         unsubscribers.push(core.eventBus.onModuleEvent(
@@ -222,8 +289,22 @@ export function createSquadRestrictionEnforcementModule({
     return run;
   }
 
+  function reloadRuntimeConfig() {
+    const configured = readConfig(config);
+    runtimeConfig = {
+      ...configured,
+      enforcementMode: MODES.has(runtimeControl.enforcementMode)
+        ? runtimeControl.enforcementMode
+        : configured.enforcementMode,
+      forceOpenWithoutTrustedClock: typeof runtimeControl.forceOpenWithoutTrustedClock === "boolean"
+        ? runtimeControl.forceOpenWithoutTrustedClock
+        : configured.forceOpenWithoutTrustedClock,
+    };
+    return runtimeConfig;
+  }
+
   async function ingestMonitorSnapshot(event = {}) {
-    runtimeConfig = readConfig(config);
+    reloadRuntimeConfig();
     const context = getRoundContext(event.serverId, event);
     lastRoundContext = { ...context };
     syncRound(context.roundKey, "monitor_snapshot");
@@ -239,7 +320,7 @@ export function createSquadRestrictionEnforcementModule({
   }
 
   async function runTick(contextOverride = null) {
-    runtimeConfig = readConfig(config);
+    reloadRuntimeConfig();
     const now = nowMs();
     lastTickAt = iso(now);
     pruneExemptions(now);
@@ -585,7 +666,7 @@ export function createSquadRestrictionEnforcementModule({
       finalizeCase(item, "cancelled", "round_changed");
       return { ok: false, reason: "round_changed" };
     }
-    if (!clockTrusted(context)) {
+    if (!clockGateSatisfied(context)) {
       item.lastError = "round_clock_untrusted";
       dirty = true;
       return { ok: false, reason: "round_clock_untrusted" };
@@ -701,6 +782,26 @@ export function createSquadRestrictionEnforcementModule({
       ...clone(details),
     };
     item.actions.push(record);
+    actionRecords.push(record);
+    if (actionRecords.length > 2000) actionRecords.splice(0, actionRecords.length - 2000);
+    dirty = true;
+    return record;
+  }
+
+  function recordControlAction(action, details = {}) {
+    const now = nowMs();
+    const record = {
+      id: `runtime-control:${action}:${now}:${actionRecords.length + 1}`,
+      caseKey: "",
+      roundKey: currentRoundKey,
+      serverId: lastRoundContext?.serverId ?? "",
+      teamId: null,
+      squadId: null,
+      squadName: "",
+      action,
+      time: iso(now),
+      ...clone(details),
+    };
     actionRecords.push(record);
     if (actionRecords.length > 2000) actionRecords.splice(0, actionRecords.length - 2000);
     dirty = true;
@@ -931,11 +1032,20 @@ export function createSquadRestrictionEnforcementModule({
     return context.logClockHasAnchor === true && context.logClockManual !== true;
   }
 
+  function clockGateSatisfied(context) {
+    return runtimeConfig.forceOpenWithoutTrustedClock || clockTrusted(context);
+  }
+
   function enforcementWindowOpen(context) {
     return Boolean(
       context.roundKey
-      && clockTrusted(context)
-      && context.logClockSeconds >= runtimeConfig.startAfterSeconds,
+      && (
+        runtimeConfig.forceOpenWithoutTrustedClock
+        || (
+          clockTrusted(context)
+          && context.logClockSeconds >= runtimeConfig.startAfterSeconds
+        )
+      ),
     );
   }
 
@@ -987,6 +1097,8 @@ export function createSquadRestrictionEnforcementModule({
       serverId: context.serverId,
       matchId: context.matchId,
       clockTrusted: clockTrusted(context),
+      clockGateSatisfied: clockGateSatisfied(context),
+      forceOpenWithoutTrustedClock: runtimeConfig.forceOpenWithoutTrustedClock,
       enforcementWindowOpen: enforcementWindowOpen(context),
       logClockSeconds: context.logClockSeconds,
       logClockHasAnchor: context.logClockHasAnchor,
@@ -1004,6 +1116,7 @@ export function createSquadRestrictionEnforcementModule({
       history: history.slice(-200).reverse().map(clone),
       records: actionRecords.slice(-500).reverse().map(clone),
       exemptions: [...exemptions.values()].map(clone),
+      runtimeControl: clone(runtimeControl),
       config: clone(runtimeConfig),
     };
   }
@@ -1034,13 +1147,30 @@ export function createSquadRestrictionEnforcementModule({
     if (!context.roundKey) {
       add("round_key_missing", "blocking", "无法确定当前对局标识，自动处罚保持关闭。");
     }
-    if (runtimeConfig.requireTrustedRoundClock && !context.logClockHasAnchor) {
+    if (runtimeConfig.forceOpenWithoutTrustedClock) {
+      add(
+        "clock_override_active",
+        "warning",
+        "强制开启已启用：日志锚点、手动时钟和开局五分钟保护均被跳过。",
+      );
+    }
+    if (
+      !runtimeConfig.forceOpenWithoutTrustedClock
+      && runtimeConfig.requireTrustedRoundClock
+      && !context.logClockHasAnchor
+    ) {
       add("clock_anchor_missing", "blocking", "日志时钟没有对局锚点。");
     }
-    if (runtimeConfig.requireTrustedRoundClock && context.logClockManual) {
+    if (
+      !runtimeConfig.forceOpenWithoutTrustedClock
+      && runtimeConfig.requireTrustedRoundClock
+      && context.logClockManual
+    ) {
       add("clock_manual", "blocking", "日志时钟处于手动模式。");
     }
     if (
+      !runtimeConfig.forceOpenWithoutTrustedClock
+      &&
       context.logClockHasAnchor
       && !context.logClockManual
       && context.logClockSeconds < runtimeConfig.startAfterSeconds
@@ -1086,10 +1216,10 @@ export function createSquadRestrictionEnforcementModule({
       caseCreationReady,
       canSendWarnings: ["warn_only", "enforce"].includes(runtimeConfig.enforcementMode),
       canDisband: runtimeConfig.enforcementMode === "enforce",
-      protectionRemainingSeconds: Math.max(
-        0,
-        runtimeConfig.startAfterSeconds - context.logClockSeconds,
-      ),
+      clockOverrideActive: runtimeConfig.forceOpenWithoutTrustedClock,
+      protectionRemainingSeconds: runtimeConfig.forceOpenWithoutTrustedClock
+        ? 0
+        : Math.max(0, runtimeConfig.startAfterSeconds - context.logClockSeconds),
       latestSquadCount: squads.length,
       evaluatedSquadCount: evaluated.length,
       classificationMissingCount: squads.length - evaluated.length,
@@ -1156,6 +1286,19 @@ export function createSquadRestrictionEnforcementModule({
       for (const entry of Array.isArray(parsed?.exemptions) ? parsed.exemptions : []) {
         if (entry?.key) exemptions.set(entry.key, entry);
       }
+      if (parsed?.runtimeControl && typeof parsed.runtimeControl === "object") {
+        runtimeControl = {
+          enforcementMode: MODES.has(text(parsed.runtimeControl.enforcementMode))
+            ? text(parsed.runtimeControl.enforcementMode)
+            : "",
+          forceOpenWithoutTrustedClock: typeof parsed.runtimeControl.forceOpenWithoutTrustedClock === "boolean"
+            ? parsed.runtimeControl.forceOpenWithoutTrustedClock
+            : null,
+          updatedAt: text(parsed.runtimeControl.updatedAt),
+          reason: text(parsed.runtimeControl.reason),
+          actor: clone(parsed.runtimeControl.actor),
+        };
+      }
       currentRoundKey = text(parsed?.currentRoundKey);
     } catch (error) {
       if (error?.code !== "ENOENT") {
@@ -1168,9 +1311,10 @@ export function createSquadRestrictionEnforcementModule({
   async function persistState() {
     if (!runtimeConfig.recordDirectory) return;
     const payload = JSON.stringify({
-      version: 1,
+      version: 2,
       currentRoundKey,
       savedAt: iso(nowMs()),
+      runtimeControl,
       activeCases: [...activeCases.values()],
       history,
       records: actionRecords,
@@ -1209,7 +1353,7 @@ function readConfig(config) {
     : path.resolve(process.cwd(), text(raw.recordDirectory || DEFAULT_SQUAD_RESTRICTION_ENFORCEMENT_CONFIG.recordDirectory));
   return {
     enabled: raw.enabled !== false,
-    enforcementMode: MODES.has(mode) ? mode : "dry_run",
+    enforcementMode: MODES.has(mode) ? mode : "enforce",
     startAfterSeconds: nonNegativeInteger(raw.startAfterSeconds, 300),
     firstWarningDelaySeconds: nonNegativeInteger(raw.firstWarningDelaySeconds, 30),
     secondWarningDelaySeconds: nonNegativeInteger(raw.secondWarningDelaySeconds, 60),
@@ -1217,6 +1361,7 @@ function readConfig(config) {
     resolutionConfirmSeconds: nonNegativeInteger(raw.resolutionConfirmSeconds, 10),
     schedulerIntervalMs: Math.max(100, positiveInteger(raw.schedulerIntervalMs, 1000)),
     requireTrustedRoundClock: raw.requireTrustedRoundClock !== false,
+    forceOpenWithoutTrustedClock: raw.forceOpenWithoutTrustedClock === true,
     targetCurrentLeader: raw.targetCurrentLeader !== false,
     refreshBeforeDisband: raw.refreshBeforeDisband !== false,
     recordDirectory,
