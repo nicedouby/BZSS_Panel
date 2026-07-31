@@ -426,6 +426,66 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/astrbot/panel-test/match-finished" && req.method === "POST") {
+      const panelUser = this.core.authManager?.getUserFromRequest(req);
+      if (!panelUser) return this.json(res, 401, { error: "AuthenticationRequired" });
+      const body = await this.readJsonBody(req);
+      const serverId = String(
+        body?.serverId
+        ?? this.core.webStatus?.getSnapshot?.()?.serverId
+        ?? "",
+      ).trim();
+      const auditContext = {
+        action: AUDIT_ACTIONS.ASTRBOT_MATCH_FINISHED_TEST,
+        category: AUDIT_CATEGORIES.INTEGRATION,
+        actor: panelUser,
+        request: req,
+        sourcePage: AUDIT_SOURCE_PAGES.ASTRBOT_BRIDGE,
+        serverId,
+        target: {
+          type: "integration",
+          id: "astrbot-bridge",
+          name: "AstrBot Bridge",
+        },
+        parameters: {
+          useCurrentServer: body?.useCurrentServer !== false,
+          useLatestSnapshot: body?.useLatestSnapshot !== false,
+          winner: String(body?.winner ?? "测试阵营").slice(0, 128),
+        },
+        resultResolver: (result) => result?.ok ? AUDIT_RESULTS.SUCCESS : AUDIT_RESULTS.FAILED,
+        resultDataBuilder: (result) => ({
+          eventId: result?.event?.eventId ?? "",
+          websocketClients: Number(result?.websocketClients ?? 0),
+          simulated: result?.event?.data?.simulated === true,
+          snapshotId: result?.event?.data?.snapshotId ?? null,
+        }),
+      };
+      if (!this.core.authManager?.hasEverything?.(panelUser)) {
+        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      }
+
+      const bridge = this.modules.astrbotBridge;
+      if (!bridge?.dispatchMatchFinished) {
+        return this.json(res, 404, { error: "AstrBotBridgeUnavailable" });
+      }
+      const result = await this.executeAudited(auditContext, () => bridge.dispatchMatchFinished({
+        serverId,
+        winner: String(body?.winner ?? "测试阵营").slice(0, 128),
+        useLatestSnapshot: body?.useLatestSnapshot !== false,
+        simulated: true,
+        source: "panel.manual-test",
+      }));
+      const websocketClients = Number(result?.websocketClients ?? bridge.getWebSocketClientCount?.() ?? 0);
+      return this.json(res, 200, {
+        ok: true,
+        published: Boolean(result?.published),
+        event: result?.event ?? null,
+        websocketClients,
+        warning: websocketClients > 0 ? null : "No AstrBot WebSocket client is connected.",
+      });
+    }
+
     const astrbotBridgeHandled = await handleAstrbotBridgeRoutes({
       core: this.core,
       modules: this.modules,

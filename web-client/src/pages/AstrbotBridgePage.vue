@@ -8,10 +8,24 @@ import { formatDateTime, formatRelativeTime } from "../composables/useDateTimeFo
 import { copyText } from "../utils/clipboard";
 
 type BridgeEvent = {
-  time?: string;
   type?: string;
+  version?: number;
+  eventId?: string;
+  time?: string;
   serverId?: string;
-  payload?: any;
+  data?: Record<string, unknown>;
+};
+
+type BridgeAck = {
+  eventId?: string;
+  eventType?: string;
+  receivedAt?: string;
+  received?: boolean;
+  delivered?: boolean;
+  successCount?: number;
+  failureCount?: number;
+  targets?: Array<{ target?: string; ok?: boolean; error?: string | null }>;
+  error?: string | null;
 };
 
 type BridgeState = {
@@ -34,6 +48,21 @@ type BridgeState = {
     lastEvent?: string | null;
     recentEvents?: BridgeEvent[];
   };
+  matchFinished?: {
+    enabled?: boolean;
+    snapshotWaitMs?: number;
+    pending?: number;
+    dedupeSize?: number;
+  };
+  delivery?: {
+    enabled?: boolean;
+    ackReceived?: number;
+    delivered?: number;
+    failed?: number;
+    lastAckAt?: string | null;
+    lastDeliveredEventId?: string | null;
+    recentAcks?: BridgeAck[];
+  };
 };
 
 const state = ref<BridgeState | null>(null);
@@ -41,9 +70,13 @@ const loading = ref(true);
 const error = ref("");
 const autoRefresh = ref(true);
 const searchQuery = ref("");
-const activeFilter = ref<"all" | "player" | "squad" | "core" | "heartbeat">("all");
+const activeFilter = ref<"all" | "match" | "player" | "squad" | "core" | "heartbeat">("all");
 const expandedEventIndices = ref<Set<number>>(new Set());
 const lastRefreshedAt = ref<Date | null>(null);
+const testPublishing = ref(false);
+const testError = ref("");
+const testWarning = ref("");
+const testEventId = ref("");
 let timer: ReturnType<typeof setInterval> | null = null;
 
 async function load() {
@@ -123,14 +156,37 @@ const statusItems = computed(() => {
 });
 
 const recentEvents = computed(() => state.value?.metrics?.recentEvents || []);
+const latestMatchFinished = computed(() =>
+  recentEvents.value.find((event) => event.type === "match.finished") ?? null,
+);
+const activeTestEventId = computed(() => testEventId.value || latestMatchFinished.value?.eventId || "");
+const latestTestAck = computed(() => {
+  const eventId = activeTestEventId.value;
+  if (!eventId) return null;
+  return state.value?.delivery?.recentAcks?.find((ack) => ack.eventId === eventId) ?? null;
+});
+const testStatus = computed(() => {
+  if (testPublishing.value) return { label: "正在发布", tone: "idle" as const };
+  const ack = latestTestAck.value;
+  if (ack) {
+    const success = Number(ack.successCount ?? 0);
+    const failed = Number(ack.failureCount ?? 0);
+    if (ack.delivered && failed === 0) return { label: "QQ群发送成功", tone: "ok" as const };
+    if (success > 0 && failed > 0) return { label: "部分目标失败", tone: "warn" as const };
+    return { label: "全部发送失败", tone: "error" as const };
+  }
+  if (activeTestEventId.value) return { label: "等待机器人确认", tone: "warn" as const };
+  return { label: "可开始测试", tone: "idle" as const };
+});
 
 const filteredEvents = computed(() => {
   return recentEvents.value.filter((ev) => {
     const type = (ev.type || "core.event").toLowerCase();
-    const serverId = (ev.serverId || "").toLowerCase();
+    const serverId = String(ev.data?.serverId ?? ev.serverId ?? "").toLowerCase();
     const query = searchQuery.value.trim().toLowerCase();
 
     // Type filter
+    if (activeFilter.value === "match" && !type.includes("match")) return false;
     if (activeFilter.value === "player" && !type.includes("player")) return false;
     if (activeFilter.value === "squad" && !type.includes("squad")) return false;
     if (activeFilter.value === "core" && !type.includes("core") && !type.includes("system")) return false;
@@ -140,13 +196,47 @@ const filteredEvents = computed(() => {
     if (query) {
       const matchType = type.includes(query);
       const matchServer = serverId.includes(query);
-      const matchPayload = JSON.stringify(ev.payload || {}).toLowerCase().includes(query);
-      return matchType || matchServer || matchPayload;
+      const matchData = JSON.stringify(ev.data || {}).toLowerCase().includes(query);
+      const matchEventId = String(ev.eventId ?? "").toLowerCase().includes(query);
+      return matchType || matchServer || matchData || matchEventId;
     }
 
     return true;
   });
 });
+
+async function simulateMatchFinished() {
+  const confirmed = window.confirm(
+    "这只会发送一条明确标记为测试消息的对局结束事件，不会结束真实对局、执行换图或生成新的正式快照。确定继续吗？",
+  );
+  if (!confirmed) return;
+  testPublishing.value = true;
+  testError.value = "";
+  testWarning.value = "";
+  try {
+    const response = await fetch("/api/astrbot/panel-test/match-finished", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        useCurrentServer: true,
+        useLatestSnapshot: true,
+        winner: "测试阵营",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload?.message || payload?.error || `HTTP ${response.status}`);
+    }
+    testEventId.value = String(payload?.event?.eventId ?? "");
+    testWarning.value = String(payload?.warning ?? "");
+    await load();
+  } catch (err) {
+    testError.value = err instanceof Error ? err.message : "测试事件发布失败";
+  } finally {
+    testPublishing.value = false;
+  }
+}
 
 async function copyTextHandler(text: string, label: string) {
   const success = await copyText(text);
@@ -269,6 +359,79 @@ onUnmounted(() => {
         </div>
       </section>
 
+      <PageCard
+        title="对局结束推送测试"
+        description="通过与真实结束相同的 match.finished v1 链路，验证机器人接收、QQ群发送与 ACK 回传。"
+        class="match-test-card"
+      >
+        <template #actions>
+          <AppStatusBadge :tone="testStatus.tone">{{ testStatus.label }}</AppStatusBadge>
+        </template>
+
+        <div class="match-test-layout">
+          <div class="match-test-status">
+            <div class="test-status-item">
+              <span>Bridge</span>
+              <strong>{{ state.enabled ? "已启用" : "未启用" }}</strong>
+            </div>
+            <div class="test-status-item">
+              <span>Token</span>
+              <strong>{{ state.tokenConfigured ? "已配置" : "未配置" }}</strong>
+            </div>
+            <div class="test-status-item">
+              <span>WebSocket</span>
+              <strong>{{ state.websocket?.enabled ? "已开启" : "未开启" }}</strong>
+            </div>
+            <div class="test-status-item">
+              <span>机器人客户端</span>
+              <strong>{{ state.websocket?.clients ?? 0 }}</strong>
+            </div>
+            <div class="test-status-item">
+              <span>ACK 成功 / 失败</span>
+              <strong>{{ state.delivery?.delivered ?? 0 }} / {{ state.delivery?.failed ?? 0 }}</strong>
+            </div>
+          </div>
+
+          <div class="match-test-result">
+            <div class="test-event-heading">
+              <div>
+                <span class="info-label">最近 match.finished</span>
+                <strong>{{ latestMatchFinished?.data?.map || latestMatchFinished?.data?.layer || "暂无事件" }}</strong>
+              </div>
+              <AppStatusBadge v-if="latestMatchFinished" :tone="latestMatchFinished.data?.simulated ? 'warn' : 'ok'">
+                {{ latestMatchFinished.data?.simulated ? "模拟" : "真实" }}
+              </AppStatusBadge>
+            </div>
+            <div v-if="latestMatchFinished" class="match-summary-grid">
+              <span>模式 <strong>{{ latestMatchFinished.data?.mode || "—" }}</strong></span>
+              <span>胜方 <strong>{{ latestMatchFinished.data?.winner || "—" }}</strong></span>
+              <span>人数 <strong>{{ latestMatchFinished.data?.players ?? 0 }}</strong></span>
+              <span>快照 <strong>{{ latestMatchFinished.data?.snapshotId || "纯文字" }}</strong></span>
+            </div>
+            <code v-if="activeTestEventId" class="test-event-id">{{ activeTestEventId }}</code>
+            <div v-if="latestTestAck" class="ack-summary">
+              <span>机器人已确认：成功 {{ latestTestAck.successCount ?? 0 }}，失败 {{ latestTestAck.failureCount ?? 0 }}</span>
+              <span v-if="latestTestAck.error" class="text-danger">{{ latestTestAck.error }}</span>
+            </div>
+            <p v-else-if="activeTestEventId" class="test-hint">Panel 已发布，正在等待机器人回传 ACK。</p>
+            <p v-else class="test-hint">测试不会触发 MATCH_END、RCON、换图或正式快照生成。</p>
+          </div>
+
+          <div class="match-test-action">
+            <button
+              type="button"
+              class="btn-action primary"
+              :disabled="testPublishing || !state.enabled"
+              @click="simulateMatchFinished"
+            >
+              {{ testPublishing ? "正在发布…" : "模拟对局结束" }}
+            </button>
+            <span v-if="testWarning" class="test-warning">{{ testWarning }}</span>
+            <span v-if="testError" class="text-danger">{{ testError }}</span>
+          </div>
+        </div>
+      </PageCard>
+
       <!-- Grid layout for Detail Cards -->
       <div class="cards-grid">
         <!-- Configuration & Whitelist Card -->
@@ -362,7 +525,7 @@ onUnmounted(() => {
               <!-- Filter Tabs -->
               <div class="filter-pills">
                 <button
-                  v-for="filter in (['all', 'player', 'squad', 'core', 'heartbeat'] as const)"
+                  v-for="filter in (['all', 'match', 'player', 'squad', 'core', 'heartbeat'] as const)"
                   :key="filter"
                   type="button"
                   class="filter-btn"
@@ -371,6 +534,7 @@ onUnmounted(() => {
                 >
                   {{
                     filter === "all" ? "全部" :
+                    filter === "match" ? "对局" :
                     filter === "player" ? "玩家" :
                     filter === "squad" ? "小队" :
                     filter === "core" ? "核心" : "心跳"
@@ -392,7 +556,7 @@ onUnmounted(() => {
             <div v-else class="events-list">
               <article
                 v-for="(event, index) in filteredEvents"
-                :key="`${event.time}-${index}`"
+                :key="event.eventId || `${event.time}-${index}`"
                 class="event-item"
                 :class="{ expanded: expandedEventIndices.has(index) }"
               >
@@ -401,9 +565,10 @@ onUnmounted(() => {
                     <AppStatusBadge :tone="getEventTypeBadgeTone(event.type)">
                       {{ event.type || "core.event" }}
                     </AppStatusBadge>
-                    <span v-if="event.serverId" class="server-badge">
-                      🖥️ {{ event.serverId }}
+                    <span v-if="event.data?.serverId || event.serverId" class="server-badge">
+                      🖥️ {{ event.data?.serverId || event.serverId }}
                     </span>
+                    <span v-if="event.eventId" class="server-badge">{{ event.eventId }}</span>
                   </div>
 
                   <div class="event-meta">
@@ -416,21 +581,32 @@ onUnmounted(() => {
                   </div>
                 </div>
 
-                <!-- Expanded JSON Payload -->
+                <div v-if="event.type === 'match.finished'" class="match-event-summary">
+                  <span>{{ event.data?.map || event.data?.layer || "未知地图" }}</span>
+                  <span>{{ event.data?.mode || "未知模式" }}</span>
+                  <span>胜方 {{ event.data?.winner || "未知" }}</span>
+                  <span>{{ event.data?.players ?? 0 }} 人</span>
+                  <span>{{ event.data?.snapshotId || "无快照" }}</span>
+                  <AppStatusBadge :tone="event.data?.simulated ? 'warn' : 'ok'">
+                    {{ event.data?.simulated ? "模拟" : "真实" }}
+                  </AppStatusBadge>
+                </div>
+
+                <!-- Expanded JSON Data -->
                 <div v-if="expandedEventIndices.has(index)" class="event-detail">
                   <div class="detail-bar">
                     <span class="detail-time">精确时间: {{ formatDateTime(event.time) }}</span>
                     <button
-                      v-if="event.payload"
+                      v-if="event.data"
                       type="button"
                       class="btn-sm"
-                      @click.stop="copyTextHandler(JSON.stringify(event.payload, null, 2), '事件 Payload')"
+                      @click.stop="copyTextHandler(JSON.stringify(event.data, null, 2), '事件 Data')"
                     >
                       复制 JSON
                     </button>
                   </div>
-                  <pre v-if="event.payload" class="json-code"><code>{{ JSON.stringify(event.payload, null, 2) }}</code></pre>
-                  <div v-else class="no-payload">无 Payload 数据</div>
+                  <pre v-if="event.data" class="json-code"><code>{{ JSON.stringify(event.data, null, 2) }}</code></pre>
+                  <div v-else class="no-payload">无 Data 数据</div>
                 </div>
               </article>
             </div>
@@ -590,6 +766,154 @@ onUnmounted(() => {
 
 .code-font {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.match-test-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(320px, 1.4fr) minmax(180px, 0.6fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.match-test-status,
+.match-test-result,
+.match-test-action {
+  border: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  padding: 14px;
+}
+
+.match-test-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.test-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.test-status-item span,
+.test-hint {
+  color: var(--color-text-muted, #94a3b8);
+  font-size: 12px;
+}
+
+.test-status-item strong {
+  color: var(--color-text-primary, #f8fafc);
+  font-size: 14px;
+}
+
+.match-test-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.test-event-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.test-event-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.test-event-heading strong {
+  overflow: hidden;
+  color: var(--color-text-primary, #f8fafc);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.match-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--color-text-muted, #94a3b8);
+}
+
+.match-summary-grid strong {
+  color: var(--color-text-secondary, #cbd5e1);
+  overflow-wrap: anywhere;
+}
+
+.test-event-id {
+  display: block;
+  overflow: hidden;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #7dd3fc;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ack-summary,
+.match-test-action {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.match-test-action {
+  justify-content: center;
+}
+
+.match-test-action .btn-action {
+  justify-content: center;
+}
+
+.test-warning {
+  color: #fbbf24;
+  line-height: 1.4;
+}
+
+.text-danger {
+  color: #f87171;
+  font-size: 12px;
+}
+
+.match-event-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 0 14px 10px;
+  color: var(--color-text-secondary, #cbd5e1);
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .match-test-layout {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .match-test-action {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .match-test-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .match-test-action {
+    grid-column: auto;
+  }
 }
 
 /* Main Cards Grid */
@@ -977,4 +1301,3 @@ onUnmounted(() => {
   font-style: italic;
 }
 </style>
-

@@ -50,6 +50,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       capturedAt,
       modules,
     });
+    payload.roundKey = buildRoundKey(payload);
     const id = buildSnapshotId(payload);
     const coverage = payload.summary?.fireTeamCounts ?? {};
     pluginLogger.info?.("[MatchEndSnapshot] fireteam coverage: A=" + (coverage.A ?? 0)
@@ -700,6 +701,14 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
     players,
     squads,
     source: {
+      roundKey: firstText(
+        triggerEvent?.roundKey,
+        triggerEvent?.payload?.roundKey,
+        triggerEvent?.data?.roundKey,
+        triggerEvent?.eventId,
+        triggerEvent?.rawEvent?.EventId,
+      ),
+      triggerEventId: firstText(triggerEvent?.eventId, triggerEvent?.rawEvent?.EventId),
       matchStateUpdatedAt: firstText(matchState?.updatedAt, matchState?.players?.lastUpdatedAt),
       bzssCoreUpdatedAt: firstText(
         (modules?.bzssCoreMonitor?.api ?? modules?.bzssCoreMonitor)?.getState?.()?.updatedAt,
@@ -1082,6 +1091,7 @@ function describePayload(id, payload) {
     playerCount: firstNumber(payload?.server?.playerCount, payload?.summary?.playerCount) ?? 0,
     queueCount: firstNumber(payload?.server?.queueCount) ?? 0,
     winner: firstText(payload?.trigger?.winner),
+    roundKey: buildRoundKey(payload),
     snapshotType: firstText(payload?.snapshotType, "match-end-data"),
     schemaVersion: firstNumber(payload?.schemaVersion) ?? 2,
   };
@@ -1141,10 +1151,15 @@ function filterAndSortSnapshots(items, options = {}) {
 }
 
 function buildRoundKey(payload) {
+  const explicit = firstText(payload?.roundKey, payload?.source?.roundKey);
+  if (explicit) return explicit;
+  const capturedMs = Date.parse(firstText(payload?.capturedAt));
+  const playtimeMs = Math.max(0, firstNumber(payload?.match?.playtime) ?? 0) * 1000;
+  const anchorMs = Math.floor(((Number.isFinite(capturedMs) ? capturedMs : Date.now()) - playtimeMs) / 60_000) * 60_000;
   return [
     firstText(payload?.server?.serverId, "server"),
     firstText(payload?.match?.layer, payload?.match?.map, "unknown"),
-    firstText(payload?.capturedAt).slice(0, 16),
+    new Date(anchorMs).toISOString().slice(0, 16),
   ].join(":");
 }
 

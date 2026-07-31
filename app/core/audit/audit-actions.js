@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = Object.freeze({
   TANK_BATTLE_EXECUTE: "tank_battle.execute",
   RCON_COMMAND_EXECUTE: "rcon.command.execute",
   RESERVE_SLOT_MANAGEMENT: "reserve_slot_management",
+  ASTRBOT_MATCH_FINISHED_TEST: "astrbot.match_finished.test",
 });
 
 export const AUDIT_CATEGORIES = Object.freeze({
@@ -19,6 +20,7 @@ export const AUDIT_CATEGORIES = Object.freeze({
   SERVER_MANAGEMENT: "server_management",
   RCON: "rcon",
   RESERVE_SLOT_MANAGEMENT: "reserve_slot_management",
+  INTEGRATION: "integration",
 });
 
 export const AUDIT_RESULTS = Object.freeze({
@@ -40,4 +42,5 @@ export const AUDIT_SOURCE_PAGES = Object.freeze({
   RCON_CONSOLE: "rcon_console",
   PERMISSION_MANAGEMENT: "permission_management",
   RESERVE_SLOT_MANAGEMENT: "reserve_slot_management",
+  ASTRBOT_BRIDGE: "astrbot_bridge",
 });
