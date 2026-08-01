@@ -12,6 +12,10 @@ export function createStepCalculator() {
     if (steamID) previous.delete(String(steamID));
   }
 
+  function resetAll() {
+    previous.clear();
+  }
+
   function observe(player, observedAt) {
     const steamID = normalizeSteamID(player?.identity?.steamID);
     const position = normalizePosition(player?.telemetry?.position);
@@ -65,7 +69,7 @@ export function createStepCalculator() {
     };
   }
 
-  return { observe, reset };
+  return { observe, reset, resetAll };
 }
 
 function normalizeSteamID(value) {
