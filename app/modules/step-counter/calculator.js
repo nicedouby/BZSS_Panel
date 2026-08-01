@@ -96,10 +96,10 @@ export function createStepCalculator() {
     const vehicleType = String(player?.vehicle?.vehicleType ?? "").trim();
     const onVehicle = Boolean(
       player?.telemetry?.ov
-      ?? player?.telemetry?.onVehicle
-      ?? player?.presence?.ov
-      ?? player?.presence?.onVehicle
-      ?? vehicleType,
+      || player?.telemetry?.onVehicle
+      || player?.presence?.ov
+      || player?.presence?.onVehicle
+      || vehicleType,
     );
     if (onVehicle) return result(false, "onVehicle", details);
 
