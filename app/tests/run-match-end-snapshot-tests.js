@@ -80,6 +80,12 @@ function createHarness() {
               },
             };
           },
+          async readTickets() {
+            return {
+              ok: true,
+              response: { ok: true, t1: 301, t2: 155 },
+            };
+          },
         },
       },
       bzssCoreMonitor: {
@@ -155,8 +161,10 @@ async function testSingleOverviewSnapshot() {
     assert.equal(snapshot.players[0].health, 64.5);
     assert.equal(snapshot.players[0].bzssCore.kills, 9);
     assert.equal(snapshot.players[0].bzssCore.ping, 38);
-    assert.deepEqual(snapshot.match.teamTickets, { team1: 287, team2: 143 });
-    assert.equal(snapshot.match.teamTicketsSource, "remoteTelemetry.currentSample");
+    assert.deepEqual(snapshot.match.teamTickets, { team1: 301, team2: 155 });
+    assert.equal(snapshot.match.teamTicketsSource, "remoteTelemetry.readTickets");
+    assert.equal(snapshot.match.teamTicketsDiagnostics.liveReadAttempted, true);
+    assert.equal(snapshot.match.teamTicketsDiagnostics.liveReadOk, true);
 
     const manifest = await plugin.api.readSnapshotManifest(item.id);
     assert.equal(manifest.pageCount, 1);
@@ -344,6 +352,11 @@ function testPlayerCombatMetricsAndLaneHeaders() {
   for (const tone of ["#63e6be", "#38bdf8", "#fb7185", "#ff8a65", "#fbbf24", "#4ade80", "#22d3ee", "#60a5fa", "#c084fc", "#f472b6"]) {
     assert.equal(svg.includes(`fill="${tone}"`), true);
   }
+  assert.ok((svg.match(/class="player-stat-chip"/g) ?? []).length >= 44);
+  assert.ok((svg.match(/class="player-stat mono" fill="#63e6be"/g) ?? []).length >= 4);
+  assert.equal((svg.match(/class="runtime-metric-label">PLAYERS/g) ?? []).length, 1);
+  assert.equal((svg.match(/class="runtime-metric-label">QUEUE/g) ?? []).length, 1);
+  assert.equal((svg.match(/class="runtime-metric-label">TIME/g) ?? []).length, 1);
   assert.equal(svg.includes('class="squad-creator"'), true);
 }
 
