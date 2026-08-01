@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createStepCalculator } from "../modules/step-counter/calculator.js";
 import { createStepCounterModule, getStepRoundKey } from "../modules/step-counter/index.js";
 import { createStepStorage } from "../modules/step-counter/storage.js";
@@ -12,6 +13,7 @@ const baseTime = Date.parse("2026-07-31T00:00:00.000Z");
 
 testCalculatorTelemetrySamples();
 testCalculatorFiltersAndBaselines();
+testBzssCoreChunkMetadata();
 await testStorageRecoveryAndMonotonicTotals();
 await testOnlyConfirmedRoundEventsResetMatchCounters();
 console.log("step-counter tests passed");
@@ -97,6 +99,39 @@ function testCalculatorFiltersAndBaselines() {
   inactive.presence.state = "noPawn";
   assert.equal(calculator.observe(inactive).reason, "inactive");
   assert.equal(calculator.observe(makePlayer({ x: 50_000, ms: 1000, tick: 3, seq: 3 })).reason, "warmingUp");
+}
+
+function testBzssCoreChunkMetadata() {
+  const monitor = createBzssCoreMonitorModule({
+    core: {
+      logger: { info() {}, warn() {} },
+      eventBus: { emitModuleEvent() {} },
+      webStatus: {},
+    },
+    modules: {},
+    config: { get: (_key, fallback) => fallback },
+  });
+  const ingested = monitor.api.ingestPlayerChunk({
+    version: "v1",
+    seq: "42",
+    tick: "9001",
+    players: [{
+      playerId: 7,
+      playerName: "Telemetry Tester",
+      position: { x: 100, y: 200, z: 300 },
+    }],
+  }, "");
+
+  assert.equal(ingested.ok, true);
+  const player = monitor.api.getRuntimePlayers()[0];
+  assert.equal(player.sourceSeq, "42");
+  assert.equal(player.sourceTick, "9001");
+  assert.ok(Date.parse(player.observedAt) > 0);
+  const diagnostics = monitor.api.getState().playerChunkDiagnostics;
+  assert.equal(diagnostics.lastSeq, "42");
+  assert.equal(diagnostics.lastTick, "9001");
+  assert.equal(diagnostics.totalChunks, 1);
+  assert.equal(diagnostics.tickAdvance, null);
 }
 
 async function testStorageRecoveryAndMonotonicTotals() {
