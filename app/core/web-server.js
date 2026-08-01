@@ -16,6 +16,7 @@ import { handleWarmupReserveGrantRoutes } from "../modules/warmup-reserve-grant/
 import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/routes.js";
 import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
+import { handleStepCounterRoutes } from "../modules/step-counter/routes.js";
 import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
 import { handleTacticalFeedWriterRoutes } from "../modules/tactical-feed-writer/routes.js";
 import {
@@ -533,6 +534,14 @@ export class WebServer {
         message: "Authentication required.",
       });
     }
+
+    const stepCounterHandled = await handleStepCounterRoutes({
+      module: this.modules.stepCounter,
+      url,
+      req,
+      json: (status, obj) => this.json(res, status, obj),
+    });
+    if (stepCounterHandled) return;
 
     if (url.pathname === "/api/tasks/create" && req.method === "POST") {
       const body = await this.readJsonBody(req);

@@ -448,6 +448,16 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "step-counter",
+    path: "/debug/step-counter",
+    component: () => import("../pages/StepCounterPage.vue"),
+    title: "步数统计",
+    category: "debug",
+    refreshPolicy: "polling",
+    nav: { section: "analytics", label: "步数统计", icon: "👣", order: 25 },
+    ...workspacePage,
+  },
+  {
     name: "server-info-statistics",
     path: "/plugins/server-info-statistics",
     component: () => import("../pages/ServerInfoStatisticsPage.vue"),
