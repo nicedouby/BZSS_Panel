@@ -46,7 +46,9 @@ export function createStepCalculator() {
     const previousSample = previous.get(steamID);
 
     if (previousSample && isDuplicateSample(previousSample, current)) {
-      return result(false, "duplicateTelemetry", sampleDetails(current, previousSample));
+      return result(false, "duplicateTelemetry", sampleDetails(current, previousSample, {
+        smoothedSpeedMps: previousSample.smoothedSpeedMps ?? 0,
+      }));
     }
 
     const presence = player?.presence ?? {};
