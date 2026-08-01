@@ -64,6 +64,7 @@ function testCalculatorFiltersAndBaselines() {
 
   const missingTimestamp = makePlayer({ x: 0, ms: 0, tick: 1, seq: 1 });
   delete missingTimestamp.telemetry.observedAt;
+  delete missingTimestamp.freshness.bzssCoreUpdatedAt;
   assert.equal(calculator.observe(missingTimestamp).reason, "missingTelemetryTimestamp");
 
   assert.equal(calculator.observe(makePlayer({ x: 0, ms: 0, tick: 1, seq: 1 })).reason, "warmingUp");
