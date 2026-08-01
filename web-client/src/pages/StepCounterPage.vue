@@ -152,9 +152,7 @@ function drawLeaderboard(context: CanvasRenderingContext2D, width: number, heigh
   context.fillText("BZSS 行军榜", 48, 82);
   context.fillStyle = "#aabd7c";
   context.font = '700 15px "Arial Narrow", sans-serif';
-  context.letterSpacing = "2px";
   context.fillText("STEP LEADERBOARD · TOP 10", 49, 111);
-  context.letterSpacing = "0px";
 
   context.strokeStyle = "rgba(135, 160, 100, 0.4)";
   context.beginPath();
