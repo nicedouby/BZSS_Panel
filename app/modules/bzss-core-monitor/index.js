@@ -1085,8 +1085,10 @@ function updatePlayerChunkDiagnostics(draft, chunk, observedAt) {
   const diagnostics = draft.playerChunkDiagnostics ??= createEmptyPlayerChunkDiagnostics();
   const observedAtMs = Date.parse(observedAt);
   const previousObservedAtMs = Date.parse(diagnostics.lastObservedAt);
-  const currentTick = Number(chunk?.tick);
-  const previousTick = Number(diagnostics.lastTick);
+  const currentTickText = chunk?.tick === null || chunk?.tick === undefined ? "" : String(chunk.tick).trim();
+  const previousTickText = String(diagnostics.lastTick ?? "").trim();
+  const currentTick = currentTickText ? Number(currentTickText) : NaN;
+  const previousTick = previousTickText ? Number(previousTickText) : NaN;
   const interval = Number.isFinite(observedAtMs) && Number.isFinite(previousObservedAtMs)
     ? observedAtMs - previousObservedAtMs
     : null;
