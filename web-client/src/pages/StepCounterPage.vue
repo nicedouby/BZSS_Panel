@@ -62,11 +62,12 @@ const topPlayers = computed(() => players.value.slice(0, 100));
 const meters = (value?: number) => `${Number(value ?? 0).toFixed(1)} m`;
 const speed = (value?: number) => `${Number(value ?? 0).toFixed(2)} m/s`;
 const milliseconds = (value?: number | null) => value == null ? "—" : `${Math.round(value)} ms`;
+const hertz = (value?: number | null) => value == null ? "—" : `${value.toFixed(2)} Hz`;
 const telemetryTime = (value?: string) => value ? new Date(value).toLocaleTimeString() : "—";
 const position = (value?: Position) => value
   ? `${Number(value.x ?? 0).toFixed(0)}, ${Number(value.y ?? 0).toFixed(0)}, ${Number(value.z ?? 0).toFixed(0)}`
   : "—";
-const statusClass = (status?: string) => String(status ?? "UNKNOWN").toLowerCase().replaceAll("_", "-");
+const statusClass = (status?: string) => String(status ?? "UNKNOWN").toLowerCase().replace(/_/g, "-");
 </script>
 
 <template>
@@ -84,7 +85,7 @@ const statusClass = (status?: string) => String(status ?? "UNKNOWN").toLowerCase
     </header>
 
     <div class="diagnostic-grid">
-      <article><span>Telemetry Rate</span><strong>{{ diagnostics.telemetryRateHz == null ? "—" : diagnostics.telemetryRateHz.toFixed(2) + " Hz" }}</strong></article>
+      <article><span>Telemetry Rate</span><strong>{{ hertz(diagnostics.telemetryRateHz) }}</strong></article>
       <article><span>Valid Samples</span><strong>{{ Number(diagnostics.validSamples ?? 0).toLocaleString() }}</strong></article>
       <article><span>Duplicates Ignored</span><strong>{{ Number(diagnostics.duplicateSamples ?? 0).toLocaleString() }}</strong></article>
       <article><span>Last Interval</span><strong>{{ milliseconds(diagnostics.lastSampleIntervalMs) }}</strong></article>
