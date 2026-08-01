@@ -46,6 +46,7 @@ import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
 import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player-native/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
+import { createStepCounterModule } from "../modules/step-counter/index.js";
 // The native JSONL writer rewrites the complete tactical snapshot every 333 ms
 // and can grow to several gigabytes per round. Use the binary delta writer for
 // new recordings; the native player remains loaded for old native archives.
@@ -116,6 +117,7 @@ export class ModuleManager {
       createTacticalStateModule,
       createTacticalReplayPlayerModule,
       createTacticalStateV2Module,
+      createStepCounterModule,
       createTacticalFeedWriterModule,
       createNetworkStatsModule,
       createSquadBrowserPlayerLookupModule,
