@@ -12,40 +12,48 @@ export function createStepCounterModule({ core, modules, config, logger }) {
   const calculator = createStepCalculator();
   const storage = createStepStorage({ dataDir, logger: moduleLogger });
   let unsubscribe = null;
+  let unsubscribeRound = null;
   let flushTimer = null;
   let lastReason = "";
-  let activeMatchKey = null;
+  let activeRoundKey = "";
   let started = false;
 
-  function getSnapshot() {
-    return modules.tacticalState?.getSnapshot?.() ?? null;
-  }
+  function acceptRoundKey(roundKey, { flush = true } = {}) {
+    const key = String(roundKey ?? "").trim();
+    if (!key || key === activeRoundKey) return false;
 
-  function getMatchKey(snapshot) {
-    const match = snapshot?.match ?? {};
-    const server = snapshot?.server ?? {};
-    return String(
-      match.matchId ?? match.id ?? match.startTime ?? match.startedAt
-      ?? `${server.serverId ?? ""}:${server.map ?? ""}:${server.layer ?? ""}`,
-    );
-  }
-
-  function ensureMatch(player, snapshot) {
-    const key = getMatchKey(snapshot);
-    if (!activeMatchKey) {
-      activeMatchKey = key;
-    } else if (key && key !== activeMatchKey) {
-      for (const item of Object.values(storage.getData().players)) {
-        storage.upsert(item.steamID, { matchSteps: 0, matchDistanceMeters: 0, matches: Number(item.matches ?? 0) + 1 });
-      }
-      activeMatchKey = key;
-      calculator.reset(player?.identity?.steamID);
+    if (!activeRoundKey) {
+      activeRoundKey = key;
+      storage.setActiveRoundKey(key);
+      return false;
     }
+
+    for (const item of Object.values(storage.getData().players)) {
+      const participated = Number(item.matchSteps ?? 0) > 0 || Number(item.matchDistanceMeters ?? 0) > 0;
+      storage.upsert(item.steamID, {
+        matchSteps: 0,
+        matchDistanceMeters: 0,
+        matches: Number(item.matches ?? 0) + (participated ? 1 : 0),
+      });
+    }
+    activeRoundKey = key;
+    storage.setActiveRoundKey(key);
+    calculator.resetAll();
+    moduleLogger?.info?.(`[StepCounter] confirmed new round: ${key}`);
+    if (flush) {
+      void storage.flush().catch((error) => {
+        moduleLogger?.warn?.(`[StepCounter] round-boundary flush failed: ${error.message}`);
+      });
+    }
+    return true;
+  }
+
+  function handleRoundUpdated(event) {
+    acceptRoundKey(getStepRoundKey(event));
   }
 
   function handleSnapshot(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.players)) return;
-    ensureMatch(snapshot.players[0], snapshot);
     const observedAt = snapshot.meta?.generatedAt ?? new Date().toISOString();
     for (const player of snapshot.players) {
       const steamID = String(player?.identity?.steamID ?? "").trim();
@@ -78,7 +86,7 @@ export function createStepCounterModule({ core, modules, config, logger }) {
         matchDistanceMeters: Number(Number(player.matchDistanceMeters ?? 0).toFixed(1)),
       }))
       .sort((a, b) => b.matchSteps - a.matchSteps || b.totalSteps - a.totalSteps);
-    return { updatedAt: data.updatedAt, players, lastReason, filePath: storage.filePath };
+    return { updatedAt: data.updatedAt, players, lastReason, activeRoundKey, filePath: storage.filePath };
   }
 
   return {
@@ -90,6 +98,9 @@ export function createStepCounterModule({ core, modules, config, logger }) {
     api: { getStats, getPlayer: (steamID) => storage.getPlayer(steamID) },
     async init() {
       await storage.init();
+      activeRoundKey = storage.getActiveRoundKey();
+      const currentRound = modules.matchState?.getState?.()?.round?.current;
+      acceptRoundKey(getStepRoundKey(currentRound), { flush: false });
       this.api = { getStats, getPlayer: (steamID) => storage.getPlayer(steamID) };
     },
     async start() {
@@ -101,16 +112,38 @@ export function createStepCounterModule({ core, modules, config, logger }) {
         enabled: true, order: 130, icon: "👣",
       });
       unsubscribe = modules.tacticalState?.subscribe?.(handleSnapshot) ?? null;
-      flushTimer = setInterval(() => { void storage.flush(); }, 30_000);
+      unsubscribeRound = core.eventBus?.onModuleEvent?.("module.matchState", "roundUpdated", handleRoundUpdated) ?? null;
+      flushTimer = setInterval(() => {
+        void storage.flush().catch((error) => {
+          moduleLogger?.warn?.(`[StepCounter] periodic flush failed: ${error.message}`);
+        });
+      }, 30_000);
       flushTimer.unref?.();
     },
     async stop() {
       started = false;
       if (unsubscribe) unsubscribe();
       unsubscribe = null;
+      if (unsubscribeRound) unsubscribeRound();
+      unsubscribeRound = null;
       if (flushTimer) clearInterval(flushTimer);
       flushTimer = null;
       await storage.flush(true);
     },
   };
+}
+
+export function getStepRoundKey(value) {
+  const record = value?.record ?? value?.roundState?.current ?? value;
+  if (!record || typeof record !== "object") return "";
+
+  const direct = String(record.dedupeKey ?? "").trim();
+  if (direct) return direct;
+
+  const serverId = String(record.serverId ?? value?.serverId ?? "").trim();
+  const logLineTime = String(record.logLineTime ?? "").trim();
+  const worldPath = String(record.worldPath ?? "").trim();
+  const serverPlayAt = String(record.serverPlayAt ?? "").trim();
+  if (!worldPath || (!logLineTime && !serverPlayAt)) return "";
+  return [serverId, logLineTime, worldPath, serverPlayAt].join(":");
 }
