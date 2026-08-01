@@ -463,8 +463,9 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
         draft.rawFields = ["BZSSCORE", "PS", String(chunk.version ?? "v1")];
 
         const observedAt = new Date().toISOString();
+        updatePlayerChunkDiagnostics(draft, chunk, observedAt);
         for (const player of Array.isArray(chunk.players) ? chunk.players : []) {
-          upsertBzssCorePlayerChunkRecord(draft, player, observedAt);
+          upsertBzssCorePlayerChunkRecord(draft, player, observedAt, chunk.seq, chunk.tick);
         }
         draft.updatedAt = observedAt;
       });
@@ -565,7 +566,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     return { position: null, yaw: null };
   }
 
-  function upsertBzssCorePlayerChunkRecord(draft, rawPlayer, observedAt) {
+  function upsertBzssCorePlayerChunkRecord(draft, rawPlayer, observedAt, sourceSeq, sourceTick) {
     if ((!Array.isArray(rawPlayer) && (!rawPlayer || typeof rawPlayer !== "object")) || rawPlayer.length === 0) return;
     const getField = (index, ...keys) => (Array.isArray(rawPlayer)
       ? rawPlayer[index]
@@ -579,6 +580,9 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     existing.playerId = playerId;
     existing.playerIndex = playerId;
     existing.lastSeenAt = observedAt;
+    existing.observedAt = observedAt;
+    existing.sourceSeq = sourceSeq === null || sourceSeq === undefined ? "" : String(sourceSeq).trim();
+    existing.sourceTick = sourceTick === null || sourceTick === undefined ? "" : String(sourceTick).trim();
     existing.stale = false;
     existing.sourceTypes = mergeUniqueStrings(existing.sourceTypes, ["bzssCorePlayerChunk"]);
     existing.rawText = JSON.stringify(rawPlayer);
@@ -621,7 +625,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     return ingestPlayerChunk({
       version: "v1",
       seq: event?.rawEvent?.Seq ?? event?.seq ?? "",
-      tick: event?.rawEvent?.Tick ?? "",
+      tick: event?.rawEvent?.Tick ?? event?.tick ?? "",
       count: event?.rawEvent?.Count ?? "",
       players: event?.rawEvent?.Players ?? [],
     }, "");
@@ -647,6 +651,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       vehicleTypeCount: state.vehicleTypes.size,
       vehicleFrameUpdatedAt: state.vehicleFrameUpdatedAt,
       vehicleDebug: clonePlainObject(state.vehicleDebug),
+      playerChunkDiagnostics: snapshotPlayerChunkDiagnostics(state.playerChunkDiagnostics),
       rawLineHash: state.rawLineHash,
       rawFields: [...state.rawFields],
       lastError: state.lastError,
@@ -675,6 +680,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       vehicles: state.vehicles.map(clonePlainObject),
       vehicleTypes: getObservedVehicleTypes(state),
       vehicleDebug: clonePlainObject(state.vehicleDebug),
+      playerChunkDiagnostics: snapshotPlayerChunkDiagnostics(state.playerChunkDiagnostics),
       runtimePlayers: [...state.runtimePlayersByKey.values()].map(clonePlainObject),
       scoreboardPlayers: [...state.scoreboardPlayersByKey.values()].map(clonePlainObject),
       explosions: (state.explosions ?? []).map(clonePlainObject),
@@ -1049,6 +1055,7 @@ function createInitialState() {
     vehicleTypes: new Map(),
     vehicleFrameUpdatedAt: "",
     vehicleDebug: createEmptyVehicleDebugState(),
+    playerChunkDiagnostics: createEmptyPlayerChunkDiagnostics(),
     explosions: [],
     rawLineHash: "",
     rawFields: [],
@@ -1058,6 +1065,59 @@ function createInitialState() {
     lastCompletePriFrameAt: "",
     priFrame: createEmptyPriFrameState(),
     diagnostics: [],
+  };
+}
+
+function createEmptyPlayerChunkDiagnostics() {
+  return {
+    totalChunks: 0,
+    lastSeq: "",
+    lastTick: "",
+    tickAdvance: null,
+    lastObservedAt: "",
+    lastSampleIntervalMs: null,
+    averageSampleIntervalMs: null,
+    maxSampleIntervalMs: 0,
+  };
+}
+
+function updatePlayerChunkDiagnostics(draft, chunk, observedAt) {
+  const diagnostics = draft.playerChunkDiagnostics ??= createEmptyPlayerChunkDiagnostics();
+  const observedAtMs = Date.parse(observedAt);
+  const previousObservedAtMs = Date.parse(diagnostics.lastObservedAt);
+  const currentTickText = chunk?.tick === null || chunk?.tick === undefined ? "" : String(chunk.tick).trim();
+  const previousTickText = String(diagnostics.lastTick ?? "").trim();
+  const currentTick = currentTickText ? Number(currentTickText) : NaN;
+  const previousTick = previousTickText ? Number(previousTickText) : NaN;
+  const interval = Number.isFinite(observedAtMs) && Number.isFinite(previousObservedAtMs)
+    ? observedAtMs - previousObservedAtMs
+    : null;
+
+  diagnostics.totalChunks += 1;
+  diagnostics.lastSeq = chunk?.seq === null || chunk?.seq === undefined ? "" : String(chunk.seq).trim();
+  diagnostics.lastTick = chunk?.tick === null || chunk?.tick === undefined ? "" : String(chunk.tick).trim();
+  diagnostics.tickAdvance = Number.isFinite(currentTick) && Number.isFinite(previousTick)
+    ? currentTick - previousTick
+    : null;
+  diagnostics.lastObservedAt = observedAt;
+
+  if (Number.isFinite(interval) && interval > 0) {
+    diagnostics.lastSampleIntervalMs = interval;
+    diagnostics.maxSampleIntervalMs = Math.max(diagnostics.maxSampleIntervalMs, interval);
+    diagnostics.averageSampleIntervalMs = diagnostics.averageSampleIntervalMs == null
+      ? interval
+      : diagnostics.averageSampleIntervalMs * 0.9 + interval * 0.1;
+  }
+}
+
+function snapshotPlayerChunkDiagnostics(value) {
+  const diagnostics = value ?? createEmptyPlayerChunkDiagnostics();
+  const observedAtMs = Date.parse(diagnostics.lastObservedAt);
+  const average = Number(diagnostics.averageSampleIntervalMs);
+  return {
+    ...clonePlainObject(diagnostics),
+    telemetryAgeMs: Number.isFinite(observedAtMs) ? Math.max(0, Date.now() - observedAtMs) : null,
+    rateHz: Number.isFinite(average) && average > 0 ? 1000 / average : null,
   };
 }
 

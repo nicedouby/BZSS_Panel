@@ -3,6 +3,34 @@
 import { createStepCalculator } from "./calculator.js";
 import { createStepStorage } from "./storage.js";
 
+const DIAGNOSTIC_REASON_FIELDS = {
+  valid: "validSamples",
+  duplicateTelemetry: "duplicateSamples",
+  stationary: "stationarySamples",
+  staleTelemetry: "staleSamples",
+  teleportOrRespawn: "teleportSamples",
+  aboveWalkingSpeed: "aboveWalkingSpeedSamples",
+  missingTelemetryTimestamp: "missingTimestampSamples",
+  missingPosition: "missingPositionSamples",
+};
+
+const STATUS_BY_REASON = {
+  valid: "VALID",
+  warmingUp: "WARMING_UP",
+  duplicateTelemetry: "DUPLICATE",
+  stationary: "STATIONARY",
+  belowWalkingSpeed: "BELOW_WALKING_SPEED",
+  aboveWalkingSpeed: "ABOVE_WALKING_SPEED",
+  teleportOrRespawn: "TELEPORT",
+  staleTelemetry: "STALE",
+  onVehicle: "ON_VEHICLE",
+  inactive: "INACTIVE",
+  missingPosition: "NO_POSITION",
+  missingTelemetryTimestamp: "NO_TIMESTAMP",
+  invalidInterval: "INVALID_INTERVAL",
+  missingSteamID: "NO_STEAM_ID",
+};
+
 export function createStepCounterModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.stepCounter", source: "module.stepCounter", channel: "module",
@@ -11,6 +39,7 @@ export function createStepCounterModule({ core, modules, config, logger }) {
   const dataDir = moduleConfig.dataDir || "data/step-counter";
   const calculator = createStepCalculator();
   const storage = createStepStorage({ dataDir, logger: moduleLogger });
+  const sampleDiagnostics = createSampleDiagnostics();
   let unsubscribe = null;
   let unsubscribeRound = null;
   let flushTimer = null;
@@ -54,14 +83,32 @@ export function createStepCounterModule({ core, modules, config, logger }) {
 
   function handleSnapshot(snapshot) {
     if (!snapshot || !Array.isArray(snapshot.players)) return;
-    const observedAt = snapshot.meta?.generatedAt ?? new Date().toISOString();
     for (const player of snapshot.players) {
       const steamID = String(player?.identity?.steamID ?? "").trim();
       if (!/^\d{17}$/.test(steamID)) continue;
-      const result = calculator.observe(player, observedAt);
+
+      const result = calculator.observe(player);
+      recordSampleDiagnostic(sampleDiagnostics, result);
       const existing = storage.getPlayer(steamID) ?? {};
       const name = String(player?.identity?.name ?? existing.playerName ?? "").trim();
-      const patch = { playerName: name, lastSeenAt: observedAt, currentSpeedMps: Number(result.speedMps ?? 0), lastReason: result.reason ?? "" };
+      const observedAt = String(result.observedAt ?? player?.telemetry?.observedAt ?? "").trim();
+      const patch = {
+        playerName: name,
+        lastSeenAt: observedAt || new Date().toISOString(),
+        currentPosition: result.position ?? player?.telemetry?.position ?? null,
+        sourceTick: result.sourceTick ?? player?.telemetry?.sourceTick ?? null,
+        sourceSeq: result.sourceSeq ?? player?.telemetry?.sourceSeq ?? null,
+        telemetryObservedAt: observedAt,
+        telemetryAgeMs: finiteOrNull(result.telemetryAgeMs),
+        sampleIntervalMs: finiteOrNull(result.sampleIntervalMs),
+        distanceDeltaMeters: finiteOrZero(result.distanceMeters),
+        instantSpeedMps: finiteOrZero(result.instantSpeedMps ?? result.speedMps),
+        smoothedSpeedMps: finiteOrZero(result.smoothedSpeedMps),
+        currentSpeedMps: finiteOrZero(result.smoothedSpeedMps ?? result.speedMps),
+        currentStatus: STATUS_BY_REASON[result.reason] ?? String(result.reason ?? "UNKNOWN").toUpperCase(),
+        lastReason: result.reason ?? "",
+      };
+
       if (result.valid) {
         patch.totalSteps = Number(existing.totalSteps ?? 0) + result.steps;
         patch.totalDistanceMeters = Number(existing.totalDistanceMeters ?? 0) + result.distanceMeters;
@@ -77,22 +124,36 @@ export function createStepCounterModule({ core, modules, config, logger }) {
 
   function getStats() {
     const data = storage.getData();
+    const now = Date.now();
     const players = Object.values(data.players)
-      .map((player) => ({
-        ...player,
-        totalSteps: Math.floor(Number(player.totalSteps ?? 0)),
-        matchSteps: Math.floor(Number(player.matchSteps ?? 0)),
-        totalDistanceMeters: Number(Number(player.totalDistanceMeters ?? 0).toFixed(1)),
-        matchDistanceMeters: Number(Number(player.matchDistanceMeters ?? 0).toFixed(1)),
-      }))
+      .map((player) => {
+        const telemetryTimestamp = Date.parse(player.telemetryObservedAt ?? "");
+        return {
+          ...player,
+          totalSteps: Math.floor(Number(player.totalSteps ?? 0)),
+          matchSteps: Math.floor(Number(player.matchSteps ?? 0)),
+          totalDistanceMeters: Number(Number(player.totalDistanceMeters ?? 0).toFixed(1)),
+          matchDistanceMeters: Number(Number(player.matchDistanceMeters ?? 0).toFixed(1)),
+          telemetryAgeMs: Number.isFinite(telemetryTimestamp)
+            ? Math.max(0, now - telemetryTimestamp)
+            : null,
+        };
+      })
       .sort((a, b) => b.matchSteps - a.matchSteps || b.totalSteps - a.totalSteps);
-    return { updatedAt: data.updatedAt, players, lastReason, activeRoundKey, filePath: storage.filePath };
+    return {
+      updatedAt: data.updatedAt,
+      players,
+      lastReason,
+      activeRoundKey,
+      sampleDiagnostics: snapshotSampleDiagnostics(sampleDiagnostics),
+      filePath: storage.filePath,
+    };
   }
 
   return {
     manifest: {
-      id: "module.stepCounter", name: "Step Counter Module", kind: "module", version: "1.0.0",
-      description: "Estimates infantry steps from tactical-state distance and speed, and persists JSON statistics.",
+      id: "module.stepCounter", name: "Step Counter Module", kind: "module", version: "1.1.0",
+      description: "Estimates infantry steps from unique BZSS-Core telemetry samples and persists JSON statistics.",
     },
     apiName: "stepCounter",
     api: { getStats, getPlayer: (steamID) => storage.getPlayer(steamID) },
@@ -131,6 +192,70 @@ export function createStepCounterModule({ core, modules, config, logger }) {
       await storage.flush(true);
     },
   };
+}
+
+function createSampleDiagnostics() {
+  return {
+    totalSamples: 0,
+    validSamples: 0,
+    duplicateSamples: 0,
+    stationarySamples: 0,
+    staleSamples: 0,
+    teleportSamples: 0,
+    aboveWalkingSpeedSamples: 0,
+    missingTimestampSamples: 0,
+    missingPositionSamples: 0,
+    lastSampleIntervalMs: null,
+    maxSampleIntervalMs: 0,
+    intervalSamples: [],
+  };
+}
+
+function recordSampleDiagnostic(diagnostics, result) {
+  diagnostics.totalSamples += 1;
+  const field = DIAGNOSTIC_REASON_FIELDS[result.reason];
+  if (field) diagnostics[field] += 1;
+  const interval = finiteOrNull(result.sampleIntervalMs);
+  if (interval == null || interval <= 0) return;
+  diagnostics.lastSampleIntervalMs = interval;
+  diagnostics.maxSampleIntervalMs = Math.max(diagnostics.maxSampleIntervalMs, interval);
+  diagnostics.intervalSamples.push(interval);
+  if (diagnostics.intervalSamples.length > 1000) diagnostics.intervalSamples.shift();
+}
+
+function snapshotSampleDiagnostics(diagnostics) {
+  const intervals = diagnostics.intervalSamples;
+  const average = intervals.length
+    ? intervals.reduce((sum, value) => sum + value, 0) / intervals.length
+    : null;
+  const sorted = [...intervals].sort((a, b) => a - b);
+  const p95Index = sorted.length ? Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1) : -1;
+  return {
+    totalSamples: diagnostics.totalSamples,
+    validSamples: diagnostics.validSamples,
+    duplicateSamples: diagnostics.duplicateSamples,
+    stationarySamples: diagnostics.stationarySamples,
+    staleSamples: diagnostics.staleSamples,
+    teleportSamples: diagnostics.teleportSamples,
+    aboveWalkingSpeedSamples: diagnostics.aboveWalkingSpeedSamples,
+    missingTimestampSamples: diagnostics.missingTimestampSamples,
+    missingPositionSamples: diagnostics.missingPositionSamples,
+    lastSampleIntervalMs: diagnostics.lastSampleIntervalMs,
+    averageSampleIntervalMs: average,
+    maxSampleIntervalMs: diagnostics.maxSampleIntervalMs || null,
+    p95SampleIntervalMs: p95Index >= 0 ? sorted[p95Index] : null,
+    telemetryRateHz: average && average > 0 ? 1000 / average : null,
+  };
+}
+
+function finiteOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function finiteOrZero(value) {
+  return finiteOrNull(value) ?? 0;
 }
 
 export function getStepRoundKey(value) {

@@ -556,6 +556,8 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         telemetry: {
           position: clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null),
           yaw: numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null),
+          sourceSeq: bzssPlayer?.sourceSeq ?? null,
+          sourceTick: bzssPlayer?.sourceTick ?? null,
           observedAt: bzssPlayer?.observedAt ?? "",
           presenceHint: firstText(bzssPlayer?.presenceHint, ""),
         },
@@ -714,6 +716,9 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         position: telemetryPosition,
         rotation: telemetryRotation,
         yaw: telemetryYaw,
+        sourceSeq: bzssPlayer?.sourceSeq ?? null,
+        sourceTick: bzssPlayer?.sourceTick ?? null,
+        observedAt: firstText(bzssPlayer?.observedAt, ""),
         health: noPawn ? null : numberOrNull(bzssPlayer?.soldierInfo?.health, null),
         soldierClass: noPawn ? "" : firstText(bzssPlayer?.soldierInfo?.soldierClass, ""),
         weaponClass: noPawn ? "" : firstText(bzssPlayer?.soldierInfo?.weaponClass, ""),
