@@ -46,6 +46,18 @@
           />
         </div>
 
+        <PressureZoneOverlay
+          :state="pressureZoneState"
+          :map-bounds="activeMapConfig.bounds"
+          :visible="pressureZoneOverlayVisible"
+          :show-hard="showPressureHard"
+          :show-soft="showPressureSoft"
+          :show-combat="showPressureCombat"
+          :show-diagnostics="showPressureDiagnostics"
+          :show-connections="showPressureConnections"
+          :connection-points="pressureObjectivePoints"
+        />
+
         <!-- Tactical Coordinates Grid Lines -->
         <div v-if="showGrid" class="map-grid-overlay">
           <!-- Vertical grid lines (game X coordinates) -->
@@ -689,6 +701,12 @@
       :show-player-coords="showPlayerCoords"
       :show-capture-zones="showCaptureZones"
       :show-fobs="showFobs"
+      :show-pressure-zones="showPressureZones"
+      :show-pressure-hard="showPressureHard"
+      :show-pressure-soft="showPressureSoft"
+      :show-pressure-combat="showPressureCombat"
+      :show-pressure-diagnostics="showPressureDiagnostics"
+      :show-pressure-connections="showPressureConnections"
       :measure-mode="measureMode"
       :selected-map-key="selectedMapKey"
       :marker-scale="markerScale"
@@ -738,6 +756,12 @@
       @update:show-player-coords="showPlayerCoords = $event"
       @update:show-capture-zones="showCaptureZones = $event"
       @update:show-fobs="showFobs = $event"
+      @update:show-pressure-zones="showPressureZones = $event"
+      @update:show-pressure-hard="showPressureHard = $event"
+      @update:show-pressure-soft="showPressureSoft = $event"
+      @update:show-pressure-combat="showPressureCombat = $event"
+      @update:show-pressure-diagnostics="showPressureDiagnostics = $event"
+      @update:show-pressure-connections="showPressureConnections = $event"
       @update:measure-mode="measureMode = $event"
       @update:selected-map-key="selectedMapKey = $event"
       @update:marker-scale="markerScale = $event"
@@ -780,6 +804,7 @@ import {
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
 import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
@@ -791,6 +816,7 @@ import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
 import { getChineseNameByFaction, getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
 import { apiDelete, apiGet, apiPost } from "../app/apiClient";
+import { fetchDynamicPressureZoneState, type PressureZoneState } from "../app/dynamicPressureZoneApi";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -1235,6 +1261,15 @@ provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y }
 const showGrid = ref(true);
 const showCaptureZones = ref(true);
 const showFobs = ref(true);
+const showPressureZones = ref(true);
+const showPressureHard = ref(true);
+const showPressureSoft = ref(true);
+const showPressureCombat = ref(true);
+const showPressureDiagnostics = ref(false);
+const showPressureConnections = ref(false);
+const pressureZoneState = shallowRef<PressureZoneState | null>(null);
+let pressureZoneFetchTimer: number | null = null;
+let pressureZoneRequestSequence = 0;
 const filterAliveOnly = ref(false);
 const activeMapControlPanel = ref<"layers" | "tools" | "help" | null>(null);
 
@@ -1255,6 +1290,49 @@ let resizeObserver: ResizeObserver | null = null;
 let fitViewportTimeout: number | null = null;
 let mapPageActive = false;
 const tilesReady = ref(false);
+const pressureObjectivePoints = computed(() => (Array.isArray(captureZones.value) ? captureZones.value : [])
+  .map((zone: any) => ({ x: Number(zone?.x ?? zone?.position?.x), y: Number(zone?.y ?? zone?.position?.y) }))
+  .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
+const pressureZoneOverlayVisible = computed(() => {
+  const stateMapKey = String(pressureZoneState.value?.mapKey ?? "").trim();
+  return showPressureZones.value && (!stateMapKey || stateMapKey === activeMapConfig.value.key);
+});
+const pressureZoneInputSignature = computed(() => JSON.stringify({
+  layer: (snapshot.value as any)?.server?.layer ?? (snapshot.value as any)?.match?.layer ?? "",
+  mode: (snapshot.value as any)?.server?.mode ?? (snapshot.value as any)?.match?.mode ?? "",
+  captureZones: (Array.isArray(captureZones.value) ? captureZones.value : []).map((zone: any) => [
+    zone?.id ?? zone?.name ?? "",
+    zone?.ownerTeamId ?? zone?.teamId ?? zone?.captureDirection ?? null,
+    zone?.position?.x ?? zone?.x ?? null,
+    zone?.position?.y ?? zone?.y ?? null,
+  ]),
+  mainZones: (Array.isArray(mainZones.value) ? mainZones.value : []).map((zone: any) => [
+    zone?.teamId ?? zone?.teamID ?? null,
+    zone?.position?.x ?? zone?.x ?? null,
+    zone?.position?.y ?? zone?.y ?? null,
+  ]),
+}));
+
+function schedulePressureZoneFetch(delayMs = 120) {
+  if (!mapPageActive) return;
+  if (pressureZoneFetchTimer != null) window.clearTimeout(pressureZoneFetchTimer);
+  pressureZoneFetchTimer = window.setTimeout(() => {
+    pressureZoneFetchTimer = null;
+    void refreshPressureZoneState();
+  }, delayMs);
+}
+
+async function refreshPressureZoneState() {
+  const requestId = ++pressureZoneRequestSequence;
+  try {
+    const response = await fetchDynamicPressureZoneState();
+    if (requestId === pressureZoneRequestSequence && mapPageActive) pressureZoneState.value = response.state;
+  } catch (error) {
+    if (import.meta.env.DEV) console.warn("[TacticalMap] pressure zone state unavailable", error);
+  }
+}
+
+watch(pressureZoneInputSignature, () => schedulePressureZoneFetch(), { flush: "post" });
 const tacticalMapViewerCount = ref<number | null>(null);
 const tacticalRecording = ref({ known: false, recordingEnabled: false, recording: false, pending: false });
 const tacticalRecordingLabel = computed(() => {
@@ -3374,6 +3452,7 @@ function activateMapPage() {
     void tacticalStateStore.fetchSnapshot();
     tacticalStateStore.startStream();
   }
+  schedulePressureZoneFetch(0);
 
   window.addEventListener("resize", fitToViewport);
   window.addEventListener("keydown", handleWindowKeyDown);
@@ -3420,6 +3499,11 @@ function deactivateMapPage() {
     cancelAnimationFrame(tilesEnableFrame);
     tilesEnableFrame = null;
   }
+  if (pressureZoneFetchTimer != null) {
+    window.clearTimeout(pressureZoneFetchTimer);
+    pressureZoneFetchTimer = null;
+  }
+  pressureZoneRequestSequence += 1;
   cancelMarkerBatch();
   renderedPlayerLimit.value = 0;
   clearTimeout(shakeTimeoutId);

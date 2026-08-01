@@ -67,6 +67,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "pressure-zone-simulator",
+    path: "/debug/pressure-zone",
+    component: () => import("../pages/PressureZoneSimulatorPage.vue"),
+    title: "压家区域模拟器",
+    category: "debug",
+    refreshPolicy: "manual",
+    nav: { section: "opsLive", label: "压家区域模拟器", icon: "🛡️", order: 16 },
+    requiredPermission: "settings.manage",
+    ...workspacePage,
+  },
+  {
     name: "astrbot-server-info-card",
     path: "/astrbot/server-info-card",
     component: () => import("../pages/ServerInfoSnapshotPage.vue"),

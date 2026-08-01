@@ -17,6 +17,7 @@ import { handleBlackEdgePrivilegeRoutes } from "../modules/black-edge-privilege/
 import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
 import { handleStepCounterRoutes } from "../modules/step-counter/routes.js";
+import { handleDynamicPressureZoneRoutes } from "../modules/dynamic-pressure-zone/routes.js";
 import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
 import { handleTacticalFeedWriterRoutes } from "../modules/tactical-feed-writer/routes.js";
 import {
@@ -542,6 +543,17 @@ export class WebServer {
       json: (status, obj) => this.json(res, status, obj),
     });
     if (stepCounterHandled) return;
+
+    const dynamicPressureZoneHandled = await handleDynamicPressureZoneRoutes({
+      core: this.core,
+      module: this.modules.dynamicPressureZone,
+      url,
+      req,
+      user,
+      readJsonBody: (request) => this.readJsonBody(request),
+      json: (status, obj) => this.json(res, status, obj),
+    });
+    if (dynamicPressureZoneHandled) return;
 
     if (url.pathname === "/api/tasks/create" && req.method === "POST") {
       const body = await this.readJsonBody(req);
