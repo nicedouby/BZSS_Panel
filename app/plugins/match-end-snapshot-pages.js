@@ -625,7 +625,8 @@ export function renderOverviewSvg(model) {
   svg.push(`<text x="232" y="86" class="hero-title">${escapeXml(model.mapTitle)}</text>`);
   svg.push(`<text x="234" y="105" class="hero-sub">${escapeXml(model.layerTitle)} · ${escapeXml(model.modeTitle)} · NEXT ${escapeXml(model.nextLayer)}</text>`);
   svg.push(renderGlobalMatchMetrics(model));
-  svg.push(`<text x="1530" y="39" text-anchor="end" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
+  svg.push(renderTopRightRuntimeMetrics(model));
+  svg.push(`<text x="1192" y="28" text-anchor="end" class="meta mono">${escapeXml(model.capturedAt)}</text>`);
   svg.push(renderServerBattleStrip(model));
 
   for (const team of model.teams) {
@@ -648,18 +649,31 @@ function renderServerBattleStrip(model) {
 }
 
 function renderGlobalMatchMetrics(model) {
-  return [
-    `<text x="222" y="122" class="global-server">${escapeXml(clip(model.serverName, 42))}</text>`,
-    '<circle cx="544" cy="118.5" r="2.5" fill="#37c8ff"/>',
-    '<text x="553" y="122" class="global-metric-label">PLAYERS</text>',
-    `<text x="607" y="122" class="global-metric-value mono">${escapeXml(String(model.playerCount))}</text>`,
-    '<circle cx="650" cy="118.5" r="2.5" fill="#f8bd55"/>',
-    '<text x="659" y="122" class="global-metric-label">QUEUE</text>',
-    `<text x="702" y="122" class="global-metric-value mono">${escapeXml(String(model.queueCount))}</text>`,
-    '<circle cx="744" cy="118.5" r="2.5" fill="#52e79b"/>',
-    '<text x="753" y="122" class="global-metric-label">TIME</text>',
-    `<text x="788" y="122" class="global-metric-value mono">${escapeXml(model.playtime)}</text>`,
-  ].join("");
+  return `<text x="222" y="122" class="global-server">${escapeXml(clip(model.serverName, 62))}</text>`;
+}
+
+function renderTopRightRuntimeMetrics(model) {
+  const x = 1212;
+  const y = 8;
+  const width = 352;
+  const height = 34;
+  const itemWidth = width / 3;
+  const items = [
+    { label: "PLAYERS", value: String(model.playerCount), tone: "#37c8ff" },
+    { label: "QUEUE", value: String(model.queueCount), tone: "#f8bd55" },
+    { label: "TIME", value: model.playtime, tone: "#52e79b" },
+  ];
+  const svg = [
+    `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="7" fill="#04101e" fill-opacity=".74" stroke="#dce9f7" stroke-opacity=".24"/>`,
+    `<path d="M${x + itemWidth} ${y + 6}V${y + height - 6}M${x + itemWidth * 2} ${y + 6}V${y + height - 6}" stroke="#dce9f7" stroke-opacity=".14"/>`,
+  ];
+  items.forEach((item, index) => {
+    const left = x + itemWidth * index;
+    svg.push(`<circle cx="${left + 13}" cy="${y + 17}" r="2.5" fill="${item.tone}"/>`);
+    svg.push(`<text x="${left + 22}" y="${y + 14}" class="runtime-metric-label">${item.label}</text>`);
+    svg.push(`<text x="${left + 22}" y="${y + 28}" class="runtime-metric-value mono" fill="${item.tone}">${escapeXml(item.value)}</text>`);
+  });
+  return svg.join("");
 }
 
 function renderTeamCombatPanel(team, x, side) {
@@ -814,6 +828,7 @@ function renderPlayerRow(team, player, x, y, index) {
   for (const column of layout.columns) {
     const value = metrics[column.key];
     const color = column.key === "ping" ? pingColor(value === "--" ? null : value) : column.tone;
+    svg.push(`<rect x="${column.x + 1}" y="${y + 2}" width="${column.width - 2}" height="${Math.max(9, rowHeight - 4)}" rx="2" class="player-stat-chip" fill="${color}" fill-opacity=".13" stroke="${color}" stroke-opacity=".12"/>`);
     svg.push(`<text x="${column.center}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-stat mono" fill="${color}">${escapeXml(String(value))}</text>`);
   }
   return svg.join("");
@@ -997,6 +1012,7 @@ function renderDefs() {
       .meta{font-size:8px;fill:#b7c8d8}
       .global-server{font-size:7px;font-weight:900;letter-spacing:.55px;fill:#aebfd0}
       .global-metric-label{font-size:7px;font-weight:900;fill:#8398ad;letter-spacing:.35px}.global-metric-value{font-size:7px;font-weight:900;fill:#eef7ff}
+      .runtime-metric-label{font-size:6px;font-weight:900;letter-spacing:.55px;fill:#8ea5ba}.runtime-metric-value{font-size:10px;font-weight:900}
       .ticket-team{font-size:6.5px;font-weight:900;letter-spacing:.4px;fill:#dce9f5}
       .ticket-label{font-size:5.5px;font-weight:900;letter-spacing:1px;fill:#8ea4b8}
       .ticket-value{font-size:23px;font-weight:900}
