@@ -662,7 +662,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
     match.playerCount,
     players.length,
   ) ?? players.length;
-  const remoteTeamTickets = extractRemoteTelemetryTeamTickets(modules);
+  const remoteTicketSnapshot = await resolveRemoteTelemetryTeamTickets(modules);
 
   return {
     schemaVersion: 2,
@@ -686,11 +686,12 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       nextMap,
       nextLayer,
       playtime: firstNumber(match.playtime, status.playtime, serverStatus.playtime, status.matchTimeSeconds),
-      // The remote telemetry sender is the same authoritative source used by
-      // MatchStatusPage. Freeze its latest sample into the snapshot instead of
-      // guessing ticket-shaped fields from match-state.
-      teamTickets: remoteTeamTickets ?? extractTeamTickets(matchState, overview, match, status, serverStatus),
-      teamTicketsSource: remoteTeamTickets ? "remoteTelemetry.currentSample" : "matchState",
+      // Ask the sender for a live memory read first. The telemetry state is
+      // retained only as a fallback because its last sample can already belong
+      // to the next layer when the match-end capture settles.
+      teamTickets: remoteTicketSnapshot?.tickets ?? extractTeamTickets(matchState, overview, match, status, serverStatus),
+      teamTicketsSource: remoteTicketSnapshot?.source ?? "matchState",
+      teamTicketsDiagnostics: remoteTicketSnapshot?.diagnostics ?? null,
       factionIds: extractTeamFactionIds(matchState, overview, match, status, serverStatus),
     },
     summary: {
@@ -742,24 +743,97 @@ function extractTeamFactionIds(...sources) {
   return { team1: "", team2: "" };
 }
 
-function extractRemoteTelemetryTeamTickets(modules) {
+async function resolveRemoteTelemetryTeamTickets(modules) {
   const api = modules?.remoteTelemetry?.api ?? modules?.remoteTelemetry;
-  const state = typeof api?.getState === "function" ? api.getState() : null;
-  const sample = state?.currentSample ?? state?.currentSource?.latest ?? null;
-  const team1 = firstNumber(
-    sample?.tickets?.team1,
-    sample?.tickets?.t1,
-    sample?.team1,
-    sample?.t1,
+  if (!api) return null;
+
+  const diagnostics = {
+    liveReadAttempted: false,
+    liveReadOk: false,
+    liveReadError: "",
+    sourceOnline: null,
+    lastMessageAt: "",
+  };
+
+  if (typeof api.readTickets === "function") {
+    diagnostics.liveReadAttempted = true;
+    try {
+      const liveRead = await api.readTickets();
+      diagnostics.liveReadOk = Boolean(liveRead?.ok ?? liveRead?.response?.ok);
+      const tickets = extractTicketPair(
+        liveRead?.response,
+        liveRead?.response?.data,
+        liveRead?.response?.result,
+        liveRead,
+      );
+      if (tickets) {
+        return {
+          tickets,
+          source: "remoteTelemetry.readTickets",
+          diagnostics,
+        };
+      }
+    } catch (error) {
+      diagnostics.liveReadError = String(error?.message ?? error ?? "Ticket read failed.");
+    }
+  }
+
+  let state = null;
+  if (typeof api.getState === "function") {
+    try {
+      state = api.getState();
+    } catch (error) {
+      diagnostics.liveReadError ||= String(error?.message ?? error ?? "Telemetry state read failed.");
+    }
+  }
+  diagnostics.sourceOnline = state?.currentSource?.online ?? null;
+  diagnostics.lastMessageAt = firstText(
+    state?.currentSource?.lastMessageAt,
+    state?.lastMessageAt,
   );
-  const team2 = firstNumber(
-    sample?.tickets?.team2,
-    sample?.tickets?.t2,
-    sample?.team2,
-    sample?.t2,
-  );
-  if (team1 == null && team2 == null) return null;
-  return { team1, team2 };
+
+  const samples = [
+    state?.currentSample,
+    state?.currentSource?.latest,
+    state?.currentSource?.previous,
+    ...(Array.isArray(state?.recentSamples) ? state.recentSamples : []),
+  ];
+  for (const sample of samples) {
+    const tickets = extractTicketPair(sample, sample?.payload);
+    if (!tickets) continue;
+    return {
+      tickets,
+      source: sample === state?.currentSource?.previous
+        ? "remoteTelemetry.previousSample"
+        : "remoteTelemetry.currentSample",
+      diagnostics,
+    };
+  }
+  return { tickets: null, source: "", diagnostics };
+}
+
+function extractTicketPair(...sources) {
+  for (const source of sources) {
+    if (!source || typeof source !== "object") continue;
+    const team1 = firstNumber(
+      source?.tickets?.team1,
+      source?.tickets?.t1,
+      source?.teamTickets?.team1,
+      source?.teamTickets?.t1,
+      source?.team1,
+      source?.t1,
+    );
+    const team2 = firstNumber(
+      source?.tickets?.team2,
+      source?.tickets?.t2,
+      source?.teamTickets?.team2,
+      source?.teamTickets?.t2,
+      source?.team2,
+      source?.t2,
+    );
+    if (team1 != null || team2 != null) return { team1, team2 };
+  }
+  return null;
 }
 
 function extractTeamTickets(...sources) {
