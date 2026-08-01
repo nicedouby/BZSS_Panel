@@ -146,7 +146,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "manual",
     nav: { section: "players", label: "查成分", icon: "🔍", order: 15 },
-    ...workspacePage,
+    ...documentPage,
   },
   {
     name: "reserve-slots",
