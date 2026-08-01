@@ -625,7 +625,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     return ingestPlayerChunk({
       version: "v1",
       seq: event?.rawEvent?.Seq ?? event?.seq ?? "",
-      tick: event?.rawEvent?.Tick ?? "",
+      tick: event?.rawEvent?.Tick ?? event?.tick ?? "",
       count: event?.rawEvent?.Count ?? "",
       players: event?.rawEvent?.Players ?? [],
     }, "");
