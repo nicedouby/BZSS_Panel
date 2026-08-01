@@ -122,6 +122,22 @@ export function createStepCounterModule({ core, modules, config, logger }) {
     }
   }
 
+  async function resetMatchStats() {
+    const players = Object.values(storage.getData().players);
+    for (const player of players) {
+      storage.upsert(player.steamID, {
+        matchSteps: 0,
+        matchDistanceMeters: 0,
+      });
+    }
+    calculator.resetAll();
+    lastReason = "manualMatchReset";
+    await storage.flush(true);
+    const resetAt = new Date().toISOString();
+    moduleLogger?.info?.(`[StepCounter] current-match statistics manually reset for ${players.length} players.`);
+    return { playersReset: players.length, resetAt };
+  }
+
   function getStats() {
     const data = storage.getData();
     const now = Date.now();
@@ -152,17 +168,17 @@ export function createStepCounterModule({ core, modules, config, logger }) {
 
   return {
     manifest: {
-      id: "module.stepCounter", name: "Step Counter Module", kind: "module", version: "1.1.0",
+      id: "module.stepCounter", name: "Step Counter Module", kind: "module", version: "1.2.0",
       description: "Estimates infantry steps from unique BZSS-Core telemetry samples and persists JSON statistics.",
     },
     apiName: "stepCounter",
-    api: { getStats, getPlayer: (steamID) => storage.getPlayer(steamID) },
+    api: { getStats, getPlayer: (steamID) => storage.getPlayer(steamID), resetMatchStats },
     async init() {
       await storage.init();
       activeRoundKey = storage.getActiveRoundKey();
       const currentRound = modules.matchState?.getState?.()?.round?.current;
       acceptRoundKey(getStepRoundKey(currentRound), { flush: false });
-      this.api = { getStats, getPlayer: (steamID) => storage.getPlayer(steamID) };
+      this.api = { getStats, getPlayer: (steamID) => storage.getPlayer(steamID), resetMatchStats };
     },
     async start() {
       if (started) return;
