@@ -125,5 +125,9 @@ async function runNodeToolProcess({ toolLabel, execArgs }) {
 }
 
 function isWindowsNativeCrash(code) {
-  return code === 0xC0000005 || code === 0xC000001D || code === 3221225477;
+  // child_process may expose Windows NTSTATUS exit codes as either the
+  // unsigned value (0xC0000005) or the signed 32-bit value (-1073741819).
+  const numericCode = Number(code);
+  const unsignedCode = numericCode < 0 ? numericCode >>> 0 : numericCode;
+  return unsignedCode === 0xC0000005 || unsignedCode === 0xC000001D;
 }
