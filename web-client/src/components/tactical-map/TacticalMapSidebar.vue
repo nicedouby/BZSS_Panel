@@ -1435,7 +1435,7 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 .sidebar-main-scroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: auto !important;
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -1450,17 +1450,18 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 
 /* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 6px !important;
+  display: block !important;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.3) !important;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.25);
-  border-radius: 3px;
+  background: rgba(0, 240, 255, 0.35) !important;
+  border-radius: 3px !important;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 240, 255, 0.6);
+  background: rgba(0, 240, 255, 0.7) !important;
 }
 
 /* ─── Overview Tab Cards ──────────────────────────── */

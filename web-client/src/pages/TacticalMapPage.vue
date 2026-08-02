@@ -777,14 +777,31 @@
       @open-pressure-settings="pressureSettingsOpen = true"
     />
 
-    <div v-if="pressureSettingsOpen" class="pressure-settings-modal" role="dialog" aria-modal="true" aria-label="压家圈基础参数" @click.self="pressureSettingsOpen = false">
-      <div class="pressure-settings-modal__panel">
-        <PressureZoneSettingsPage
-          embedded
-          :current-map-size-meters="activeMapDimensionsMeters.longest"
-          @close="pressureSettingsOpen = false"
-          @saved="handlePressureSettingsSaved"
-        />
+    <div v-if="pressureSettingsOpen" class="pressure-settings-modal" role="dialog" aria-modal="true" aria-label="压家圈基础参数">
+      <div
+        class="pressure-settings-modal__panel"
+        :style="{
+          left: modalPos ? `${modalPos.x}px` : undefined,
+          top: modalPos ? `${modalPos.y}px` : undefined,
+          right: modalPos ? 'auto' : undefined
+        }"
+      >
+        <div class="modal-drag-header" @mousedown="startModalDrag">
+          <div class="drag-title-block">
+            <span class="drag-grip-dots">:::</span>
+            <span class="drag-title font-mono">⚙ 压家圈基础参数设置</span>
+            <span class="drag-tip">(按住此处自由拖拽窗口)</span>
+          </div>
+          <button type="button" class="modal-close-icon" title="关闭窗口" @click="pressureSettingsOpen = false">✕</button>
+        </div>
+        <div class="modal-body-scroll custom-scrollbar">
+          <PressureZoneSettingsPage
+            embedded
+            :current-map-size-meters="activeMapDimensionsMeters.longest"
+            @close="pressureSettingsOpen = false"
+            @saved="handlePressureSettingsSaved"
+          />
+        </div>
       </div>
     </div>
 
@@ -1490,6 +1507,37 @@ const focusedSquadId = ref<number | null>(null);
 const combatLogs = ref<CombatLog[]>([]);
 const viewerPerspectiveMode = ref<ViewerPerspectiveMode>("auto");
 const focusedPlayerKey = ref("");
+
+// Draggable Pressure Zone Settings Modal State
+const modalPos = ref<{ x: number; y: number } | null>(null);
+const isDraggingModal = ref(false);
+let dragOffset = { x: 0, y: 0 };
+
+function startModalDrag(e: MouseEvent) {
+  isDraggingModal.value = true;
+  const initialX = modalPos.value?.x ?? Math.max(20, window.innerWidth - 980);
+  const initialY = modalPos.value?.y ?? 70;
+  dragOffset = {
+    x: e.clientX - initialX,
+    y: e.clientY - initialY,
+  };
+  window.addEventListener("mousemove", onModalDrag);
+  window.addEventListener("mouseup", stopModalDrag);
+}
+
+function onModalDrag(e: MouseEvent) {
+  if (!isDraggingModal.value) return;
+  modalPos.value = {
+    x: Math.max(10, Math.min(window.innerWidth - 450, e.clientX - dragOffset.x)),
+    y: Math.max(10, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y)),
+  };
+}
+
+function stopModalDrag() {
+  isDraggingModal.value = false;
+  window.removeEventListener("mousemove", onModalDrag);
+  window.removeEventListener("mouseup", stopModalDrag);
+}
 
 // Shared activePlayerWindow managed by parent MatchStatusPage
 
@@ -3742,8 +3790,88 @@ onBeforeUnmount(deactivateMapPage);
 .map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
 .map-coordinate-readout span { color: #60768a; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
 .map-coordinate-readout b { color: #dcebf3; font-weight: 650; }
-.pressure-settings-modal { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(1, 6, 13, .78); backdrop-filter: blur(8px); }
-.pressure-settings-modal__panel { width: min(1320px, 96vw); height: min(900px, 94vh); overflow: hidden; border: 1px solid rgba(94, 234, 212, .3); border-radius: 16px; background: #040912; box-shadow: 0 30px 90px rgba(0, 0, 0, .68); }
+.pressure-settings-modal {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  pointer-events: none;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.pressure-settings-modal__panel {
+  position: absolute;
+  top: 70px;
+  right: 440px;
+  width: 540px;
+  max-width: calc(100vw - 460px);
+  height: min(640px, 82vh);
+  pointer-events: auto;
+  overflow: hidden;
+  border: 1px solid rgba(94, 234, 212, 0.4);
+  border-radius: 12px;
+  background: rgba(4, 9, 18, 0.95);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(45, 212, 191, 0.18);
+  backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-drag-header {
+  padding: 8px 12px;
+  background: rgba(13, 148, 136, 0.25);
+  border-bottom: 1px solid rgba(94, 234, 212, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.drag-title-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #99f6e4;
+  font-size: 11px;
+}
+
+.drag-grip-dots {
+  font-weight: 900;
+  color: #2dd4bf;
+  letter-spacing: -2px;
+}
+
+.drag-title {
+  font-weight: 700;
+}
+
+.drag-tip {
+  font-size: 9px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.modal-close-icon {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.modal-close-icon:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.modal-body-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
 
 @media (max-width: 1050px) {
   .tactical-command-bar { grid-template-columns: minmax(0, 1fr) auto; }
