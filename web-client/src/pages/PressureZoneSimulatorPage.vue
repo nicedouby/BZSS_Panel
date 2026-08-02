@@ -25,12 +25,13 @@
         <div v-if="editorTab === 'map'" class="panel-scroll">
           <section class="editor-section">
             <div class="section-heading"><div><span>MAP SIZE</span><h2>地图尺寸</h2></div><small>单位：米</small></div>
-            <div class="size-presets">
+            <label class="sim-map-select"><span>战术地图底图</span><select v-model="selectedMapKey" @change="applySelectedMap"><option value="custom">自定义空白地图</option><option v-for="map in mapOptions" :key="map.key" :value="map.key">{{ map.name }}</option></select></label>
+            <div v-if="selectedMapKey === 'custom'" class="size-presets">
               <button v-for="size in [2000, 4000, 6000, 8000]" :key="size" type="button" :class="{ active: model.width === size && model.height === size }" @click="setSquareSize(size)">{{ size / 1000 }} km</button>
             </div>
             <div class="field-row two">
-              <label><span>宽度</span><input v-model.number="model.width" type="number" min="500" max="20000" step="100" /></label>
-              <label><span>高度</span><input v-model.number="model.height" type="number" min="500" max="20000" step="100" /></label>
+              <label><span>宽度</span><input :value="Math.round(mapWidthMeters)" type="number" :disabled="selectedMapKey !== 'custom'" min="500" max="20000" step="100" @input="updateCustomDimension('width', $event)" /></label>
+              <label><span>高度</span><input :value="Math.round(mapHeightMeters)" type="number" :disabled="selectedMapKey !== 'custom'" min="500" max="20000" step="100" @input="updateCustomDimension('height', $event)" /></label>
             </div>
             <div class="field-row two">
               <label><span>模式</span><select v-model="model.mode"><option>AAS</option><option>RAAS</option><option>Invasion</option></select></label>
@@ -91,20 +92,39 @@
             <label class="combat"><input v-model="layers.combat" type="checkbox" /><span></span>Combat</label>
             <label><input v-model="layers.diagnostics" type="checkbox" /><span></span>参数标签</label>
           </div>
-          <div class="map-scale-readout">{{ model.width }} × {{ model.height }} m</div>
+          <div class="map-scale-readout">{{ activeMapName }} · {{ Math.round(mapWidthMeters) }} × {{ Math.round(mapHeightMeters) }} m</div>
         </div>
-        <div class="map-viewport">
+        <div
+          ref="viewportRef"
+          class="map-viewport tactical-sim-viewport"
+          :class="{ 'is-panning': camera.isDragging.value }"
+          @pointerdown="startPan"
+          @pointermove="onViewportPointerMove"
+          @pointerup="stopPointerInteraction"
+          @pointercancel="stopPointerInteraction"
+          @wheel.prevent="onWheel"
+        >
+          <div class="viewport-bg-grid"></div>
           <div
             ref="stageRef"
             class="sim-map"
-            :class="{ 'add-mode': addMode, dragging: Boolean(dragging) }"
-            :style="{ aspectRatio: `${Math.max(1, model.width)} / ${Math.max(1, model.height)}` }"
+            :class="{ 'add-mode': addMode, dragging: Boolean(dragging) || camera.isDragging.value }"
+            :style="mapTransformStyle"
             @click="onMapClick"
-            @pointermove="onPointerMove"
-            @pointerup="stopDrag"
-            @pointercancel="stopDrag"
           >
-            <div class="sim-map-grid"></div>
+            <div class="tiled-map-wrapper">
+              <TiledMapRenderer
+                v-if="activeMapConfig"
+                :tile-base-path="activeMapConfig.tileBasePath"
+                :max-zoom="activeMapConfig.maxZoomLevel"
+                :tiles-enabled="true"
+                :interaction-active="camera.isDragging.value || Boolean(dragging)"
+                :viewport-width="viewportWidth"
+                :viewport-height="viewportHeight"
+                :fallback-image="activeMapConfig.image"
+              />
+              <div v-else class="sim-map-grid"></div>
+            </div>
             <PressureZoneOverlay :state="result" :map-bounds="mapBounds" :show-hard="layers.hard" :show-soft="layers.soft" :show-combat="layers.combat" :show-diagnostics="layers.diagnostics" :show-connections="true" :connection-points="model.objectives" />
             <svg class="sim-objective-layer" viewBox="0 0 1000 1000" preserveAspectRatio="none">
               <g class="distance-lines">
@@ -116,6 +136,8 @@
             <div v-if="addMode" class="add-mode-hint">＋ 点击空白位置添加 {{ ownerLabel(newOwner) }} 旗点</div>
             <div v-if="!result?.active" class="inactive-notice">{{ inactiveReason }}</div>
           </div>
+          <header class="sim-tactical-command-bar"><div><span>PRESSURE ZONE LAB</span><strong>{{ activeMapName }}</strong><small>{{ Math.round(mapWidthMeters) }} × {{ Math.round(mapHeightMeters) }} m</small></div><b :class="{ busy: loading }"><i></i>{{ loading ? "重算中" : "实时预览" }}</b></header>
+          <section class="sim-map-controls" aria-label="模拟器地图操作"><button type="button" title="放大" @click.stop="zoomIn">+</button><button type="button" title="缩小" @click.stop="zoomOut">−</button><button type="button" title="适配视口" @click.stop="resetView">↺</button></section>
         </div>
         <footer class="map-footer"><span>拖动 M1 / M2 / P1… 修改位置</span><span>旗点顺序只由左侧 ↑↓ 调整</span><span v-if="result?.combat" class="combat-pair">当前交战：{{ result.combat.team1ObjectiveId }} ↔ {{ result.combat.team2ObjectiveId }}</span></footer>
       </main>
@@ -148,15 +170,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
+import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import { useMapCamera } from "../composables/useMapCamera";
+import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
+import { TACTICAL_MAP_CONFIGS, TACTICAL_MAP_LIST, type TacticalMapConfig } from "../shared/tactical-map-data";
 import { fetchDynamicPressureZoneBaseConfig, saveDynamicPressureZoneProfile, simulateDynamicPressureZone, type PressureZoneState } from "../app/dynamicPressureZoneApi";
 
 interface ObjectiveModel { uid: string; name: string; x: number; y: number; owner: number }
 type DragState = { type: "main" | "objective"; id: number | string; pointerId: number; startX: number; startY: number; moved: boolean };
 
 const stageRef = ref<HTMLElement | null>(null);
+const viewportRef = ref<HTMLElement | null>(null);
+const viewportWidth = ref(0);
+const viewportHeight = ref(0);
+const camera = useMapCamera();
+const mapTransformStyle = computed(() => camera.getTransform());
+provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y });
 const result = ref<PressureZoneState | null>(null);
 const loading = ref(false);
 const saving = ref(false);
@@ -164,6 +196,7 @@ const baseConfigLoaded = ref(false);
 const errorText = ref("");
 const statusText = ref("");
 const selectedPreset = ref("straight");
+const selectedMapKey = ref("custom");
 const editorTab = ref<"map" | "objectives">("map");
 const selectedObjectiveUid = ref("");
 const addMode = ref(false);
@@ -174,6 +207,8 @@ let sequence = 10;
 let simulationTimer: number | null = null;
 let requestSequence = 0;
 let suppressMapClick = false;
+let resizeObserver: ResizeObserver | null = null;
+let activePanPointerId: number | null = null;
 
 const model = reactive({
   width: 4000,
@@ -191,7 +226,13 @@ const presets = [
   { key: "soft-overlap", name: "交战区与 Soft 重叠" },
 ];
 
-const mapBounds = computed(() => ({ minX: 0, minY: 0, maxX: Math.max(1, model.width), maxY: Math.max(1, model.height) }));
+const mapOptions = TACTICAL_MAP_LIST;
+const activeMapConfig = computed<TacticalMapConfig | null>(() => TACTICAL_MAP_CONFIGS[selectedMapKey.value] ?? null);
+const activeMapName = computed(() => activeMapConfig.value?.name ?? "自定义模拟地图");
+const mapBounds = computed(() => activeMapConfig.value?.bounds ?? ({ minX: 0, minY: 0, maxX: Math.max(1, model.width), maxY: Math.max(1, model.height) }));
+const coordinateScaleMeters = computed(() => Math.hypot(mapBounds.value.maxX - mapBounds.value.minX, mapBounds.value.maxY - mapBounds.value.minY) > 20_000 ? 0.01 : 1);
+const mapWidthMeters = computed(() => (mapBounds.value.maxX - mapBounds.value.minX) * coordinateScaleMeters.value);
+const mapHeightMeters = computed(() => (mapBounds.value.maxY - mapBounds.value.minY) * coordinateScaleMeters.value);
 const selectedObjective = computed(() => model.objectives.find((item) => item.uid === selectedObjectiveUid.value) ?? null);
 const inactiveReason = computed(() => ({ "unsupported-mode": "当前模式不启用压家区域", "incomplete-geometry": "至少需要两个 Main 和两个旗点" }[result.value?.reason ?? ""] ?? result.value?.reason ?? errorText.value ?? "等待计算"));
 const combatShapeWidth = computed(() => Math.max(15, Math.min(100, Number(result.value?.combat?.lateralRadius ?? 0) / 20)));
@@ -199,7 +240,7 @@ const objectiveSegments = computed(() => model.objectives.slice(0, -1).map((item
   const next = model.objectives[index + 1];
   const id = `p${index + 1}`; const nextId = `p${index + 2}`;
   const a = { x: px(item.x), y: py(item.y) }; const b = { x: px(next.x), y: py(next.y) };
-  return { key: `${item.uid}-${next.uid}`, a, b, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, distance: Math.round(Math.hypot(next.x - item.x, next.y - item.y)), combat: result.value?.combat?.team1ObjectiveId === id && result.value?.combat?.team2ObjectiveId === nextId };
+  return { key: `${item.uid}-${next.uid}`, a, b, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, distance: Math.round(Math.hypot(next.x - item.x, next.y - item.y) * coordinateScaleMeters.value), combat: result.value?.combat?.team1ObjectiveId === id && result.value?.combat?.team2ObjectiveId === nextId };
 }));
 
 function objective(name: string, x: number, y: number, owner: number): ObjectiveModel { return { uid: `objective-${sequence++}`, name, x, y, owner }; }
@@ -215,10 +256,19 @@ function applyPreset(key: string) {
     "soft-overlap": { size: 4000, mains: [[250, 300], [3700, 3650]], points: [[500, 400, 1], [700, 500, 1], [900, 650, 2], [3200, 3200, 2]] },
   };
   const scenario = scenarios[key] ?? scenarios.straight;
-  model.width = scenario.size; model.height = scenario.size;
-  model.mains.forEach((main, index) => { main.x = scenario.mains[index][0]; main.y = scenario.mains[index][1]; });
-  model.objectives.splice(0, model.objectives.length, ...scenario.points.map((point, index) => objective(`P${index + 1}`, point[0], point[1], point[2])));
+  if (selectedMapKey.value === "custom") { model.width = scenario.size; model.height = scenario.size; }
+  const bounds = mapBounds.value;
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+  const project = (x: number, y: number) => ({ x: bounds.minX + (x / scenario.size) * width, y: bounds.minY + (y / scenario.size) * height });
+  model.mains.forEach((main, index) => { const point = project(scenario.mains[index][0], scenario.mains[index][1]); main.x = point.x; main.y = point.y; });
+  model.objectives.splice(0, model.objectives.length, ...scenario.points.map((point, index) => { const projected = project(point[0], point[1]); return objective(`P${index + 1}`, projected.x, projected.y, point[2]); }));
   selectedObjectiveUid.value = model.objectives[0]?.uid ?? "";
+}
+
+function applySelectedMap() {
+  applyPreset(selectedPreset.value);
+  void nextTick(resetView);
 }
 
 function buildPayload() { return { mode: model.mode, mapBounds: mapBounds.value, mains: model.mains, objectiveChain: model.objectives.map((item, index) => ({ id: `p${index + 1}`, name: item.name, x: item.x, y: item.y })), objectiveState: Object.fromEntries(model.objectives.map((item, index) => [`p${index + 1}`, item.owner || null])) }; }
@@ -233,26 +283,42 @@ async function saveProfile() {
   saving.value = true; statusText.value = ""; errorText.value = "";
   try {
     const payload = buildPayload();
-    await saveDynamicPressureZoneProfile({ layer: model.layer, mapKey: "", mode: model.mode, mapBounds: payload.mapBounds, mains: Object.fromEntries(model.mains.map((main) => [main.teamId, { x: main.x, y: main.y }])), objectives: payload.objectiveChain });
+    await saveDynamicPressureZoneProfile({ layer: model.layer, mapKey: activeMapConfig.value?.key ?? "", mode: model.mode, mapBounds: payload.mapBounds, mains: Object.fromEntries(model.mains.map((main) => [main.teamId, { x: main.x, y: main.y }])), objectives: payload.objectiveChain });
     statusText.value = `Layer Profile 已保存：${model.layer}`;
   } catch (error: any) { errorText.value = error?.message ?? "保存失败"; }
   finally { saving.value = false; }
 }
 
-function setSquareSize(size: number) { model.width = size; model.height = size; }
+function updateCustomDimension(axis: "width" | "height", event: Event) {
+  const value = Math.max(500, Math.min(20_000, Number((event.target as HTMLInputElement)?.value) || 500));
+  if (axis === "width") model.width = value; else model.height = value;
+}
+function setSquareSize(size: number) {
+  const oldWidth = Math.max(1, model.width); const oldHeight = Math.max(1, model.height);
+  model.mains.forEach((item) => { item.x = item.x / oldWidth * size; item.y = item.y / oldHeight * size; });
+  model.objectives.forEach((item) => { item.x = item.x / oldWidth * size; item.y = item.y / oldHeight * size; });
+  model.width = size; model.height = size;
+}
 function addObjectiveAt(x: number, y: number) { const item = objective(nextObjectiveName(), Math.round(x), Math.round(y), newOwner.value); model.objectives.push(item); selectedObjectiveUid.value = item.uid; editorTab.value = "objectives"; }
 function nextObjectiveName() { const used = new Set(model.objectives.map((item) => item.name.trim().toLowerCase())); let number = 1; while (used.has(`p${number}`)) number += 1; return `P${number}`; }
-function addObjectiveAtCenter() { addObjectiveAt(model.width / 2, model.height / 2); }
+function addObjectiveAtCenter() { const bounds = mapBounds.value; addObjectiveAt((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2); }
 function removeObjective(index: number) { const [removed] = model.objectives.splice(index, 1); if (selectedObjectiveUid.value === removed?.uid) selectedObjectiveUid.value = model.objectives[Math.min(index, model.objectives.length - 1)]?.uid ?? ""; }
 function moveObjective(index: number, offset: number) { const target = index + offset; if (target < 0 || target >= model.objectives.length) return; const [item] = model.objectives.splice(index, 1); model.objectives.splice(target, 0, item); }
 function ownerLabel(owner: number) { return owner === 1 ? "Team 1" : owner === 2 ? "Team 2" : "Neutral"; }
 function baseFor(teamId: number) { return teamId === 1 ? result.value?.bases?.team1 : result.value?.bases?.team2; }
 function fmt(value: unknown, digits = 0) { const number = Number(value); return Number.isFinite(number) ? number.toFixed(digits) : "--"; }
-function px(x: number) { return Math.max(0, Math.min(1000, (Number(x) / Math.max(1, model.width)) * 1000)); }
-function py(y: number) { return Math.max(0, Math.min(1000, (Number(y) / Math.max(1, model.height)) * 1000)); }
+function px(x: number) { const bounds = mapBounds.value; return Math.max(0, Math.min(1000, ((Number(x) - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX)) * 1000)); }
+function py(y: number) { const bounds = mapBounds.value; return Math.max(0, Math.min(1000, ((Number(y) - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY)) * 1000)); }
 function isCombatObjective(item: ObjectiveModel) { const index = model.objectives.indexOf(item); const id = `p${index + 1}`; return result.value?.combat?.team1ObjectiveId === id || result.value?.combat?.team2ObjectiveId === id; }
-function distanceToMain(item: ObjectiveModel, teamId: number) { const main = model.mains.find((entry) => entry.teamId === teamId); return main ? Math.round(Math.hypot(item.x - main.x, item.y - main.y)) : "--"; }
-function mapCoordinates(event: MouseEvent | PointerEvent) { const rect = stageRef.value?.getBoundingClientRect(); if (!rect) return null; return { x: Math.max(0, Math.min(model.width, ((event.clientX - rect.left) / rect.width) * model.width)), y: Math.max(0, Math.min(model.height, ((event.clientY - rect.top) / rect.height) * model.height)) }; }
+function distanceToMain(item: ObjectiveModel, teamId: number) { const main = model.mains.find((entry) => entry.teamId === teamId); return main ? Math.round(Math.hypot(item.x - main.x, item.y - main.y) * coordinateScaleMeters.value) : "--"; }
+function mapCoordinates(event: MouseEvent | PointerEvent) {
+  const rect = stageRef.value?.getBoundingClientRect(); if (!rect) return null;
+  const bounds = mapBounds.value;
+  return {
+    x: bounds.minX + Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * (bounds.maxX - bounds.minX),
+    y: bounds.minY + Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) * (bounds.maxY - bounds.minY),
+  };
+}
 function startDrag(type: "main" | "objective", id: number | string, event: PointerEvent) { if (type === "objective") selectedObjectiveUid.value = String(id); const target = event.currentTarget as Element; target.setPointerCapture?.(event.pointerId); dragging.value = { type, id, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false }; }
 function onPointerMove(event: PointerEvent) {
   if (!dragging.value) return;
@@ -263,11 +329,60 @@ function onPointerMove(event: PointerEvent) {
 }
 function stopDrag(event: PointerEvent) { if (!dragging.value) return; suppressMapClick = dragging.value.moved; const target = event.target as Element; if (target.hasPointerCapture?.(dragging.value.pointerId)) target.releasePointerCapture(dragging.value.pointerId); dragging.value = null; if (suppressMapClick) window.setTimeout(() => { suppressMapClick = false; }, 0); }
 function onMapClick(event: MouseEvent) { if (!addMode.value || suppressMapClick) return; const point = mapCoordinates(event); if (point) addObjectiveAt(point.x, point.y); }
+function startPan(event: PointerEvent) {
+  if (dragging.value || addMode.value || event.button !== 0 || (event.target as Element).closest?.(".draggable-node")) return;
+  activePanPointerId = event.pointerId;
+  viewportRef.value?.setPointerCapture?.(event.pointerId);
+  const rect = viewportRef.value?.getBoundingClientRect();
+  camera.startDrag(event.clientX - (rect?.left ?? 0), event.clientY - (rect?.top ?? 0));
+}
+function onViewportPointerMove(event: PointerEvent) {
+  if (dragging.value) { onPointerMove(event); return; }
+  if (!camera.isDragging.value || activePanPointerId !== event.pointerId) return;
+  const rect = viewportRef.value?.getBoundingClientRect();
+  camera.onDrag(event.clientX - (rect?.left ?? 0), event.clientY - (rect?.top ?? 0));
+}
+function stopPointerInteraction(event: PointerEvent) {
+  if (dragging.value) { stopDrag(event); return; }
+  if (activePanPointerId !== event.pointerId) return;
+  viewportRef.value?.releasePointerCapture?.(event.pointerId);
+  activePanPointerId = null;
+  camera.endDrag();
+  suppressMapClick = true;
+  window.setTimeout(() => { suppressMapClick = false; }, 0);
+}
+function onWheel(event: WheelEvent) {
+  const rect = viewportRef.value?.getBoundingClientRect(); if (!rect) return;
+  const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+  camera.setZoom(Math.max(.2, Math.min(12, camera.zoom.value * factor)), event.clientX - rect.left, event.clientY - rect.top);
+}
+function zoomAtCenter(factor: number) {
+  const rect = viewportRef.value?.getBoundingClientRect(); if (!rect) return;
+  camera.setZoom(Math.max(.2, Math.min(12, camera.zoom.value * factor)), rect.width / 2, rect.height / 2);
+}
+function zoomIn() { zoomAtCenter(1.25); }
+function zoomOut() { zoomAtCenter(.8); }
+function resetView() {
+  const element = viewportRef.value; if (!element) return;
+  const nextZoom = Math.max(.2, Math.min(1.2, Math.min(element.clientWidth, element.clientHeight) / 1000 * .94));
+  camera.zoom.value = nextZoom;
+  camera.x.value = (element.clientWidth - 1000 * nextZoom) / 2;
+  camera.y.value = (element.clientHeight - 1000 * nextZoom) / 2;
+}
 function onKeydown(event: KeyboardEvent) { if (event.key === "Escape") { addMode.value = false; dragging.value = null; } }
 
 watch(model, scheduleSimulation, { deep: true });
-onMounted(async () => { window.addEventListener("keydown", onKeydown); try { await fetchDynamicPressureZoneBaseConfig(); baseConfigLoaded.value = true; } catch {} });
-onBeforeUnmount(() => { window.removeEventListener("keydown", onKeydown); if (simulationTimer != null) window.clearTimeout(simulationTimer); requestSequence += 1; });
+onMounted(async () => {
+  window.addEventListener("keydown", onKeydown);
+  if (viewportRef.value && typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(([entry]) => { viewportWidth.value = entry.contentRect.width; viewportHeight.value = entry.contentRect.height; });
+    resizeObserver.observe(viewportRef.value);
+    viewportWidth.value = viewportRef.value.clientWidth; viewportHeight.value = viewportRef.value.clientHeight;
+  }
+  await nextTick(); resetView();
+  try { await fetchDynamicPressureZoneBaseConfig(); baseConfigLoaded.value = true; } catch {}
+});
+onBeforeUnmount(() => { window.removeEventListener("keydown", onKeydown); resizeObserver?.disconnect(); if (simulationTimer != null) window.clearTimeout(simulationTimer); requestSequence += 1; });
 applyPreset("straight");
 </script>
 
@@ -278,6 +393,20 @@ applyPreset("straight");
 .objectives-editor { padding: 9px; }.add-objective-box { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 10px; border: 1px dashed rgba(45, 212, 191, .3); border-radius: 8px; background: rgba(13, 148, 136, .05); }.add-objective-box.active { border-style: solid; background: rgba(13, 148, 136, .12); }.add-objective-box div { display: grid; gap: 3px; }.add-objective-box strong { font-size: 10px; }.add-objective-box small { color: #70879c; font-size: 8px; }.add-objective-box button,.center-add { padding: 6px 8px; border: 1px solid rgba(45, 212, 191, .35); border-radius: 6px; background: rgba(13, 148, 136, .13); color: #99f6e4; font-size: 9px; cursor: pointer; }.new-owner-row { display: flex; align-items: center; gap: 6px; padding: 8px 1px; color: #70879c; font-size: 9px; }.new-owner-row .center-add { margin-left: auto; }.owner-toggle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 9px; }.owner-toggle.compact { width: 105px; margin: 0; }.owner-toggle.compact button { padding: 4px; font-size: 8px; }.objective-list { display: grid; gap: 4px; }.objective-row { display: grid; grid-template-columns: 27px 1fr auto auto; align-items: center; gap: 6px; padding: 6px; border: 1px solid rgba(148, 163, 184, .12); border-radius: 7px; background: rgba(15, 23, 42, .48); cursor: pointer; }.objective-row:hover,.objective-row.selected { border-color: rgba(94, 234, 212, .38); background: rgba(13, 148, 136, .08); }.objective-row.combat { box-shadow: inset 2px 0 #2dd4bf; }.drag-order { width: 25px; height: 25px; border: 1px solid rgba(148, 163, 184, .2); border-radius: 50%; background: #0c1b2a; color: #cbd5e1; font: 700 9px ui-monospace, monospace; }.objective-identity { min-width: 0; display: grid; gap: 2px; }.objective-identity strong { overflow: hidden; text-overflow: ellipsis; font-size: 10px; }.objective-identity span { color: #61798f; font: 8px ui-monospace, monospace; }.owner-chip { padding: 3px 5px; border-radius: 999px; background: rgba(148, 163, 184, .09); color: #94a3b8; font-size: 7px; }.owner-1 .owner-chip { background: rgba(37, 99, 235, .12); color: #93c5fd; }.owner-2 .owner-chip { background: rgba(220, 38, 38, .12); color: #fca5a5; }.row-actions { display: flex; gap: 2px; opacity: .45; }.objective-row:hover .row-actions,.objective-row.selected .row-actions { opacity: 1; }.row-actions button { width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: rgba(148, 163, 184, .08); color: #94a3b8; cursor: pointer; }.row-actions button:disabled { opacity: .25; }.selected-editor { margin-top: 8px; padding: 10px; border: 1px solid rgba(45, 212, 191, .18); border-radius: 8px; background: rgba(13, 148, 136, .035); }
 .map-toolbar { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: none; padding: 7px 10px; border-bottom: 1px solid rgba(148, 163, 184, .12); }.layer-toggles { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }.layer-toggles label { display: flex; align-items: center; gap: 5px; padding: 5px 7px; border-radius: 6px; background: rgba(148, 163, 184, .055); color: #8ba0b4; font-size: 9px; cursor: pointer; }.layer-toggles input { display: none; }.layer-toggles label>span { width: 6px; height: 6px; border-radius: 50%; background: #64748b; opacity: .35; }.layer-toggles input:checked+span { opacity: 1; box-shadow: 0 0 7px currentColor; }.layer-toggles .hard>span { background: #ef4444; }.layer-toggles .soft>span { background: #f97316; }.layer-toggles .combat>span { background: #14b8a6; }.map-scale-readout { color: #668096; font: 9px ui-monospace, monospace; }.map-viewport { min-height: 0; display: grid; place-items: center; flex: 1; overflow: auto; padding: 10px; background: #02060b; }.sim-map { position: relative; width: 100%; max-width: 100%; overflow: hidden; border: 1px solid rgba(94, 234, 212, .16); border-radius: 7px; background: radial-gradient(circle at 50% 50%, rgba(18, 55, 76, .42), transparent 58%), #06101b; touch-action: none; user-select: none; }.sim-map.add-mode { cursor: crosshair; border-color: rgba(45, 212, 191, .55); }.sim-map.dragging { cursor: grabbing; }.sim-map-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(125, 211, 252, .055) 1px, transparent 1px), linear-gradient(90deg, rgba(125, 211, 252, .055) 1px, transparent 1px); background-size: 5% 5%; }.sim-objective-layer { position: absolute; z-index: 6; inset: 0; width: 100%; height: 100%; overflow: visible; }.draggable-node { cursor: grab; }.draggable-node circle { fill: #07111e; stroke: #cbd5e1; stroke-width: 3px; }.draggable-node text { fill: white; font-size: 17px; font-weight: 800; text-anchor: middle; pointer-events: none; }.main-node.team-1 circle,.objective-node.owner-1 circle { stroke: #60a5fa; }.main-node.team-2 circle,.objective-node.owner-2 circle { stroke: #f87171; }.objective-node.owner-0 circle { stroke: #cbd5e1; }.objective-node.combat circle { fill: #115e59; stroke: #5eead4; }.objective-node.selected circle { stroke-width: 5px; filter: drop-shadow(0 0 7px rgba(94, 234, 212, .8)); }.distance-lines line { stroke: rgba(203, 213, 225, .34); stroke-width: 2px; stroke-dasharray: 7 6; }.distance-lines text { fill: #a9b9c9; font-size: 15px; text-anchor: middle; paint-order: stroke; stroke: #020617; stroke-width: 5px; }.distance-lines .combat line { stroke: #5eead4; stroke-width: 4px; }.distance-lines .combat text { fill: #99f6e4; }.add-mode-hint { position: absolute; z-index: 10; top: 9px; left: 50%; transform: translateX(-50%); padding: 6px 9px; border: 1px solid rgba(45, 212, 191, .45); border-radius: 999px; background: rgba(4, 47, 46, .92); color: #99f6e4; font-size: 9px; pointer-events: none; }.inactive-notice { position: absolute; z-index: 12; inset: 50% auto auto 50%; transform: translate(-50%, -50%); padding: 9px 12px; border: 1px solid #f59e0b; border-radius: 7px; background: rgba(69, 26, 3, .9); color: #fde68a; font-size: 10px; }.map-footer { min-height: 31px; display: flex; align-items: center; gap: 14px; flex: none; padding: 5px 10px; border-top: 1px solid rgba(148, 163, 184, .1); color: #5f778c; font-size: 8px; }.combat-pair { margin-left: auto; color: #5eead4; }
 .result-header { min-height: 49px; display: flex; align-items: center; justify-content: space-between; flex: none; padding: 8px 11px; border-bottom: 1px solid rgba(148, 163, 184, .12); }.result-header button { width: 27px; height: 27px; border: 1px solid rgba(148, 163, 184, .18); border-radius: 6px; background: rgba(148, 163, 184, .06); color: #8fa8bf; cursor: pointer; }.result-scroll { padding: 9px; }.metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }.metric-grid>div { display: grid; gap: 3px; padding: 9px; border-radius: 7px; background: rgba(148, 163, 184, .055); }.metric-grid span { color: #647d93; font-size: 8px; }.metric-grid strong { font: 700 15px ui-monospace, monospace; }.team-result,.combat-result,.distance-result { margin-top: 8px; padding: 9px; border: 1px solid rgba(148, 163, 184, .12); border-radius: 8px; background: rgba(15, 23, 42, .38); }.team-result { border-left: 2px solid #60a5fa; }.team-result.team-2 { border-left-color: #f87171; }.team-result header,.combat-result header,.distance-result header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; }.team-result header span { color: #8fa8bf; font-size: 8px; }.team-result header i { display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; background: #60a5fa; }.team-result.team-2 header i { background: #f87171; }.team-result header b,.combat-result header b { color: #dbeafe; font: 700 9px ui-monospace, monospace; }.radius-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 7px; border-radius: 5px; background: rgba(239, 68, 68, .06); }.radius-row+.radius-row { margin-top: 3px; }.radius-row span { color: #b98080; font-size: 8px; }.radius-row strong { color: #fca5a5; font: 700 12px ui-monospace, monospace; }.radius-row.soft { background: rgba(249, 115, 22, .06); }.radius-row.soft span { color: #a77e63; }.radius-row.soft strong { color: #fdba74; }.team-result dl,.combat-result dl { display: grid; grid-template-columns: 1fr auto; gap: 5px; margin: 8px 0 0; color: #667e93; font-size: 8px; }.team-result dd,.combat-result dd { margin: 0; color: #a9bbcc; font: 9px ui-monospace, monospace; }.combat-result { border-color: rgba(45, 212, 191, .17); }.combat-shape { height: 12px; display: flex; align-items: center; justify-content: center; }.combat-shape::before { content: ''; width: 58%; border-top: 1px dashed rgba(94, 234, 212, .3); }.combat-shape span { position: absolute; max-width: 76%; height: 9px; border: 1px solid rgba(45, 212, 191, .45); border-radius: 999px; background: rgba(20, 184, 166, .12); }.distance-result header span { font-size: 9px; font-weight: 700; }.distance-result header small { color: #587187; font-size: 7px; }.distance-result>div:not(header) { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 4px 0; border-top: 1px solid rgba(148, 163, 184, .07); color: #7890a7; font: 8px ui-monospace, monospace; }.distance-result b { color: #b8c6d3; }.toast { position: fixed; z-index: 30; right: 20px; bottom: 18px; display: flex; align-items: center; gap: 12px; max-width: 420px; padding: 10px 12px; border: 1px solid rgba(52, 211, 153, .35); border-radius: 8px; background: rgba(6, 35, 29, .96); color: #a7f3d0; font-size: 10px; box-shadow: 0 12px 30px rgba(0,0,0,.35); }.toast.error { border-color: rgba(248, 113, 113, .4); background: rgba(50, 13, 18, .96); color: #fecaca; }.toast button { border: 0; background: transparent; color: inherit; cursor: pointer; }
+.sim-map-select { display: grid; gap: 5px; margin-bottom: 9px; color: #7890a7; font-size: 9px; }
+.sim-map-select select { width: 100%; padding: 8px; border: 1px solid rgba(45, 212, 191, .24); border-radius: 7px; background: #071320; color: #dbeafe; font-size: 10px; }
+.field-row input:disabled { color: #88a2b6; background: rgba(15, 29, 47, .58); cursor: not-allowed; }
+.map-viewport.tactical-sim-viewport { position: relative; display: block; place-items: unset; overflow: hidden; padding: 0; background: #02060b; touch-action: none; }
+.viewport-bg-grid { position: absolute; inset: 0; background-image: linear-gradient(rgba(125, 211, 252, .035) 1px, transparent 1px), linear-gradient(90deg, rgba(125, 211, 252, .035) 1px, transparent 1px); background-size: 32px 32px; }
+.tactical-sim-viewport .sim-map { position: absolute; width: 1000px; height: 1000px; max-width: none; aspect-ratio: auto; transform-origin: 0 0; border-radius: 0; will-change: transform; }
+.tactical-sim-viewport .tiled-map-wrapper { position: absolute; z-index: 0; inset: 0; overflow: hidden; background: radial-gradient(circle at 50% 50%, rgba(18, 55, 76, .42), transparent 58%), #06101b; }
+.tactical-sim-viewport .sim-map-grid { background-size: 50px 50px; }
+.map-viewport.is-panning,.tactical-sim-viewport .sim-map.dragging { cursor: grabbing; }
+.sim-tactical-command-bar { position: absolute; z-index: 20; top: 12px; left: 12px; right: 12px; display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 52px; padding: 8px 13px; border: 1px solid rgba(148, 163, 184, .28); border-radius: 11px; background: linear-gradient(90deg, rgba(4, 13, 27, .94), rgba(8, 23, 40, .84)); box-shadow: 0 12px 32px rgba(0,0,0,.32); backdrop-filter: blur(12px); pointer-events: none; }
+.sim-tactical-command-bar div { display: grid; gap: 1px; }.sim-tactical-command-bar span { color: #48d6aa; font-size: 8px; font-weight: 800; letter-spacing: .14em; }.sim-tactical-command-bar strong { color: #f1f7fb; font-size: 14px; }.sim-tactical-command-bar small { color: #91aabd; font: 9px ui-monospace, monospace; }.sim-tactical-command-bar>b { display: flex; align-items: center; gap: 6px; color: #a7f3d0; font-size: 9px; }.sim-tactical-command-bar>b i { width: 7px; height: 7px; border-radius: 50%; background: #45d9ac; box-shadow: 0 0 10px rgba(69,217,172,.8); }.sim-tactical-command-bar>b.busy i { background: #f59e0b; }
+.sim-map-controls { position: absolute; z-index: 21; bottom: 12px; left: 12px; display: flex; padding: 4px; border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0,0,0,.28); }
+.sim-map-controls button { width: 34px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: #b8ccd9; font-size: 16px; cursor: pointer; }.sim-map-controls button:hover { background: rgba(72, 214, 170, .2); color: #a7f6d4; }
+.tactical-sim-viewport .add-mode-hint { top: 78px; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (max-width: 1180px) { .sim-workspace { grid-template-columns: 270px minmax(430px, 1fr); }.result-panel { display: none; } }
 @media (max-width: 760px) { .pressure-simulator-page { height: auto; min-height: 100%; overflow: auto; }.sim-header { align-items: flex-start; flex-direction: column; }.header-actions { width: 100%; flex-wrap: wrap; }.header-actions select { flex: 1; }.sim-workspace { display: flex; flex-direction: column; }.editor-panel { min-height: 420px; }.map-panel { min-height: 520px; order: -1; }.result-panel { display: flex; min-height: 460px; }.sim-title .live-badge { display: none; }.map-footer { flex-wrap: wrap; }.combat-pair { margin-left: 0; } }
