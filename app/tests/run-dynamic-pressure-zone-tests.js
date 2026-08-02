@@ -71,7 +71,7 @@ const overlapInput = baseInput({
   objectiveChain: [{ id: "p1", x: 500, y: 200 }, { id: "p2", x: 600, y: 200 }, { id: "p3", x: 700, y: 200 }, { id: "p4", x: 3200, y: 3200 }],
 });
 const overlap = calculatePressureZones(overlapInput);
-assert.equal(classifyPoint({ x: 520, y: 200 }, overlap.zones).type, "combat");
+assert.equal(classifyPoint({ x: 600, y: 200 }, overlap.zones).type, "combat");
 
 // 8. Hard always wins over Combat.
 assert.equal(classifyPoint({ x: 200, y: 200 }, overlap.zones).type, "hard");
@@ -91,6 +91,37 @@ const centimeters = calculatePressureZones(baseInput({
 }));
 assert.equal(centimeters.map.widthMeters, 4000);
 assert.equal(centimeters.map.worldUnitsPerMeter, 100);
+
+// Every base-size control is effective: contributions are additive and zero
+// remains a valid configured value instead of falling back to defaults.
+const influenceConfig = {
+  baseRadiusMultiplier: 1,
+  hard: {
+    mapFactor: 0,
+    nearestObjectiveFactor: 0,
+    minRadiusMeters: 0,
+    maxRadiusMeters: 5000,
+    frontSafetyMarginMeters: 0,
+  },
+  soft: {
+    mapFactor: 0,
+    nearestObjectiveFactor: 0,
+    minExtraOverHardMeters: 0,
+    maxRadiusMeters: 5000,
+    frontSafetyMarginMeters: 0,
+  },
+};
+const zeroContribution = calculatePressureZones(baseInput({ config: influenceConfig }));
+assert.equal(zeroContribution.bases.team1.hardRadius, 0);
+assert.equal(zeroContribution.bases.team1.softRadius, 0);
+const mapContribution = calculatePressureZones(baseInput({ config: { ...influenceConfig, hard: { ...influenceConfig.hard, mapFactor: 0.1 } } }));
+const objectiveContribution = calculatePressureZones(baseInput({ config: { ...influenceConfig, hard: { ...influenceConfig.hard, nearestObjectiveFactor: 0.5 } } }));
+const multipliedContribution = calculatePressureZones(baseInput({ config: { ...influenceConfig, baseRadiusMultiplier: 2, hard: { ...influenceConfig.hard, mapFactor: 0.1 } } }));
+assert.ok(mapContribution.bases.team1.hardRadius > zeroContribution.bases.team1.hardRadius);
+assert.ok(objectiveContribution.bases.team1.hardRadius > zeroContribution.bases.team1.hardRadius);
+assert.equal(multipliedContribution.bases.team1.hardRadius, mapContribution.bases.team1.hardRadius * 2);
+assert.ok(straight.bases.team1.hardRadius > 700);
+assert.ok(straight.bases.team1.softRadius > 1200);
 
 // Tactical player ticks do not trigger recalculation; ownership changes do.
 const liveSnapshot = {
@@ -139,6 +170,7 @@ assert.equal(livePublishCount, 2);
 // Base settings persist, validate, and immediately affect simulations and live state.
 const defaultBaseConfig = module.api.getBaseConfig();
 assert.equal(defaultBaseConfig.config.combat.gapFactor, 0.6);
+assert.equal(defaultBaseConfig.config.baseRadiusMultiplier, 1.15);
 const updatedConfig = structuredClone(defaultBaseConfig.config);
 updatedConfig.combat.gapFactor = 0.9;
 let routeResponse = null;

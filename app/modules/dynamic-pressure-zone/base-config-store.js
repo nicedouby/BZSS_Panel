@@ -8,6 +8,7 @@ const FIELD_RULES = {
   referenceDiagonalMeters: [500, 20000],
   minMapScale: [0.1, 5],
   maxMapScale: [0.1, 5],
+  baseRadiusMultiplier: [0.25, 4],
   "hard.mapFactor": [0, 2],
   "hard.nearestObjectiveFactor": [0, 3],
   "hard.minRadiusMeters": [0, 10000],
@@ -60,6 +61,7 @@ export function normalizeBaseConfig(value = {}) {
     minMapScale: checked("minMapScale", merged.minMapScale),
     maxMapScale: checked("maxMapScale", merged.maxMapScale),
     coordinateScaleMeters: nullablePositive("coordinateScaleMeters", merged.coordinateScaleMeters),
+    baseRadiusMultiplier: checked("baseRadiusMultiplier", merged.baseRadiusMultiplier),
     hard: {
       mapFactor: checked("hard.mapFactor", merged.hard.mapFactor),
       nearestObjectiveFactor: checked("hard.nearestObjectiveFactor", merged.hard.nearestObjectiveFactor),
