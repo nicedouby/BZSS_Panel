@@ -779,6 +779,7 @@
 
     <div v-if="pressureSettingsOpen" class="pressure-settings-modal" role="dialog" aria-modal="true" aria-label="压家圈基础参数">
       <div
+        ref="pressureModalPanelRef"
         class="pressure-settings-modal__panel"
         :style="{
           left: modalPos ? `${modalPos.x}px` : undefined,
@@ -792,7 +793,10 @@
             <span class="drag-title font-mono">⚙ 压家圈基础参数设置</span>
             <span class="drag-tip">(按住此处自由拖拽窗口)</span>
           </div>
-          <button type="button" class="modal-close-icon" title="关闭窗口" @click="pressureSettingsOpen = false">✕</button>
+          <div class="modal-header-actions">
+            <button v-if="modalPos" type="button" class="modal-reset-pos-btn" title="重置窗口位置" @click="resetModalPos">↺ 重置位置</button>
+            <button type="button" class="modal-close-icon" title="关闭窗口" @click="pressureSettingsOpen = false">✕</button>
+          </div>
         </div>
         <div class="modal-body-scroll custom-scrollbar">
           <PressureZoneSettingsPage
@@ -1510,33 +1514,42 @@ const focusedPlayerKey = ref("");
 
 // Draggable Pressure Zone Settings Modal State
 const modalPos = ref<{ x: number; y: number } | null>(null);
-const isDraggingModal = ref(false);
-let dragOffset = { x: 0, y: 0 };
+const pressureModalPanelRef = ref<HTMLElement | null>(null);
 
-function startModalDrag(e: MouseEvent) {
-  isDraggingModal.value = true;
-  const initialX = modalPos.value?.x ?? Math.max(20, window.innerWidth - 980);
-  const initialY = modalPos.value?.y ?? 70;
-  dragOffset = {
-    x: e.clientX - initialX,
-    y: e.clientY - initialY,
-  };
-  window.addEventListener("mousemove", onModalDrag);
-  window.addEventListener("mouseup", stopModalDrag);
+function resetModalPos() {
+  modalPos.value = null;
 }
 
-function onModalDrag(e: MouseEvent) {
-  if (!isDraggingModal.value) return;
-  modalPos.value = {
-    x: Math.max(10, Math.min(window.innerWidth - 450, e.clientX - dragOffset.x)),
-    y: Math.max(10, Math.min(window.innerHeight - 200, e.clientY - dragOffset.y)),
-  };
-}
+function startModalDrag(event: MouseEvent) {
+  if ((event.target as HTMLElement).closest("button, input, select, a")) return;
+  event.preventDefault();
+  const panelEl = pressureModalPanelRef.value;
+  if (!panelEl) return;
+  const rect = panelEl.getBoundingClientRect();
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const initialLeft = modalPos.value ? modalPos.value.x : rect.left;
+  const initialTop = modalPos.value ? modalPos.value.y : rect.top;
 
-function stopModalDrag() {
-  isDraggingModal.value = false;
-  window.removeEventListener("mousemove", onModalDrag);
-  window.removeEventListener("mouseup", stopModalDrag);
+  const onMouseMove = (moveEvent: MouseEvent) => {
+    const deltaX = moveEvent.clientX - startX;
+    const deltaY = moveEvent.clientY - startY;
+    const panelWidth = rect.width;
+    const panelHeight = rect.height;
+    const maxX = Math.max(10, window.innerWidth - panelWidth - 10);
+    const maxY = Math.max(10, window.innerHeight - panelHeight - 10);
+    const newX = Math.max(10, Math.min(maxX, initialLeft + deltaX));
+    const newY = Math.max(10, Math.min(maxY, initialTop + deltaY));
+    modalPos.value = { x: newX, y: newY };
+  };
+
+  const onMouseUp = () => {
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  };
+
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
 }
 
 // Shared activePlayerWindow managed by parent MatchStatusPage
@@ -3801,16 +3814,15 @@ onBeforeUnmount(deactivateMapPage);
 
 .pressure-settings-modal__panel {
   position: absolute;
-  top: 70px;
-  right: 440px;
-  width: 540px;
-  max-width: calc(100vw - 460px);
-  height: min(640px, 82vh);
+  top: 50px;
+  left: max(16px, calc(50vw - 390px));
+  width: min(780px, calc(100vw - 32px));
+  height: min(700px, calc(100vh - 70px));
   pointer-events: auto;
   overflow: hidden;
   border: 1px solid rgba(94, 234, 212, 0.4);
-  border-radius: 12px;
-  background: rgba(4, 9, 18, 0.95);
+  border-radius: 14px;
+  background: rgba(4, 9, 18, 0.96);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(45, 212, 191, 0.18);
   backdrop-filter: blur(16px);
   display: flex;
@@ -3818,7 +3830,7 @@ onBeforeUnmount(deactivateMapPage);
 }
 
 .modal-drag-header {
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: rgba(13, 148, 136, 0.25);
   border-bottom: 1px solid rgba(94, 234, 212, 0.3);
   display: flex;
@@ -3834,7 +3846,7 @@ onBeforeUnmount(deactivateMapPage);
   align-items: center;
   gap: 8px;
   color: #99f6e4;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .drag-grip-dots {
@@ -3848,18 +3860,42 @@ onBeforeUnmount(deactivateMapPage);
 }
 
 .drag-tip {
-  font-size: 9px;
+  font-size: 10px;
   color: rgba(148, 163, 184, 0.7);
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-reset-pos-btn {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-reset-pos-btn:hover {
+  background: rgba(13, 148, 136, 0.3);
+  border-color: rgba(45, 212, 191, 0.5);
+  color: #5eead4;
 }
 
 .modal-close-icon {
   background: transparent;
   border: none;
   color: #94a3b8;
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
 }
 
 .modal-close-icon:hover {
