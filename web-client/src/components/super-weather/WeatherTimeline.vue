@@ -1,9 +1,18 @@
 <template>
   <div class="timeline-shell">
     <div class="timeline-summary">
-      <span>2 HOUR WORKSPACE</span>
-      <strong>Weather total {{ formatDuration(totalSeconds) }}</strong>
-      <small>Drag blocks to reorder · drag the right edge to change duration · click arrows to edit Transition</small>
+      <div class="timeline-summary-copy">
+        <span>{{ formatWorkspace(workspaceSeconds) }} EDIT RANGE</span>
+        <strong>Weather total {{ formatDuration(totalSeconds) }}</strong>
+        <small>Drag blocks to reorder · drag either boundary to change intervals · click arrows to edit Transition</small>
+      </div>
+      <label class="workspace-picker">
+        <span>VISIBLE RANGE</span>
+        <select :value="workspaceSeconds" @change="$emit('workspace-change', Number(($event.target as HTMLSelectElement).value))">
+          <option :value="2 * 60 * 60">02:00:00 · Typical match</option>
+          <option :value="6 * 60 * 60">06:00:00 · Extended workspace</option>
+        </select>
+      </label>
     </div>
     <div
       ref="track"
@@ -36,11 +45,12 @@
           :end-seconds="item.endSeconds"
           :left-percent="item.leftPercent"
           :width-percent="item.widthPercent"
+          :can-resize-left="item.index > 0"
           :selected="item.segment.id === selectedId"
           :current="item.segment.id === currentSegmentId"
           :dragging="item.segment.id === draggingId"
           @select="$emit('select', item.segment.id)"
-          @resize-start="beginDurationResize($event, item.segment)"
+          @resize-start="beginDurationResize($event.event, item.segment, $event.side)"
           @drag-start="beginReorder($event, item.segment.id)"
           @drag-end="draggingId = ''"
           @drop="dropOn(item.segment.id)"
@@ -67,16 +77,25 @@ import WeatherBlock from "./WeatherBlock.vue";
 
 const DEFAULT_WORKSPACE_SECONDS = 2 * 60 * 60;
 const MIN_CANVAS_WIDTH = 1440;
+const MIN_SEGMENT_SECONDS = 10;
 const props = defineProps<{
   timeline: SuperWeatherSegment[];
   selectedId?: string;
   currentSegmentId?: string;
   currentTransitionNodeId?: string | null;
   logicalSeconds?: number | null;
+  workspaceSeconds?: number;
 }>();
 const emit = defineEmits<{
   select: [id: string];
+  "workspace-change": [seconds: number];
   updateDuration: [id: string, durationSeconds: number];
+  updateBoundary: [
+    currentId: string,
+    currentDurationSeconds: number,
+    previousId: string,
+    previousDurationSeconds: number,
+  ];
   reorder: [fromId: string, toId: string];
 }>();
 const track = ref<HTMLElement | null>(null);
@@ -85,7 +104,10 @@ let resizeState: {
   pointerId: number;
   id: string;
   startX: number;
+  side: "left" | "right";
   startDuration: number;
+  previousId: string | null;
+  previousStartDuration: number | null;
   trackWidth: number;
   displaySeconds: number;
 } | null = null;
@@ -99,7 +121,11 @@ const rawLayout = computed(() => {
   });
 });
 const totalSeconds = computed(() => rawLayout.value.at(-1)?.endSeconds ?? 0);
-const displaySeconds = computed(() => Math.max(DEFAULT_WORKSPACE_SECONDS, totalSeconds.value));
+const workspaceSeconds = computed(() => Math.max(
+  DEFAULT_WORKSPACE_SECONDS,
+  Number(props.workspaceSeconds) || DEFAULT_WORKSPACE_SECONDS,
+));
+const displaySeconds = computed(() => Math.max(workspaceSeconds.value, totalSeconds.value));
 const canvasWidth = computed(() => Math.max(MIN_CANVAS_WIDTH, Math.ceil(displaySeconds.value / 5)));
 const layout = computed(() => rawLayout.value.map((item) => ({
   ...item,
@@ -132,14 +158,22 @@ function dropOn(toId: string) {
   if (fromId && fromId !== toId) emit("reorder", fromId, toId);
 }
 
-function beginDurationResize(event: PointerEvent, segment: SuperWeatherWeatherSegment) {
+function beginDurationResize(
+  event: PointerEvent,
+  segment: SuperWeatherWeatherSegment,
+  side: "left" | "right",
+) {
   const width = track.value?.getBoundingClientRect().width ?? 0;
-  if (!width) return;
+  const previous = props.timeline[props.timeline.findIndex((item) => item.id === segment.id) - 1] ?? null;
+  if (!width || (side === "left" && !previous)) return;
   resizeState = {
     pointerId: event.pointerId,
     id: segment.id,
+    side,
     startX: event.clientX,
     startDuration: segment.durationSeconds,
+    previousId: previous?.id ?? null,
+    previousStartDuration: previous?.durationSeconds ?? null,
     trackWidth: width,
     displaySeconds: displaySeconds.value,
   };
@@ -150,9 +184,28 @@ function beginDurationResize(event: PointerEvent, segment: SuperWeatherWeatherSe
 
 function resizeDuration(event: PointerEvent) {
   if (!resizeState || event.pointerId !== resizeState.pointerId) return;
-  const deltaSeconds = (event.clientX - resizeState.startX) / resizeState.trackWidth * resizeState.displaySeconds;
+  const deltaSeconds = (event.clientX - resizeState.startX)
+    / resizeState.trackWidth
+    * resizeState.displaySeconds;
   const snap = event.altKey || event.shiftKey ? 10 : 60;
-  const duration = Math.max(10, Math.round((resizeState.startDuration + deltaSeconds) / snap) * snap);
+
+  if (resizeState.side === "left" && resizeState.previousId && resizeState.previousStartDuration != null) {
+    const currentDuration = Math.max(
+      MIN_SEGMENT_SECONDS,
+      Math.round((resizeState.startDuration - deltaSeconds) / snap) * snap,
+    );
+    const previousDuration = Math.max(
+      MIN_SEGMENT_SECONDS,
+      Math.round((resizeState.previousStartDuration + deltaSeconds) / snap) * snap,
+    );
+    emit("updateBoundary", resizeState.id, currentDuration, resizeState.previousId, previousDuration);
+    return;
+  }
+
+  const duration = Math.max(
+    MIN_SEGMENT_SECONDS,
+    Math.round((resizeState.startDuration + deltaSeconds) / snap) * snap,
+  );
   emit("updateDuration", resizeState.id, duration);
 }
 
@@ -161,6 +214,11 @@ function stopDurationResize() {
   window.removeEventListener("pointermove", resizeDuration);
   window.removeEventListener("pointerup", stopDurationResize);
   window.removeEventListener("pointercancel", stopDurationResize);
+}
+
+function formatWorkspace(value: number) {
+  const hours = Math.max(1, Math.round(value / 3600));
+  return String(hours).padStart(2, "0") + " HOUR";
 }
 
 function formatTick(value: number) {
@@ -180,10 +238,14 @@ function formatDuration(value: number) {
 
 <style scoped>
 .timeline-shell { min-width: 0; }
-.timeline-summary { display: flex; align-items: center; gap: 12px; padding: 0 4px 8px; }
-.timeline-summary span { color: #6edaff; font-size: 8px; letter-spacing: .14em; }
-.timeline-summary strong { color: rgba(224, 241, 250, .78); font: 10px ui-monospace, monospace; }
-.timeline-summary small { margin-left: auto; color: rgba(202, 221, 235, .46); font-size: 9px; }
+.timeline-summary { display: flex; align-items: end; gap: 14px; padding: 0 4px 8px; }
+.timeline-summary-copy { min-width: 0; display: grid; gap: 3px; }
+.timeline-summary-copy span { color: #6edaff; font-size: 8px; letter-spacing: .14em; }
+.timeline-summary-copy strong { color: rgba(224, 241, 250, .78); font: 10px ui-monospace, monospace; }
+.timeline-summary-copy small { color: rgba(202, 221, 235, .46); font-size: 9px; }
+.workspace-picker { display: grid; gap: 3px; margin-left: auto; }
+.workspace-picker span { color: rgba(175, 207, 224, .56); font-size: 8px; letter-spacing: .12em; }
+.workspace-picker select { height: 27px; padding: 0 8px; border: 1px solid rgba(106, 161, 187, .25); border-radius: 7px; background: rgba(11, 29, 43, .9); color: #dff5ff; font-size: 10px; }
 .timeline-track {
   position: relative;
   height: 174px;
