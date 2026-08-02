@@ -34,6 +34,9 @@ export class DeveloperToolsService {
       busy: Boolean(this.running),
       activeOperation: this.running?.operation ?? null,
       pid: process.pid,
+      nodePath: process.execPath,
+      workingDirectory: process.cwd(),
+      entrypoint: process.argv[1] ?? null,
     };
   }
 
@@ -86,7 +89,24 @@ export class DeveloperToolsService {
           // Keep the normal Windows entry point, including its configured CPU affinity.
           "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', $runScript) -WorkingDirectory $projectRoot -WindowStyle Hidden",
         ].join("; ");
-        const child = this.processSpawner("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+        // Start PowerShell through a detached cmd wrapper. This gives the
+        // supervisor its own process tree before the current Node process is
+        // terminated, which is more reliable when Panel was started by a
+        // .bat file with START /WAIT.
+        const child = this.processSpawner("cmd.exe", [
+          "/d",
+          "/c",
+          "start",
+          "",
+          "/b",
+          "powershell.exe",
+          "-NoProfile",
+          "-NonInteractive",
+          "-WindowStyle",
+          "Hidden",
+          "-Command",
+          script,
+        ], {
           detached: true,
           stdio: "ignore",
           windowsHide: true,
@@ -102,7 +122,13 @@ export class DeveloperToolsService {
         setTimeout(() => process.exit(0), 800).unref();
       }
       this.logger?.warn?.("Developer tools scheduled a panel restart.", { operation: "developerTools.restart", pid: currentPid });
-      return { ok: true, operation: "restart", currentPid, message: "The running Panel process will be stopped and a new process will be started." };
+      return {
+        ok: true,
+        operation: "restart",
+        currentPid,
+        workingDirectory: this.projectRoot,
+        message: "The running Panel process will be stopped and a new process will be started from the detected project directory.",
+      };
     } catch (error) {
       return { ok: false, code: "RestartScheduleFailed", message: error?.message ?? "Failed to schedule restart." };
     }
