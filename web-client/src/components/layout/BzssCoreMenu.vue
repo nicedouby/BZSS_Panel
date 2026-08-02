@@ -11,6 +11,9 @@
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('weather')">
           Weather
         </button>
+        <button type="button" class="bzss-core-item" role="menuitem" @click="openSuperWeather">
+          Super Weather
+        </button>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('forb-ress')">
           FOB Resource Regeneration
         </button>
@@ -339,7 +342,7 @@
                 <code>CreateVehicle:PlayerName,/Game/Vehicles/AUS_M1A1/BP_AUS_M1A1.BP_AUS_M1A1_C,1</code>
                 <code>AdminTrack:AdminName,TrackObject</code>
                 <code>RemoveAdminTrack:AdminName</code>
-                <code>SetWeather:SnowHeavy,10</code>
+                <code>SetWeather:11,10</code>
                   <code>SetFobResourceRegeneration:1,1,100,500,10</code>
                   <code>SetAutomaticHeal:1</code>
                   <code>SetAutomaticHealValue:100</code>
@@ -621,6 +624,11 @@ function toggleMenu() {
 function closeMenu() {
   menuOpen.value = false;
   if (!dialogOpen.value) removeWindowListeners();
+}
+
+function openSuperWeather() {
+  closeMenu();
+  window.dispatchEvent(new CustomEvent("bzss:super-weather-open"));
 }
 
 function onWindowPointerDown(event: PointerEvent) {
