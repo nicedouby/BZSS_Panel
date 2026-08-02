@@ -87,13 +87,12 @@ export class DeveloperToolsService {
       // Use a standalone Node supervisor instead of passing a large PowerShell
       // command through spawn(). This avoids Windows EINVAL argument parsing and
       // lets the supervisor survive termination of this Panel process.
-      const child = this.processSpawner(process.execPath, [supervisorPath, payload], {
+      const child = await spawnDetachedAndWait(this.processSpawner, process.execPath, [supervisorPath, payload], {
         cwd: this.projectRoot,
         detached: true,
         stdio: "ignore",
         windowsHide: true,
       });
-      child.unref?.();
 
       this.logger?.warn?.("Developer tools scheduled a panel restart.", {
         operation: "developerTools.restart",
@@ -142,6 +141,39 @@ export class DeveloperToolsService {
 function compactOutput(result = {}) {
   const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
   return output.length > OUTPUT_LIMIT ? `${output.slice(0, OUTPUT_LIMIT)}\n… output truncated` : output;
+}
+
+function spawnDetachedAndWait(processSpawner, file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = processSpawner(file, args, options);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    let settled = false;
+    const onError = (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const onSpawn = () => {
+      if (settled) return;
+      settled = true;
+      child.removeListener?.("error", onError);
+      child.unref?.();
+      resolve(child);
+    };
+
+    child.once?.("error", onError);
+    child.once?.("spawn", onSpawn);
+    if (!child.once) {
+      settled = true;
+      reject(new Error("Restart supervisor did not return a ChildProcess."));
+    }
+  });
 }
 
 function execFileAsync(file, args, options = {}) {
