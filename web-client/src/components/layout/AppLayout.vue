@@ -29,6 +29,7 @@
       @close="rconModalOpen = false"
     />
     <SuperWeatherWindow />
+    <DeveloperToolsWindow />
   </div>
 </template>
 
@@ -51,6 +52,7 @@ import SettingsDrawer from "../settings/SettingsDrawer.vue";
 import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";
 import RconCommandModal from "../console/RconCommandModal.vue";
 import SuperWeatherWindow from "../super-weather/SuperWeatherWindow.vue";
+import DeveloperToolsWindow from "../developer-tools/DeveloperToolsWindow.vue";
 
 const ui = useUiStore();
 const auth = useAuthStore();

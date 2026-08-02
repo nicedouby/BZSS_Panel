@@ -52,6 +52,9 @@
         <button v-if="canManageTankBattle" type="button" class="menu-item" role="menuitem" @click="openTankBattleDialog">
           开启坦克大战
         </button>
+        <button v-if="canUseDeveloperTools" type="button" class="menu-item" role="menuitem" @click="openDeveloperTools">
+          开发者窗口
+        </button>
         <button type="button" class="menu-item danger" role="menuitem" @click="logout">
           {{ t("user.logout") }}
         </button>
@@ -376,6 +379,7 @@ const tankBattleOptions = [
 const usernameLabel = computed(() => String(auth.user?.username ?? t("user.user")));
 const roleLabel = computed(() => String(auth.user?.role ?? t("common.unknown")));
 const canUseArbitraryRcon = computed(() => auth.user?.isSuperAdmin === true);
+const canUseDeveloperTools = computed(() => auth.user?.isSuperAdmin === true);
 const canManageSettingsTools = computed(() => hasSharedPermission(auth.user?.permissions, "settings.manage"));
 const canOpenSettings = computed(() => auth.user?.isSuperAdmin === true || canManageSettingsTools.value);
 const canManageTankBattle = computed(() => (
@@ -452,6 +456,12 @@ function openRconModal() {
   if (!canUseArbitraryRcon.value) return;
   closeMenu();
   emit("open-rcon-modal");
+}
+
+function openDeveloperTools() {
+  if (!canUseDeveloperTools.value) return;
+  closeMenu();
+  window.dispatchEvent(new CustomEvent("bzss:developer-tools-open"));
 }
 
 function openPluginCenter() {

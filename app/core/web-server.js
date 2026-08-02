@@ -7,6 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { BzssCoreCommandService } from "./bzss-core-command-service.js";
+import { DeveloperToolsService } from "./developer-tools-service.js";
 
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
@@ -86,6 +87,7 @@ export class WebServer {
       config: core.config,
       logger,
     });
+    this.developerToolsService = new DeveloperToolsService({ logger });
     this.server = null;
     this.jobs = new Map();
     this.jobCounter = 0;
@@ -373,6 +375,36 @@ export class WebServer {
         authenticated: Boolean(user),
         user: user ? this.serializeAuthSessionUser(user) : null,
       });
+    }
+
+    if (url.pathname === "/api/developer-tools/status" && req.method === "GET") {
+      const user = this.core.authManager?.getUserFromRequest(req);
+      if (!this.requireSuperAdmin(user, res)) return;
+      try {
+        return this.json(res, 200, await this.developerToolsService.getStatus());
+      } catch (error) {
+        return this.json(res, 500, { ok: false, error: error?.code ?? "DeveloperStatusFailed", message: error?.message ?? "Unable to read repository status." });
+      }
+    }
+
+    if (url.pathname === "/api/developer-tools/run" && req.method === "POST") {
+      const user = this.core.authManager?.getUserFromRequest(req);
+      const body = await this.readJsonBody(req);
+      if (!this.requireSuperAdmin(user, res)) return;
+      const operation = String(body?.operation ?? "").trim();
+      try {
+        const result = await this.developerToolsService.run(operation);
+        return this.json(res, result.ok ? 200 : 409, result);
+      } catch (error) {
+        return this.json(res, 400, { ok: false, operation, error: error?.code ?? "DeveloperCommandFailed", message: error?.message ?? "Developer command failed." });
+      }
+    }
+
+    if (url.pathname === "/api/developer-tools/restart" && req.method === "POST") {
+      const user = this.core.authManager?.getUserFromRequest(req);
+      if (!this.requireSuperAdmin(user, res)) return;
+      const result = await this.developerToolsService.scheduleRestart();
+      return this.json(res, result.ok ? 202 : 409, result);
     }
 
     if (url.pathname === "/api/auth/me/profile" && req.method === "GET") {
