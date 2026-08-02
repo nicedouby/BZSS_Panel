@@ -130,6 +130,75 @@
             </div>
           </div>
 
+          <!-- Pressure Zone Settings Card [RESTORED & ENHANCED] -->
+          <div class="overview-card">
+            <div class="overview-card-title">
+              <span class="glowing-square teal"></span>
+              <span>压家圈防护机制与参数</span>
+              <button
+                type="button"
+                class="pressure-quick-toggle"
+                :class="{ active: showPressureZonesModel }"
+                @click="showPressureZonesModel = !showPressureZonesModel"
+              >
+                {{ showPressureZonesModel ? '⚡ 已开启' : '⚡ 已关闭' }}
+              </button>
+            </div>
+
+            <div v-if="showPressureZonesModel" class="pressure-layer-options">
+              <label class="pressure-sub-option"><input v-model="showPressureHardModel" type="checkbox" /><span>Hard 圈</span></label>
+              <label class="pressure-sub-option"><input v-model="showPressureSoftModel" type="checkbox" /><span>Soft 圈</span></label>
+              <label class="pressure-sub-option"><input v-model="showPressureCombatModel" type="checkbox" /><span>Combat 圈</span></label>
+              <label class="pressure-sub-option"><input v-model="showPressureDiagnosticsModel" type="checkbox" /><span>诊断参数</span></label>
+              <label class="pressure-sub-option"><input v-model="showPressureConnectionsModel" type="checkbox" /><span>阵营连线</span></label>
+
+              <button
+                v-if="canManagePressureSettings"
+                type="button"
+                class="pressure-settings-button"
+                @click="emit('open-pressure-settings')"
+              >
+                <span>⚙</span><b>压家圈基础参数设置</b>
+              </button>
+            </div>
+          </div>
+
+          <!-- Map Layer Presets & Switchers Card -->
+          <div class="overview-card">
+            <div class="overview-card-title">
+              <span class="glowing-square blue"></span>
+              <span>图层显示与快捷预设</span>
+              <div class="layer-preset-bar">
+                <button type="button" class="preset-btn" @click="applyLayerPreset('all')">全图层</button>
+                <button type="button" class="preset-btn" @click="applyLayerPreset('compact')">精简</button>
+                <button type="button" class="preset-btn" @click="applyLayerPreset('minimal')">极简</button>
+              </div>
+            </div>
+            <div class="layers-chips-grid">
+              <button type="button" class="layer-chip" :class="{ active: showGridModel }" @click="showGridModel = !showGridModel">
+                <span class="chip-icon">🌐</span><span class="chip-text">网格</span>
+              </button>
+              <button type="button" class="layer-chip" :class="{ active: showPlayerNamesModel }" @click="showPlayerNamesModel = !showPlayerNamesModel">
+                <span class="chip-icon">🏷️</span><span class="chip-text">名称</span>
+              </button>
+              <button type="button" class="layer-chip" :class="{ active: showPlayerCoordsModel }" @click="showPlayerCoordsModel = !showPlayerCoordsModel">
+                <span class="chip-icon">📍</span><span class="chip-text">坐标</span>
+              </button>
+              <button type="button" class="layer-chip" :class="{ active: showCaptureZonesModel }" @click="showCaptureZonesModel = !showCaptureZonesModel">
+                <span class="chip-icon">🚩</span><span class="chip-text">目标点</span>
+              </button>
+              <button type="button" class="layer-chip" :class="{ active: showFobsModel }" @click="showFobsModel = !showFobsModel">
+                <span class="chip-icon">🏰</span><span class="chip-text">FOB</span>
+              </button>
+              <button type="button" class="layer-chip" :class="{ active: showPressureZonesModel }" @click="showPressureZonesModel = !showPressureZonesModel">
+                <span class="chip-icon">⚡</span><span class="chip-text">压家圈</span>
+              </button>
+              <button type="button" class="layer-chip" :class="{ active: measureModeModel }" @click="measureModeModel = !measureModeModel">
+                <span class="chip-icon">📏</span><span class="chip-text">测距</span>
+              </button>
+            </div>
+          </div>
+
           <!-- View & Map Preferences Card -->
           <div class="overview-card">
             <div class="overview-card-title">
@@ -786,6 +855,54 @@ const sidebarOnlyVehicleModel = computed({
   get: () => props.sidebarOnlyVehicle,
   set: (value: boolean) => emit("update:sidebar-only-vehicle", value),
 });
+const showGridModel = computed({
+  get: () => props.showGrid,
+  set: (val: boolean) => emit("update:show-grid", val),
+});
+const showPlayerNamesModel = computed({
+  get: () => props.showPlayerNames,
+  set: (val: boolean) => emit("update:show-player-names", val),
+});
+const showPlayerCoordsModel = computed({
+  get: () => props.showPlayerCoords,
+  set: (val: boolean) => emit("update:show-player-coords", val),
+});
+const showCaptureZonesModel = computed({
+  get: () => props.showCaptureZones,
+  set: (val: boolean) => emit("update:show-capture-zones", val),
+});
+const showFobsModel = computed({
+  get: () => props.showFobs,
+  set: (val: boolean) => emit("update:show-fobs", val),
+});
+const showPressureZonesModel = computed({
+  get: () => props.showPressureZones,
+  set: (val: boolean) => emit("update:show-pressure-zones", val),
+});
+const showPressureHardModel = computed({
+  get: () => props.showPressureHard,
+  set: (val: boolean) => emit("update:show-pressure-hard", val),
+});
+const showPressureSoftModel = computed({
+  get: () => props.showPressureSoft,
+  set: (val: boolean) => emit("update:show-pressure-soft", val),
+});
+const showPressureCombatModel = computed({
+  get: () => props.showPressureCombat,
+  set: (val: boolean) => emit("update:show-pressure-combat", val),
+});
+const showPressureDiagnosticsModel = computed({
+  get: () => props.showPressureDiagnostics,
+  set: (val: boolean) => emit("update:show-pressure-diagnostics", val),
+});
+const showPressureConnectionsModel = computed({
+  get: () => props.showPressureConnections,
+  set: (val: boolean) => emit("update:show-pressure-connections", val),
+});
+const measureModeModel = computed({
+  get: () => props.measureMode,
+  set: (val: boolean) => emit("update:measure-mode", val),
+});
 const selectedMapKeyModel = computed({
   get: () => props.selectedMapKey,
   set: (value: string) => emit("update:selected-map-key", value),
@@ -798,6 +915,31 @@ const viewerPerspectiveModeModel = computed({
   get: () => props.viewerPerspectiveMode,
   set: (value: ViewerPerspectiveMode) => emit("update:viewer-perspective-mode", value),
 });
+
+function applyLayerPreset(mode: "all" | "compact" | "minimal") {
+  if (mode === "all") {
+    showGridModel.value = true;
+    showPlayerNamesModel.value = true;
+    showPlayerCoordsModel.value = true;
+    showCaptureZonesModel.value = true;
+    showFobsModel.value = true;
+    showPressureZonesModel.value = true;
+  } else if (mode === "compact") {
+    showGridModel.value = false;
+    showPlayerNamesModel.value = true;
+    showPlayerCoordsModel.value = false;
+    showCaptureZonesModel.value = true;
+    showFobsModel.value = true;
+    showPressureZonesModel.value = false;
+  } else if (mode === "minimal") {
+    showGridModel.value = false;
+    showPlayerNamesModel.value = true;
+    showPlayerCoordsModel.value = false;
+    showCaptureZonesModel.value = false;
+    showFobsModel.value = false;
+    showPressureZonesModel.value = false;
+  }
+}
 
 const isLowTicket = computed(() => {
   const t1 = props.tickets?.team1 ?? 100;
@@ -983,8 +1125,8 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 .tactical-sidebar {
   position: relative;
   height: 100%;
-  width: 360px;
-  min-width: 360px;
+  width: 420px;
+  min-width: 420px;
   display: flex;
   flex-shrink: 0;
   background: radial-gradient(ellipse at 100% 0%, rgba(10, 18, 42, 0.97), rgba(4, 7, 18, 0.99));
@@ -1053,8 +1195,8 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 .sidebar-content-wrapper {
   display: flex;
   flex-direction: column;
-  width: 360px;
-  min-width: 360px;
+  width: 420px;
+  min-width: 420px;
   height: 100%;
   overflow: hidden;
   opacity: 1;
@@ -1338,14 +1480,16 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   color: rgba(248, 250, 252, 0.95);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding-bottom: 7px;
 }
 
-.glowing-square { width: 6px; height: 6px; border-radius: 1px; }
+.glowing-square { width: 6px; height: 6px; border-radius: 1px; flex-shrink: 0; }
 .glowing-square.blue { background: #00f0ff; box-shadow: 0 0 8px #00f0ff; }
 .glowing-square.green { background: #10b981; box-shadow: 0 0 8px #10b981; }
+.glowing-square.teal { background: #2dd4bf; box-shadow: 0 0 8px #2dd4bf; }
 
 .team-comparison-grid {
   display: flex;
@@ -1370,6 +1514,131 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 .team-comp-stat .lbl { color: rgba(148, 163, 184, 0.7); }
 .team-comp-stat .val { color: #e2e8f0; }
 .team-comp-divider { width: 1px; background: rgba(255, 255, 255, 0.08); }
+
+/* Pressure Zone Layer Card */
+.pressure-quick-toggle {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(45, 212, 191, 0.3);
+  background: rgba(45, 212, 191, 0.08);
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pressure-quick-toggle.active {
+  border-color: #2dd4bf;
+  background: rgba(45, 212, 191, 0.2);
+  color: #5eead4;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.25);
+}
+
+.pressure-layer-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: 6px;
+  background: rgba(13, 148, 136, 0.08);
+}
+
+.pressure-sub-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #9db5c8;
+  font: 10px/1.2 monospace;
+  cursor: pointer;
+}
+
+.pressure-sub-option input {
+  accent-color: #2dd4bf;
+}
+
+.pressure-settings-button {
+  grid-column: 1 / -1;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(45, 212, 191, .35);
+  border-radius: 5px;
+  background: rgba(13, 148, 136, .2);
+  color: #99f6e4;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+
+.pressure-settings-button:hover {
+  border-color: rgba(94, 234, 212, .7);
+  background: rgba(13, 148, 136, .35);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.25);
+}
+
+/* Layer presets and chips */
+.layer-preset-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.preset-btn {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: rgba(0, 240, 255, 0.06);
+  color: #00e5ff;
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.preset-btn:hover {
+  background: rgba(0, 240, 255, 0.18);
+  border-color: rgba(0, 240, 255, 0.4);
+}
+
+.layers-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.layer-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.layer-chip:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  color: #f8fafc;
+}
+
+.layer-chip.active {
+  border-color: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.12);
+  color: #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+}
+
+.chip-icon { font-size: 10px; }
 
 .settings-form-grid {
   display: flex;
@@ -1725,7 +1994,7 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
     right: 0;
     top: 0;
     bottom: 0;
-    width: min(92vw, 360px);
+    width: min(92vw, 420px);
   }
 }
 </style>

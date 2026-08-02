@@ -1449,8 +1449,8 @@
 /* Right Collapsible Sidebar */
 .tactical-sidebar {
   position: relative;
-  width: 360px;
-  min-width: 360px;
+  width: 420px;
+  min-width: 420px;
   height: 100%;
   background: rgba(4, 7, 18, 0.93);
   border-left: 1px solid rgba(0, 240, 255, 0.15);
