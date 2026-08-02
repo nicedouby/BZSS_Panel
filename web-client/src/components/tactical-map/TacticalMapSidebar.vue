@@ -67,13 +67,14 @@
           <div class="title-left">
             <span class="glowing-square blue"></span>
             <h3>图层控制</h3>
+            <span class="layers-count-badge font-mono">{{ activeLayerCount }} 项开启</span>
           </div>
           <button type="button" class="section-collapse-btn" aria-label="Toggle Layers">
             {{ layersOpen ? '▲' : '▼' }}
           </button>
         </div>
 
-        <div v-show="layersOpen" class="layers-content">
+        <div v-show="layersOpen" class="layers-content custom-scrollbar">
           <!-- Layer Presets -->
           <div class="layer-preset-bar">
             <span class="preset-label font-mono">预设:</span>
@@ -217,465 +218,481 @@
       <section class="sidebar-tab-section">
 
         <!-- Overview Tab -->
-        <div v-if="sidebarTab === 'overview'" class="sidebar-overview sidebar-scroll">
-          <!-- Tactical Breakdown Card -->
-          <div class="overview-card tactical-breakdown-card">
-            <div class="overview-card-title">战场局势对比</div>
-            <div class="team-comparison-grid">
-              <div class="team-comp-col team-1-col" :style="getPerspectiveStyle(1)">
-                <div class="team-comp-header">TEAM 1</div>
-                <div class="team-comp-stat"><span class="lbl">FOB 电台</span><strong class="val font-mono">{{ team1FobCount }}</strong></div>
-                <div class="team-comp-stat"><span class="lbl">控制点</span><strong class="val font-mono">{{ team1CpCount }}</strong></div>
-                <div class="team-comp-stat"><span class="lbl">在线人数</span><strong class="val font-mono">{{ team1PlayerCount }}</strong></div>
-              </div>
-              <div class="team-comp-divider"></div>
-              <div class="team-comp-col team-2-col" :style="getPerspectiveStyle(2)">
-                <div class="team-comp-header">TEAM 2</div>
-                <div class="team-comp-stat"><span class="lbl">FOB 电台</span><strong class="val font-mono">{{ team2FobCount }}</strong></div>
-                <div class="team-comp-stat"><span class="lbl">控制点</span><strong class="val font-mono">{{ team2CpCount }}</strong></div>
-                <div class="team-comp-stat"><span class="lbl">在线人数</span><strong class="val font-mono">{{ team2PlayerCount }}</strong></div>
+        <div v-if="sidebarTab === 'overview'" class="tab-panel-container">
+          <div class="sidebar-scroll panel-body-scroll custom-scrollbar">
+            <!-- Tactical Breakdown Card -->
+            <div class="overview-card tactical-breakdown-card">
+              <div class="overview-card-title">战场局势对比</div>
+              <div class="team-comparison-grid">
+                <div class="team-comp-col team-1-col" :style="getPerspectiveStyle(1)">
+                  <div class="team-comp-header">TEAM 1</div>
+                  <div class="team-comp-stat"><span class="lbl">FOB 电台</span><strong class="val font-mono">{{ team1FobCount }}</strong></div>
+                  <div class="team-comp-stat"><span class="lbl">控制点</span><strong class="val font-mono">{{ team1CpCount }}</strong></div>
+                  <div class="team-comp-stat"><span class="lbl">在线人数</span><strong class="val font-mono">{{ team1PlayerCount }}</strong></div>
+                </div>
+                <div class="team-comp-divider"></div>
+                <div class="team-comp-col team-2-col" :style="getPerspectiveStyle(2)">
+                  <div class="team-comp-header">TEAM 2</div>
+                  <div class="team-comp-stat"><span class="lbl">FOB 电台</span><strong class="val font-mono">{{ team2FobCount }}</strong></div>
+                  <div class="team-comp-stat"><span class="lbl">控制点</span><strong class="val font-mono">{{ team2CpCount }}</strong></div>
+                  <div class="team-comp-stat"><span class="lbl">在线人数</span><strong class="val font-mono">{{ team2PlayerCount }}</strong></div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="overview-card">
-            <div class="overview-card-title">服务器 / BZSS 核心</div>
-            <div class="overview-grid">
-              <div class="overview-line"><span>在场玩家</span><strong class="font-mono text-cyan">{{ serverPlayerCount }}</strong></div>
-              <div class="overview-line"><span>对局阶段</span><strong>{{ matchPhase || '进行中' }}</strong></div>
-              <div class="overview-line"><span>BZSS 核心</span><strong :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</strong></div>
-              <div class="overview-line"><span>数据更新</span><strong class="font-mono">{{ bzssCoreUpdatedAtText }}</strong></div>
+            <div class="overview-card">
+              <div class="overview-card-title">服务器 / BZSS 核心</div>
+              <div class="overview-grid">
+                <div class="overview-line"><span>在场玩家</span><strong class="font-mono text-cyan">{{ serverPlayerCount }}</strong></div>
+                <div class="overview-line"><span>对局阶段</span><strong>{{ matchPhase || '进行中' }}</strong></div>
+                <div class="overview-line"><span>BZSS 核心</span><strong :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</strong></div>
+                <div class="overview-line"><span>数据更新</span><strong class="font-mono">{{ bzssCoreUpdatedAtText }}</strong></div>
+              </div>
             </div>
-          </div>
 
-          <div class="overview-card">
-            <div class="overview-card-title">快捷导航</div>
-            <div class="overview-actions">
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'units'">
-                <span>👥 查找玩家</span>
-              </button>
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'assets'">
-                <span>📡 查看战术资产</span>
-              </button>
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'feed'">
-                <span>📜 实时战报日志</span>
-              </button>
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'core'">
-                <span>⚙️ 核心状态</span>
-              </button>
+            <div class="overview-card">
+              <div class="overview-card-title">快捷导航</div>
+              <div class="overview-actions">
+                <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'units'">
+                  <span>👥 查找玩家</span>
+                </button>
+                <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'assets'">
+                  <span>📡 查看战术资产</span>
+                </button>
+                <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'feed'">
+                  <span>📜 实时战报日志</span>
+                </button>
+                <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'core'">
+                  <span>⚙️ 核心状态</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Units Tab -->
-        <div v-else-if="sidebarTab === 'units'" class="sidebar-scroll">
-          <div class="sidebar-search-row">
-            <div class="search-input-wrapper">
-              <span class="search-icon">🔍</span>
-              <input
-                v-model="sidebarSearchModel"
-                class="sidebar-search-input"
-                type="search"
-                placeholder="搜索玩家、小队、Kit..."
-              />
+        <div v-else-if="sidebarTab === 'units'" class="tab-panel-container">
+          <div class="panel-sticky-header">
+            <div class="sidebar-search-row">
+              <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input
+                  v-model="sidebarSearchModel"
+                  class="sidebar-search-input"
+                  type="search"
+                  placeholder="搜索玩家、小队、Kit..."
+                />
+                <button
+                  v-if="sidebarSearchModel"
+                  type="button"
+                  class="search-clear-btn"
+                  title="清空搜索"
+                  @click="sidebarSearchModel = ''"
+                >
+                  ✕
+                </button>
+              </div>
+              <select v-model="sidebarSortModeModel" class="map-select sort-select" title="排序规则">
+                <option value="squad">小队</option>
+                <option value="name">名称</option>
+                <option value="health">血量</option>
+                <option value="distance">距离</option>
+                <option value="vehicle">载具</option>
+              </select>
+            </div>
+
+            <!-- Active filters & Count badge -->
+            <div class="filter-pill-row">
               <button
-                v-if="sidebarSearchModel"
                 type="button"
-                class="search-clear-btn"
-                title="清空搜索"
-                @click="sidebarSearchModel = ''"
+                class="filter-pill"
+                :class="{ active: sidebarOnlyAliveModel }"
+                @click="sidebarOnlyAliveModel = !sidebarOnlyAliveModel"
               >
-                ✕
+                存活
+              </button>
+              <button
+                type="button"
+                class="filter-pill"
+                :class="{ active: sidebarOnlyVehicleModel }"
+                @click="sidebarOnlyVehicleModel = !sidebarOnlyVehicleModel"
+              >
+                载具
+              </button>
+              <button
+                type="button"
+                class="filter-pill"
+                :class="{ active: sidebarOnlySl }"
+                @click="sidebarOnlySl = !sidebarOnlySl"
+              >
+                仅队长 SL
+              </button>
+              <button
+                type="button"
+                class="filter-pill"
+                :class="{ active: sidebarOnlyLowHp }"
+                @click="sidebarOnlyLowHp = !sidebarOnlyLowHp"
+              >
+                低血量
+              </button>
+              <span class="search-count-pill font-mono">{{ filteredPlayers.length }} 人</span>
+            </div>
+
+            <!-- Team Selector -->
+            <div class="sidebar-tabs">
+              <button
+                type="button"
+                class="tab-btn"
+                :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]"
+                :style="getPerspectiveStyle(1)"
+                @click="activeTeamTabModel = 1"
+              >
+                TEAM 1 ({{ team1PlayerCount }})
+              </button>
+              <button
+                type="button"
+                class="tab-btn"
+                :class="[getPerspectiveClass(2), { active: activeTeamTab === 2 }]"
+                :style="getPerspectiveStyle(2)"
+                @click="activeTeamTabModel = 2"
+              >
+                TEAM 2 ({{ team2PlayerCount }})
               </button>
             </div>
-            <select v-model="sidebarSortModeModel" class="map-select sort-select" title="排序规则">
-              <option value="squad">小队</option>
-              <option value="name">名称</option>
-              <option value="health">血量</option>
-              <option value="distance">距离</option>
-              <option value="vehicle">载具</option>
-            </select>
+
+            <!-- Unit Mode Selector -->
+            <div class="unit-mode-tabs">
+              <button
+                type="button"
+                class="mode-chip"
+                :class="{ active: sidebarUnitMode === 'squads' }"
+                @click="sidebarUnitModeModel = 'squads'"
+              >
+                小队 Squads ({{ currentTeamSquads.length }})
+              </button>
+              <button
+                type="button"
+                class="mode-chip"
+                :class="{ active: sidebarUnitMode === 'players' }"
+                @click="sidebarUnitModeModel = 'players'"
+              >
+                玩家 Players ({{ filteredPlayers.length }})
+              </button>
+            </div>
           </div>
 
-          <!-- Active filters & Count badge -->
-          <div class="filter-pill-row">
-            <button
-              type="button"
-              class="filter-pill"
-              :class="{ active: sidebarOnlyAliveModel }"
-              @click="sidebarOnlyAliveModel = !sidebarOnlyAliveModel"
-            >
-              存活
-            </button>
-            <button
-              type="button"
-              class="filter-pill"
-              :class="{ active: sidebarOnlyVehicleModel }"
-              @click="sidebarOnlyVehicleModel = !sidebarOnlyVehicleModel"
-            >
-              载具
-            </button>
-            <button
-              type="button"
-              class="filter-pill"
-              :class="{ active: sidebarOnlySl }"
-              @click="sidebarOnlySl = !sidebarOnlySl"
-            >
-              仅队长 SL
-            </button>
-            <button
-              type="button"
-              class="filter-pill"
-              :class="{ active: sidebarOnlyLowHp }"
-              @click="sidebarOnlyLowHp = !sidebarOnlyLowHp"
-            >
-              低血量
-            </button>
-            <span class="search-count-pill font-mono">{{ filteredPlayers.length }} 人</span>
-          </div>
+          <div class="sidebar-scroll panel-body-scroll custom-scrollbar">
+            <!-- Squad List -->
+            <div v-if="sidebarUnitMode === 'squads'" class="sidebar-list">
+              <button
+                v-for="squad in currentTeamSquads"
+                :key="squad.id"
+                type="button"
+                class="sidebar-squad-card"
+                :class="[getPerspectiveClass(squad.teamId), { 'is-focused': focusedSquadId === squad.id }]"
+                :style="getPerspectiveStyle(squad.teamId)"
+                @click="$emit('focus-squad', { teamId: squad.teamId, squadId: squad.id })"
+              >
+                <div class="squad-card-header">
+                  <span class="squad-number font-mono">#{{ squad.id }}</span>
+                  <span class="squad-name">{{ squad.name }}</span>
+                  <span class="squad-members-count font-mono">{{ squad.playersCount }} 人</span>
+                </div>
+                <div class="squad-card-meta">
+                  <span class="sl-name">SL: {{ squad.squadLeaderName || '未指定队长' }}</span>
+                  <div class="squad-health-summary">
+                    <span class="health-label font-mono">均血</span>
+                    <div class="mini-bar-track">
+                      <div
+                        class="mini-bar-fill"
+                        :style="{ width: `${squad.avgHealth}%`, backgroundColor: squad.avgHealth < 50 ? '#ef4444' : squad.avgHealth < 75 ? '#eab308' : '#10b981' }"
+                      ></div>
+                    </div>
+                    <span class="health-num font-mono">{{ squad.avgHealth }}%</span>
+                  </div>
+                </div>
+              </button>
+              <div v-if="!currentTeamSquads.length" class="empty-state">暂无小队数据</div>
+            </div>
 
-          <!-- Team Selector -->
-          <div class="sidebar-tabs">
-            <button
-              type="button"
-              class="tab-btn"
-              :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]"
-              :style="getPerspectiveStyle(1)"
-              @click="activeTeamTabModel = 1"
-            >
-              TEAM 1 ({{ team1PlayerCount }})
-            </button>
-            <button
-              type="button"
-              class="tab-btn"
-              :class="[getPerspectiveClass(2), { active: activeTeamTab === 2 }]"
-              :style="getPerspectiveStyle(2)"
-              @click="activeTeamTabModel = 2"
-            >
-              TEAM 2 ({{ team2PlayerCount }})
-            </button>
-          </div>
-
-          <!-- Unit Mode Selector -->
-          <div class="unit-mode-tabs">
-            <button
-              type="button"
-              class="mode-chip"
-              :class="{ active: sidebarUnitMode === 'squads' }"
-              @click="sidebarUnitModeModel = 'squads'"
-            >
-              小队 Squads ({{ currentTeamSquads.length }})
-            </button>
-            <button
-              type="button"
-              class="mode-chip"
-              :class="{ active: sidebarUnitMode === 'players' }"
-              @click="sidebarUnitModeModel = 'players'"
-            >
-              玩家 Players ({{ filteredPlayers.length }})
-            </button>
-          </div>
-
-          <!-- Squad List -->
-          <div v-if="sidebarUnitMode === 'squads'" class="sidebar-list">
-            <button
-              v-for="squad in currentTeamSquads"
-              :key="squad.id"
-              type="button"
-              class="sidebar-squad-card"
-              :class="[getPerspectiveClass(squad.teamId), { 'is-focused': focusedSquadId === squad.id }]"
-              :style="getPerspectiveStyle(squad.teamId)"
-              @click="$emit('focus-squad', { teamId: squad.teamId, squadId: squad.id })"
-            >
-              <div class="squad-card-header">
-                <span class="squad-number font-mono">#{{ squad.id }}</span>
-                <span class="squad-name">{{ squad.name }}</span>
-                <span class="squad-members-count font-mono">{{ squad.playersCount }} 人</span>
-              </div>
-              <div class="squad-card-meta">
-                <span class="sl-name">SL: {{ squad.squadLeaderName || '未指定队长' }}</span>
-                <div class="squad-health-summary">
-                  <span class="health-label font-mono">均血</span>
-                  <div class="mini-bar-track">
+            <!-- Player List -->
+            <div v-else class="sidebar-list">
+              <button
+                v-for="player in filteredPlayers"
+                :key="getPlayerKey(player)"
+                type="button"
+                class="sidebar-player-card-row"
+                :class="[
+                  `team-${normalizeTeam(player.teamId)}`,
+                  getPerspectiveClass(player.teamId),
+                  { 'is-focused': markerFocusKey === getPlayerKey(player) }
+                ]"
+                :style="getPerspectiveStyle(player.teamId)"
+                :title="player.linkReason"
+                @click="onPlayerClick(player)"
+              >
+                <div class="player-card-header">
+                  <span class="player-name">
+                    {{ getPlayerLabel(player) }}
+                    <span v-if="isSquadLeader(player)" class="sl-badge-pill">SL</span>
+                  </span>
+                  <span class="player-squad-tag font-mono">S{{ normalizeSquad(player.squadId) }}</span>
+                  <span class="player-link-pill font-mono" :data-confidence="player.linkConfidence">{{ linkConfidenceLabel(player.linkConfidence) }}</span>
+                </div>
+                <div class="player-card-body">
+                  <div class="player-health-bar-container">
                     <div
-                      class="mini-bar-fill"
-                      :style="{ width: `${squad.avgHealth}%`, backgroundColor: squad.avgHealth < 50 ? '#ef4444' : squad.avgHealth < 75 ? '#eab308' : '#10b981' }"
+                      class="player-health-bar-fill"
+                      :style="{ width: `${getPlayerHealth(player) ?? 0}%`, backgroundColor: getPlayerHealthColor(player) }"
                     ></div>
                   </div>
-                  <span class="health-num font-mono">{{ squad.avgHealth }}%</span>
+                  <div class="player-status-row">
+                    <span class="player-hp-value font-mono">{{ getPlayerHealth(player) ?? '0' }}% HP</span>
+                    <span v-if="player.soldierInfo?.soldierClass" class="player-kit">{{ player.soldierInfo.soldierClass }}</span>
+                    <span v-if="player.vehicleInfo?.vehicleType && player.vehicleInfo.vehicleType !== 'None'" class="player-vehicle-badge">
+                      <span class="vehicle-icon-mini">⚡</span>
+                      {{ player.vehicleInfo.vehicleType }}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            </button>
-            <div v-if="!currentTeamSquads.length" class="empty-state">暂无小队数据</div>
-          </div>
-
-          <!-- Player List -->
-          <div v-else class="sidebar-list">
-            <button
-              v-for="player in filteredPlayers"
-              :key="getPlayerKey(player)"
-              type="button"
-              class="sidebar-player-card-row"
-              :class="[
-                `team-${normalizeTeam(player.teamId)}`,
-                getPerspectiveClass(player.teamId),
-                { 'is-focused': markerFocusKey === getPlayerKey(player) }
-              ]"
-              :style="getPerspectiveStyle(player.teamId)"
-              :title="player.linkReason"
-              @click="onPlayerClick(player)"
-            >
-              <div class="player-card-header">
-                <span class="player-name">
-                  {{ getPlayerLabel(player) }}
-                  <span v-if="isSquadLeader(player)" class="sl-badge-pill">SL</span>
-                </span>
-                <span class="player-squad-tag font-mono">S{{ normalizeSquad(player.squadId) }}</span>
-                <span class="player-link-pill font-mono" :data-confidence="player.linkConfidence">{{ linkConfidenceLabel(player.linkConfidence) }}</span>
-              </div>
-              <div class="player-card-body">
-                <div class="player-health-bar-container">
-                  <div
-                    class="player-health-bar-fill"
-                    :style="{ width: `${getPlayerHealth(player) ?? 0}%`, backgroundColor: getPlayerHealthColor(player) }"
-                  ></div>
-                </div>
-                <div class="player-status-row">
-                  <span class="player-hp-value font-mono">{{ getPlayerHealth(player) ?? '0' }}% HP</span>
-                  <span v-if="player.soldierInfo?.soldierClass" class="player-kit">{{ player.soldierInfo.soldierClass }}</span>
-                  <span v-if="player.vehicleInfo?.vehicleType && player.vehicleInfo.vehicleType !== 'None'" class="player-vehicle-badge">
-                    <span class="vehicle-icon-mini">⚡</span>
-                    {{ player.vehicleInfo.vehicleType }}
-                  </span>
-                </div>
-              </div>
-            </button>
-            <div v-if="!filteredPlayers.length" class="empty-state">未找到匹配玩家</div>
+              </button>
+              <div v-if="!filteredPlayers.length" class="empty-state">未找到匹配玩家</div>
+            </div>
           </div>
         </div>
 
         <!-- Assets Tab -->
-        <div v-else-if="sidebarTab === 'assets'" class="sidebar-scroll">
-          <!-- Summary Header -->
-          <div class="asset-summary-bar">
-            <div class="asset-summary-item">
-              <span class="lbl">主基地</span>
-              <strong class="val font-mono">{{ mainZoneMarkers.length }}</strong>
-            </div>
-            <div class="asset-summary-item">
-              <span class="lbl">占领点</span>
-              <strong class="val font-mono">{{ captureZoneMarkers.length }}</strong>
-            </div>
-            <div class="asset-summary-item">
-              <span class="lbl">FOB 电台</span>
-              <strong class="val font-mono">{{ fobMarkers.length }}</strong>
-            </div>
-            <div class="asset-summary-item">
-              <span class="lbl">载具类型</span>
-              <strong class="val font-mono">{{ vehicleGroups.length }}</strong>
+        <div v-else-if="sidebarTab === 'assets'" class="tab-panel-container">
+          <div class="panel-sticky-header">
+            <!-- Summary Header -->
+            <div class="asset-summary-bar">
+              <div class="asset-summary-item">
+                <span class="lbl">主基地</span>
+                <strong class="val font-mono">{{ mainZoneMarkers.length }}</strong>
+              </div>
+              <div class="asset-summary-item">
+                <span class="lbl">占领点</span>
+                <strong class="val font-mono">{{ captureZoneMarkers.length }}</strong>
+              </div>
+              <div class="asset-summary-item">
+                <span class="lbl">FOB 电台</span>
+                <strong class="val font-mono">{{ fobMarkers.length }}</strong>
+              </div>
+              <div class="asset-summary-item">
+                <span class="lbl">载具类型</span>
+                <strong class="val font-mono">{{ vehicleGroups.length }}</strong>
+              </div>
             </div>
           </div>
 
-          <!-- Main Bases -->
-          <div class="asset-group">
-            <div class="asset-group-title">主基地 (Main Bases)</div>
-            <button
-              v-for="zone in mainZoneMarkers"
-              :key="zone.id"
-              type="button"
-              class="asset-row asset-row--stacked"
-              @click="$emit('focus-zone', zone)"
-            >
-              <div class="asset-row-title">
-                <span class="bzss-team-indicator" :class="`team-ind-${zone.teamId ?? 0}`">T{{ zone.teamId ?? '--' }}</span>
-                <span class="asset-name-text">{{ zone.name }}</span>
-              </div>
-              <div class="asset-meta font-mono">{{ zone.mapX.toFixed(1) }}%, {{ zone.mapY.toFixed(1) }}%</div>
-            </button>
-            <div v-if="!mainZoneMarkers.length" class="empty-state">暂无主基地数据</div>
-          </div>
+          <div class="sidebar-scroll panel-body-scroll custom-scrollbar">
+            <!-- Main Bases -->
+            <div class="asset-group">
+              <div class="asset-group-title">主基地 (Main Bases)</div>
+              <button
+                v-for="zone in mainZoneMarkers"
+                :key="zone.id"
+                type="button"
+                class="asset-row asset-row--stacked"
+                @click="$emit('focus-zone', zone)"
+              >
+                <div class="asset-row-title">
+                  <span class="bzss-team-indicator" :class="`team-ind-${zone.teamId ?? 0}`">T{{ zone.teamId ?? '--' }}</span>
+                  <span class="asset-name-text">{{ zone.name }}</span>
+                </div>
+                <div class="asset-meta font-mono">{{ zone.mapX.toFixed(1) }}%, {{ zone.mapY.toFixed(1) }}%</div>
+              </button>
+              <div v-if="!mainZoneMarkers.length" class="empty-state">暂无主基地数据</div>
+            </div>
 
-          <!-- Capture Points -->
-          <div class="asset-group">
-            <div class="asset-group-title">占领点 (Capture Points)</div>
-            <button
-              v-for="zone in captureZoneMarkers"
-              :key="zone.id"
-              type="button"
-              class="asset-row asset-row--stacked"
-              @click="$emit('focus-zone', zone)"
-            >
-              <div class="asset-row-title">
-                <span class="bzss-badge bzss-badge--ok">CP</span>
-                <span class="asset-name-text">{{ zone.name }}</span>
-                <span v-if="zone.isLocked" class="bzss-badge bzss-badge--warn">LOCKED</span>
-              </div>
-              <div class="asset-bars">
-                <div class="asset-bar-line">
-                  <span>进度</span>
-                  <div class="mini-bar-track">
-                    <div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.max(0, Math.min(100, Math.round(zone.capturePercent ?? 0)))}%` }"></div>
-                  </div>
-                  <span class="font-mono">{{ Math.round(zone.capturePercent ?? 0) }}%</span>
+            <!-- Capture Points -->
+            <div class="asset-group">
+              <div class="asset-group-title">占领点 (Capture Points)</div>
+              <button
+                v-for="zone in captureZoneMarkers"
+                :key="zone.id"
+                type="button"
+                class="asset-row asset-row--stacked"
+                @click="$emit('focus-zone', zone)"
+              >
+                <div class="asset-row-title">
+                  <span class="bzss-badge bzss-badge--ok">CP</span>
+                  <span class="asset-name-text">{{ zone.name }}</span>
+                  <span v-if="zone.isLocked" class="bzss-badge bzss-badge--warn">LOCKED</span>
                 </div>
-                <div v-if="zone.captureDirection != null" class="asset-meta font-mono">方向 {{ zone.captureDirection }}</div>
-              </div>
-            </button>
-            <div v-if="!captureZoneMarkers.length" class="empty-state">暂无占领点数据</div>
-          </div>
+                <div class="asset-bars">
+                  <div class="asset-bar-line">
+                    <span>进度</span>
+                    <div class="mini-bar-track">
+                      <div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.max(0, Math.min(100, Math.round(zone.capturePercent ?? 0)))}%` }"></div>
+                    </div>
+                    <span class="font-mono">{{ Math.round(zone.capturePercent ?? 0) }}%</span>
+                  </div>
+                  <div v-if="zone.captureDirection != null" class="asset-meta font-mono">方向 {{ zone.captureDirection }}</div>
+                </div>
+              </button>
+              <div v-if="!captureZoneMarkers.length" class="empty-state">暂无占领点数据</div>
+            </div>
 
-          <!-- FOB Radios -->
-          <div class="asset-group">
-            <div class="asset-group-title">FOB 电台 (Radios)</div>
-            <button
-              v-for="fob in fobMarkers"
-              :key="`${fob.teamId}-${fob.name}-${fob.mapX}-${fob.mapY}`"
-              type="button"
-              class="asset-row asset-row--stacked"
-              :class="{ 'is-fob-bleeding': fob.isBleeding }"
-              @click="$emit('focus-fob', fob)"
-            >
-              <div class="asset-row-title">
-                <span class="bzss-team-indicator" :class="`team-ind-${fob.teamId}`">T{{ fob.teamId }}</span>
-                <span class="asset-name-text">{{ fob.name || 'FOB Radio' }}</span>
-                <span v-if="fob.isBleeding" class="bzss-badge bzss-badge--danger pulse-badge">! 流血中</span>
-              </div>
-              <div class="asset-bars">
-                <div class="asset-bar-line">
-                  <span>耐久</span>
-                  <div class="mini-bar-track">
-                    <div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></div>
-                  </div>
-                  <span class="font-mono">{{ Math.round((fob.health ?? 0) * 100) }}%</span>
+            <!-- FOB Radios -->
+            <div class="asset-group">
+              <div class="asset-group-title">FOB 电台 (Radios)</div>
+              <button
+                v-for="fob in fobMarkers"
+                :key="`${fob.teamId}-${fob.name}-${fob.mapX}-${fob.mapY}`"
+                type="button"
+                class="asset-row asset-row--stacked"
+                :class="{ 'is-fob-bleeding': fob.isBleeding }"
+                @click="$emit('focus-fob', fob)"
+              >
+                <div class="asset-row-title">
+                  <span class="bzss-team-indicator" :class="`team-ind-${fob.teamId}`">T{{ fob.teamId }}</span>
+                  <span class="asset-name-text">{{ fob.name || 'FOB Radio' }}</span>
+                  <span v-if="fob.isBleeding" class="bzss-badge bzss-badge--danger pulse-badge">! 流血中</span>
                 </div>
-                <div class="asset-bar-line">
-                  <span>弹药</span>
-                  <div class="mini-bar-track">
-                    <div class="mini-bar-fill bzss-fill-ammo" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
+                <div class="asset-bars">
+                  <div class="asset-bar-line">
+                    <span>耐久</span>
+                    <div class="mini-bar-track">
+                      <div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></div>
+                    </div>
+                    <span class="font-mono">{{ Math.round((fob.health ?? 0) * 100) }}%</span>
                   </div>
-                  <span class="font-mono">{{ Math.round(fob.ammo ?? 0) }}</span>
-                </div>
-                <div class="asset-bar-line">
-                  <span>建材</span>
-                  <div class="mini-bar-track">
-                    <div class="mini-bar-fill bzss-fill-const" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
+                  <div class="asset-bar-line">
+                    <span>弹药</span>
+                    <div class="mini-bar-track">
+                      <div class="mini-bar-fill bzss-fill-ammo" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
+                    </div>
+                    <span class="font-mono">{{ Math.round(fob.ammo ?? 0) }}</span>
                   </div>
-                  <span class="font-mono">{{ Math.round(fob.construction ?? 0) }}</span>
+                  <div class="asset-bar-line">
+                    <span>建材</span>
+                    <div class="mini-bar-track">
+                      <div class="mini-bar-fill bzss-fill-const" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
+                    </div>
+                    <span class="font-mono">{{ Math.round(fob.construction ?? 0) }}</span>
+                  </div>
                 </div>
-              </div>
-            </button>
-            <div v-if="!fobMarkers.length" class="empty-state">暂无 FOB 电台数据</div>
-          </div>
+              </button>
+              <div v-if="!fobMarkers.length" class="empty-state">暂无 FOB 电台数据</div>
+            </div>
 
-          <!-- Vehicles -->
-          <div class="asset-group">
-            <div class="asset-group-title">载具分类 (Vehicles)</div>
-            <button
-              v-for="group in vehicleGroups"
-              :key="`${group.teamId}-${group.vehicleType}`"
-              type="button"
-              class="asset-row"
-              @click="$emit('focus-vehicle', group)"
-            >
-              <div class="asset-row-title">
-                <span class="bzss-team-indicator" :class="`team-ind-${group.teamId}`">T{{ group.teamId }}</span>
-                <span>{{ group.vehicleType }}</span>
-              </div>
-              <span class="asset-meta font-mono">x{{ group.count }}</span>
-            </button>
-            <div v-if="!vehicleGroups.length" class="empty-state">暂无活跃载具</div>
+            <!-- Vehicles -->
+            <div class="asset-group">
+              <div class="asset-group-title">载具分类 (Vehicles)</div>
+              <button
+                v-for="group in vehicleGroups"
+                :key="`${group.teamId}-${group.vehicleType}`"
+                type="button"
+                class="asset-row"
+                @click="$emit('focus-vehicle', group)"
+              >
+                <div class="asset-row-title">
+                  <span class="bzss-team-indicator" :class="`team-ind-${group.teamId}`">T{{ group.teamId }}</span>
+                  <span>{{ group.vehicleType }}</span>
+                </div>
+                <span class="asset-meta font-mono">x{{ group.count }}</span>
+              </button>
+              <div v-if="!vehicleGroups.length" class="empty-state">暂无活跃载具</div>
+            </div>
           </div>
         </div>
 
         <!-- Feed / Combat Log Tab [NEW] -->
-        <div v-else-if="sidebarTab === 'feed'" class="sidebar-scroll">
-          <div class="feed-filter-bar">
-            <button
-              type="button"
-              class="feed-chip"
-              :class="{ active: feedFilter === 'all' }"
-              @click="feedFilter = 'all'"
-            >
-              全部
-            </button>
-            <button
-              type="button"
-              class="feed-chip"
-              :class="{ active: feedFilter === 'kill' }"
-              @click="feedFilter = 'kill'"
-            >
-              击杀
-            </button>
-            <button
-              type="button"
-              class="feed-chip"
-              :class="{ active: feedFilter === 'revive' }"
-              @click="feedFilter = 'revive'"
-            >
-              救起
-            </button>
-            <button
-              type="button"
-              class="feed-chip"
-              :class="{ active: feedFilter === 'capture' }"
-              @click="feedFilter = 'capture'"
-            >
-              目标/FOB
-            </button>
+        <div v-else-if="sidebarTab === 'feed'" class="tab-panel-container">
+          <div class="panel-sticky-header">
+            <div class="feed-filter-bar">
+              <button
+                type="button"
+                class="feed-chip"
+                :class="{ active: feedFilter === 'all' }"
+                @click="feedFilter = 'all'"
+              >
+                全部
+              </button>
+              <button
+                type="button"
+                class="feed-chip"
+                :class="{ active: feedFilter === 'kill' }"
+                @click="feedFilter = 'kill'"
+              >
+                击杀
+              </button>
+              <button
+                type="button"
+                class="feed-chip"
+                :class="{ active: feedFilter === 'revive' }"
+                @click="feedFilter = 'revive'"
+              >
+                救起
+              </button>
+              <button
+                type="button"
+                class="feed-chip"
+                :class="{ active: feedFilter === 'capture' }"
+                @click="feedFilter = 'capture'"
+              >
+                目标/FOB
+              </button>
+            </div>
           </div>
 
-          <div class="combat-log-console">
-            <div
-              v-for="(log, idx) in filteredCombatLogs"
-              :key="`log-${idx}`"
-              class="console-log-line"
-              :class="`log-type-${log.type}`"
-            >
-              <span class="log-time font-mono">{{ log.time }}</span>
-              <span class="log-type-tag font-mono" :class="`tag-${log.type}`">
-                {{ getLogTypeTag(log.type) }}
-              </span>
-              <span class="log-text">{{ log.text }}</span>
+          <div class="sidebar-scroll panel-body-scroll custom-scrollbar">
+            <div class="combat-log-console">
+              <div
+                v-for="(log, idx) in filteredCombatLogs"
+                :key="`log-${idx}`"
+                class="console-log-line"
+                :class="`log-type-${log.type}`"
+              >
+                <span class="log-time font-mono">{{ log.time }}</span>
+                <span class="log-type-tag font-mono" :class="`tag-${log.type}`">
+                  {{ getLogTypeTag(log.type) }}
+                </span>
+                <span class="log-text">{{ log.text }}</span>
+              </div>
+              <div v-if="!filteredCombatLogs.length" class="empty-state">暂无实时战报日志</div>
             </div>
-            <div v-if="!filteredCombatLogs.length" class="empty-state">暂无实时战报日志</div>
           </div>
         </div>
 
         <!-- Core Tab -->
-        <div v-else-if="sidebarTab === 'core'" class="sidebar-scroll">
-          <div class="bzss-info-card">
-            <div class="bzss-card-title">
-              <span class="bzss-status-dot" :class="bzssCoreStatusClass"></span>
-              核心通信状态
+        <div v-else-if="sidebarTab === 'core'" class="tab-panel-container">
+          <div class="sidebar-scroll panel-body-scroll custom-scrollbar">
+            <div class="bzss-info-card">
+              <div class="bzss-card-title">
+                <span class="bzss-status-dot" :class="bzssCoreStatusClass"></span>
+                核心通信状态
+              </div>
+              <div class="bzss-stats-grid">
+                <div class="bzss-stat-row"><span class="bzss-stat-label">运行状态</span><span class="bzss-stat-value" :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</span></div>
+                <div class="bzss-stat-row"><span class="bzss-stat-label">数据版本</span><span class="bzss-stat-value font-mono">Rev {{ snapshot?.state?.revision ?? '--' }}</span></div>
+                <div class="bzss-stat-row"><span class="bzss-stat-label">最近刷新</span><span class="bzss-stat-value font-mono">{{ bzssCoreUpdatedAtText }}</span></div>
+                <div class="bzss-stat-row"><span class="bzss-stat-label">标记就绪</span><span class="bzss-stat-value"><span v-if="snapshot?.state?.markerSeen" class="bzss-badge bzss-badge--ok">已锁定</span><span v-else class="bzss-badge bzss-badge--warn">未锁定</span></span></div>
+              </div>
             </div>
-            <div class="bzss-stats-grid">
-              <div class="bzss-stat-row"><span class="bzss-stat-label">运行状态</span><span class="bzss-stat-value" :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">数据版本</span><span class="bzss-stat-value font-mono">Rev {{ snapshot?.state?.revision ?? '--' }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">最近刷新</span><span class="bzss-stat-value font-mono">{{ bzssCoreUpdatedAtText }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">标记就绪</span><span class="bzss-stat-value"><span v-if="snapshot?.state?.markerSeen" class="bzss-badge bzss-badge--ok">已锁定</span><span v-else class="bzss-badge bzss-badge--warn">未锁定</span></span></div>
-            </div>
-          </div>
 
-          <div class="bzss-info-card">
-            <div class="bzss-card-title">在场玩家统计</div>
-            <div class="bzss-stats-grid">
-              <div class="bzss-stat-row"><span class="bzss-stat-label">运行时玩家</span><span class="bzss-stat-value text-cyan font-mono">{{ snapshot?.state?.runtimePlayerCount ?? 0 }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">积分板计数</span><span class="bzss-stat-value text-yellow font-mono">{{ snapshot?.state?.scoreboardPlayerCount ?? 0 }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">全图已定位</span><span class="bzss-stat-value text-cyan font-mono">{{ positionedPlayerCount }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">存活生命体</span><span class="bzss-stat-value text-green font-mono">{{ bzssCoreAliveCount }}</span></div>
+            <div class="bzss-info-card">
+              <div class="bzss-card-title">在场玩家统计</div>
+              <div class="bzss-stats-grid">
+                <div class="bzss-stat-row"><span class="bzss-stat-label">运行时玩家</span><span class="bzss-stat-value text-cyan font-mono">{{ snapshot?.state?.runtimePlayerCount ?? 0 }}</span></div>
+                <div class="bzss-stat-row"><span class="bzss-stat-label">积分板计数</span><span class="bzss-stat-value text-yellow font-mono">{{ snapshot?.state?.scoreboardPlayerCount ?? 0 }}</span></div>
+                <div class="bzss-stat-row"><span class="bzss-stat-label">全图已定位</span><span class="bzss-stat-value text-cyan font-mono">{{ positionedPlayerCount }}</span></div>
+                <div class="bzss-stat-row"><span class="bzss-stat-label">存活生命体</span><span class="bzss-stat-value text-green font-mono">{{ bzssCoreAliveCount }}</span></div>
+              </div>
             </div>
-          </div>
 
-          <div v-if="rawFields?.length" class="bzss-info-card">
-            <div class="bzss-card-title">原始结构字段</div>
-            <div class="bzss-raw-fields">
-              <code v-for="(field, idx) in rawFields" :key="`rf-${idx}`" class="bzss-raw-field-tag font-mono">{{ field }}</code>
+            <div v-if="rawFields?.length" class="bzss-info-card">
+              <div class="bzss-card-title">原始结构字段</div>
+              <div class="bzss-raw-fields">
+                <code v-for="(field, idx) in rawFields" :key="`rf-${idx}`" class="bzss-raw-field-tag font-mono">{{ field }}</code>
+              </div>
             </div>
-          </div>
 
-          <div v-if="lastError" class="bzss-info-card bzss-info-card--error">
-            <div class="bzss-card-title">异常警示</div>
-            <div class="bzss-error-text font-mono">{{ lastError }}</div>
+            <div v-if="lastError" class="bzss-info-card bzss-info-card--error">
+              <div class="bzss-card-title">异常警示</div>
+              <div class="bzss-error-text font-mono">{{ lastError }}</div>
+            </div>
           </div>
         </div>
 
@@ -954,6 +971,18 @@ const isLowTicket = computed(() => {
   const t1 = props.tickets?.team1 ?? 100;
   const t2 = props.tickets?.team2 ?? 100;
   return t1 < 50 || t2 < 50;
+});
+
+const activeLayerCount = computed(() => {
+  return [
+    showGridModel.value,
+    showPlayerNamesModel.value,
+    showPlayerCoordsModel.value,
+    showCaptureZonesModel.value,
+    showFobsModel.value,
+    showPressureZonesModel.value,
+    measureModeModel.value,
+  ].filter(Boolean).length;
 });
 
 const team1PlayerCount = computed(() => {
@@ -1451,6 +1480,16 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   gap: 8px;
 }
 
+.layers-count-badge {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 240, 255, 0.12);
+  color: #00e5ff;
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  margin-left: 4px;
+}
+
 .glowing-square {
   width: 6px;
   height: 6px;
@@ -1484,7 +1523,10 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.2);
+  max-height: 240px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Presets bar */
@@ -1750,13 +1792,43 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   border: 1px solid rgba(0, 229, 255, 0.3);
 }
 
-/* ─── Tab Content Section ─────────────────────────── */
+/* ─── Tab Content Section & Sticky Panels ───────── */
 .sidebar-tab-section {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.tab-panel-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-sticky-header {
+  padding: 10px 12px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(6, 11, 26, 0.96);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+  flex-shrink: 0;
+  backdrop-filter: blur(12px);
+  z-index: 5;
+}
+
+.panel-body-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sidebar-scroll {
@@ -1766,21 +1838,29 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   display: flex;
   flex-direction: column;
   gap: 10px;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* Scrollbar styling */
+/* Custom Scrollbars */
+.custom-scrollbar::-webkit-scrollbar,
 .sidebar-scroll::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
+
+.custom-scrollbar::-webkit-scrollbar-track,
 .sidebar-scroll::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.25);
 }
+
+.custom-scrollbar::-webkit-scrollbar-thumb,
 .sidebar-scroll::-webkit-scrollbar-thumb {
   background: rgba(0, 240, 255, 0.25);
-  border-radius: 2px;
+  border-radius: 3px;
 }
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.55);
 }
 
 /* ─── Overview Tab ────────────────────────────────── */
