@@ -6,36 +6,69 @@ export const WEATHER_TYPES = Object.freeze([
   "Snow", "Snow_Blizzard", "Snow_Light",
 ]);
 
+/**
+ * Converts the original Weather/Transition/Weather model into weather-only
+ * segments. A transition is a zero-width command node at the end of the
+ * weather on its left, so its duration becomes transitionToNextSeconds.
+ */
+export function normalizeTimeline(timeline) {
+  if (!Array.isArray(timeline)) return [];
+
+  const normalized = [];
+  for (let index = 0; index < timeline.length; index += 1) {
+    const segment = timeline[index];
+    if (segment?.type !== "weather") continue;
+    const legacyTransition = timeline[index + 1]?.type === "transition"
+      ? timeline[index + 1]
+      : null;
+    normalized.push({
+      id: String(segment.id ?? "").trim(),
+      type: "weather",
+      weatherType: Number(segment.weatherType),
+      durationSeconds: Number(segment.durationSeconds),
+      transitionToNextSeconds: legacyTransition
+        ? Number(legacyTransition.durationSeconds)
+        : Number(segment.transitionToNextSeconds ?? 0),
+    });
+  }
+
+  if (normalized.length > 0) normalized.at(-1).transitionToNextSeconds = 0;
+  return normalized;
+}
+
 export function validateTimeline(timeline) {
   const errors = [];
   if (!Array.isArray(timeline) || timeline.length === 0) {
     return { ok: false, errors: ["Timeline must contain at least one Weather segment."] };
   }
-  if (timeline[0]?.type !== "weather") errors.push("The first segment must be Weather.");
-  if (timeline.at(-1)?.type !== "weather") errors.push("The last segment must be Weather.");
 
   const ids = new Set();
   timeline.forEach((segment, index) => {
-    const expectedType = index % 2 === 0 ? "weather" : "transition";
-    if (segment?.type !== expectedType) errors.push(`Segment ${index + 1} must be ${expectedType}.`);
+    if (segment?.type !== "weather") errors.push(`Segment ${index + 1} must be weather.`);
     const id = String(segment?.id ?? "").trim();
     if (!id) errors.push(`Segment ${index + 1} requires an id.`);
     else if (ids.has(id)) errors.push(`Segment id ${id} is duplicated.`);
     else ids.add(id);
+
     const duration = Number(segment?.durationSeconds);
-    if (!Number.isInteger(duration) || duration < 1) errors.push(`Segment ${index + 1} durationSeconds must be a positive integer.`);
-    if (segment?.type === "weather") {
-      const weatherType = Number(segment?.weatherType);
-      if (!Number.isInteger(weatherType) || weatherType < 0 || weatherType >= WEATHER_TYPES.length) {
-        errors.push(`Segment ${index + 1} weatherType must be between 0 and ${WEATHER_TYPES.length - 1}.`);
-      }
+    if (!Number.isInteger(duration) || duration < 1) {
+      errors.push(`Segment ${index + 1} durationSeconds must be a positive integer.`);
+    }
+    const transition = Number(segment?.transitionToNextSeconds ?? 0);
+    if (!Number.isInteger(transition) || transition < 0) {
+      errors.push(`Segment ${index + 1} transitionToNextSeconds must be a non-negative integer.`);
+    }
+    const weatherType = Number(segment?.weatherType);
+    if (!Number.isInteger(weatherType) || weatherType < 0 || weatherType >= WEATHER_TYPES.length) {
+      errors.push(`Segment ${index + 1} weatherType must be between 0 and ${WEATHER_TYPES.length - 1}.`);
     }
   });
   return { ok: errors.length === 0, errors };
 }
 
 export function compileTimeline(timeline) {
-  const validation = validateTimeline(timeline);
+  const normalized = normalizeTimeline(timeline);
+  const validation = validateTimeline(normalized);
   if (!validation.ok) {
     const error = new Error(validation.errors.join(" "));
     error.code = "InvalidWeatherTimeline";
@@ -44,35 +77,23 @@ export function compileTimeline(timeline) {
   }
 
   let cursor = 0;
-  const segments = timeline.map((segment, index) => {
+  const segments = normalized.map((segment, index) => {
     const durationSeconds = Number(segment.durationSeconds);
     const startSeconds = cursor;
     const endSeconds = cursor + durationSeconds;
+    const previous = normalized[index - 1] ?? null;
     cursor = endSeconds;
-    if (segment.type === "weather") {
-      return {
-        id: segment.id,
-        type: "weather",
-        startSeconds,
-        endSeconds,
-        durationSeconds,
-        currentWeather: Number(segment.weatherType),
-        targetWeather: Number(segment.weatherType),
-        transitionTotalSeconds: 0,
-        sourceIndex: index,
-      };
-    }
-    const left = timeline[index - 1];
-    const right = timeline[index + 1];
     return {
       id: segment.id,
-      type: "transition",
+      type: "weather",
       startSeconds,
       endSeconds,
       durationSeconds,
-      currentWeather: Number(left.weatherType),
-      targetWeather: Number(right.weatherType),
-      transitionTotalSeconds: durationSeconds,
+      currentWeather: Number(segment.weatherType),
+      targetWeather: Number(segment.weatherType),
+      transitionNodeId: previous ? `transition:${previous.id}` : null,
+      transitionTotalSeconds: previous ? Number(previous.transitionToNextSeconds ?? 0) : 0,
+      transitionToNextSeconds: Number(segment.transitionToNextSeconds ?? 0),
       sourceIndex: index,
     };
   });
@@ -92,23 +113,18 @@ export function resolveTimeline(compiledOrTimeline, seconds) {
   const resolvedIndex = index >= 0 ? index : compiled.segments.length - 1;
   const base = compiled.segments[resolvedIndex];
   const held = index < 0;
-  const segment = held ? {
-    ...base,
-    startSeconds: base.startSeconds,
-    endSeconds: null,
-  } : base;
-  const transitionRemainingSeconds = segment.type === "transition"
-    ? Math.max(0, Math.ceil(Number(segment.endSeconds) - position))
-    : 0;
+  const elapsedInSegment = Math.max(0, position - base.startSeconds);
+  const transitionRemainingSeconds = Math.max(0, Math.ceil(base.transitionTotalSeconds - elapsedInSegment));
 
   return {
-    type: segment.type,
-    segmentId: segment.id,
-    startSeconds: segment.startSeconds,
-    endSeconds: segment.endSeconds,
-    currentWeather: segment.currentWeather,
-    targetWeather: segment.targetWeather,
-    transitionTotalSeconds: segment.transitionTotalSeconds,
+    type: "weather",
+    segmentId: base.id,
+    transitionNodeId: base.transitionNodeId,
+    startSeconds: base.startSeconds,
+    endSeconds: held ? null : base.endSeconds,
+    currentWeather: base.currentWeather,
+    targetWeather: base.targetWeather,
+    transitionTotalSeconds: base.transitionTotalSeconds,
     transitionRemainingSeconds,
     timelinePositionSeconds: position,
     held,

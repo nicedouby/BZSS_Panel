@@ -60,18 +60,23 @@
                   :timeline="draft.timeline"
                   :selected-id="selectedSegmentId"
                   :current-segment-id="state?.currentSegment?.segmentId"
+                  :current-transition-node-id="state?.currentSegment?.transitionRemainingSeconds
+                    ? state?.currentSegment?.transitionNodeId
+                    : null"
                   :logical-seconds="state?.logicalSeconds"
                   @select="selectedSegmentId = $event"
+                  @update-duration="updateTimelineDuration"
+                  @reorder="reorderWeather"
                 />
               </div>
               <button type="button" class="add-weather" @click="addWeather">+ Weather</button>
             </div>
             <WeatherInspector
-              :segment="selectedSegment"
-              :from-weather="selectedNeighbors.from"
-              :to-weather="selectedNeighbors.to"
+              :weather="selectedWeather"
+              :transition="selectedTransition"
               :weather-count="weatherCount"
-              @update="updateSelectedSegment"
+              @update-weather="updateSelectedWeather"
+              @update-transition="updateSelectedTransition"
               @delete="deleteSelectedWeather"
             />
           </div>
@@ -82,7 +87,7 @@
             <button type="button" :disabled="busy || dirty || state?.activePresetId !== selectedPresetId" @click="applyToRunning">Apply To Running</button>
             <button type="button" :disabled="busy || !state?.running" @click="stopRunning">Stop</button>
             <button type="button" :disabled="busy || !state?.running" @click="reconcileNow">Reconcile Now</button>
-            <button type="button" :disabled="busy || selectedSegment?.type !== 'weather'" @click="testSelectedWeather">Test Selected</button>
+            <button type="button" :disabled="busy || !selectedWeather" @click="testSelectedWeather">Test Selected</button>
             <span class="action-note">Save updates the preset only. Apply explicitly reloads the running timeline.</span>
           </div>
 
@@ -92,7 +97,7 @@
               <span>Current Segment</span><strong>{{ state?.currentSegment?.segmentId || "--" }}</strong>
               <span>Theoretical Weather</span><strong>{{ weatherLabel(state?.currentSegment?.currentWeather) }}</strong>
               <span>Target Weather</span><strong>{{ weatherLabel(state?.currentSegment?.targetWeather) }}</strong>
-              <span>Transition Remaining</span><strong>{{ state?.currentSegment?.transitionRemainingSeconds ?? 0 }}s</strong>
+              <span>Transition Command Remaining</span><strong>{{ state?.currentSegment?.transitionRemainingSeconds ?? 0 }}s</strong>
               <span>Timeline Position</span><strong>{{ formatClock(state?.currentSegment?.timelinePositionSeconds) }}</strong>
               <span>Next Segment</span><strong>{{ state?.nextSegment?.id || "HOLD LAST" }}</strong>
               <span>Next Action Time</span><strong>{{ formatClock(state?.nextActionSeconds) }}</strong>
@@ -134,8 +139,8 @@ import {
   testWeather,
   updatePreset,
   type SuperWeatherPreset,
-  type SuperWeatherSegment,
   type SuperWeatherState,
+  type SuperWeatherWeatherSegment,
 } from "../../app/superWeatherApi";
 import { useUiStore } from "../../stores/ui.store";
 import WeatherTimeline from "./WeatherTimeline.vue";
@@ -177,16 +182,23 @@ const windowStyle = computed(() => maximized.value ? {} : {
   height: windowState.minimized ? "52px" : `${windowState.height}px`,
 });
 const dirty = computed(() => Boolean(draft.value && saved.value && JSON.stringify(editable(draft.value)) !== JSON.stringify(editable(saved.value))));
-const selectedSegment = computed(() => draft.value?.timeline.find((item) => item.id === selectedSegmentId.value) ?? null);
-const weatherCount = computed(() => draft.value?.timeline.filter((item) => item.type === "weather").length ?? 0);
-const selectedNeighbors = computed(() => {
+const selectedWeather = computed(() => selectedSegmentId.value.startsWith("transition:")
+  ? null
+  : draft.value?.timeline.find((item) => item.id === selectedSegmentId.value) ?? null);
+const weatherCount = computed(() => draft.value?.timeline.length ?? 0);
+const selectedTransition = computed(() => {
+  if (!selectedSegmentId.value.startsWith("transition:")) return null;
   const timeline = draft.value?.timeline ?? [];
-  const index = timeline.findIndex((item) => item.id === selectedSegmentId.value);
-  const previous = timeline[index - 1];
-  const next = timeline[index + 1];
+  const sourceId = selectedSegmentId.value.slice("transition:".length);
+  const index = timeline.findIndex((item) => item.id === sourceId);
+  const source = timeline[index];
+  const target = timeline[index + 1];
+  if (!source || !target) return null;
   return {
-    from: previous?.type === "weather" ? previous.weatherType : null,
-    to: next?.type === "weather" ? next.weatherType : null,
+    sourceId: source.id,
+    fromWeather: source.weatherType,
+    toWeather: target.weatherType,
+    seconds: source.transitionToNextSeconds,
   };
 });
 
@@ -270,7 +282,13 @@ async function createNewPreset() {
   await runAction(async () => {
     const created = await createPreset({
       name: `Weather Preset ${presets.value.length + 1}`,
-      timeline: [{ id: makeId("weather"), type: "weather", weatherType: 0, durationSeconds: 900 }],
+      timeline: [{
+        id: makeId("weather"),
+        type: "weather",
+        weatherType: 0,
+        durationSeconds: 1800,
+        transitionToNextSeconds: 0,
+      }],
       endBehavior: "hold_last",
     });
     presets.value.push(created);
@@ -321,36 +339,64 @@ async function reconcileNow() {
   });
 }
 async function testSelectedWeather() {
-  if (selectedSegment.value?.type !== "weather") return;
+  if (!selectedWeather.value) return;
   await runAction(async () => {
-    await testWeather(selectedSegment.value!.type === "weather" ? selectedSegment.value!.weatherType : 0, 0);
-    toast("Test weather sent", weatherLabel(selectedSegment.value?.type === "weather" ? selectedSegment.value.weatherType : null));
+    await testWeather(selectedWeather.value!.weatherType, 0);
+    toast("Test weather sent", weatherLabel(selectedWeather.value?.weatherType));
   });
 }
 
 function addWeather() {
   if (!draft.value) return;
-  draft.value.timeline.push(
-    { id: makeId("transition"), type: "transition", durationSeconds: 120 },
-    { id: makeId("weather"), type: "weather", weatherType: 0, durationSeconds: 900 },
-  );
+  const previous = draft.value.timeline.at(-1);
+  if (previous) previous.transitionToNextSeconds = 120;
+  draft.value.timeline.push({
+    id: makeId("weather"),
+    type: "weather",
+    weatherType: 0,
+    durationSeconds: 900,
+    transitionToNextSeconds: 0,
+  });
   selectedSegmentId.value = draft.value.timeline.at(-1)?.id ?? "";
 }
 
-function updateSelectedSegment(patch: Record<string, number>) {
+function updateSelectedWeather(patch: { weatherType?: number; durationSeconds?: number }) {
   if (!draft.value) return;
   const index = draft.value.timeline.findIndex((item) => item.id === selectedSegmentId.value);
   if (index < 0) return;
-  draft.value.timeline[index] = { ...draft.value.timeline[index], ...patch } as SuperWeatherSegment;
+  draft.value.timeline[index] = { ...draft.value.timeline[index], ...patch } as SuperWeatherWeatherSegment;
+}
+
+function updateSelectedTransition(seconds: number) {
+  if (!draft.value || !selectedTransition.value) return;
+  const source = draft.value.timeline.find((item) => item.id === selectedTransition.value?.sourceId);
+  if (source) source.transitionToNextSeconds = Math.max(0, Math.floor(seconds));
+}
+
+function updateTimelineDuration(id: string, durationSeconds: number) {
+  const segment = draft.value?.timeline.find((item) => item.id === id);
+  if (segment) segment.durationSeconds = Math.max(1, Math.floor(durationSeconds));
+}
+
+function reorderWeather(fromId: string, toId: string) {
+  if (!draft.value) return;
+  const timeline = draft.value.timeline;
+  const fromIndex = timeline.findIndex((item) => item.id === fromId);
+  const toIndex = timeline.findIndex((item) => item.id === toId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+  const [moved] = timeline.splice(fromIndex, 1);
+  timeline.splice(toIndex, 0, moved);
+  timeline.at(-1)!.transitionToNextSeconds = 0;
+  selectedSegmentId.value = moved.id;
 }
 
 function deleteSelectedWeather() {
-  if (!draft.value || selectedSegment.value?.type !== "weather" || weatherCount.value <= 1) return;
+  if (!draft.value || !selectedWeather.value || weatherCount.value <= 1) return;
   const index = draft.value.timeline.findIndex((item) => item.id === selectedSegmentId.value);
   if (index < 0) return;
-  if (index === 0) draft.value.timeline.splice(0, 2);
-  else draft.value.timeline.splice(index - 1, 2);
-  selectedSegmentId.value = draft.value.timeline[Math.max(0, index - 2)]?.id ?? draft.value.timeline[0]?.id ?? "";
+  draft.value.timeline.splice(index, 1);
+  draft.value.timeline.at(-1)!.transitionToNextSeconds = 0;
+  selectedSegmentId.value = draft.value.timeline[Math.max(0, index - 1)]?.id ?? draft.value.timeline[0]?.id ?? "";
 }
 
 async function runAction(action: () => Promise<void>) {

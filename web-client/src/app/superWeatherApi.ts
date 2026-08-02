@@ -11,15 +11,11 @@ export interface SuperWeatherWeatherSegment {
   type: "weather";
   weatherType: number;
   durationSeconds: number;
+  /** SetWeather transition parameter used when switching to the next weather. */
+  transitionToNextSeconds: number;
 }
 
-export interface SuperWeatherTransitionSegment {
-  id: string;
-  type: "transition";
-  durationSeconds: number;
-}
-
-export type SuperWeatherSegment = SuperWeatherWeatherSegment | SuperWeatherTransitionSegment;
+export type SuperWeatherSegment = SuperWeatherWeatherSegment;
 
 export interface SuperWeatherPreset {
   id: string;
@@ -32,8 +28,9 @@ export interface SuperWeatherPreset {
 }
 
 export interface SuperWeatherResolvedSegment {
-  type: "weather" | "transition";
+  type: "weather";
   segmentId: string;
+  transitionNodeId?: string | null;
   startSeconds: number;
   endSeconds: number | null;
   currentWeather: number;
