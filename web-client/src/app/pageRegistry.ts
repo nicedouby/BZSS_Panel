@@ -84,7 +84,6 @@ export const pageRegistry: PageDefinition[] = [
     title: "压家圈基础参数",
     category: "system",
     refreshPolicy: "manual",
-    nav: { section: "opsLive", label: "压家圈基础参数", icon: "⚙️", order: 17 },
     requiredPermission: "settings.manage",
     ...workspacePage,
   },

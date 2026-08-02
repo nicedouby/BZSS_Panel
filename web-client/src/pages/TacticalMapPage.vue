@@ -550,7 +550,7 @@
         <div class="tactical-command-bar__identity">
           <span class="tactical-command-bar__eyebrow">TACTICAL OPERATIONS</span>
           <strong>{{ serverMapName || detectedMapName || "正在识别地图" }}</strong>
-          <span>{{ matchPhase || statusText || "实时战场态势" }}</span>
+          <span>{{ matchPhase || statusText || "实时战场态势" }} · 地图 {{ activeMapSizeText }}</span>
         </div>
         <div class="tactical-command-bar__tickets" aria-label="双方票数">
           <span class="tactical-ticket tactical-ticket--team1" :style="getPerspectiveStyle(1)"><b>TEAM 1</b><strong>{{ tickets.team1 }}</strong></span>
@@ -712,6 +712,8 @@
       :marker-scale="markerScale"
       :viewer-perspective-mode="viewerPerspectiveMode"
       :detected-map-name="detectedMapName"
+      :map-size-text="activeMapSizeText"
+      :can-manage-pressure-settings="canManagePressureSettings"
       :map-options="mapOptions"
       :server-player-count="serverPlayerCount"
       :server-map-name="serverMapName"
@@ -772,7 +774,19 @@
       @focus-zone="focusZoneOnMap"
       @focus-vehicle="focusVehicleOnMap"
       @open-player="showPlayerDetails"
+      @open-pressure-settings="pressureSettingsOpen = true"
     />
+
+    <div v-if="pressureSettingsOpen" class="pressure-settings-modal" role="dialog" aria-modal="true" aria-label="压家圈基础参数" @click.self="pressureSettingsOpen = false">
+      <div class="pressure-settings-modal__panel">
+        <PressureZoneSettingsPage
+          embedded
+          :current-map-size-meters="activeMapDimensionsMeters.longest"
+          @close="pressureSettingsOpen = false"
+          @saved="handlePressureSettingsSaved"
+        />
+      </div>
+    </div>
 
   </div>
 </template>
@@ -807,6 +821,7 @@ import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
+import PressureZoneSettingsPage from "./PressureZoneSettingsPage.vue";
 import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
 import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
@@ -1145,6 +1160,9 @@ const canManageRcon = computed(() => {
     authStore.user?.permissions?.some(p => p.startsWith("rcon."))
   );
 });
+const canManagePressureSettings = computed(() => Boolean(
+  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("settings.manage"),
+));
 
 const snapshot = computed(() => {
   if (props.snapshot) return props.snapshot;
@@ -1219,8 +1237,31 @@ const activeMapConfig = computed<TacticalMapConfig>(() => {
   return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_CONFIGS[fallbackKey] || TACTICAL_MAP_LIST[0] || emptyMapConfig;
 });
 
+const pressureSettingsOpen = ref(false);
+const pressureZoneState = shallowRef<PressureZoneState | null>(null);
 const mapOptions = computed<TacticalMapConfig[]>(() => TACTICAL_MAP_LIST);
 const staticAssets = computed(() => getStaticTacticalAssets(activeMapConfig.value.key));
+const activeMapDimensionsMeters = computed(() => {
+  const stateMap = pressureZoneState.value?.map;
+  const stateMapKey = String(pressureZoneState.value?.mapKey ?? "").trim();
+  if ((!stateMapKey || stateMapKey === activeMapConfig.value.key) && Number(stateMap?.widthMeters) > 0 && Number(stateMap?.heightMeters) > 0) {
+    const width = Number(stateMap?.widthMeters);
+    const height = Number(stateMap?.heightMeters);
+    return { width, height, longest: Math.max(width, height) };
+  }
+  const bounds = activeMapConfig.value.bounds;
+  const rawWidth = Math.max(0, Number(bounds.maxX) - Number(bounds.minX));
+  const rawHeight = Math.max(0, Number(bounds.maxY) - Number(bounds.minY));
+  const scale = Math.hypot(rawWidth, rawHeight) > 20_000 ? 0.01 : 1;
+  const width = rawWidth * scale;
+  const height = rawHeight * scale;
+  return { width, height, longest: Math.max(width, height) };
+});
+const activeMapSizeText = computed(() => {
+  const { width, height } = activeMapDimensionsMeters.value;
+  if (!(width > 1) || !(height > 1) || !activeMapConfig.value.key || (!activeMapConfig.value.image && !activeMapConfig.value.tileBasePath)) return "等待识别";
+  return `${Math.round(width).toLocaleString()} × ${Math.round(height).toLocaleString()} m`;
+});
 
 const lastKnownZonePositions = ref(new Map<string, { x: number; y: number }>());
 const lastKnownFobPositions = ref(new Map<string, { x: number; y: number }>());
@@ -1267,7 +1308,6 @@ const showPressureSoft = ref(true);
 const showPressureCombat = ref(true);
 const showPressureDiagnostics = ref(false);
 const showPressureConnections = ref(false);
-const pressureZoneState = shallowRef<PressureZoneState | null>(null);
 let pressureZoneFetchTimer: number | null = null;
 let pressureZoneRequestSequence = 0;
 const filterAliveOnly = ref(false);
@@ -1330,6 +1370,10 @@ async function refreshPressureZoneState() {
   } catch (error) {
     if (import.meta.env.DEV) console.warn("[TacticalMap] pressure zone state unavailable", error);
   }
+}
+
+function handlePressureSettingsSaved() {
+  schedulePressureZoneFetch(0);
 }
 
 watch(pressureZoneInputSignature, () => schedulePressureZoneFetch(), { flush: "post" });
@@ -3404,6 +3448,10 @@ function handleWindowKeyDown(e: KeyboardEvent) {
 
   const key = e.key.toUpperCase();
   if (key === "ESCAPE") {
+    if (pressureSettingsOpen.value) {
+      pressureSettingsOpen.value = false;
+      return;
+    }
     playerInfoPanel.value = null;
     playerActionMenu.value = null;
     mapCommandMenu.value = null;
@@ -3694,6 +3742,8 @@ onBeforeUnmount(deactivateMapPage);
 .map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
 .map-coordinate-readout span { color: #60768a; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
 .map-coordinate-readout b { color: #dcebf3; font-weight: 650; }
+.pressure-settings-modal { position: fixed; z-index: 1200; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(1, 6, 13, .78); backdrop-filter: blur(8px); }
+.pressure-settings-modal__panel { width: min(1320px, 96vw); height: min(900px, 94vh); overflow: hidden; border: 1px solid rgba(94, 234, 212, .3); border-radius: 16px; background: #040912; box-shadow: 0 30px 90px rgba(0, 0, 0, .68); }
 
 @media (max-width: 1050px) {
   .tactical-command-bar { grid-template-columns: minmax(0, 1fr) auto; }
@@ -3707,5 +3757,7 @@ onBeforeUnmount(deactivateMapPage);
   .tactical-command-bar__identity span:last-child { display: none; }
   .map-control-dock { bottom: 8px; left: 8px; }
   .map-coordinate-readout { right: 8px; bottom: 8px; }
+  .pressure-settings-modal { padding: 0; }
+  .pressure-settings-modal__panel { width: 100%; height: 100%; border: 0; border-radius: 0; }
 }
 </style>

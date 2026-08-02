@@ -1,5 +1,5 @@
 <template>
-  <div class="pressure-settings-page">
+  <div class="pressure-settings-page" :class="{ embedded: props.embedded }">
     <header class="settings-header">
       <div class="title-block">
         <span class="title-icon">◎</span>
@@ -10,11 +10,12 @@
         </div>
       </div>
       <div class="header-actions">
-        <RouterLink class="button ghost" to="/debug/pressure-zone">前往地图模拟器</RouterLink>
+        <RouterLink v-if="!props.embedded" class="button ghost" to="/debug/pressure-zone">前往地图模拟器</RouterLink>
         <button class="button ghost" type="button" :disabled="loading || saving" @click="loadDefaults">载入默认值</button>
         <button class="button primary" type="button" :disabled="!canSave" @click="saveConfig">
           {{ saving ? "保存中…" : dirty ? "保存并应用" : "已保存" }}
         </button>
+        <button v-if="props.embedded" class="button close" type="button" aria-label="关闭压家圈参数" @click="emit('close')">关闭</button>
       </div>
     </header>
 
@@ -111,10 +112,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
 import PressureZoneParameterControl from "../components/dynamic-pressure-zone/PressureZoneParameterControl.vue";
 import { fetchDynamicPressureZoneBaseConfig, saveDynamicPressureZoneBaseConfig, type PressureZoneConfig } from "../app/dynamicPressureZoneApi";
+
+const props = withDefaults(defineProps<{
+  embedded?: boolean;
+  currentMapSizeMeters?: number | null;
+}>(), {
+  embedded: false,
+  currentMapSizeMeters: null,
+});
+const emit = defineEmits<{
+  (event: "close"): void;
+  (event: "saved"): void;
+}>();
 
 const config = ref<PressureZoneConfig | null>(null);
 const defaults = ref<PressureZoneConfig | null>(null);
@@ -123,7 +136,7 @@ const loading = ref(true);
 const saving = ref(false);
 const loadError = ref("");
 const statusText = ref("");
-const previewSize = ref(4000);
+const previewSize = ref(props.currentMapSizeMeters ? Math.round(props.currentMapSizeMeters) : 4000);
 
 const dirty = computed(() => Boolean(config.value) && JSON.stringify(config.value) !== savedSnapshot.value);
 const validationError = computed(() => {
@@ -206,11 +219,15 @@ async function saveConfig() {
     config.value = cloneConfig(response.config);
     savedSnapshot.value = JSON.stringify(response.config);
     statusText.value = "保存成功，当前压家区域已重新计算。";
+    emit("saved");
   } catch (error: any) { statusText.value = error?.message ?? "保存失败"; }
   finally { saving.value = false; }
 }
 
 onMounted(loadConfig);
+watch(() => props.currentMapSizeMeters, (value) => {
+  if (Number.isFinite(Number(value)) && Number(value) > 0) previewSize.value = Math.round(Number(value));
+});
 </script>
 
 <style scoped>
@@ -218,12 +235,17 @@ onMounted(loadConfig);
 .settings-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; max-width: 1280px; margin: 0 auto 14px; padding: 16px 18px; border: 1px solid rgba(94, 234, 212, .2); border-radius: 14px; background: rgba(7, 18, 31, .92); }
 .title-block { display: flex; align-items: center; gap: 14px; }.title-icon { width: 44px; height: 44px; display: grid; place-items: center; flex: none; border: 1px solid rgba(45, 212, 191, .4); border-radius: 12px; background: rgba(13, 148, 136, .12); color: #5eead4; font-size: 25px; }.eyebrow { margin: 0 0 3px; color: #5eead4; font: 700 10px ui-monospace, monospace; letter-spacing: .16em; }.settings-header h1 { margin: 0; font-size: 22px; }.settings-header p:not(.eyebrow) { margin: 4px 0 0; color: #8198ad; font-size: 12px; }.header-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0 13px; border: 1px solid rgba(148, 163, 184, .28); border-radius: 8px; color: #dbeafe; background: rgba(15, 29, 47, .9); text-decoration: none; cursor: pointer; }.button.primary { border-color: #2dd4bf; background: #0f766e; color: white; font-weight: 700; }.button:disabled { opacity: .45; cursor: default; }.button:not(:disabled):hover { border-color: #5eead4; }
+.button.close { color: #94a3b8; }
 .state-card { max-width: 1280px; margin: 0 auto; padding: 28px; border: 1px solid rgba(148, 163, 184, .2); border-radius: 12px; background: rgba(7, 18, 31, .86); color: #9fb3c6; }.state-card.error { display: flex; gap: 12px; align-items: center; border-color: rgba(248, 113, 113, .35); color: #fecaca; }.state-card button { margin-left: auto; }
 .reference-strip { max-width: 1280px; display: grid; grid-template-columns: minmax(230px, 1.4fr) repeat(4, minmax(125px, .7fr)); gap: 8px; margin: 0 auto 14px; }.reference-heading { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; padding: 0 2px; }.reference-heading strong { color: #c9d9e8; font-size: 12px; }.reference-heading span { color: #6f879d; font-size: 10px; }.preview-control,.preview-stat { min-height: 66px; display: flex; flex-direction: column; justify-content: center; gap: 7px; padding: 10px 12px; border: 1px solid rgba(148, 163, 184, .17); border-radius: 10px; background: rgba(7, 18, 31, .82); }.preview-control>span,.preview-stat span { color: #738ba2; font-size: 10px; }.preview-stat strong { font: 700 18px ui-monospace, monospace; }.preview-stat.hard strong { color: #fca5a5; }.preview-stat.soft strong { color: #fdba74; }.preview-stat.combat strong { color: #5eead4; }.segmented { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }.segmented button,.coordinate-actions button { padding: 5px 7px; border: 1px solid transparent; border-radius: 6px; background: rgba(148, 163, 184, .08); color: #8fa8bf; cursor: pointer; }.segmented button.active,.coordinate-actions button.active { border-color: rgba(45, 212, 191, .42); background: rgba(13, 148, 136, .2); color: #99f6e4; }
 .settings-layout { max-width: 1280px; display: grid; grid-template-columns: 230px minmax(0, 1fr); align-items: start; gap: 14px; margin: 0 auto; }.section-nav { position: sticky; top: 12px; display: grid; gap: 5px; padding: 9px; border: 1px solid rgba(148, 163, 184, .17); border-radius: 12px; background: rgba(7, 18, 31, .9); }.section-nav>a { display: grid; grid-template-columns: 30px 1fr; gap: 0 8px; padding: 10px; border-radius: 8px; color: #dbeafe; text-decoration: none; }.section-nav>a:hover { background: rgba(45, 212, 191, .08); }.section-nav>a>span { grid-row: 1 / 3; color: #477189; font: 700 12px ui-monospace, monospace; }.section-nav b { font-size: 12px; }.section-nav small { margin-top: 3px; color: #70879c; font-size: 10px; }.inheritance-note { display: grid; gap: 5px; margin-top: 6px; padding: 10px; border-top: 1px solid rgba(148, 163, 184, .12); color: #7890a7; font-size: 10px; }.inheritance-note strong { color: #9fb3c6; }
 .parameter-sections { display: grid; gap: 12px; }.parameter-card { scroll-margin-top: 12px; overflow: hidden; border: 1px solid rgba(148, 163, 184, .18); border-radius: 12px; background: rgba(7, 18, 31, .88); }.parameter-card>header { display: flex; align-items: center; gap: 12px; padding: 14px 17px; border-bottom: 1px solid rgba(148, 163, 184, .13); background: rgba(255, 255, 255, .018); }.parameter-card>header>span { color: #4d7188; font: 700 11px ui-monospace, monospace; }.parameter-card h2 { margin: 0; font-size: 15px; }.parameter-card header p { margin: 4px 0 0; color: #7890a7; font-size: 11px; }.hard-card { border-left: 3px solid #ef4444; }.soft-card { border-left: 3px solid #f97316; }.combat-card { border-left: 3px solid #14b8a6; }.map-card { border-left: 3px solid #38bdf8; }.parameter-list { padding: 0 17px; }
 .coordinate-mode { min-height: 76px; display: grid; grid-template-columns: minmax(180px, .9fr) minmax(240px, 1.1fr); align-items: center; gap: 20px; padding: 12px 0; }.coordinate-mode>span:first-child { display: grid; gap: 4px; }.coordinate-mode b { font-size: 13px; }.coordinate-mode small { color: #7f95aa; font-size: 11px; }.coordinate-actions { display: flex; align-items: center; gap: 6px; }.coordinate-actions input { width: 90px; padding: 7px; border: 1px solid rgba(148, 163, 184, .28); border-radius: 7px; background: #06101b; color: #e2e8f0; }.coordinate-actions em { color: #7890a7; font: normal 10px ui-monospace, monospace; }
 .save-bar { position: fixed; z-index: 20; right: 20px; bottom: 16px; left: max(20px, calc(var(--app-sidebar-width, 0px) + 20px)); max-width: 1240px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: auto; padding: 11px 13px; border: 1px solid rgba(148, 163, 184, .22); border-radius: 11px; background: rgba(5, 13, 24, .96); box-shadow: 0 16px 36px rgba(0, 0, 0, .32); }.save-bar>div { display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 8px; }.save-dot { width: 7px; height: 7px; grid-row: 1 / 3; border-radius: 50%; background: #34d399; }.save-bar.dirty .save-dot { background: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, .8); }.save-bar strong { font-size: 12px; }.save-bar small { color: #7890a7; font-size: 10px; }
+.pressure-settings-page.embedded { min-height: 0; height: 100%; padding: 14px; padding-bottom: 14px; overflow: auto; background: #040912; }
+.embedded .settings-header { position: sticky; z-index: 5; top: -14px; max-width: none; }
+.embedded .reference-strip,.embedded .settings-layout { max-width: none; }
+.embedded .save-bar { position: sticky; right: auto; bottom: -14px; left: auto; max-width: none; margin-top: 14px; }
 @media (max-width: 980px) { .settings-header { align-items: flex-start; }.reference-strip { grid-template-columns: repeat(4, 1fr); }.preview-control { grid-column: 1 / -1; }.settings-layout { grid-template-columns: 1fr; }.section-nav { position: static; grid-template-columns: repeat(4, 1fr); }.inheritance-note { display: none; }.section-nav>a { grid-template-columns: 1fr; }.section-nav>a>span,.section-nav small { display: none; } }
 @media (max-width: 720px) { .pressure-settings-page { padding: 10px 10px 92px; }.settings-header { flex-direction: column; }.header-actions { width: 100%; justify-content: stretch; }.header-actions>* { flex: 1; }.reference-strip { grid-template-columns: 1fr 1fr; }.reference-heading { display: grid; gap: 4px; }.preview-control { grid-column: 1 / -1; }.section-nav { grid-template-columns: 1fr 1fr; }.coordinate-mode { grid-template-columns: 1fr; gap: 9px; }.coordinate-actions { flex-wrap: wrap; }.save-bar { right: 10px; bottom: 10px; left: 10px; }.save-bar small { display: none; } }
 </style>

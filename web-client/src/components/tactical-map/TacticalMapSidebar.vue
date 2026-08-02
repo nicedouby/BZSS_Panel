@@ -98,6 +98,9 @@
             <label><input v-model="showPressureCombatModel" type="checkbox" /><span>Combat</span></label>
             <label><input v-model="showPressureDiagnosticsModel" type="checkbox" /><span>参数</span></label>
             <label><input v-model="showPressureConnectionsModel" type="checkbox" /><span>点位连线</span></label>
+            <button v-if="canManagePressureSettings" type="button" class="pressure-settings-button" @click="emit('open-pressure-settings')">
+              <span>⚙</span><b>基础参数</b>
+            </button>
           </div>
 
           <!-- Map selector -->
@@ -108,6 +111,7 @@
               <option v-for="map in mapOptions" :key="map.key" :value="map.key">{{ map.name }}</option>
             </select>
           </div>
+          <div class="map-size-summary"><span>地图尺寸</span><strong>{{ mapSizeText }}</strong></div>
 
           <!-- Perspective -->
           <div class="option-row option-row--col">
@@ -500,6 +504,8 @@ const props = defineProps<{
   markerScale: number;
   viewerPerspectiveMode: ViewerPerspectiveMode;
   detectedMapName: string;
+  mapSizeText: string;
+  canManagePressureSettings: boolean;
   mapOptions: TacticalMapConfigOption[];
   serverPlayerCount: number;
   serverMapName: string;
@@ -563,6 +569,7 @@ const emit = defineEmits<{
   (e: "focus-zone", payload: TacticalCaptureZoneMarker): void;
   (e: "focus-vehicle", payload: TacticalVehicleGroup): void;
   (e: "open-player", player: TacticalLinkedPlayer): void;
+  (e: "open-pressure-settings"): void;
 }>();
 
 // Local UI state
@@ -1781,6 +1788,11 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 }
 .pressure-layer-options label { display: flex; align-items: center; gap: 5px; color: #9db5c8; font: 10px/1.2 monospace; }
 .pressure-layer-options input { accent-color: #2dd4bf; }
+.pressure-settings-button { grid-column: 1 / -1; min-height: 30px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(45, 212, 191, .3); border-radius: 7px; background: rgba(13, 148, 136, .13); color: #99f6e4; cursor: pointer; }
+.pressure-settings-button:hover { border-color: rgba(94, 234, 212, .65); background: rgba(13, 148, 136, .22); }
+.pressure-settings-button b { font-size: 10px; }
+.map-size-summary { display: flex; align-items: center; justify-content: space-between; margin-top: -2px; padding: 6px 8px; border-radius: 7px; background: rgba(0, 229, 255, .055); color: #7f98aa; font-size: 10px; }
+.map-size-summary strong { color: #bfeaf0; font: 700 10px ui-monospace, monospace; }
 
 /* ─── Common Helpers ──────────────────────────────── */
 .empty-state {
