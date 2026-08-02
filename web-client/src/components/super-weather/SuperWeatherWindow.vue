@@ -9,7 +9,7 @@
       role="dialog"
       aria-label="BZSS Super Weather"
     >
-      <header class="window-header" @pointerdown="beginDrag">
+      <header class="window-header" @pointerdown="beginDrag" @dblclick="toggleMaximized">
         <div class="window-title">
           <span class="weather-mark">SW</span>
           <div><strong>BZSS SUPER WEATHER</strong><small>RCON-ANCHORED WEATHER ORCHESTRATOR</small></div>
@@ -106,6 +106,14 @@
           </details>
         </template>
       </div>
+      <button
+        v-if="!windowState.minimized && !maximized"
+        type="button"
+        class="window-resize-handle"
+        aria-label="Resize Super Weather window"
+        title="Resize window"
+        @pointerdown.stop.prevent="beginResize"
+      />
     </section>
   </teleport>
 </template>
@@ -134,6 +142,9 @@ import WeatherInspector from "./WeatherInspector.vue";
 
 const STORAGE_KEY = "bzss.super-weather.window";
 const DEFAULT_WINDOW = { x: 220, y: 140, width: 1200, height: 680, minimized: false };
+const MIN_WINDOW_WIDTH = 560;
+const MIN_WINDOW_HEIGHT = 360;
+const VIEWPORT_GAP = 8;
 const ui = useUiStore();
 const visible = ref(false);
 const loading = ref(false);
@@ -149,8 +160,14 @@ const windowEl = ref<HTMLElement | null>(null);
 const maximized = ref(false);
 const windowState = reactive(loadWindowState());
 let pollTimer: number | null = null;
-let resizeObserver: ResizeObserver | null = null;
 let dragState: { pointerId: number; offsetX: number; offsetY: number } | null = null;
+let resizeState: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startWidth: number;
+  startHeight: number;
+} | null = null;
 
 const windowStyle = computed(() => maximized.value ? {} : {
   left: `${windowState.x}px`,
@@ -182,16 +199,20 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", clampWindow);
   stopPolling();
   stopDrag();
-  resizeObserver?.disconnect();
+  stopResize();
 });
 
 async function openWindow() {
+  const wasVisible = visible.value;
   visible.value = true;
+  // An explicit menu action should reveal the full window. Keeping a persisted
+  // minimized state here made the window look as though it collapsed by itself.
+  windowState.minimized = false;
   await nextTick();
   clampWindow();
-  observeSize();
   startPolling();
-  await loadAll();
+  persistWindowState();
+  if (!wasVisible || !state.value) await loadAll();
 }
 
 function closeWindow() {
@@ -355,7 +376,8 @@ function replacePreset(preset: SuperWeatherPreset) {
 function toast(title: string, message: string) { ui.pushToast({ title, message, tone: "ok" }); }
 
 function beginDrag(event: PointerEvent) {
-  if (maximized.value || windowState.minimized && (event.target as HTMLElement)?.closest("button")) return;
+  if (event.button !== 0 || maximized.value || (event.target as HTMLElement)?.closest("button")) return;
+  event.preventDefault();
   dragState = { pointerId: event.pointerId, offsetX: event.clientX - windowState.x, offsetY: event.clientY - windowState.y };
   window.addEventListener("pointermove", dragWindow);
   window.addEventListener("pointerup", stopDrag);
@@ -373,27 +395,65 @@ function stopDrag() {
   window.removeEventListener("pointerup", stopDrag);
   window.removeEventListener("pointercancel", stopDrag);
 }
-function toggleMinimized() { windowState.minimized = !windowState.minimized; persistWindowState(); }
-function toggleMaximized() { maximized.value = !maximized.value; }
-function observeSize() {
-  resizeObserver?.disconnect();
-  if (!windowEl.value) return;
-  resizeObserver = new ResizeObserver(([entry]) => {
-    if (maximized.value || windowState.minimized) return;
-    windowState.width = Math.round(entry.contentRect.width);
-    windowState.height = Math.round(entry.contentRect.height);
-    persistWindowState();
-  });
-  resizeObserver.observe(windowEl.value);
+
+function beginResize(event: PointerEvent) {
+  if (event.button !== 0 || maximized.value || windowState.minimized) return;
+  clampWindow();
+  resizeState = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startWidth: windowEl.value?.getBoundingClientRect().width ?? windowState.width,
+    startHeight: windowEl.value?.getBoundingClientRect().height ?? windowState.height,
+  };
+  document.body.classList.add("super-weather-resizing");
+  window.addEventListener("pointermove", resizeWindow);
+  window.addEventListener("pointerup", stopResize);
+  window.addEventListener("pointercancel", stopResize);
+}
+function resizeWindow(event: PointerEvent) {
+  if (!resizeState || event.pointerId !== resizeState.pointerId) return;
+  const minWidth = Math.min(MIN_WINDOW_WIDTH, Math.max(320, window.innerWidth - VIEWPORT_GAP * 2));
+  const minHeight = Math.min(MIN_WINDOW_HEIGHT, Math.max(240, window.innerHeight - VIEWPORT_GAP * 2));
+  const maxWidth = Math.max(minWidth, window.innerWidth - windowState.x - VIEWPORT_GAP);
+  const maxHeight = Math.max(minHeight, window.innerHeight - windowState.y - VIEWPORT_GAP);
+  windowState.width = Math.round(Math.max(minWidth, Math.min(maxWidth, resizeState.startWidth + event.clientX - resizeState.startX)));
+  windowState.height = Math.round(Math.max(minHeight, Math.min(maxHeight, resizeState.startHeight + event.clientY - resizeState.startY)));
+}
+function stopResize() {
+  if (resizeState) persistWindowState();
+  resizeState = null;
+  document.body.classList.remove("super-weather-resizing");
+  window.removeEventListener("pointermove", resizeWindow);
+  window.removeEventListener("pointerup", stopResize);
+  window.removeEventListener("pointercancel", stopResize);
+}
+function toggleMinimized() {
+  windowState.minimized = !windowState.minimized;
+  if (!windowState.minimized) nextTick(clampWindow);
+  persistWindowState();
+}
+function toggleMaximized() {
+  if (!maximized.value) windowState.minimized = false;
+  maximized.value = !maximized.value;
+  if (!maximized.value) nextTick(clampWindow);
 }
 function clampWindow() {
-  windowState.width = Math.min(windowState.width, Math.max(360, window.innerWidth - 16));
-  windowState.height = Math.min(windowState.height, Math.max(300, window.innerHeight - 16));
-  windowState.x = Math.max(0, Math.min(windowState.x, window.innerWidth - Math.min(180, windowState.width)));
+  const visibleWidth = Math.min(windowState.width, Math.max(320, window.innerWidth - VIEWPORT_GAP * 2));
+  windowState.x = Math.max(0, Math.min(windowState.x, window.innerWidth - Math.min(180, visibleWidth)));
   windowState.y = Math.max(0, Math.min(windowState.y, window.innerHeight - 52));
 }
 function loadWindowState() {
-  try { return { ...DEFAULT_WINDOW, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+  try {
+    const stored = { ...DEFAULT_WINDOW, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") };
+    return {
+      x: Number.isFinite(Number(stored.x)) ? Math.max(0, Number(stored.x)) : DEFAULT_WINDOW.x,
+      y: Number.isFinite(Number(stored.y)) ? Math.max(0, Number(stored.y)) : DEFAULT_WINDOW.y,
+      width: Number.isFinite(Number(stored.width)) ? Math.max(MIN_WINDOW_WIDTH, Number(stored.width)) : DEFAULT_WINDOW.width,
+      height: Number.isFinite(Number(stored.height)) ? Math.max(MIN_WINDOW_HEIGHT, Number(stored.height)) : DEFAULT_WINDOW.height,
+      minimized: Boolean(stored.minimized),
+    };
+  }
   catch { return { ...DEFAULT_WINDOW }; }
 }
 function persistWindowState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(windowState)); }
@@ -416,13 +476,13 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
 
 <style scoped>
 .super-weather-window {
+  box-sizing: border-box;
   position: fixed;
   z-index: 12000;
-  min-width: min(360px, calc(100vw - 8px));
-  min-height: 300px;
+  min-width: min(560px, calc(100vw - 16px));
+  min-height: min(360px, calc(100vh - 16px));
   max-width: calc(100vw - 8px);
-  max-height: 1200px;
-  resize: both;
+  max-height: calc(100vh - 8px);
   overflow: hidden;
   border: 1px solid rgba(94, 194, 240, .28);
   border-radius: 15px;
@@ -431,8 +491,8 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
   box-shadow: 0 26px 90px rgba(0, 0, 0, .62), 0 0 45px rgba(20, 142, 208, .08);
   backdrop-filter: blur(18px);
 }
-.super-weather-window.minimized { min-height: 52px; resize: none; }
-.super-weather-window.maximized { inset: 8px; width: auto; height: auto; max-width: none; max-height: none; resize: none; }
+.super-weather-window.minimized { min-height: 52px; }
+.super-weather-window.maximized { inset: 8px; width: auto; height: auto; max-width: none; max-height: none; }
 .window-header { height: 52px; padding: 0 12px 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(102, 166, 195, .16); background: linear-gradient(90deg, rgba(17, 58, 81, .92), rgba(7, 18, 30, .96)); cursor: move; user-select: none; touch-action: none; }
 .window-title { display: flex; align-items: center; gap: 11px; }
 .window-title div { display: grid; gap: 2px; }
@@ -442,7 +502,10 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
 .window-controls { display: flex; gap: 4px; }
 .window-controls button { width: 29px; height: 29px; border: 0; border-radius: 7px; background: transparent; color: rgba(218, 235, 244, .68); }
 .window-controls button:hover { background: rgba(116, 178, 207, .15); color: white; }
-.window-body { height: calc(100% - 52px); overflow: auto; padding: 14px; display: grid; align-content: start; gap: 13px; }
+.window-body { box-sizing: border-box; height: calc(100% - 52px); overflow: auto; padding: 14px; display: grid; align-content: start; gap: 13px; }
+.window-resize-handle { position: absolute; right: 1px; bottom: 1px; z-index: 3; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 0 0 13px 0; background: linear-gradient(135deg, transparent 0 46%, rgba(102, 201, 239, .22) 47% 55%, transparent 56% 65%, rgba(102, 201, 239, .48) 66% 74%, transparent 75%); cursor: nwse-resize; touch-action: none; }
+.window-resize-handle:hover { background: linear-gradient(135deg, transparent 0 42%, rgba(112, 218, 255, .35) 43% 53%, transparent 54% 62%, rgba(112, 218, 255, .78) 63% 75%, transparent 76%); }
+:global(body.super-weather-resizing) { cursor: nwse-resize !important; user-select: none !important; }
 .preset-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
 .preset-bar label { display: grid; gap: 4px; min-width: 230px; }
 .preset-bar label span, .clock-grid span { color: rgba(175, 207, 224, .56); font-size: 8px; letter-spacing: .14em; }
