@@ -782,6 +782,13 @@
   },
   "plugins": {
     "enabled": true,
+    "bzss-super-weather": {
+      "enabled": true,
+      "tickIntervalMs": 1000,
+      "maxExtrapolationSeconds": 180,
+      "backwardJitterToleranceSeconds": 15,
+      "persistRuntime": true
+    },
     "squad-join-playtime-warning": {
       "enabled": false
     },

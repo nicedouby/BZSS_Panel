@@ -28,6 +28,7 @@
       :open="rconModalOpen"
       @close="rconModalOpen = false"
     />
+    <SuperWeatherWindow />
   </div>
 </template>
 
@@ -49,6 +50,7 @@ import ToastHost from "../common/ToastHost.vue";
 import SettingsDrawer from "../settings/SettingsDrawer.vue";
 import PluginCenterDrawer from "../../features/plugins/PluginCenterDrawer.vue";
 import RconCommandModal from "../console/RconCommandModal.vue";
+import SuperWeatherWindow from "../super-weather/SuperWeatherWindow.vue";
 
 const ui = useUiStore();
 const auth = useAuthStore();

@@ -48,6 +48,7 @@ import { LogPostMonitor } from "./core/logpost-monitor.js";
 import { LogPostFileBridge } from "./core/logpost-file-bridge.js";
 import { FileIOManager } from "./core/file-io-manager.js";
 import { TaskManager } from "./core/task/TaskManager.js";
+import { BzssCoreCommandService } from "./core/bzss-core-command-service.js";
 import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
@@ -119,6 +120,11 @@ async function main() {
   });
   await auditManager.init();
 
+  const bzssCoreCommandService = new BzssCoreCommandService({
+    config: configManager,
+    logger: logger.child({ moduleId: "core.bzssCoreCommandService", source: "core.bzssCoreCommandService" }),
+  });
+
   let rawLogDerivedEvents = null;
 
   const rconConfig = configManager.get("rcon", {}) ?? {};
@@ -186,6 +192,7 @@ async function main() {
     logPostFileBridge,
     fileIO: fileIOManager,
     taskManager,
+    bzssCoreCommandService,
   };
   auditManager.core = coreContext;
 

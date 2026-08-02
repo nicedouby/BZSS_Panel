@@ -184,6 +184,7 @@ export class PluginManager {
           pluginManager: this,
           webStatus: this.core.webStatus,
           taskManager: this.core.taskManager,
+          bzssCoreCommandService: this.core.bzssCoreCommandService,
         },
         modules: this.modules,
         playerRepository: this.modules.playerDatabase ?? null,

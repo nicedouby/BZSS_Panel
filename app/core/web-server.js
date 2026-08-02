@@ -5,8 +5,8 @@ import { createReadStream, existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { execFile } from "node:child_process";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { BzssCoreCommandService } from "./bzss-core-command-service.js";
 
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
@@ -82,6 +82,10 @@ export class WebServer {
     this.logger = logger;
     this.core = core;
     this.modules = modules;
+    this.bzssCoreCommandService = core.bzssCoreCommandService ?? new BzssCoreCommandService({
+      config: core.config,
+      logger,
+    });
     this.server = null;
     this.jobs = new Map();
     this.jobCounter = 0;
@@ -534,6 +538,59 @@ export class WebServer {
         error: "Unauthorized",
         message: "Authentication required.",
       });
+    }
+
+    if (url.pathname.startsWith("/api/plugins/bzss-super-weather")) {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, {
+          error: "Forbidden",
+          message: "bzss_core.use permission is required.",
+        });
+      }
+      const pluginApi = this.getPluginApi("bzss-super-weather");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "SuperWeatherUnavailable",
+          message: "BZSS Super Weather plugin is not loaded.",
+        });
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/state" && req.method === "GET") {
+        return this.json(res, 200, pluginApi.getState());
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/presets" && req.method === "GET") {
+        return this.json(res, 200, { presets: pluginApi.listPresets() });
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/presets" && req.method === "POST") {
+        return this.json(res, 201, await pluginApi.createPreset(await this.readJsonBody(req)));
+      }
+      const presetMatch = url.pathname.match(/^\/api\/plugins\/bzss-super-weather\/presets\/([^/]+)$/);
+      if (presetMatch && req.method === "PATCH") {
+        return this.json(res, 200, await pluginApi.updatePreset(decodeURIComponent(presetMatch[1]), await this.readJsonBody(req)));
+      }
+      if (presetMatch && req.method === "DELETE") {
+        return this.json(res, 200, { ok: true, preset: await pluginApi.deletePreset(decodeURIComponent(presetMatch[1])) });
+      }
+      const duplicateMatch = url.pathname.match(/^\/api\/plugins\/bzss-super-weather\/presets\/([^/]+)\/duplicate$/);
+      if (duplicateMatch && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        return this.json(res, 201, await pluginApi.duplicatePreset(decodeURIComponent(duplicateMatch[1]), body?.name));
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/activate" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, await pluginApi.activate(body?.presetId));
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/stop" && req.method === "POST") {
+        return this.json(res, 200, await pluginApi.stop());
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/reconcile" && req.method === "POST") {
+        return this.json(res, 200, await pluginApi.reconcile());
+      }
+      if (url.pathname === "/api/plugins/bzss-super-weather/test-weather" && req.method === "POST") {
+        const body = await this.readJsonBody(req);
+        const result = await pluginApi.testWeather(body?.weatherType, body?.transitionSeconds);
+        return this.json(res, result.ok ? 200 : 400, result);
+      }
+      return this.json(res, 405, { error: "MethodNotAllowed", message: "Super Weather endpoint or method is not supported." });
     }
 
     const stepCounterHandled = await handleStepCounterRoutes({
@@ -5389,199 +5446,15 @@ export class WebServer {
   }
 
   async executeBzssCoreCommand(body = {}) {
-    const config = this.core.config?.get?.("bzssCore", {}) ?? {};
-    const scriptPath = String(config.modifyScriptPath ?? config.modifySaveGamePath ?? "").trim();
-    const saveGamePath = String(config.remoteSaveGamePath ?? config.saveGamePath ?? "").trim();
-    const batchCommands = Array.isArray(body?.batch)
-      ? body.batch
-        .map((item) => typeof item === "string" ? item : item?.command)
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean)
-        .map((item) => this.normalizeBzssCoreCommand({ command: item }))
-      : null;
-    if (batchCommands?.some((item) => !item.ok)) {
-      return batchCommands.find((item) => !item.ok);
-    }
-    const command = batchCommands?.length
-      ? {
-          ok: true,
-          directive: "Batch",
-          command: batchCommands.map((item) => item.command),
-        }
-      : this.normalizeBzssCoreCommand(body);
-
-    if (!scriptPath) {
-      return {
-        ok: false,
-        error: "MissingModifyScriptPath",
-        message: "ModifySaveGame.py path is not configured.",
-      };
-    }
-
-    if (!saveGamePath) {
-      return {
-        ok: false,
-        error: "MissingRemoteSaveGamePath",
-        message: "Remote save game path is not configured.",
-      };
-    }
-
-    if (!command.ok) {
-      return command;
-    }
-
-    const resolvedScriptPath = path.isAbsolute(scriptPath)
-      ? scriptPath
-      : path.resolve(process.cwd(), scriptPath);
-
-    const startedAt = Date.now();
-    try {
-      const output = await this.execFileAsync("python", [
-        resolvedScriptPath,
-        saveGamePath,
-        ...(Array.isArray(command.command) ? command.command : [command.command]),
-      ], {
-        cwd: path.dirname(resolvedScriptPath),
-        timeout: Math.max(1000, Number(this.core.config?.get?.("bzssCore.timeoutMs", 15000)) || 15000),
-        windowsHide: true,
-        maxBuffer: 1024 * 1024,
-      });
-
-      return {
-        ok: true,
-        command: Array.isArray(command.command) ? command.command.join("\n") : command.command,
-        directive: command.directive,
-        scriptPath: resolvedScriptPath,
-        remoteSaveGamePath: saveGamePath,
-        stdout: output.stdout,
-        stderr: output.stderr,
-        durationMs: Date.now() - startedAt,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: "BzssCoreExecuteFailed",
-        message: error?.message ?? "Failed to execute BZSS-Core command.",
-        command: Array.isArray(command.command) ? command.command.join("\n") : command.command,
-        directive: command.directive,
-        scriptPath: resolvedScriptPath,
-        remoteSaveGamePath: saveGamePath,
-        stdout: String(error?.stdout ?? ""),
-        stderr: String(error?.stderr ?? ""),
-        exitCode: error?.code ?? null,
-        durationMs: Date.now() - startedAt,
-      };
-    }
+    return this.bzssCoreCommandService.execute({ ...body, source: body?.source ?? "web-api" });
   }
 
   normalizeBzssCoreCommand(body = {}) {
-    const directive = String(body.directive ?? "").trim();
-    const parameter = String(body.parameter ?? body.value ?? "").trim();
-    const rawCommand = String(body.command ?? "").trim();
-    const rawMode = body?.raw === true;
-
-    if (rawMode) {
-      if (!rawCommand) {
-        return {
-          ok: false,
-          error: "MissingBzssCoreCommand",
-          message: "Raw command is required.",
-        };
-      }
-      if (/[\r\n]/.test(rawCommand)) {
-        return {
-          ok: false,
-          error: "InvalidBzssCoreCommand",
-          message: "Raw command must be a single line.",
-        };
-      }
-      const rawDirectiveMatch = rawCommand.match(/^([A-Za-z]+):(.*)$/);
-      if (rawDirectiveMatch?.[1] === "CreateVehicle") {
-        const validation = this.validateCreateVehicleParameter(rawDirectiveMatch[2]);
-        if (!validation.ok) return validation;
-      }
-      return {
-        ok: true,
-        directive: "Raw",
-        parameter: rawCommand,
-        command: rawCommand,
-        raw: true,
-      };
-    }
-
-    if (rawCommand) {
-      const match = rawCommand.match(/^([A-Za-z]+):(.*)$/);
-      if (!match) {
-        return {
-          ok: false,
-          error: "InvalidBzssCoreCommand",
-          message: "Command must use Directive:Value format.",
-        };
-      }
-      return this.normalizeBzssCoreDirective(match[1], match[2]);
-    }
-
-    return this.normalizeBzssCoreDirective(directive, parameter);
+    return this.bzssCoreCommandService.normalize(body);
   }
 
   normalizeBzssCoreDirective(directive, parameter) {
-    const normalizedDirective = String(directive ?? "").trim();
-    const text = String(parameter ?? "").trim();
-    const allowed = new Set([
-      "SetTime",
-      "SetWeather",
-      "Cheer",
-      "SetFobResourceRegeneration",
-      "SetAutomaticHeal",
-      "SetAutomaticHealValue",
-      "CreateVehicle",
-      "AdminTrack",
-      "RemoveAdminTrack",
-    ]);
-
-    if (!allowed.has(normalizedDirective)) {
-      return {
-        ok: false,
-        error: "UnsupportedBzssCoreDirective",
-        message: "Supported directives: SetTime, SetWeather, Cheer, SetFobResourceRegeneration, SetAutomaticHeal, SetAutomaticHealValue, CreateVehicle, AdminTrack, RemoveAdminTrack.",
-      };
-    }
-
-    if (!text) {
-      return {
-        ok: false,
-        error: "MissingBzssCoreParameter",
-        message: `${normalizedDirective} requires a parameter.`,
-      };
-    }
-
-    if (normalizedDirective === "SetAutomaticHeal" && !/^[01]$/.test(text)) {
-      return {
-        ok: false,
-        error: "InvalidAutomaticHealParameter",
-        message: "SetAutomaticHeal only accepts 1 (enabled) or 0 (disabled).",
-      };
-    }
-
-    if (/[\r\n]/.test(text)) {
-      return {
-        ok: false,
-        error: "InvalidBzssCoreParameter",
-        message: "Parameter must be a single line.",
-      };
-    }
-
-    if (normalizedDirective === "CreateVehicle") {
-      const validation = this.validateCreateVehicleParameter(text);
-      if (!validation.ok) return validation;
-    }
-
-    return {
-      ok: true,
-      directive: normalizedDirective,
-      parameter: text,
-      command: `${normalizedDirective}:${text}`,
-    };
+    return this.bzssCoreCommandService.normalizeDirective(directive, parameter);
   }
 
   getBzssCorePlayerInfo(query = {}) {
@@ -5731,52 +5604,7 @@ export class WebServer {
   }
 
   validateCreateVehicleParameter(parameter) {
-    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
-    if (parts.length !== 2 && parts.length !== 3) {
-      return {
-        ok: false,
-        error: "InvalidCreateVehicleParameter",
-        message: "CreateVehicle requires player, vehicle asset path, and optional team id.",
-      };
-    }
-
-    if (!parts[0] || !parts[1]) {
-      return {
-        ok: false,
-        error: "InvalidCreateVehicleParameter",
-        message: "CreateVehicle requires player and vehicle asset path.",
-      };
-    }
-
-    if (parts.length === 3) {
-      const teamId = parts[2];
-      if (teamId !== "0" && teamId !== "1" && teamId !== "2") {
-        return {
-          ok: false,
-          error: "InvalidCreateVehicleTeamId",
-          message: "CreateVehicle team id must be 0, 1, or 2.",
-        };
-      }
-    }
-
-    return { ok: true };
-  }
-
-  execFileAsync(file, args, options = {}) {
-    return new Promise((resolve, reject) => {
-      execFile(file, args, options, (error, stdout, stderr) => {
-        if (error) {
-          error.stdout = stdout;
-          error.stderr = stderr;
-          reject(error);
-          return;
-        }
-        resolve({
-          stdout: String(stdout ?? ""),
-          stderr: String(stderr ?? ""),
-        });
-      });
-    });
+    return this.bzssCoreCommandService.validateCreateVehicleParameter(parameter);
   }
 
   summarizePlaytimeJobForAudit(job) {
