@@ -76,7 +76,36 @@ export async function runNodeTool({
   console.log(`[client-build] Starting ${toolLabel} with Node ${nodeVersion}`);
   console.log(`[client-build] Runtime flags: ${execArgs.slice(0, -1 - args.length).join(" ")}`);
 
-  const code = await new Promise((resolve, reject) => {
+  let code = await runNodeToolProcess({
+    toolLabel,
+    execArgs,
+  });
+
+  // Node/Rollup can terminate with a Windows native access violation while
+  // transforming a large dependency graph. Retry only that failure in the V8
+  // interpreter; normal builds keep the faster default execution mode.
+  if (process.platform === "win32" && isWindowsNativeCrash(code) && !execArgs.includes("--jitless")) {
+    console.error("[client-build] Native access violation detected; retrying with --jitless.");
+    code = await runNodeToolProcess({
+      toolLabel,
+      execArgs: [...execArgs.slice(0, 2), "--jitless", ...execArgs.slice(2)],
+    });
+  }
+
+  const elapsedMs = Date.now() - startedAt;
+  if (code === 0) {
+    console.log(`[client-build] Finished ${toolLabel} in ${elapsedMs} ms`);
+  } else {
+    console.error(`[client-build] ${toolLabel} failed with exit code ${code} after ${elapsedMs} ms.`);
+    console.error(`[client-build] Runtime: Node ${nodeVersion}, platform ${process.platform} ${process.arch}`);
+  }
+
+  return code;
+}
+
+
+async function runNodeToolProcess({ toolLabel, execArgs }) {
+  return await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, execArgs, {
       stdio: "inherit",
       env: createStableNodeToolEnv(),
@@ -93,14 +122,8 @@ export async function runNodeTool({
       resolve(exitCode ?? 1);
     });
   });
+}
 
-  const elapsedMs = Date.now() - startedAt;
-  if (code === 0) {
-    console.log(`[client-build] Finished ${toolLabel} in ${elapsedMs} ms`);
-  } else {
-    console.error(`[client-build] ${toolLabel} failed with exit code ${code} after ${elapsedMs} ms.`);
-    console.error(`[client-build] Runtime: Node ${nodeVersion}, platform ${process.platform} ${process.arch}`);
-  }
-
-  return code;
+function isWindowsNativeCrash(code) {
+  return code === 0xC0000005 || code === 0xC000001D || code === 3221225477;
 }
