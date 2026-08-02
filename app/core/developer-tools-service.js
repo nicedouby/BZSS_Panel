@@ -89,17 +89,10 @@ export class DeveloperToolsService {
           // Keep the normal Windows entry point, including its configured CPU affinity.
           "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', $runScript) -WorkingDirectory $projectRoot -WindowStyle Hidden",
         ].join("; ");
-        // Start PowerShell through a detached cmd wrapper. This gives the
-        // supervisor its own process tree before the current Node process is
-        // terminated, which is more reliable when Panel was started by a
-        // .bat file with START /WAIT.
-        const child = this.processSpawner("cmd.exe", [
-          "/d",
-          "/c",
-          "start",
-          "",
-          "/b",
-          "powershell.exe",
+        // Spawn PowerShell directly. The previous cmd.exe -> start ->
+        // powershell chain could emit EINVAL asynchronously on Windows,
+        // after this method had already reported success.
+        await spawnDetachedAndWait(this.processSpawner, "powershell.exe", [
           "-NoProfile",
           "-NonInteractive",
           "-WindowStyle",
@@ -111,7 +104,6 @@ export class DeveloperToolsService {
           stdio: "ignore",
           windowsHide: true,
         });
-        child.unref();
       } else {
         const child = this.processSpawner(process.execPath, ["app/main.js"], {
           cwd: this.projectRoot,
@@ -167,5 +159,40 @@ function execFileAsync(file, args, options = {}) {
       }
       resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
+  });
+}
+
+function spawnDetachedAndWait(processSpawner, file, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = processSpawner(file, args, options);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      child.removeListener?.("error", onError);
+      child.removeListener?.("spawn", onSpawn);
+      if (error) reject(error);
+      else resolve(child);
+    };
+    const onError = (error) => finish(error);
+    const onSpawn = () => {
+      child.unref?.();
+      finish();
+    };
+
+    child.once?.("error", onError);
+    child.once?.("spawn", onSpawn);
+
+    // Test doubles and a few compatible process implementations may not emit
+    // spawn. A returned ChildProcess from Node always emits it, but do not
+    // leave the request hanging if a compatible implementation does not.
+    if (!child.once) finish(new Error("Restart supervisor did not return a ChildProcess."));
   });
 }
