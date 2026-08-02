@@ -1,5 +1,33 @@
 import { apiGet, apiPost, request } from "./apiClient";
 
+export interface PressureZoneConfig {
+  referenceDiagonalMeters: number;
+  minMapScale: number;
+  maxMapScale: number;
+  coordinateScaleMeters: number | null;
+  hard: {
+    mapFactor: number;
+    nearestObjectiveFactor: number;
+    minRadiusMeters: number;
+    maxRadiusMeters: number;
+    frontSafetyMarginMeters: number;
+  };
+  soft: {
+    mapFactor: number;
+    nearestObjectiveFactor: number;
+    minExtraOverHardMeters: number;
+    maxRadiusMeters: number;
+    frontSafetyMarginMeters: number;
+  };
+  combat: {
+    gapFactor: number;
+    lateralFactor: number;
+    minRadiusMeters: number;
+    maxRadiusMeters: number;
+    polygonArcSegments: number;
+  };
+}
+
 export interface TacticalMapBoundsLike {
   minX: number;
   minY: number;
@@ -57,6 +85,18 @@ export async function fetchDynamicPressureZoneState() {
 
 export async function simulateDynamicPressureZone(input: unknown) {
   return apiPost<{ ok: boolean; state: PressureZoneState }>("/api/dynamic-pressure-zone/simulate", input);
+}
+
+export async function fetchDynamicPressureZoneBaseConfig() {
+  return apiGet<{ ok: boolean; config: PressureZoneConfig; defaults: PressureZoneConfig }>("/api/dynamic-pressure-zone/base-config");
+}
+
+export async function saveDynamicPressureZoneBaseConfig(config: PressureZoneConfig) {
+  return request<{ ok: boolean; config: PressureZoneConfig; filePath: string }>("/api/dynamic-pressure-zone/base-config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
 }
 
 export async function saveDynamicPressureZoneProfile(profile: unknown) {
