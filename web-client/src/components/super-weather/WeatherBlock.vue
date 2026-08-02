@@ -16,12 +16,22 @@
       <small>{{ formatDuration(startSeconds) }} → {{ formatDuration(endSeconds) }}</small>
     </button>
     <button
+      v-if="canResizeLeft"
       type="button"
-      class="duration-handle"
+      class="duration-handle left"
+      title="Drag boundary to adjust both adjacent intervals"
+      aria-label="Drag boundary to adjust both adjacent intervals"
+      draggable="false"
+      @pointerdown.stop.prevent="$emit('resize-start', { event: $event, side: 'left' })"
+      @dragstart.prevent
+    ></button>
+    <button
+      type="button"
+      class="duration-handle right"
       title="Drag to change weather duration"
       aria-label="Drag to change weather duration"
       draggable="false"
-      @pointerdown.stop.prevent="$emit('resize-start', $event)"
+      @pointerdown.stop.prevent="$emit('resize-start', { event: $event, side: 'right' })"
       @dragstart.prevent
     ></button>
   </div>
@@ -40,10 +50,11 @@ const props = defineProps<{
   selected?: boolean;
   current?: boolean;
   dragging?: boolean;
+  canResizeLeft?: boolean;
 }>();
 defineEmits<{
   select: [];
-  "resize-start": [event: PointerEvent];
+  "resize-start": [payload: { event: PointerEvent; side: "left" | "right" }];
   "drag-start": [event: DragEvent];
   "drag-end": [];
   drop: [event: DragEvent];
@@ -111,6 +122,13 @@ small { color: rgba(213, 232, 245, .58); font-family: ui-monospace, monospace; }
   background: linear-gradient(90deg, transparent, rgba(83, 203, 250, .13));
   cursor: ew-resize;
   touch-action: none;
+}
+.duration-handle.left {
+  right: auto;
+  left: 0;
+  border-left: 0;
+  border-right: 1px solid rgba(115, 210, 250, .12);
+  background: linear-gradient(270deg, transparent, rgba(83, 203, 250, .13));
 }
 .duration-handle:hover { background: rgba(91, 213, 255, .28); }
 </style>
