@@ -17,7 +17,7 @@ const TEAM_LANE_HEADER_HEIGHT = 18;
 const TEAM_LANE_HEADER_GAP = 4;
 const SQUAD_HEADER_HEIGHT = 14;
 const SQUAD_GAP = 3;
-const DEFAULT_PLAYER_ROW_HEIGHT = 17;
+const DEFAULT_PLAYER_ROW_HEIGHT = 21;
 const MIN_PLAYER_ROW_HEIGHT = 13;
 const PLAYER_STAT_COLUMNS = Object.freeze([
   { key: "kills", label: "K", width: 16, tone: "#63e6be" },
@@ -810,6 +810,8 @@ function renderSquadCard(team, group, x, y) {
 function renderPlayerRow(team, player, x, y, index) {
   const role = resolveRoleMeta(firstText(player?.role, player?.bzssCore?.soldierClass));
   const rowHeight = team.rowHeight;
+  const roleIconSize = Math.max(10, Math.min(17, rowHeight - 3));
+  const roleIconY = y + Math.max(1, (rowHeight - roleIconSize) / 2);
   const fireTeam = resolveSnapshotPlayerFireTeam(player).fireTeam;
   const backgroundOpacity = index % 2 === 0 ? ".50" : ".36";
   const metrics = buildSnapshotPlayerMetrics(player);
@@ -819,17 +821,16 @@ function renderPlayerRow(team, player, x, y, index) {
     `<rect x="${x}" y="${y}" width="${team.laneWidth}" height="${rowHeight}" fill="#020817" fill-opacity="${backgroundOpacity}" stroke="#ffffff" stroke-opacity=".035"/>`,
     `<rect x="${x}" y="${y}" width="7" height="${rowHeight}" fill="${fireTeamColor(fireTeam)}" fill-opacity="${fireTeam ? "1" : ".65"}"/>`,
     `<rect x="${x + 7}" y="${y}" width="1" height="${rowHeight}" fill="#ffffff" fill-opacity=".18"/>`,
-    `<rect x="${x + 10}" y="${y + 2}" width="16" height="16" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
-    player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${y + 2}" width="16" height="16" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
+    `<rect x="${x + 10}" y="${roleIconY}" width="${roleIconSize}" height="${roleIconSize}" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
+    player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${roleIconY}" width="${roleIconSize}" height="${roleIconSize}" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
     `<defs><clipPath id="${nameClipId}"><rect x="${x + 29}" y="${y}" width="${Math.max(20, layout.metricsStart - x - 34)}" height="${rowHeight}"/></clipPath></defs>`,
     `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name" clip-path="url(#${nameClipId})">${escapeXml(firstText(player?.name, "Unknown"))}</text>`,
     `<path d="M${layout.metricsStart - 3} ${y + 2}V${y + rowHeight - 2}" stroke="#ffffff" stroke-opacity=".08"/>`,
   ];
   for (const column of layout.columns) {
     const value = metrics[column.key];
-    const color = column.key === "ping" ? pingColor(value === "--" ? null : value) : column.tone;
-    svg.push(`<rect x="${column.x + 1}" y="${y + 2}" width="${column.width - 2}" height="${Math.max(9, rowHeight - 4)}" rx="2" class="player-stat-chip" fill="${color}" fill-opacity=".13" stroke="${color}" stroke-opacity=".12"/>`);
-    svg.push(`<text x="${column.center}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-stat mono" fill="${color}">${escapeXml(String(value))}</text>`);
+    svg.push(`<rect x="${column.x + 1}" y="${y + 2}" width="${column.width - 2}" height="${Math.max(9, rowHeight - 4)}" rx="2" class="player-stat-chip" fill="#dce9f7" fill-opacity=".055" stroke="#dce9f7" stroke-opacity=".08"/>`);
+    svg.push(`<text x="${column.center}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-stat mono" fill="#f2f7fb">${escapeXml(String(value))}</text>`);
   }
   return svg.join("");
 }
@@ -1027,8 +1028,8 @@ function renderDefs() {
       .scoreboard-header-title{font-size:6px;font-weight:900;letter-spacing:.65px;fill:#a9bed1}
       .scoreboard-header-stat{font-size:6px;font-weight:900}
       .role-badge{font-size:8px;font-weight:900}
-      .player-name{font-size:7.5px;font-weight:900}
-      .player-stat{font-size:6.1px;font-weight:900}
+      .player-name{font-size:8.5px;font-weight:900}
+      .player-stat{font-size:7.6px;font-weight:900}
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}
