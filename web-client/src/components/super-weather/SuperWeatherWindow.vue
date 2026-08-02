@@ -106,6 +106,15 @@
           </details>
         </template>
       </div>
+
+      <button
+        v-if="!windowState.minimized && !maximized"
+        type="button"
+        class="resize-handle"
+        aria-label="Resize Super Weather window"
+        title="Resize window"
+        @pointerdown.stop.prevent="beginResize"
+      ></button>
     </section>
   </teleport>
 </template>
@@ -133,7 +142,10 @@ import WeatherTimeline from "./WeatherTimeline.vue";
 import WeatherInspector from "./WeatherInspector.vue";
 
 const STORAGE_KEY = "bzss.super-weather.window";
-const DEFAULT_WINDOW = { x: 220, y: 140, width: 1200, height: 680, minimized: false };
+const WINDOW_STATE_VERSION = 2;
+const MIN_WINDOW_WIDTH = 360;
+const MIN_WINDOW_HEIGHT = 300;
+const DEFAULT_WINDOW = { version: WINDOW_STATE_VERSION, x: 220, y: 140, width: 1200, height: 680, minimized: false };
 const ui = useUiStore();
 const visible = ref(false);
 const loading = ref(false);
@@ -149,8 +161,14 @@ const windowEl = ref<HTMLElement | null>(null);
 const maximized = ref(false);
 const windowState = reactive(loadWindowState());
 let pollTimer: number | null = null;
-let resizeObserver: ResizeObserver | null = null;
 let dragState: { pointerId: number; offsetX: number; offsetY: number } | null = null;
+let resizeState: {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startWidth: number;
+  startHeight: number;
+} | null = null;
 
 const windowStyle = computed(() => maximized.value ? {} : {
   left: `${windowState.x}px`,
@@ -182,14 +200,13 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", clampWindow);
   stopPolling();
   stopDrag();
-  resizeObserver?.disconnect();
+  stopResize();
 });
 
 async function openWindow() {
   visible.value = true;
   await nextTick();
   clampWindow();
-  observeSize();
   startPolling();
   await loadAll();
 }
@@ -375,25 +392,59 @@ function stopDrag() {
 }
 function toggleMinimized() { windowState.minimized = !windowState.minimized; persistWindowState(); }
 function toggleMaximized() { maximized.value = !maximized.value; }
-function observeSize() {
-  resizeObserver?.disconnect();
-  if (!windowEl.value) return;
-  resizeObserver = new ResizeObserver(([entry]) => {
-    if (maximized.value || windowState.minimized) return;
-    windowState.width = Math.round(entry.contentRect.width);
-    windowState.height = Math.round(entry.contentRect.height);
-    persistWindowState();
-  });
-  resizeObserver.observe(windowEl.value);
+
+function beginResize(event: PointerEvent) {
+  if (maximized.value || windowState.minimized || !windowEl.value) return;
+  const rect = windowEl.value.getBoundingClientRect();
+  resizeState = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    startWidth: rect.width,
+    startHeight: rect.height,
+  };
+  window.addEventListener("pointermove", resizeWindow);
+  window.addEventListener("pointerup", stopResize);
+  window.addEventListener("pointercancel", stopResize);
+}
+function resizeWindow(event: PointerEvent) {
+  if (!resizeState || event.pointerId !== resizeState.pointerId) return;
+  const maxWidth = Math.max(MIN_WINDOW_WIDTH, window.innerWidth - windowState.x - 8);
+  const maxHeight = Math.max(MIN_WINDOW_HEIGHT, window.innerHeight - windowState.y - 8);
+  windowState.width = Math.round(Math.max(MIN_WINDOW_WIDTH, Math.min(maxWidth, resizeState.startWidth + event.clientX - resizeState.startX)));
+  windowState.height = Math.round(Math.max(MIN_WINDOW_HEIGHT, Math.min(maxHeight, resizeState.startHeight + event.clientY - resizeState.startY)));
+}
+function stopResize() {
+  if (resizeState) persistWindowState();
+  resizeState = null;
+  window.removeEventListener("pointermove", resizeWindow);
+  window.removeEventListener("pointerup", stopResize);
+  window.removeEventListener("pointercancel", stopResize);
 }
 function clampWindow() {
-  windowState.width = Math.min(windowState.width, Math.max(360, window.innerWidth - 16));
-  windowState.height = Math.min(windowState.height, Math.max(300, window.innerHeight - 16));
   windowState.x = Math.max(0, Math.min(windowState.x, window.innerWidth - Math.min(180, windowState.width)));
   windowState.y = Math.max(0, Math.min(windowState.y, window.innerHeight - 52));
 }
 function loadWindowState() {
-  try { return { ...DEFAULT_WINDOW, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    if (saved.version !== WINDOW_STATE_VERSION) {
+      return {
+        ...DEFAULT_WINDOW,
+        x: Number.isFinite(saved.x) ? saved.x : DEFAULT_WINDOW.x,
+        y: Number.isFinite(saved.y) ? saved.y : DEFAULT_WINDOW.y,
+        minimized: Boolean(saved.minimized),
+        width: Math.min(DEFAULT_WINDOW.width, Math.max(MIN_WINDOW_WIDTH, window.innerWidth - 16)),
+        height: Math.min(DEFAULT_WINDOW.height, Math.max(MIN_WINDOW_HEIGHT, window.innerHeight - 16)),
+      };
+    }
+    return {
+      ...DEFAULT_WINDOW,
+      ...saved,
+      width: Math.max(MIN_WINDOW_WIDTH, Number(saved.width) || DEFAULT_WINDOW.width),
+      height: Math.max(MIN_WINDOW_HEIGHT, Number(saved.height) || DEFAULT_WINDOW.height),
+    };
+  }
   catch { return { ...DEFAULT_WINDOW }; }
 }
 function persistWindowState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(windowState)); }
@@ -418,11 +469,12 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
 .super-weather-window {
   position: fixed;
   z-index: 12000;
+  box-sizing: border-box;
   min-width: min(360px, calc(100vw - 8px));
   min-height: 300px;
   max-width: calc(100vw - 8px);
   max-height: 1200px;
-  resize: both;
+  resize: none;
   overflow: hidden;
   border: 1px solid rgba(94, 194, 240, .28);
   border-radius: 15px;
@@ -433,6 +485,20 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
 }
 .super-weather-window.minimized { min-height: 52px; resize: none; }
 .super-weather-window.maximized { inset: 8px; width: auto; height: auto; max-width: none; max-height: none; resize: none; }
+.resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: linear-gradient(135deg, transparent 0 48%, rgba(111, 211, 251, .18) 49% 58%, transparent 59% 66%, rgba(111, 211, 251, .55) 67% 74%, transparent 75%);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.resize-handle:hover { background-color: rgba(50, 173, 222, .08); }
 .window-header { height: 52px; padding: 0 12px 0 16px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(102, 166, 195, .16); background: linear-gradient(90deg, rgba(17, 58, 81, .92), rgba(7, 18, 30, .96)); cursor: move; user-select: none; touch-action: none; }
 .window-title { display: flex; align-items: center; gap: 11px; }
 .window-title div { display: grid; gap: 2px; }
