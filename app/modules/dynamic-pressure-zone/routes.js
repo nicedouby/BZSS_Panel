@@ -11,6 +11,23 @@ export async function handleDynamicPressureZoneRoutes({ core, module, url, req, 
     json(200, { ok: true, state: module.getState() });
     return true;
   }
+  if (url.pathname === "/api/dynamic-pressure-zone/base-config" && req.method === "GET") {
+    json(200, { ok: true, ...module.getBaseConfig() });
+    return true;
+  }
+  if (url.pathname === "/api/dynamic-pressure-zone/base-config" && req.method === "PUT") {
+    if (!canManage(core, user)) {
+      json(403, { error: "Forbidden", message: "settings.manage permission is required." });
+      return true;
+    }
+    const body = await readJsonBody(req);
+    try {
+      json(200, { ok: true, ...(await module.saveBaseConfig(body)) });
+    } catch (error) {
+      json(400, { error: "InvalidBaseConfig", message: error?.message ?? "Invalid base pressure zone config." });
+    }
+    return true;
+  }
   if (url.pathname === "/api/dynamic-pressure-zone/profile" && req.method === "GET") {
     json(200, { ok: true, profile: await module.getLayerProfile() });
     return true;

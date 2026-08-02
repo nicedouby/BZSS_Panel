@@ -1,7 +1,8 @@
 // -*- coding: utf-8 -*-
 
 import { calculatePressureZones } from "./engine.js";
-import { mergePressureZoneConfig } from "./defaults.js";
+import { DEFAULT_PRESSURE_ZONE_CONFIG, mergePressureZoneConfig } from "./defaults.js";
+import { createBaseConfigStore } from "./base-config-store.js";
 import { createLayerProfileStore } from "./layer-profile-store.js";
 import { simulatePressureZones } from "./simulator.js";
 import {
@@ -21,6 +22,10 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
     dataDir: moduleConfig.dataDir || "data/dynamic-pressure-zone",
     logger: moduleLogger,
   });
+  const baseConfigStore = createBaseConfigStore({
+    dataDir: moduleConfig.dataDir || "data/dynamic-pressure-zone",
+    logger: moduleLogger,
+  });
   const subscribers = new Set();
   let unsubscribe = null;
   let state = inactive("waiting-for-tactical-state");
@@ -30,6 +35,7 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
   let lastInputSignature = "";
   let generation = 0;
   let started = false;
+  let baseConfig = mergePressureZoneConfig(moduleConfig.rules);
 
   function getState() {
     return clone(state);
@@ -60,7 +66,7 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
       currentProfile = layer ? await store.get(layer) : null;
     }
     if (localGeneration !== generation) return getState();
-    const input = buildLiveInput(source, currentProfile, moduleConfig);
+    const input = buildLiveInput(source, currentProfile, baseConfig);
     const calculated = calculatePressureZones(input);
     calculated.layer = layer;
     calculated.mapKey = input.mapKey ?? "";
@@ -84,6 +90,27 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
     return clone(result);
   }
 
+  function getBaseConfig() {
+    return {
+      config: clone(baseConfig),
+      defaults: clone(DEFAULT_PRESSURE_ZONE_CONFIG),
+    };
+  }
+
+  async function saveBaseConfig(value) {
+    const result = await baseConfigStore.save(value);
+    baseConfig = mergePressureZoneConfig(moduleConfig.rules, result.config);
+    await recalculate(lastSnapshot, { force: true });
+    return { ...clone(result), config: clone(baseConfig) };
+  }
+
+  function simulate(input = {}) {
+    return simulatePressureZones({
+      ...input,
+      config: mergePressureZoneConfig(baseConfig, input?.config),
+    });
+  }
+
   return {
     manifest: {
       id: "module.dynamicPressureZone",
@@ -97,12 +124,16 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
       getState,
       getLayerProfile,
       saveLayerProfile,
-      simulate: simulatePressureZones,
+      getBaseConfig,
+      saveBaseConfig,
+      simulate,
       subscribe,
       recalculate,
     },
     async init() {
       await store.init();
+      await baseConfigStore.init();
+      baseConfig = mergePressureZoneConfig(moduleConfig.rules, await baseConfigStore.get());
     },
     async start() {
       if (started) return;
@@ -145,7 +176,7 @@ function buildRelevantSnapshotSignature(snapshot) {
   });
 }
 
-function buildLiveInput(snapshot, profile, moduleConfig) {
+function buildLiveInput(snapshot, profile, baseConfig) {
   const assets = snapshot?.assets ?? {};
   const mapIdentity = firstText(profile?.mapKey, snapshot?.server?.map, snapshot?.server?.layer, snapshot?.match?.map);
   const mapKey = profile?.mapKey || resolveTacticalMapKey(mapIdentity) || "";
@@ -165,7 +196,7 @@ function buildLiveInput(snapshot, profile, moduleConfig) {
     mains: profile?.mains ?? normalizeRuntimeMains(assets.mainZones),
     objectiveChain: objectives,
     objectiveState,
-    config: mergePressureZoneConfig(moduleConfig.rules, profile?.config),
+    config: mergePressureZoneConfig(baseConfig, profile?.config),
   };
 }
 

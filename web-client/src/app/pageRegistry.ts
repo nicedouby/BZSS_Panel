@@ -78,6 +78,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "pressure-zone-settings",
+    path: "/settings/pressure-zone",
+    component: () => import("../pages/PressureZoneSettingsPage.vue"),
+    title: "压家圈基础参数",
+    category: "system",
+    refreshPolicy: "manual",
+    nav: { section: "opsLive", label: "压家圈基础参数", icon: "⚙️", order: 17 },
+    requiredPermission: "settings.manage",
+    ...workspacePage,
+  },
+  {
     name: "astrbot-server-info-card",
     path: "/astrbot/server-info-card",
     component: () => import("../pages/ServerInfoSnapshotPage.vue"),

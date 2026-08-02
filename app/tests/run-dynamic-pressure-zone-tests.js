@@ -1,9 +1,14 @@
 // -*- coding: utf-8 -*-
 
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { normalizeBaseConfig } from "../modules/dynamic-pressure-zone/base-config-store.js";
 import { calculatePressureZones } from "../modules/dynamic-pressure-zone/engine.js";
 import { classifyPoint } from "../modules/dynamic-pressure-zone/geometry.js";
 import { createDynamicPressureZoneModule } from "../modules/dynamic-pressure-zone/index.js";
+import { handleDynamicPressureZoneRoutes } from "../modules/dynamic-pressure-zone/routes.js";
 
 function baseInput(overrides = {}) {
   return {
@@ -110,10 +115,11 @@ const tacticalState = {
   subscribe(listener) { tacticalListener = listener; return () => { tacticalListener = null; }; },
   async getSnapshot() { return liveSnapshot; },
 };
+const testDataDir = await mkdtemp(path.join(tmpdir(), "bzss-dynamic-pressure-zone-"));
 const module = createDynamicPressureZoneModule({
   core: { logger: { warn() {} }, createLogger() { return this.logger; } },
   modules: { tacticalState },
-  config: { get(key, fallback) { return key === "modules.dynamicPressureZone" ? { dataDir: "/tmp/bzss-dynamic-pressure-zone-tests" } : fallback; } },
+  config: { get(key, fallback) { return key === "modules.dynamicPressureZone" ? { dataDir: testDataDir } : fallback; } },
   logger: { warn() {} },
 });
 let livePublishCount = 0;
@@ -129,6 +135,33 @@ ownershipChanged.assets.captureZones[1].ownerTeamId = 2;
 tacticalListener?.(ownershipChanged);
 await new Promise((resolve) => setImmediate(resolve));
 assert.equal(livePublishCount, 2);
+
+// Base settings persist, validate, and immediately affect simulations and live state.
+const defaultBaseConfig = module.api.getBaseConfig();
+assert.equal(defaultBaseConfig.config.combat.gapFactor, 0.6);
+const updatedConfig = structuredClone(defaultBaseConfig.config);
+updatedConfig.combat.gapFactor = 0.9;
+let routeResponse = null;
+const routeContext = {
+  core: { authManager: { hasPermission: () => true } },
+  module: module.api,
+  user: { id: "pressure-zone-test-admin" },
+  readJsonBody: async () => updatedConfig,
+  json: (status, body) => { routeResponse = { status, body }; },
+};
+assert.equal(await handleDynamicPressureZoneRoutes({ ...routeContext, url: new URL("http://localhost/api/dynamic-pressure-zone/base-config"), req: { method: "GET" } }), true);
+assert.equal(routeResponse.status, 200);
+assert.equal(routeResponse.body.config.combat.gapFactor, 0.6);
+assert.equal(await handleDynamicPressureZoneRoutes({ ...routeContext, url: new URL("http://localhost/api/dynamic-pressure-zone/base-config"), req: { method: "PUT" } }), true);
+assert.equal(routeResponse.status, 200);
+assert.equal(module.api.getBaseConfig().config.combat.gapFactor, 0.9);
+assert.equal(livePublishCount, 3);
+const persistedConfig = JSON.parse(await readFile(path.join(testDataDir, "base-config.json"), "utf8"));
+assert.equal(persistedConfig.combat.gapFactor, 0.9);
+assert.equal(module.api.simulate(baseInput()).diagnostics.config.combat.gapFactor, 0.9);
+assert.throws(() => normalizeBaseConfig({ minMapScale: 2, maxMapScale: 1 }), /cannot exceed/);
+assert.throws(() => normalizeBaseConfig({ combat: { polygonArcSegments: 2 } }), /between 6 and 128/);
 await module.stop();
+await rm(testDataDir, { recursive: true, force: true });
 
 console.log("Dynamic pressure zone tests passed.");
