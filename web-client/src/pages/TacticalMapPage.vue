@@ -1474,7 +1474,7 @@ const dynamicMarkerScale = computed(() => {
 
 // Sidebar states
 type SidebarMode = "expanded" | "compact" | "hidden";
-type SidebarTab = "overview" | "units" | "assets" | "core";
+type SidebarTab = "overview" | "units" | "assets" | "feed" | "core";
 type SidebarUnitMode = "squads" | "players";
 type SidebarSortMode = "name" | "squad" | "health" | "distance" | "vehicle";
 

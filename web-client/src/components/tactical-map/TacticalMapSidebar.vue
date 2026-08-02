@@ -6,100 +6,157 @@
       type="button"
       :class="{ 'is-collapsed': isCollapsed }"
       @click="isCollapsed = !isCollapsed"
-      :title="isCollapsed ? '展开面板' : '收起面板'"
+      :title="isCollapsed ? '展开战术面板' : '收起战术面板'"
     >
       <span class="tab-arrow">{{ isCollapsed ? '◀' : '▶' }}</span>
+      <span v-if="isCollapsed" class="vertical-tab-text font-mono">TACTICAL</span>
     </button>
 
     <div class="sidebar-content-wrapper" :class="{ 'is-collapsed': isCollapsed }">
       <!-- ── Header ── -->
       <header class="sidebar-header">
-        <div class="header-led-block">
-          <div class="header-led-indicator pulse-led" title="System Online"></div>
-          <div class="header-text">
-            <div class="sidebar-title">TACTICAL CMD</div>
-            <div class="sidebar-subtitle">实时战术指挥系统</div>
+        <div class="header-top-row">
+          <div class="header-led-block">
+            <div class="header-led-indicator pulse-led" title="System Online"></div>
+            <div class="header-text">
+              <div class="sidebar-title font-mono">TACTICAL CMD</div>
+              <div class="sidebar-subtitle">实时战术指挥系统</div>
+            </div>
+          </div>
+          <div class="header-live-chip">
+            <span class="live-pulse-dot"></span>
+            <span class="live-label font-mono">LIVE</span>
           </div>
         </div>
+
         <!-- Server quick stats -->
         <div class="header-quick-stats">
           <div class="qs-item">
-            <span class="qs-val text-cyan monospace">{{ serverPlayerCount }}</span>
-            <span class="qs-lbl">在线</span>
+            <span class="qs-val text-cyan font-mono">{{ serverPlayerCount }}</span>
+            <span class="qs-lbl">在线玩家</span>
           </div>
           <div class="qs-sep"></div>
           <div class="qs-item">
-            <span class="qs-val pulsing-text text-green">{{ statusText }}</span>
-            <span class="qs-lbl">状态</span>
+            <span class="qs-val pulsing-text text-green">{{ statusText || '正常运行' }}</span>
+            <span class="qs-lbl">系统状态</span>
           </div>
           <div class="qs-sep"></div>
           <div class="qs-item">
-            <span class="qs-val">{{ matchPhase }}</span>
-            <span class="qs-lbl">阶段</span>
+            <span class="qs-val text-amber font-mono">{{ matchPhase || '对局进行中' }}</span>
+            <span class="qs-lbl">战局阶段</span>
           </div>
         </div>
+
         <!-- Ticket bar -->
-        <div class="header-ticket-bar">
-          <span class="ticket-label-left monospace" :style="getPerspectiveStyle(1)">T1 {{ tickets.team1 }}</span>
+        <div class="header-ticket-bar" :class="{ 'is-low-ticket': isLowTicket }">
+          <div class="ticket-meta-info">
+            <span class="ticket-label-left font-mono" :style="getPerspectiveStyle(1)">T1 {{ tickets.team1 }}</span>
+            <span class="ticket-vs-badge font-mono">VS</span>
+            <span class="ticket-label-right font-mono" :style="getPerspectiveStyle(2)">{{ tickets.team2 }} T2</span>
+          </div>
           <div class="ticket-track">
-            <div class="ticket-fill" :style="{ ...getPerspectiveStyle(1), width: getTicketBarWidth(1) }"></div>
+            <div class="ticket-fill ticket-fill-left" :style="{ ...getPerspectiveStyle(1), width: getTicketBarWidth(1) }"></div>
             <div class="ticket-fill ticket-fill-right" :style="{ ...getPerspectiveStyle(2), width: getTicketBarWidth(2) }"></div>
           </div>
-          <span class="ticket-label-right monospace" :style="getPerspectiveStyle(2)">{{ tickets.team2 }} T2</span>
         </div>
       </header>
 
       <!-- ── Layers / Settings ── -->
       <section class="sidebar-section">
-        <div class="section-title-bar">
-          <span class="glowing-square blue"></span>
-          <h3>图层控制</h3>
-          <button type="button" class="section-collapse-btn" @click="layersOpen = !layersOpen">
+        <div class="section-title-bar" @click="layersOpen = !layersOpen">
+          <div class="title-left">
+            <span class="glowing-square blue"></span>
+            <h3>图层控制</h3>
+          </div>
+          <button type="button" class="section-collapse-btn" aria-label="Toggle Layers">
             {{ layersOpen ? '▲' : '▼' }}
           </button>
         </div>
 
         <div v-show="layersOpen" class="layers-content">
-          <!-- Checkboxes -->
-          <div class="options-group-sidebar layers-grid">
-            <label class="option-item-sidebar" :class="{ checked: showGridModel }">
-              <input v-model="showGridModel" type="checkbox" />
-              <span class="option-text">网格</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: showPlayerNamesModel }">
-              <input v-model="showPlayerNamesModel" type="checkbox" />
-              <span class="option-text">名称</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: showPlayerCoordsModel }">
-              <input v-model="showPlayerCoordsModel" type="checkbox" />
-              <span class="option-text">坐标</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: showCaptureZonesModel }">
-              <input v-model="showCaptureZonesModel" type="checkbox" />
-              <span class="option-text">目标点</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: showFobsModel }">
-              <input v-model="showFobsModel" type="checkbox" />
-              <span class="option-text">FOB</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: showPressureZonesModel }">
-              <input v-model="showPressureZonesModel" type="checkbox" />
-              <span class="option-text">动态压家</span>
-            </label>
-            <label class="option-item-sidebar" :class="{ checked: measureModeModel }">
-              <input v-model="measureModeModel" type="checkbox" />
-              <span class="option-text">测距</span>
-            </label>
+          <!-- Layer Presets -->
+          <div class="layer-preset-bar">
+            <span class="preset-label font-mono">预设:</span>
+            <button type="button" class="preset-btn" @click="applyLayerPreset('all')">全图层</button>
+            <button type="button" class="preset-btn" @click="applyLayerPreset('compact')">精简</button>
+            <button type="button" class="preset-btn" @click="applyLayerPreset('minimal')">极简</button>
+          </div>
+
+          <!-- Switcher Chips Grid -->
+          <div class="layers-chips-grid">
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: showGridModel }"
+              @click="showGridModel = !showGridModel"
+            >
+              <span class="chip-icon">🌐</span>
+              <span class="chip-text">网格</span>
+            </button>
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: showPlayerNamesModel }"
+              @click="showPlayerNamesModel = !showPlayerNamesModel"
+            >
+              <span class="chip-icon">🏷️</span>
+              <span class="chip-text">名称</span>
+            </button>
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: showPlayerCoordsModel }"
+              @click="showPlayerCoordsModel = !showPlayerCoordsModel"
+            >
+              <span class="chip-icon">📍</span>
+              <span class="chip-text">坐标</span>
+            </button>
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: showCaptureZonesModel }"
+              @click="showCaptureZonesModel = !showCaptureZonesModel"
+            >
+              <span class="chip-icon">🚩</span>
+              <span class="chip-text">目标点</span>
+            </button>
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: showFobsModel }"
+              @click="showFobsModel = !showFobsModel"
+            >
+              <span class="chip-icon">🏰</span>
+              <span class="chip-text">FOB</span>
+            </button>
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: showPressureZonesModel }"
+              @click="showPressureZonesModel = !showPressureZonesModel"
+            >
+              <span class="chip-icon">⚡</span>
+              <span class="chip-text">压家圈</span>
+            </button>
+            <button
+              type="button"
+              class="layer-chip"
+              :class="{ active: measureModeModel }"
+              @click="measureModeModel = !measureModeModel"
+            >
+              <span class="chip-icon">📏</span>
+              <span class="chip-text">测距</span>
+            </button>
           </div>
 
           <div v-if="showPressureZonesModel" class="pressure-layer-options">
-            <label><input v-model="showPressureHardModel" type="checkbox" /><span>Hard</span></label>
-            <label><input v-model="showPressureSoftModel" type="checkbox" /><span>Soft</span></label>
-            <label><input v-model="showPressureCombatModel" type="checkbox" /><span>Combat</span></label>
-            <label><input v-model="showPressureDiagnosticsModel" type="checkbox" /><span>参数</span></label>
-            <label><input v-model="showPressureConnectionsModel" type="checkbox" /><span>点位连线</span></label>
+            <label class="pressure-sub-option"><input v-model="showPressureHardModel" type="checkbox" /><span>Hard</span></label>
+            <label class="pressure-sub-option"><input v-model="showPressureSoftModel" type="checkbox" /><span>Soft</span></label>
+            <label class="pressure-sub-option"><input v-model="showPressureCombatModel" type="checkbox" /><span>Combat</span></label>
+            <label class="pressure-sub-option"><input v-model="showPressureDiagnosticsModel" type="checkbox" /><span>参数</span></label>
+            <label class="pressure-sub-option"><input v-model="showPressureConnectionsModel" type="checkbox" /><span>连线</span></label>
             <button v-if="canManagePressureSettings" type="button" class="pressure-settings-button" @click="emit('open-pressure-settings')">
-              <span>⚙</span><b>基础参数</b>
+              <span>⚙</span><b>压家圈基础参数</b>
             </button>
           </div>
 
@@ -107,34 +164,37 @@
           <div class="option-row">
             <span class="option-label">地图</span>
             <select v-model="selectedMapKeyModel" class="map-select">
-              <option value="auto">Auto ({{ detectedMapName }})</option>
+              <option value="auto">Auto ({{ detectedMapName || '自动识别' }})</option>
               <option v-for="map in mapOptions" :key="map.key" :value="map.key">{{ map.name }}</option>
             </select>
           </div>
-          <div class="map-size-summary"><span>地图尺寸</span><strong>{{ mapSizeText }}</strong></div>
+          <div class="map-size-summary">
+            <span>地图范围</span>
+            <strong class="font-mono">{{ mapSizeText || '未知尺寸' }}</strong>
+          </div>
 
           <!-- Perspective -->
           <div class="option-row option-row--col">
-            <span class="option-label">视角</span>
+            <span class="option-label">观察视角</span>
             <div class="perspective-switch">
               <button type="button" class="perspective-btn" :class="{ active: viewerPerspectiveModeModel === 'auto' }" @click="viewerPerspectiveModeModel = 'auto'">Auto</button>
-              <button type="button" class="perspective-btn" :class="{ active: viewerPerspectiveModeModel === 'team1' }" :style="getPerspectiveStyle(1)" @click="viewerPerspectiveModeModel = 'team1'">T1</button>
-              <button type="button" class="perspective-btn" :class="{ active: viewerPerspectiveModeModel === 'team2' }" :style="getPerspectiveStyle(2)" @click="viewerPerspectiveModeModel = 'team2'">T2</button>
+              <button type="button" class="perspective-btn" :class="{ active: viewerPerspectiveModeModel === 'team1' }" :style="getPerspectiveStyle(1)" @click="viewerPerspectiveModeModel = 'team1'">TEAM 1</button>
+              <button type="button" class="perspective-btn" :class="{ active: viewerPerspectiveModeModel === 'team2' }" :style="getPerspectiveStyle(2)" @click="viewerPerspectiveModeModel = 'team2'">TEAM 2</button>
             </div>
           </div>
-          <div class="perspective-summary">{{ perspectiveSummaryText }}</div>
+          <div v-if="perspectiveSummaryText" class="perspective-summary">{{ perspectiveSummaryText }}</div>
 
           <!-- Marker scale -->
           <div class="option-row">
-            <span class="option-label">标记</span>
+            <span class="option-label">标记缩放</span>
             <input v-model.number="markerScaleModel" type="range" min="0.05" max="2" step="0.05" class="scale-slider" />
-            <span class="scale-val monospace">{{ markerScaleModel.toFixed(2) }}x</span>
+            <span class="scale-val font-mono">{{ markerScaleModel.toFixed(2) }}x</span>
           </div>
         </div>
       </section>
 
-      <!-- ── Tab Navigation ── -->
-      <div class="sidebar-tabs-directory">
+      <!-- ── Tab Directory Navigation ── -->
+      <nav class="sidebar-tabs-directory" aria-label="Sidebar Navigation">
         <button class="directory-tab-btn" :class="{ active: sidebarTab === 'overview' }" @click="sidebarTabModel = 'overview'">
           <span class="tab-icon">📊</span><span class="tab-name">总览</span>
         </button>
@@ -144,40 +204,91 @@
         <button class="directory-tab-btn" :class="{ active: sidebarTab === 'assets' }" @click="sidebarTabModel = 'assets'">
           <span class="tab-icon">📡</span><span class="tab-name">资产</span>
         </button>
+        <button class="directory-tab-btn" :class="{ active: sidebarTab === 'feed' }" @click="sidebarTabModel = 'feed'">
+          <span class="tab-icon">📜</span><span class="tab-name">战报</span>
+          <span v-if="combatLogs?.length" class="feed-count-badge font-mono">{{ combatLogs.length }}</span>
+        </button>
         <button class="directory-tab-btn" :class="{ active: sidebarTab === 'core' }" @click="sidebarTabModel = 'core'">
           <span class="tab-icon">⚙️</span><span class="tab-name">核心</span>
         </button>
-
-      </div>
+      </nav>
 
       <!-- ── Tab Content ── -->
       <section class="sidebar-tab-section">
 
         <!-- Overview Tab -->
-        <div v-if="sidebarTab === 'overview'" class="sidebar-overview">
+        <div v-if="sidebarTab === 'overview'" class="sidebar-overview sidebar-scroll">
+          <!-- Tactical Breakdown Card -->
+          <div class="overview-card tactical-breakdown-card">
+            <div class="overview-card-title">战场局势对比</div>
+            <div class="team-comparison-grid">
+              <div class="team-comp-col team-1-col" :style="getPerspectiveStyle(1)">
+                <div class="team-comp-header">TEAM 1</div>
+                <div class="team-comp-stat"><span class="lbl">FOB 电台</span><strong class="val font-mono">{{ team1FobCount }}</strong></div>
+                <div class="team-comp-stat"><span class="lbl">控制点</span><strong class="val font-mono">{{ team1CpCount }}</strong></div>
+                <div class="team-comp-stat"><span class="lbl">在线人数</span><strong class="val font-mono">{{ team1PlayerCount }}</strong></div>
+              </div>
+              <div class="team-comp-divider"></div>
+              <div class="team-comp-col team-2-col" :style="getPerspectiveStyle(2)">
+                <div class="team-comp-header">TEAM 2</div>
+                <div class="team-comp-stat"><span class="lbl">FOB 电台</span><strong class="val font-mono">{{ team2FobCount }}</strong></div>
+                <div class="team-comp-stat"><span class="lbl">控制点</span><strong class="val font-mono">{{ team2CpCount }}</strong></div>
+                <div class="team-comp-stat"><span class="lbl">在线人数</span><strong class="val font-mono">{{ team2PlayerCount }}</strong></div>
+              </div>
+            </div>
+          </div>
+
           <div class="overview-card">
             <div class="overview-card-title">服务器 / BZSS 核心</div>
             <div class="overview-grid">
-              <div class="overview-line"><span>玩家</span><strong>{{ serverPlayerCount }}</strong></div>
-              <div class="overview-line"><span>阶段</span><strong>{{ matchPhase }}</strong></div>
-              <div class="overview-line"><span>BZSS</span><strong :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</strong></div>
-              <div class="overview-line"><span>更新</span><strong>{{ bzssCoreUpdatedAtText }}</strong></div>
+              <div class="overview-line"><span>在场玩家</span><strong class="font-mono text-cyan">{{ serverPlayerCount }}</strong></div>
+              <div class="overview-line"><span>对局阶段</span><strong>{{ matchPhase || '进行中' }}</strong></div>
+              <div class="overview-line"><span>BZSS 核心</span><strong :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</strong></div>
+              <div class="overview-line"><span>数据更新</span><strong class="font-mono">{{ bzssCoreUpdatedAtText }}</strong></div>
             </div>
           </div>
+
           <div class="overview-card">
-            <div class="overview-card-title">快速操作</div>
+            <div class="overview-card-title">快捷导航</div>
             <div class="overview-actions">
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'units'">查找玩家</button>
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'assets'">查看资产</button>
-              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'core'">核心状态</button>
+              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'units'">
+                <span>👥 查找玩家</span>
+              </button>
+              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'assets'">
+                <span>📡 查看战术资产</span>
+              </button>
+              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'feed'">
+                <span>📜 实时战报日志</span>
+              </button>
+              <button type="button" class="quick-action-btn" @click="sidebarTabModel = 'core'">
+                <span>⚙️ 核心状态</span>
+              </button>
             </div>
           </div>
         </div>
+
         <!-- Units Tab -->
         <div v-else-if="sidebarTab === 'units'" class="sidebar-scroll">
           <div class="sidebar-search-row">
-            <input v-model="sidebarSearchModel" class="sidebar-search-input" type="search" placeholder="搜索玩家、小队、Kit..." />
-            <select v-model="sidebarSortModeModel" class="map-select sort-select">
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input
+                v-model="sidebarSearchModel"
+                class="sidebar-search-input"
+                type="search"
+                placeholder="搜索玩家、小队、Kit..."
+              />
+              <button
+                v-if="sidebarSearchModel"
+                type="button"
+                class="search-clear-btn"
+                title="清空搜索"
+                @click="sidebarSearchModel = ''"
+              >
+                ✕
+              </button>
+            </div>
+            <select v-model="sidebarSortModeModel" class="map-select sort-select" title="排序规则">
               <option value="squad">小队</option>
               <option value="name">名称</option>
               <option value="health">血量</option>
@@ -185,19 +296,87 @@
               <option value="vehicle">载具</option>
             </select>
           </div>
+
+          <!-- Active filters & Count badge -->
           <div class="filter-pill-row">
-            <button type="button" class="filter-pill" :class="{ active: sidebarOnlyAliveModel }" @click="sidebarOnlyAliveModel = !sidebarOnlyAliveModel">存活</button>
-            <button type="button" class="filter-pill" :class="{ active: sidebarOnlyVehicleModel }" @click="sidebarOnlyVehicleModel = !sidebarOnlyVehicleModel">载具</button>
-          </div>
-          <div class="sidebar-tabs">
-            <button type="button" class="tab-btn" :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]" :style="getPerspectiveStyle(1)" @click="activeTeamTabModel = 1">TEAM 1</button>
-            <button type="button" class="tab-btn" :class="[getPerspectiveClass(2), { active: activeTeamTab === 2 }]" :style="getPerspectiveStyle(2)" @click="activeTeamTabModel = 2">TEAM 2</button>
-          </div>
-          <div class="unit-mode-tabs">
-            <button type="button" class="mode-chip" :class="{ active: sidebarUnitMode === 'squads' }" @click="sidebarUnitModeModel = 'squads'">小队</button>
-            <button type="button" class="mode-chip" :class="{ active: sidebarUnitMode === 'players' }" @click="sidebarUnitModeModel = 'players'">玩家</button>
+            <button
+              type="button"
+              class="filter-pill"
+              :class="{ active: sidebarOnlyAliveModel }"
+              @click="sidebarOnlyAliveModel = !sidebarOnlyAliveModel"
+            >
+              存活
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              :class="{ active: sidebarOnlyVehicleModel }"
+              @click="sidebarOnlyVehicleModel = !sidebarOnlyVehicleModel"
+            >
+              载具
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              :class="{ active: sidebarOnlySl }"
+              @click="sidebarOnlySl = !sidebarOnlySl"
+            >
+              仅队长 SL
+            </button>
+            <button
+              type="button"
+              class="filter-pill"
+              :class="{ active: sidebarOnlyLowHp }"
+              @click="sidebarOnlyLowHp = !sidebarOnlyLowHp"
+            >
+              低血量
+            </button>
+            <span class="search-count-pill font-mono">{{ filteredPlayers.length }} 人</span>
           </div>
 
+          <!-- Team Selector -->
+          <div class="sidebar-tabs">
+            <button
+              type="button"
+              class="tab-btn"
+              :class="[getPerspectiveClass(1), { active: activeTeamTab === 1 }]"
+              :style="getPerspectiveStyle(1)"
+              @click="activeTeamTabModel = 1"
+            >
+              TEAM 1 ({{ team1PlayerCount }})
+            </button>
+            <button
+              type="button"
+              class="tab-btn"
+              :class="[getPerspectiveClass(2), { active: activeTeamTab === 2 }]"
+              :style="getPerspectiveStyle(2)"
+              @click="activeTeamTabModel = 2"
+            >
+              TEAM 2 ({{ team2PlayerCount }})
+            </button>
+          </div>
+
+          <!-- Unit Mode Selector -->
+          <div class="unit-mode-tabs">
+            <button
+              type="button"
+              class="mode-chip"
+              :class="{ active: sidebarUnitMode === 'squads' }"
+              @click="sidebarUnitModeModel = 'squads'"
+            >
+              小队 Squads ({{ currentTeamSquads.length }})
+            </button>
+            <button
+              type="button"
+              class="mode-chip"
+              :class="{ active: sidebarUnitMode === 'players' }"
+              @click="sidebarUnitModeModel = 'players'"
+            >
+              玩家 Players ({{ filteredPlayers.length }})
+            </button>
+          </div>
+
+          <!-- Squad List -->
           <div v-if="sidebarUnitMode === 'squads'" class="sidebar-list">
             <button
               v-for="squad in currentTeamSquads"
@@ -209,24 +388,28 @@
               @click="$emit('focus-squad', { teamId: squad.teamId, squadId: squad.id })"
             >
               <div class="squad-card-header">
-                <span class="squad-number">#{{ squad.id }}</span>
+                <span class="squad-number font-mono">#{{ squad.id }}</span>
                 <span class="squad-name">{{ squad.name }}</span>
-                <span class="squad-members-count monospace">{{ squad.playersCount }}</span>
+                <span class="squad-members-count font-mono">{{ squad.playersCount }} 人</span>
               </div>
               <div class="squad-card-meta">
-                <span class="sl-name">SL: {{ squad.squadLeaderName }}</span>
+                <span class="sl-name">SL: {{ squad.squadLeaderName || '未指定队长' }}</span>
                 <div class="squad-health-summary">
-                  <span class="health-label">HP</span>
+                  <span class="health-label font-mono">均血</span>
                   <div class="mini-bar-track">
-                    <div class="mini-bar-fill" :style="{ width: `${squad.avgHealth}%`, backgroundColor: squad.avgHealth < 50 ? '#ef5350' : '#00e5ff' }"></div>
+                    <div
+                      class="mini-bar-fill"
+                      :style="{ width: `${squad.avgHealth}%`, backgroundColor: squad.avgHealth < 50 ? '#ef4444' : squad.avgHealth < 75 ? '#eab308' : '#10b981' }"
+                    ></div>
                   </div>
                   <span class="health-num font-mono">{{ squad.avgHealth }}%</span>
                 </div>
               </div>
             </button>
-            <div v-if="!currentTeamSquads.length" class="empty-state">暂无小队</div>
+            <div v-if="!currentTeamSquads.length" class="empty-state">暂无小队数据</div>
           </div>
 
+          <!-- Player List -->
           <div v-else class="sidebar-list">
             <button
               v-for="player in filteredPlayers"
@@ -247,12 +430,15 @@
                   {{ getPlayerLabel(player) }}
                   <span v-if="isSquadLeader(player)" class="sl-badge-pill">SL</span>
                 </span>
-                <span class="player-squad-tag">S{{ normalizeSquad(player.squadId) }}</span>
-                <span class="player-link-pill" :data-confidence="player.linkConfidence">{{ linkConfidenceLabel(player.linkConfidence) }}</span>
+                <span class="player-squad-tag font-mono">S{{ normalizeSquad(player.squadId) }}</span>
+                <span class="player-link-pill font-mono" :data-confidence="player.linkConfidence">{{ linkConfidenceLabel(player.linkConfidence) }}</span>
               </div>
               <div class="player-card-body">
                 <div class="player-health-bar-container">
-                  <div class="player-health-bar-fill" :style="{ width: `${getPlayerHealth(player) ?? 0}%`, backgroundColor: getPlayerHealthColor(player) }"></div>
+                  <div
+                    class="player-health-bar-fill"
+                    :style="{ width: `${getPlayerHealth(player) ?? 0}%`, backgroundColor: getPlayerHealthColor(player) }"
+                  ></div>
                 </div>
                 <div class="player-status-row">
                   <span class="player-hp-value font-mono">{{ getPlayerHealth(player) ?? '0' }}% HP</span>
@@ -264,14 +450,35 @@
                 </div>
               </div>
             </button>
-            <div v-if="!filteredPlayers.length" class="empty-state">暂无玩家</div>
+            <div v-if="!filteredPlayers.length" class="empty-state">未找到匹配玩家</div>
           </div>
         </div>
 
         <!-- Assets Tab -->
         <div v-else-if="sidebarTab === 'assets'" class="sidebar-scroll">
+          <!-- Summary Header -->
+          <div class="asset-summary-bar">
+            <div class="asset-summary-item">
+              <span class="lbl">主基地</span>
+              <strong class="val font-mono">{{ mainZoneMarkers.length }}</strong>
+            </div>
+            <div class="asset-summary-item">
+              <span class="lbl">占领点</span>
+              <strong class="val font-mono">{{ captureZoneMarkers.length }}</strong>
+            </div>
+            <div class="asset-summary-item">
+              <span class="lbl">FOB 电台</span>
+              <strong class="val font-mono">{{ fobMarkers.length }}</strong>
+            </div>
+            <div class="asset-summary-item">
+              <span class="lbl">载具类型</span>
+              <strong class="val font-mono">{{ vehicleGroups.length }}</strong>
+            </div>
+          </div>
+
+          <!-- Main Bases -->
           <div class="asset-group">
-            <div class="asset-group-title">主基地</div>
+            <div class="asset-group-title">主基地 (Main Bases)</div>
             <button
               v-for="zone in mainZoneMarkers"
               :key="zone.id"
@@ -281,15 +488,16 @@
             >
               <div class="asset-row-title">
                 <span class="bzss-team-indicator" :class="`team-ind-${zone.teamId ?? 0}`">T{{ zone.teamId ?? '--' }}</span>
-                <span>{{ zone.name }}</span>
+                <span class="asset-name-text">{{ zone.name }}</span>
               </div>
               <div class="asset-meta font-mono">{{ zone.mapX.toFixed(1) }}%, {{ zone.mapY.toFixed(1) }}%</div>
             </button>
-            <div v-if="!mainZoneMarkers.length" class="empty-state">暂无主基地</div>
+            <div v-if="!mainZoneMarkers.length" class="empty-state">暂无主基地数据</div>
           </div>
 
+          <!-- Capture Points -->
           <div class="asset-group">
-            <div class="asset-group-title">占领点</div>
+            <div class="asset-group-title">占领点 (Capture Points)</div>
             <button
               v-for="zone in captureZoneMarkers"
               :key="zone.id"
@@ -298,59 +506,70 @@
               @click="$emit('focus-zone', zone)"
             >
               <div class="asset-row-title">
-                <span class="bzss-badge bzss-badge--ok">CPZ</span>
-                <span>{{ zone.name }}</span>
-                <span v-if="zone.isLocked" class="bzss-badge bzss-badge--warn">LOCK</span>
+                <span class="bzss-badge bzss-badge--ok">CP</span>
+                <span class="asset-name-text">{{ zone.name }}</span>
+                <span v-if="zone.isLocked" class="bzss-badge bzss-badge--warn">LOCKED</span>
               </div>
               <div class="asset-bars">
                 <div class="asset-bar-line">
-                  <span>CAP</span>
-                  <div class="mini-bar-track"><div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.max(0, Math.min(100, Math.round(zone.capturePercent ?? 0)))}%` }"></div></div>
-                  <span>{{ Math.round(zone.capturePercent ?? 0) }}%</span>
+                  <span>进度</span>
+                  <div class="mini-bar-track">
+                    <div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.max(0, Math.min(100, Math.round(zone.capturePercent ?? 0)))}%` }"></div>
+                  </div>
+                  <span class="font-mono">{{ Math.round(zone.capturePercent ?? 0) }}%</span>
                 </div>
-                <div class="asset-meta font-mono">DIR {{ zone.captureDirection ?? '--' }}</div>
+                <div v-if="zone.captureDirection != null" class="asset-meta font-mono">方向 {{ zone.captureDirection }}</div>
               </div>
             </button>
-            <div v-if="!captureZoneMarkers.length" class="empty-state">暂无占领点</div>
+            <div v-if="!captureZoneMarkers.length" class="empty-state">暂无占领点数据</div>
           </div>
 
+          <!-- FOB Radios -->
           <div class="asset-group">
-            <div class="asset-group-title">FOB 电台</div>
+            <div class="asset-group-title">FOB 电台 (Radios)</div>
             <button
               v-for="fob in fobMarkers"
               :key="`${fob.teamId}-${fob.name}-${fob.mapX}-${fob.mapY}`"
               type="button"
               class="asset-row asset-row--stacked"
+              :class="{ 'is-fob-bleeding': fob.isBleeding }"
               @click="$emit('focus-fob', fob)"
             >
               <div class="asset-row-title">
                 <span class="bzss-team-indicator" :class="`team-ind-${fob.teamId}`">T{{ fob.teamId }}</span>
-                <span>{{ fob.name }}</span>
-                <span v-if="fob.isBleeding" class="bzss-badge bzss-badge--danger">失血</span>
+                <span class="asset-name-text">{{ fob.name || 'FOB Radio' }}</span>
+                <span v-if="fob.isBleeding" class="bzss-badge bzss-badge--danger pulse-badge">! 流血中</span>
               </div>
               <div class="asset-bars">
                 <div class="asset-bar-line">
-                  <span>HP</span>
-                  <div class="mini-bar-track"><div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></div></div>
-                  <span>{{ Math.round((fob.health ?? 0) * 100) }}%</span>
+                  <span>耐久</span>
+                  <div class="mini-bar-track">
+                    <div class="mini-bar-fill bzss-fill-hp" :style="{ width: `${Math.round((fob.health ?? 0) * 100)}%` }"></div>
+                  </div>
+                  <span class="font-mono">{{ Math.round((fob.health ?? 0) * 100) }}%</span>
                 </div>
                 <div class="asset-bar-line">
                   <span>弹药</span>
-                  <div class="mini-bar-track"><div class="mini-bar-fill bzss-fill-ammo" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div></div>
-                  <span>{{ Math.round(fob.ammo ?? 0) }}</span>
+                  <div class="mini-bar-track">
+                    <div class="mini-bar-fill bzss-fill-ammo" :style="{ width: `${Math.min(100, Math.round((fob.ammo ?? 0) / 100))}%` }"></div>
+                  </div>
+                  <span class="font-mono">{{ Math.round(fob.ammo ?? 0) }}</span>
                 </div>
                 <div class="asset-bar-line">
-                  <span>建设</span>
-                  <div class="mini-bar-track"><div class="mini-bar-fill bzss-fill-const" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div></div>
-                  <span>{{ Math.round(fob.construction ?? 0) }}</span>
+                  <span>建材</span>
+                  <div class="mini-bar-track">
+                    <div class="mini-bar-fill bzss-fill-const" :style="{ width: `${Math.min(100, Math.round((fob.construction ?? 0) / 20))}%` }"></div>
+                  </div>
+                  <span class="font-mono">{{ Math.round(fob.construction ?? 0) }}</span>
                 </div>
               </div>
             </button>
-            <div v-if="!fobMarkers.length" class="empty-state">暂无 FOB</div>
+            <div v-if="!fobMarkers.length" class="empty-state">暂无 FOB 电台数据</div>
           </div>
 
+          <!-- Vehicles -->
           <div class="asset-group">
-            <div class="asset-group-title">载具</div>
+            <div class="asset-group-title">载具分类 (Vehicles)</div>
             <button
               v-for="group in vehicleGroups"
               :key="`${group.teamId}-${group.vehicleType}`"
@@ -358,10 +577,67 @@
               class="asset-row"
               @click="$emit('focus-vehicle', group)"
             >
-              <span>{{ group.vehicleType }}</span>
+              <div class="asset-row-title">
+                <span class="bzss-team-indicator" :class="`team-ind-${group.teamId}`">T{{ group.teamId }}</span>
+                <span>{{ group.vehicleType }}</span>
+              </div>
               <span class="asset-meta font-mono">x{{ group.count }}</span>
             </button>
-            <div v-if="!vehicleGroups.length" class="empty-state">暂无载具</div>
+            <div v-if="!vehicleGroups.length" class="empty-state">暂无活跃载具</div>
+          </div>
+        </div>
+
+        <!-- Feed / Combat Log Tab [NEW] -->
+        <div v-else-if="sidebarTab === 'feed'" class="sidebar-scroll">
+          <div class="feed-filter-bar">
+            <button
+              type="button"
+              class="feed-chip"
+              :class="{ active: feedFilter === 'all' }"
+              @click="feedFilter = 'all'"
+            >
+              全部
+            </button>
+            <button
+              type="button"
+              class="feed-chip"
+              :class="{ active: feedFilter === 'kill' }"
+              @click="feedFilter = 'kill'"
+            >
+              击杀
+            </button>
+            <button
+              type="button"
+              class="feed-chip"
+              :class="{ active: feedFilter === 'revive' }"
+              @click="feedFilter = 'revive'"
+            >
+              救起
+            </button>
+            <button
+              type="button"
+              class="feed-chip"
+              :class="{ active: feedFilter === 'capture' }"
+              @click="feedFilter = 'capture'"
+            >
+              目标/FOB
+            </button>
+          </div>
+
+          <div class="combat-log-console">
+            <div
+              v-for="(log, idx) in filteredCombatLogs"
+              :key="`log-${idx}`"
+              class="console-log-line"
+              :class="`log-type-${log.type}`"
+            >
+              <span class="log-time font-mono">{{ log.time }}</span>
+              <span class="log-type-tag font-mono" :class="`tag-${log.type}`">
+                {{ getLogTypeTag(log.type) }}
+              </span>
+              <span class="log-text">{{ log.text }}</span>
+            </div>
+            <div v-if="!filteredCombatLogs.length" class="empty-state">暂无实时战报日志</div>
           </div>
         </div>
 
@@ -370,37 +646,38 @@
           <div class="bzss-info-card">
             <div class="bzss-card-title">
               <span class="bzss-status-dot" :class="bzssCoreStatusClass"></span>
-              核心状态
+              核心通信状态
             </div>
             <div class="bzss-stats-grid">
-              <div class="bzss-stat-row"><span class="bzss-stat-label">状态</span><span class="bzss-stat-value" :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">版本</span><span class="bzss-stat-value font-mono">Rev {{ snapshot?.state?.revision ?? '--' }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">更新</span><span class="bzss-stat-value font-mono">{{ bzssCoreUpdatedAtText }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">标记</span><span class="bzss-stat-value"><span v-if="snapshot?.state?.markerSeen" class="bzss-badge bzss-badge--ok">已发现</span><span v-else class="bzss-badge bzss-badge--warn">未找到</span></span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">运行状态</span><span class="bzss-stat-value" :class="bzssCoreStatusClass">{{ bzssCoreStatusLabel }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">数据版本</span><span class="bzss-stat-value font-mono">Rev {{ snapshot?.state?.revision ?? '--' }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">最近刷新</span><span class="bzss-stat-value font-mono">{{ bzssCoreUpdatedAtText }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">标记就绪</span><span class="bzss-stat-value"><span v-if="snapshot?.state?.markerSeen" class="bzss-badge bzss-badge--ok">已锁定</span><span v-else class="bzss-badge bzss-badge--warn">未锁定</span></span></div>
             </div>
           </div>
+
           <div class="bzss-info-card">
-            <div class="bzss-card-title">玩家统计</div>
+            <div class="bzss-card-title">在场玩家统计</div>
             <div class="bzss-stats-grid">
-              <div class="bzss-stat-row"><span class="bzss-stat-label">运行时</span><span class="bzss-stat-value text-cyan font-mono">{{ snapshot?.state?.runtimePlayerCount ?? 0 }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">积分板</span><span class="bzss-stat-value text-yellow font-mono">{{ snapshot?.state?.scoreboardPlayerCount ?? 0 }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">已定位</span><span class="bzss-stat-value text-cyan font-mono">{{ positionedPlayerCount }}</span></div>
-              <div class="bzss-stat-row"><span class="bzss-stat-label">存活</span><span class="bzss-stat-value text-green font-mono">{{ bzssCoreAliveCount }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">运行时玩家</span><span class="bzss-stat-value text-cyan font-mono">{{ snapshot?.state?.runtimePlayerCount ?? 0 }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">积分板计数</span><span class="bzss-stat-value text-yellow font-mono">{{ snapshot?.state?.scoreboardPlayerCount ?? 0 }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">全图已定位</span><span class="bzss-stat-value text-cyan font-mono">{{ positionedPlayerCount }}</span></div>
+              <div class="bzss-stat-row"><span class="bzss-stat-label">存活生命体</span><span class="bzss-stat-value text-green font-mono">{{ bzssCoreAliveCount }}</span></div>
             </div>
           </div>
-          <div class="bzss-info-card" v-if="rawFields?.length">
-            <div class="bzss-card-title">原始字段</div>
+
+          <div v-if="rawFields?.length" class="bzss-info-card">
+            <div class="bzss-card-title">原始结构字段</div>
             <div class="bzss-raw-fields">
-              <code v-for="(field, idx) in rawFields" :key="`rf-${idx}`" class="bzss-raw-field-tag">{{ field }}</code>
+              <code v-for="(field, idx) in rawFields" :key="`rf-${idx}`" class="bzss-raw-field-tag font-mono">{{ field }}</code>
             </div>
           </div>
+
           <div v-if="lastError" class="bzss-info-card bzss-info-card--error">
-            <div class="bzss-card-title">最后错误</div>
+            <div class="bzss-card-title">异常警示</div>
             <div class="bzss-error-text font-mono">{{ lastError }}</div>
           </div>
         </div>
-
-
 
       </section>
     </div>
@@ -413,10 +690,11 @@ import type { BzssCoreCaptureZoneInfo, BzssCoreFobInfo, BzssCorePlayerInfoRespon
 import type { TacticalLinkedPlayer } from "../../utils/tactical-map-linker";
 
 type SidebarMode = "expanded" | "compact" | "hidden";
-type SidebarTab = "overview" | "units" | "assets" | "core";
+type SidebarTab = "overview" | "units" | "assets" | "feed" | "core";
 type SidebarUnitMode = "squads" | "players";
 type SidebarSortMode = "name" | "squad" | "health" | "distance" | "vehicle";
 type ViewerPerspectiveMode = "auto" | "team1" | "team2";
+type FeedFilterType = "all" | "kill" | "revive" | "capture" | "system";
 
 interface TacticalMapConfigOption {
   key: string;
@@ -537,7 +815,7 @@ const props = defineProps<{
   getPlayerHealth: (player: TacticalLinkedPlayer | null | undefined) => number | null;
   normalizeTeam: (teamId: number | null | undefined) => number;
   normalizeSquad: (squadId: number | null | undefined) => number;
-}>()
+}>();
 
 const emit = defineEmits<{
   (e: "update:sidebar-mode", value: SidebarMode): void;
@@ -575,6 +853,9 @@ const emit = defineEmits<{
 // Local UI state
 const isCollapsed = ref(false);
 const layersOpen = ref(true);
+const sidebarOnlySl = ref(false);
+const sidebarOnlyLowHp = ref(false);
+const feedFilter = ref<FeedFilterType>("all");
 
 const sidebarTabModel = computed({
   get: () => props.sidebarTab,
@@ -591,6 +872,7 @@ const sidebarUnitModeModel = computed({
 const sidebarTab = computed(() => props.sidebarTab);
 const sidebarUnitMode = computed(() => props.sidebarUnitMode);
 const activeTeamTab = computed(() => props.activeTeamTab);
+
 const sidebarSearchModel = computed({
   get: () => props.sidebarSearch,
   set: (value: string) => emit("update:sidebar-search", value),
@@ -668,6 +950,68 @@ const viewerPerspectiveModeModel = computed({
   set: (value: ViewerPerspectiveMode) => emit("update:viewer-perspective-mode", value),
 });
 
+const isLowTicket = computed(() => {
+  const t1 = props.tickets?.team1 ?? 100;
+  const t2 = props.tickets?.team2 ?? 100;
+  return t1 < 50 || t2 < 50;
+});
+
+const team1PlayerCount = computed(() => {
+  return props.filteredTeamPlayers.filter(p => props.normalizeTeam(p.teamId) === 1).length;
+});
+const team2PlayerCount = computed(() => {
+  return props.filteredTeamPlayers.filter(p => props.normalizeTeam(p.teamId) === 2).length;
+});
+const team1FobCount = computed(() => {
+  return props.fobMarkers.filter(f => props.normalizeTeam(f.teamId) === 1).length;
+});
+const team2FobCount = computed(() => {
+  return props.fobMarkers.filter(f => props.normalizeTeam(f.teamId) === 2).length;
+});
+const team1CpCount = computed(() => {
+  return props.captureZoneMarkers.filter(z => props.normalizeTeam(z.teamId) === 1).length;
+});
+const team2CpCount = computed(() => {
+  return props.captureZoneMarkers.filter(z => props.normalizeTeam(z.teamId) === 2).length;
+});
+
+const filteredCombatLogs = computed(() => {
+  if (!props.combatLogs) return [];
+  if (feedFilter.value === "all") return props.combatLogs;
+  return props.combatLogs.filter(log => log.type === feedFilter.value);
+});
+
+function applyLayerPreset(mode: "all" | "compact" | "minimal") {
+  if (mode === "all") {
+    showGridModel.value = true;
+    showPlayerNamesModel.value = true;
+    showPlayerCoordsModel.value = true;
+    showCaptureZonesModel.value = true;
+    showFobsModel.value = true;
+    showPressureZonesModel.value = true;
+  } else if (mode === "compact") {
+    showGridModel.value = false;
+    showPlayerNamesModel.value = true;
+    showPlayerCoordsModel.value = false;
+    showCaptureZonesModel.value = true;
+    showFobsModel.value = true;
+    showPressureZonesModel.value = false;
+  } else if (mode === "minimal") {
+    showGridModel.value = false;
+    showPlayerNamesModel.value = true;
+    showPlayerCoordsModel.value = false;
+    showCaptureZonesModel.value = false;
+    showFobsModel.value = false;
+    showPressureZonesModel.value = false;
+  }
+}
+
+function getLogTypeTag(type: string) {
+  if (type === "kill") return "击杀";
+  if (type === "revive") return "救起";
+  if (type === "capture") return "目标";
+  return "系统";
+}
 
 function getTicketBarWidth(teamId: number) {
   const t1 = props.tickets?.team1 ?? 0;
@@ -698,9 +1042,9 @@ function isSquadLeader(player: TacticalLinkedPlayer) {
 function getPlayerHealthColor(player: TacticalLinkedPlayer) {
   const hp = props.getPlayerHealth(player);
   if (hp == null) return 'var(--perspective-primary, #00e5ff)';
-  if (hp <= 0) return '#ef5350';
-  if (hp < 40) return '#ffea00';
-  return 'var(--perspective-primary, #00e5ff)';
+  if (hp <= 0) return '#ef4444';
+  if (hp < 40) return '#eab308';
+  return '#10b981';
 }
 
 function onPlayerClick(player: TacticalLinkedPlayer) {
@@ -720,14 +1064,17 @@ function getSquadForPlayer(player: TacticalLinkedPlayer) {
   return props.currentTeamSquads.find((squad) => squad.id === props.normalizeSquad(player.squadId));
 }
 
-
 const filteredPlayers = computed(() => {
   const teamId = props.activeTeamTab;
   const query = normalizeText(props.sidebarSearch);
   const list = props.filteredTeamPlayers.filter((player) => {
     if (props.normalizeTeam(player.teamId) !== teamId) return false;
-    if (props.sidebarOnlyAlive && (props.getPlayerHealth(player) ?? 0) <= 0) return false;
+    const hp = props.getPlayerHealth(player) ?? 0;
+    if (props.sidebarOnlyAlive && hp <= 0) return false;
     if (props.sidebarOnlyVehicle && !player.vehicleInfo?.vehicleType) return false;
+    if (sidebarOnlySl.value && !isSquadLeader(player)) return false;
+    if (sidebarOnlyLowHp.value && (hp <= 0 || hp >= 50)) return false;
+
     if (!query) return true;
     const squad = getSquadForPlayer(player);
     const haystack = [
@@ -808,7 +1155,7 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 </script>
 
 <style scoped>
-/* ─── Base ─────────────────────────────────────────── */
+/* ─── Base Layout ──────────────────────────────────── */
 .tactical-sidebar {
   position: relative;
   height: 100%;
@@ -821,50 +1168,61 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   box-shadow: -12px 0 50px rgba(0, 0, 0, 0.9), inset 1px 0 0 rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(20px) saturate(180%);
   z-index: 30;
-  transition: none;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* The grid column is sized by this root element. Collapsing only the inner
- * wrapper leaves the `auto` grid track at 340px, so the map never grows. */
 .tactical-sidebar.is-collapsed {
   width: 32px;
   min-width: 32px;
-  background: transparent;
-  border-left-color: transparent;
+  background: rgba(4, 7, 18, 0.85);
+  border-left-color: rgba(0, 240, 255, 0.15);
   box-shadow: none;
-  backdrop-filter: none;
+  backdrop-filter: blur(12px);
 }
 
-/* ─── Toggle Tab ──────────────────────────────────── */
+/* ─── Toggle Handle Tab ───────────────────────────── */
 .sidebar-toggle-tab {
   position: absolute;
   left: -24px;
   top: 50%;
   transform: translateY(-50%);
   width: 24px;
-  height: 72px;
-  border: 1px solid rgba(0, 240, 255, 0.18);
+  height: 84px;
+  border: 1px solid rgba(0, 240, 255, 0.22);
   border-right: none;
   border-radius: 8px 0 0 8px;
-  background: rgba(6, 11, 28, 0.95);
-  color: rgba(0, 229, 255, 0.7);
+  background: rgba(6, 11, 28, 0.96);
+  color: rgba(0, 240, 255, 0.8);
   cursor: pointer;
-  z-index: 2;
+  z-index: 35;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: all 0.25s ease;
-  font-size: 10px;
+  gap: 6px;
+  transition: all 0.2s ease;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.5);
 }
 
 .sidebar-toggle-tab:hover {
-  background: rgba(0, 240, 255, 0.12);
+  background: rgba(0, 240, 255, 0.16);
   color: #ffffff;
-  box-shadow: -4px 0 14px rgba(0, 240, 255, 0.25);
+  box-shadow: -6px 0 18px rgba(0, 240, 255, 0.3);
+  border-color: rgba(0, 240, 255, 0.4);
 }
 
 .tab-arrow {
+  font-size: 10px;
   line-height: 1;
+}
+
+.vertical-tab-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  opacity: 0.8;
+  text-transform: uppercase;
 }
 
 /* ─── Content Wrapper ─────────────────────────────── */
@@ -877,12 +1235,10 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   overflow: hidden;
   opacity: 1;
   visibility: visible;
-  transition: opacity 0.2s ease, transform 0.2s ease, visibility 0s linear 0s;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 .sidebar-content-wrapper.is-collapsed {
-  width: 360px;
-  min-width: 360px;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -892,12 +1248,18 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 /* ─── Header ──────────────────────────────────────── */
 .sidebar-header {
   padding: 12px 14px 10px;
-  background: linear-gradient(180deg, rgba(0, 240, 255, 0.04) 0%, transparent 100%);
-  border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.05) 0%, transparent 100%);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.12);
   display: flex;
   flex-direction: column;
   gap: 10px;
   flex-shrink: 0;
+}
+
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .header-led-block {
@@ -914,14 +1276,14 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 }
 
 .pulse-led {
-  background-color: #00ff66;
-  box-shadow: 0 0 10px #00ff66, 0 0 20px rgba(0, 255, 102, 0.4);
+  background-color: #10b981;
+  box-shadow: 0 0 10px #10b981, 0 0 20px rgba(16, 185, 129, 0.4);
   animation: led-glow 2s infinite alternate;
 }
 
 @keyframes led-glow {
-  from { filter: brightness(0.7); box-shadow: 0 0 6px #00ff66; }
-  to   { filter: brightness(1.3); box-shadow: 0 0 14px #00ff66, 0 0 28px rgba(0, 255, 102, 0.5); }
+  from { filter: brightness(0.8); box-shadow: 0 0 6px #10b981; }
+  to   { filter: brightness(1.3); box-shadow: 0 0 14px #10b981, 0 0 28px rgba(16, 185, 129, 0.5); }
 }
 
 .header-text {
@@ -930,17 +1292,43 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
 }
 
 .sidebar-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
   letter-spacing: 2px;
-  color: #e2e8f0;
+  color: #f8fafc;
   text-transform: uppercase;
 }
 
 .sidebar-subtitle {
   font-size: 10px;
-  color: rgba(0, 240, 255, 0.6);
+  color: rgba(0, 240, 255, 0.65);
   margin-top: 1px;
+}
+
+.header-live-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+}
+
+.live-pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00e5ff;
+  box-shadow: 0 0 8px #00e5ff;
+  animation: stat-pulse 1.2s infinite alternate;
+}
+
+.live-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #00e5ff;
+  letter-spacing: 1px;
 }
 
 /* Quick stats row */
@@ -948,886 +1336,1198 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   display: flex;
   align-items: center;
   gap: 0;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .qs-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 6px 12px;
-  flex: 1;
-  gap: 2px;
-}
-
-.qs-sep {
-  width: 1px;
-  height: 30px;
-  background: rgba(255, 255, 255, 0.08);
+  min-width: 0;
 }
 
 .qs-val {
   font-size: 13px;
-  font-weight: 700;
-  color: #e2e8f0;
-  line-height: 1;
+  font-weight: 800;
+  line-height: 1.2;
 }
 
 .qs-lbl {
   font-size: 9px;
   color: rgba(148, 163, 184, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  margin-top: 1px;
+}
+
+.qs-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Ticket bar */
 .header-ticket-bar {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 240, 255, 0.1);
+  transition: border-color 0.3s ease;
 }
 
-.ticket-label-left,
-.ticket-label-right {
-  font-size: 10px;
-  font-weight: 800;
-  white-space: nowrap;
-  color: var(--perspective-primary, #00e5ff);
+.header-ticket-bar.is-low-ticket {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+}
+
+.ticket-meta-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ticket-vs-badge {
+  font-size: 9px;
+  color: rgba(148, 163, 184, 0.6);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .ticket-track {
-  flex: 1;
   height: 6px;
   border-radius: 3px;
+  background: rgba(15, 23, 42, 0.8);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
   display: flex;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .ticket-fill {
   height: 100%;
-  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
-  background-color: var(--perspective-primary, #00e5ff);
-  box-shadow: 0 0 8px var(--perspective-glow, rgba(0,229,255,0.5));
+  transition: width 0.3s ease;
 }
 
-/* ─── Section Common ──────────────────────────────── */
+.ticket-fill-left {
+  border-radius: 3px 0 0 3px;
+}
+
+.ticket-fill-right {
+  border-radius: 0 3px 3px 0;
+  margin-left: auto;
+}
+
+/* ─── Layer Section ──────────────────────────────── */
 .sidebar-section {
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(0, 240, 255, 0.07);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.12);
   flex-shrink: 0;
 }
 
 .section-title-bar {
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.15s ease;
+}
+
+.section-title-bar:hover {
+  background: rgba(0, 240, 255, 0.05);
+}
+
+.title-left {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 0;
 }
 
 .glowing-square {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 1px;
-  flex-shrink: 0;
 }
-.glowing-square.blue { background-color: #00e5ff; box-shadow: 0 0 6px #00e5ff; }
+
+.glowing-square.blue {
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+}
 
 .section-title-bar h3 {
-  margin: 0;
   font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: rgba(148, 163, 184, 0.9);
-  flex: 1;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin: 0;
+  letter-spacing: 0.5px;
 }
 
 .section-collapse-btn {
-  background: none;
+  background: transparent;
   border: none;
-  color: rgba(148, 163, 184, 0.6);
+  color: rgba(148, 163, 184, 0.7);
+  font-size: 9px;
   cursor: pointer;
-  font-size: 10px;
   padding: 2px 4px;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-.section-collapse-btn:hover {
-  color: #00e5ff;
-  background: rgba(0, 240, 255, 0.08);
 }
 
 .layers-content {
-  margin-top: 10px;
+  padding: 8px 14px 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  overflow: hidden;
+  background: rgba(0, 0, 0, 0.15);
 }
 
-/* Layers grid */
-.layers-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
-}
-
-.option-item-sidebar {
+/* Presets bar */
+.layer-preset-bar {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  cursor: pointer;
-  padding: 6px 8px;
-  border-radius: 7px;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s ease;
-  color: #94a3b8;
 }
-.option-item-sidebar:hover {
+
+.preset-label {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.preset-btn {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
   background: rgba(0, 240, 255, 0.06);
-  border-color: rgba(0, 240, 255, 0.25);
-  color: #e2e8f0;
-}
-.option-item-sidebar.checked {
-  background: rgba(0, 240, 255, 0.1);
-  border-color: rgba(0, 240, 255, 0.4);
   color: #00e5ff;
-}
-.option-item-sidebar input[type="checkbox"] {
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  border: 1.5px solid rgba(0, 240, 255, 0.4);
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.4);
-  position: relative;
+  font-size: 10px;
   cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.18s ease;
-}
-.option-item-sidebar input[type="checkbox"]:checked {
-  background: #00e5ff;
-  border-color: #00e5ff;
-  box-shadow: 0 0 6px #00e5ff;
-}
-.option-item-sidebar input[type="checkbox"]:checked::after {
-  content: "✓";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #040712;
-  font-size: 8px;
-  font-weight: 900;
+  transition: all 0.15s ease;
 }
 
-.option-text { font-size: 11px; }
+.preset-btn:hover {
+  background: rgba(0, 240, 255, 0.18);
+  border-color: rgba(0, 240, 255, 0.4);
+}
 
-/* Option rows */
+/* Switcher Chips Grid */
+.layers-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.layer-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.layer-chip:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  color: #f8fafc;
+}
+
+.layer-chip.active {
+  border-color: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.12);
+  color: #00f0ff;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+}
+
+.chip-icon {
+  font-size: 10px;
+}
+
+/* Sub-options for pressure zone */
+.pressure-layer-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid rgba(45, 212, 191, 0.2);
+  border-radius: 6px;
+  background: rgba(13, 148, 136, 0.08);
+}
+
+.pressure-sub-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #9db5c8;
+  font: 10px/1.2 monospace;
+  cursor: pointer;
+}
+
+.pressure-sub-option input {
+  accent-color: #2dd4bf;
+}
+
+.pressure-settings-button {
+  grid-column: 1 / -1;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(45, 212, 191, .3);
+  border-radius: 5px;
+  background: rgba(13, 148, 136, .16);
+  color: #99f6e4;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.pressure-settings-button:hover {
+  border-color: rgba(94, 234, 212, .65);
+  background: rgba(13, 148, 136, .26);
+}
+
+/* Option Rows */
 .option-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-}
-.option-row--col {
-  flex-direction: column;
-  align-items: flex-start;
-}
-.option-label {
   font-size: 11px;
-  color: rgba(148, 163, 184, 0.8);
-  white-space: nowrap;
-  width: 32px;
-  flex-shrink: 0;
 }
 
-.map-select,
-.sort-select {
-  flex: 1;
-  border: 1px solid rgba(0, 240, 255, 0.14);
-  background: rgba(0, 0, 0, 0.4);
-  color: #cbd5e1;
-  border-radius: 7px;
-  padding: 5px 8px;
-  font-size: 11px;
-  transition: all 0.2s ease;
-  cursor: pointer;
+.option-row--col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
 }
-.map-select:focus,
-.sort-select:focus {
+
+.option-label {
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+}
+
+.map-select {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 5px;
+  color: #e2e8f0;
+  padding: 4px 6px;
+  font-size: 11px;
   outline: none;
+}
+
+.map-select:focus {
   border-color: #00e5ff;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+}
+
+.map-size-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: rgba(0, 240, 255, 0.05);
+  color: #7f98aa;
+  font-size: 10px;
+}
+
+.map-size-summary strong {
+  color: #bfeaf0;
 }
 
 .perspective-switch {
   display: flex;
-  gap: 6px;
-  width: 100%;
+  gap: 4px;
 }
+
 .perspective-btn {
   flex: 1;
-  border: 1px solid rgba(0, 240, 255, 0.12);
+  padding: 4px 0;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
-  border-radius: 7px;
-  padding: 6px 8px;
-  font-size: 11px;
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+  font-family: monospace;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
 }
-.perspective-btn:hover { background: rgba(0, 240, 255, 0.08); color: #fff; }
-.perspective-btn.active {
-  border-color: var(--perspective-primary, #00e5ff);
-  background: rgba(0, 240, 255, 0.15);
+
+.perspective-btn:hover {
+  border-color: rgba(0, 240, 255, 0.3);
   color: #ffffff;
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+}
+
+.perspective-btn.active {
+  border-color: rgba(0, 240, 255, 0.6);
+  background: rgba(0, 240, 255, 0.15);
+  color: #00f0ff;
 }
 
 .perspective-summary {
   font-size: 10px;
-  color: rgba(148, 163, 184, 0.8);
-  padding: 2px 0;
+  color: rgba(148, 163, 184, 0.7);
+  padding: 2px 4px;
 }
 
 .scale-slider {
   flex: 1;
-  -webkit-appearance: none;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  outline: none;
-}
-.scale-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #00e5ff;
-  box-shadow: 0 0 6px #00e5ff;
-  cursor: pointer;
-  transition: transform 0.1s ease;
-}
-.scale-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
-.scale-val {
-  width: 40px;
-  text-align: right;
-  font-size: 11px;
+  accent-color: #00e5ff;
 }
 
-/* ─── Tab Navigation ──────────────────────────────── */
+.scale-val {
+  font-size: 10px;
+  color: #00e5ff;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ─── Tab Directory ───────────────────────────────── */
 .sidebar-tabs-directory {
   display: flex;
-  gap: 0;
-  padding: 0 8px;
-  border-bottom: 1px solid rgba(0, 240, 255, 0.08);
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.15);
   flex-shrink: 0;
 }
 
 .directory-tab-btn {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 8px 4px 7px;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
-  background: transparent;
-  color: rgba(148, 163, 184, 0.65);
+  color: rgba(148, 163, 184, 0.7);
   cursor: pointer;
   transition: all 0.2s ease;
-  font-size: 11px;
-  font-weight: 600;
+  user-select: none;
   position: relative;
 }
-.directory-tab-btn .tab-icon { font-size: 15px; line-height: 1; }
-.directory-tab-btn .tab-name { font-size: 9px; letter-spacing: 0.3px; text-transform: uppercase; }
 
 .directory-tab-btn:hover {
-  color: #e2e8f0;
-  background: rgba(0, 240, 255, 0.05);
-}
-.directory-tab-btn.active {
-  color: #00e5ff;
-  border-bottom-color: #00e5ff;
-  background: rgba(0, 240, 255, 0.07);
-}
-.directory-tab-btn.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 20%;
-  right: 20%;
-  height: 2px;
-  background: #00e5ff;
-  box-shadow: 0 0 8px #00e5ff;
-  border-radius: 1px;
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.02);
 }
 
-/* ─── Tab Section ─────────────────────────────────── */
+.directory-tab-btn.active {
+  color: #00f0ff;
+  border-bottom-color: #00f0ff;
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.tab-icon {
+  font-size: 11px;
+}
+
+.tab-name {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.feed-count-badge {
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(0, 229, 255, 0.2);
+  color: #00f0ff;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+}
+
+/* ─── Tab Content Section ─────────────────────────── */
 .sidebar-tab-section {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 10px 12px;
 }
 
-/* ─── Overview ────────────────────────────────────── */
-.sidebar-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow: auto;
-}
-.overview-card {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.overview-card-title {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: rgba(148, 163, 184, 0.8);
-  margin-bottom: 8px;
-}
-.overview-grid { display: flex; flex-direction: column; gap: 6px; }
-.overview-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12px;
-  color: rgba(148, 163, 184, 0.8);
-}
-.overview-line strong { color: #e2e8f0; font-weight: 600; }
-
-.overview-actions {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-.quick-action-btn {
-  flex: 1;
-  border: 1px solid rgba(0, 240, 255, 0.15);
-  background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
-  border-radius: 7px;
-  padding: 7px 8px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-.quick-action-btn:hover {
-  background: rgba(0, 240, 255, 0.08);
-  border-color: rgba(0, 240, 255, 0.35);
-  color: #ffffff;
-}
-
-/* ─── Scroll container ────────────────────────────── */
 .sidebar-scroll {
-  min-height: 0;
-  overflow: auto;
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-.sidebar-scroll::-webkit-scrollbar { width: 4px; }
-.sidebar-scroll::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+
+/* Scrollbar styling */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 240, 255, 0.2);
+  background: rgba(0, 240, 255, 0.25);
   border-radius: 2px;
 }
-.sidebar-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 240, 255, 0.4); }
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 240, 255, 0.5);
+}
 
-/* ─── Units ───────────────────────────────────────── */
+/* ─── Overview Tab ────────────────────────────────── */
+.overview-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.overview-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.9);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 6px;
+}
+
+.team-comparison-grid {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.team-comp-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.team-comp-header {
+  font-size: 10px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.team-comp-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.team-comp-stat .lbl {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.team-comp-stat .val {
+  color: #e2e8f0;
+}
+
+.team-comp-divider {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.overview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overview-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.overview-line span {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.overview-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.quick-action-btn {
+  padding: 7px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: rgba(0, 240, 255, 0.06);
+  color: #00e5ff;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.quick-action-btn:hover {
+  background: rgba(0, 240, 255, 0.16);
+  border-color: rgba(0, 240, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ─── Units Tab ───────────────────────────────────── */
 .sidebar-search-row {
   display: flex;
   gap: 6px;
 }
-.sidebar-search-input {
+
+.search-input-wrapper {
   flex: 1;
-  border: 1px solid rgba(0, 240, 255, 0.14);
-  background: rgba(0, 0, 0, 0.4);
-  color: #cbd5e1;
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 11px;
-  transition: all 0.2s ease;
-}
-.sidebar-search-input:focus {
-  outline: none;
-  border-color: #00e5ff;
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.25);
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.filter-pill-row,
-.unit-mode-tabs,
+.search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 10px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.sidebar-search-input {
+  width: 100%;
+  padding: 5px 24px 5px 24px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  color: #e2e8f0;
+  font-size: 11px;
+  outline: none;
+}
+
+.sidebar-search-input:focus {
+  border-color: #00e5ff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.search-clear-btn:hover {
+  color: #ef4444;
+}
+
+.sort-select {
+  width: 72px;
+}
+
+.filter-pill-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-pill:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  color: #f8fafc;
+}
+
+.filter-pill.active {
+  border-color: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.15);
+  color: #00f0ff;
+}
+
+.search-count-pill {
+  margin-left: auto;
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.6);
+}
+
 .sidebar-tabs {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
-}
-.filter-pill,
-.mode-chip {
-  border: 1px solid rgba(0, 240, 255, 0.14);
-  background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.filter-pill:hover, .mode-chip:hover {
-  background: rgba(0, 240, 255, 0.07);
-  border-color: rgba(0, 240, 255, 0.3);
-  color: #e2e8f0;
-}
-.filter-pill.active, .mode-chip.active {
-  color: #00e5ff;
-  border-color: #00e5ff;
-  background: rgba(0, 240, 255, 0.1);
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
 }
 
 .tab-btn {
-  border: 1px solid rgba(0, 240, 255, 0.14);
-  background: rgba(255, 255, 255, 0.03);
-  color: #94a3b8;
-  border-radius: 8px;
-  padding: 6px 14px;
-  font-size: 11px;
+  flex: 1;
+  padding: 6px 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
-  flex: 1;
-}
-.tab-btn:hover {
-  background: rgba(0, 240, 255, 0.08);
-  border-color: rgba(0, 240, 255, 0.35);
-  color: #fff;
-}
-.tab-btn.active {
-  color: #ffffff;
-  border-color: var(--perspective-primary, #00e5ff);
-  background: rgba(0, 240, 255, 0.15);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+  transition: all 0.15s ease;
 }
 
-/* ─── Sidebar Lists ───────────────────────────────── */
+.tab-btn.active {
+  border-color: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.12);
+  color: #00f0ff;
+}
+
+.unit-mode-tabs {
+  display: flex;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 3px;
+  border-radius: 6px;
+}
+
+.mode-chip {
+  flex: 1;
+  padding: 4px 0;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: rgba(148, 163, 184, 0.7);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-chip.active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
 .sidebar-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+/* Squad Card */
 .sidebar-squad-card {
-  text-align: left;
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(6, 11, 28, 0.4);
-  color: inherit;
-  border-radius: 10px;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  transition: all 0.22s ease;
-  cursor: pointer;
-}
-.sidebar-squad-card:hover {
-  border-color: rgba(0, 240, 255, 0.3);
-  background: rgba(6, 11, 28, 0.65);
-  box-shadow: 0 4px 14px rgba(0, 240, 255, 0.1);
-  transform: translateY(-1px);
-}
-.sidebar-squad-card.is-focused {
-  border-color: rgba(0, 240, 255, 0.5);
-  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
-  background: rgba(0, 240, 255, 0.07);
-}
-
-.squad-card-header,
-.squad-card-meta,
-.asset-row-title,
-.asset-bar-line {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: space-between;
-}
-.squad-card-meta {
-  margin-top: 6px;
-  align-items: flex-start;
   flex-direction: column;
   gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.sidebar-squad-card:hover {
+  border-color: rgba(0, 240, 255, 0.35);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.sidebar-squad-card.is-focused {
+  border-color: #00f0ff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
+}
+
+.squad-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squad-number {
+  font-size: 11px;
+  font-weight: 800;
+  color: #00e5ff;
+}
+
+.squad-name {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.squad-members-count {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.squad-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.sl-name {
+  color: rgba(148, 163, 184, 0.75);
 }
 
 .squad-health-summary {
   display: flex;
   align-items: center;
-  gap: 6px;
-  width: 100%;
+  gap: 5px;
 }
+
 .mini-bar-track {
-  flex: 1;
-  height: 5px;
-  border-radius: 999px;
+  width: 44px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.5);
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
 }
+
 .mini-bar-fill {
   height: 100%;
-  border-radius: inherit;
   transition: width 0.3s ease;
 }
 
+/* Player Card */
 .sidebar-player-card-row {
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background: rgba(6, 11, 28, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-left: 3px solid var(--perspective-primary, rgba(0, 240, 255, 0.4));
-  border-radius: 9px;
-  transition: all 0.22s ease;
-  box-sizing: border-box;
-  text-align: left;
+  gap: 4px;
   cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
 }
+
 .sidebar-player-card-row:hover {
-  background: rgba(6, 11, 28, 0.7);
-  border-color: var(--perspective-primary, #00e5ff);
-  box-shadow: 0 3px 12px rgba(0, 240, 255, 0.12);
-  transform: translateY(-1px);
+  border-color: rgba(0, 240, 255, 0.35);
+  background: rgba(15, 23, 42, 0.85);
 }
+
 .sidebar-player-card-row.is-focused {
-  background: rgba(0, 240, 255, 0.06);
-  border-color: var(--perspective-primary, #00e5ff);
-  box-shadow: 0 4px 18px rgba(0, 240, 255, 0.2);
+  border-color: #00f0ff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.2);
 }
 
 .player-card-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
 }
+
 .player-name {
-  font-size: 12px;
+  flex: 1;
+  font-size: 11px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: #f8fafc;
   display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 .sl-badge-pill {
-  font-size: 8px;
-  font-weight: 900;
-  padding: 1px 4px;
-  background: #f59e0b;
-  color: #0f172a;
+  padding: 0 4px;
   border-radius: 3px;
+  background: rgba(234, 179, 8, 0.25);
+  color: #facc15;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  font-size: 9px;
+  font-weight: 800;
 }
+
 .player-squad-tag {
   font-size: 10px;
-  font-weight: 800;
-  color: var(--perspective-primary, #00e5ff);
-  font-family: monospace;
+  color: #00e5ff;
+  font-weight: 700;
 }
 
 .player-link-pill {
   font-size: 9px;
-  font-weight: 800;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.12);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(148, 163, 184, 0.7);
 }
 
-.player-link-pill[data-confidence="exact"] {
-  background: rgba(55, 200, 255, 0.12);
-  color: #7de6ff;
-  border-color: rgba(55, 200, 255, 0.2);
-}
-
-.player-link-pill[data-confidence="strong"] {
-  background: rgba(74, 222, 128, 0.12);
-  color: #86efac;
-  border-color: rgba(74, 222, 128, 0.2);
-}
-
-.player-link-pill[data-confidence="weak"] {
-  background: rgba(251, 191, 36, 0.12);
-  color: #fbbf24;
-  border-color: rgba(251, 191, 36, 0.2);
-}
 .player-card-body {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-.player-health-bar-container {
-  position: relative;
-  width: 100%;
-  height: 8px;
-  padding: 1px;
-  box-sizing: border-box;
-  background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.04)), rgba(2, 6, 23, .86);
-  border: 1px solid rgba(148, 163, 184, .18);
-  border-radius: 999px;
-  overflow: hidden;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.2);
-}
-.player-health-bar-container::after {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  pointer-events: none;
-  border-radius: inherit;
-  background: linear-gradient(105deg, rgba(255,255,255,.28), transparent 28%, transparent 72%, rgba(255,255,255,.08));
-  opacity: .7;
-}
-.player-health-bar-fill {
-  position: relative;
-  z-index: 1;
-  height: 100%;
-  min-width: 0;
-  border-radius: inherit;
-  background-image: linear-gradient(180deg, rgba(255,255,255,.45), transparent 48%, rgba(0,0,0,.18));
-  background-blend-mode: overlay;
-  box-shadow: 0 0 7px currentColor;
-  transition: width .35s cubic-bezier(.22,.8,.35,1), filter .2s ease;
-}
-.player-status-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 10px;
-  color: #94a3b8;
-  flex-wrap: wrap;
-}
-.player-hp-value { font-size: 10px; font-weight: bold; }
-.player-kit { color: rgba(226, 232, 240, 0.8); }
-.player-vehicle-badge {
-  font-size: 9px;
-  padding: 1px 5px;
-  background: rgba(0, 240, 255, 0.1);
-  border: 1px solid rgba(0, 240, 255, 0.28);
-  color: #00e5ff;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
   gap: 3px;
 }
-.vehicle-icon-mini { font-size: 8px; }
 
-.bzss-badge {
-  padding: 1px 5px;
-  border-radius: 999px;
+.player-health-bar-container {
+  width: 100%;
+  height: 3px;
+  border-radius: 1.5px;
+  background: rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.player-health-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.player-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-.glowing-tag {
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #fbbf24;
 }
 
-/* ─── Assets ──────────────────────────────────────── */
+.player-hp-value {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.player-kit {
+  color: rgba(0, 240, 255, 0.8);
+}
+
+.player-vehicle-badge {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: #facc15;
+}
+
+/* ─── Assets Tab ──────────────────────────────────── */
+.asset-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 240, 255, 0.1);
+}
+
+.asset-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.asset-summary-item .lbl {
+  font-size: 8px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.asset-summary-item .val {
+  font-size: 11px;
+  color: #00e5ff;
+}
+
 .asset-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
+
 .asset-group-title {
   font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: rgba(148, 163, 184, 0.7);
+  font-weight: 700;
+  color: rgba(0, 240, 255, 0.8);
+  border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+  padding-bottom: 3px;
+  letter-spacing: 0.5px;
 }
+
 .asset-row {
-  text-align: left;
-  width: 100%;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(6, 11, 28, 0.35);
-  color: inherit;
-  border-radius: 9px;
-  padding: 9px 11px;
-  box-sizing: border-box;
-  transition: all 0.22s ease;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #e2e8f0;
+  font-size: 11px;
 }
+
 .asset-row:hover {
   border-color: rgba(0, 240, 255, 0.3);
-  background: rgba(6, 11, 28, 0.65);
-  box-shadow: 0 3px 12px rgba(0, 240, 255, 0.1);
-  transform: translateY(-1px);
+  background: rgba(15, 23, 42, 0.85);
 }
+
 .asset-row--stacked {
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 5px;
 }
-.asset-bars { display: flex; flex-direction: column; gap: 5px; }
-.asset-bar-line {
-  font-size: 10px;
-  color: rgba(148, 163, 184, 0.9);
-  gap: 6px;
-}
-.asset-meta { color: rgba(148, 163, 184, 0.8); font-size: 11px; }
 
-.bzss-team-indicator {
-  font-size: 9px;
-  font-weight: 800;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
-}
-.team-ind-1 { color: #00e5ff; border: 1px solid rgba(0, 229, 255, 0.3); }
-.team-ind-2 { color: #ff6b35; border: 1px solid rgba(255, 107, 53, 0.3); }
-
-.bzss-fill-hp    { background: #4caf50; }
-.bzss-fill-ammo  { background: #00e5ff; }
-.bzss-fill-const { background: #ffa726; }
-
-.bzss-badge--ok     { color: #4ade80; }
-.bzss-badge--warn   { color: #facc15; }
-.bzss-badge--danger { color: #f87171; }
-
-/* ─── Core ────────────────────────────────────────── */
-.bzss-info-card {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.02);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.bzss-card-title {
-  font-size: 11px;
-  font-weight: 800;
+.asset-row-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: rgba(148, 163, 184, 0.9);
-}
-.bzss-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.bzss-stats-grid { display: flex; flex-direction: column; gap: 6px; }
-.bzss-stat-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 11px;
-}
-.bzss-stat-label { color: rgba(148, 163, 184, 0.8); }
-.bzss-raw-fields { display: flex; flex-wrap: wrap; gap: 5px; }
-.bzss-raw-field-tag {
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 10px;
+  gap: 6px;
 }
 
-/* ─── Feed / Combat Log ───────────────────────────── */
+.asset-name-text {
+  font-weight: 700;
+}
+
+.asset-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.asset-bar-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.asset-bar-line span:first-child {
+  min-width: 24px;
+}
+
+.bzss-fill-hp { background: #10b981; }
+.bzss-fill-ammo { background: #eab308; }
+.bzss-fill-const { background: #3b82f6; }
+
+.bzss-team-indicator {
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  font-family: monospace;
+}
+
+.team-ind-1 { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+.team-ind-2 { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+.team-ind-0 { background: rgba(148, 163, 184, 0.2); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.4); }
+
+.bzss-badge {
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.bzss-badge--ok { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.bzss-badge--warn { background: rgba(234, 179, 8, 0.2); color: #facc15; }
+.bzss-badge--danger { background: rgba(239, 68, 68, 0.25); color: #f87171; }
+
+.pulse-badge {
+  animation: stat-pulse 1.2s infinite alternate;
+}
+
+.is-fob-bleeding {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+
+/* ─── Feed Tab ────────────────────────────────────── */
+.feed-filter-bar {
+  display: flex;
+  gap: 4px;
+}
+
+.feed-chip {
+  flex: 1;
+  padding: 3px 0;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(148, 163, 184, 0.7);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.feed-chip:hover {
+  border-color: rgba(0, 240, 255, 0.3);
+  color: #ffffff;
+}
+
+.feed-chip.active {
+  border-color: rgba(0, 240, 255, 0.5);
+  background: rgba(0, 240, 255, 0.12);
+  color: #00f0ff;
+}
+
 .combat-log-console {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 100%;
-  overflow: auto;
 }
+
 .console-log-line {
-  padding: 7px 9px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  font-size: 11px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 10px;
   line-height: 1.4;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
 }
-.log-time { color: rgba(148, 163, 184, 0.7); margin-right: 5px; }
 
-.pressure-layer-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
-  margin: 7px 0 10px;
-  padding: 8px;
-  border: 1px solid rgba(94, 234, 212, 0.16);
+.log-time {
+  color: rgba(148, 163, 184, 0.6);
+  flex-shrink: 0;
+}
+
+.log-type-tag {
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.tag-kill { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.tag-revive { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.tag-capture { background: rgba(0, 229, 255, 0.2); color: #00f0ff; }
+.tag-system { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+
+.log-text {
+  color: #e2e8f0;
+  word-break: break-all;
+}
+
+/* ─── Core Tab ────────────────────────────────────── */
+.bzss-info-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(0, 240, 255, 0.12);
   border-radius: 8px;
-  background: rgba(13, 148, 136, 0.06);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-.pressure-layer-options label { display: flex; align-items: center; gap: 5px; color: #9db5c8; font: 10px/1.2 monospace; }
-.pressure-layer-options input { accent-color: #2dd4bf; }
-.pressure-settings-button { grid-column: 1 / -1; min-height: 30px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid rgba(45, 212, 191, .3); border-radius: 7px; background: rgba(13, 148, 136, .13); color: #99f6e4; cursor: pointer; }
-.pressure-settings-button:hover { border-color: rgba(94, 234, 212, .65); background: rgba(13, 148, 136, .22); }
-.pressure-settings-button b { font-size: 10px; }
-.map-size-summary { display: flex; align-items: center; justify-content: space-between; margin-top: -2px; padding: 6px 8px; border-radius: 7px; background: rgba(0, 229, 255, .055); color: #7f98aa; font-size: 10px; }
-.map-size-summary strong { color: #bfeaf0; font: 700 10px ui-monospace, monospace; }
 
-/* ─── Common Helpers ──────────────────────────────── */
-.empty-state {
-  padding: 12px;
-  color: rgba(148, 163, 184, 0.7);
-  text-align: center;
-  font-size: 12px;
+.bzss-info-card--error {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.08);
 }
-.monospace { font-family: monospace; }
-.font-mono { font-family: monospace; }
-.text-cyan  { color: #00e5ff; }
-.text-green { color: #4caf50; }
-.text-yellow { color: #fbc02d; }
+
+.bzss-card-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bzss-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.bzss-stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.bzss-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+}
+
+.bzss-stat-label {
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.bzss-stat-value {
+  color: #e2e8f0;
+}
+
+.bzss-raw-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.bzss-raw-field-tag {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(148, 163, 184, 0.8);
+  font-size: 9px;
+}
+
+.bzss-error-text {
+  color: #f87171;
+  font-size: 10px;
+  word-break: break-all;
+}
+
+/* ─── Helpers ─────────────────────────────────────── */
+.empty-state {
+  padding: 16px 12px;
+  color: rgba(148, 163, 184, 0.6);
+  text-align: center;
+  font-size: 11px;
+}
+
+.font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.text-cyan  { color: #00f0ff; }
+.text-green { color: #10b981; }
+.text-amber { color: #f59e0b; }
+.text-yellow { color: #facc15; }
 
 .pulsing-text { animation: stat-pulse 1.8s infinite alternate; }
+
 @keyframes stat-pulse {
-  from { opacity: 0.45; }
+  from { opacity: 0.55; }
   to   { opacity: 1; }
 }
 
-.squad-number { font-size: 11px; font-weight: 700; color: rgba(148, 163, 184, 0.8); }
-.squad-name   { flex: 1; font-size: 12px; font-weight: 600; color: #e2e8f0; text-align: left; }
-.squad-members-count { font-size: 11px; color: rgba(148, 163, 184, 0.8); }
-.sl-name      { font-size: 10px; color: rgba(148, 163, 184, 0.8); }
-.health-label { font-size: 10px; color: rgba(148, 163, 184, 0.7); }
-.health-num   { font-size: 10px; }
-
-/* ─── Responsive ──────────────────────────────────── */
+/* Responsive breakpoint */
 @media (max-width: 900px) {
   .tactical-sidebar {
     position: absolute;
     right: 0;
     top: 0;
     bottom: 0;
-    width: min(92vw, 340px);
+    width: min(92vw, 360px);
   }
 }
 </style>
