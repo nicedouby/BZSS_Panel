@@ -82,10 +82,22 @@
               <input v-model="showFobsModel" type="checkbox" />
               <span class="option-text">FOB</span>
             </label>
+            <label class="option-item-sidebar" :class="{ checked: showPressureZonesModel }">
+              <input v-model="showPressureZonesModel" type="checkbox" />
+              <span class="option-text">动态压家</span>
+            </label>
             <label class="option-item-sidebar" :class="{ checked: measureModeModel }">
               <input v-model="measureModeModel" type="checkbox" />
               <span class="option-text">测距</span>
             </label>
+          </div>
+
+          <div v-if="showPressureZonesModel" class="pressure-layer-options">
+            <label><input v-model="showPressureHardModel" type="checkbox" /><span>Hard</span></label>
+            <label><input v-model="showPressureSoftModel" type="checkbox" /><span>Soft</span></label>
+            <label><input v-model="showPressureCombatModel" type="checkbox" /><span>Combat</span></label>
+            <label><input v-model="showPressureDiagnosticsModel" type="checkbox" /><span>参数</span></label>
+            <label><input v-model="showPressureConnectionsModel" type="checkbox" /><span>点位连线</span></label>
           </div>
 
           <!-- Map selector -->
@@ -477,6 +489,12 @@ const props = defineProps<{
   showPlayerCoords: boolean;
   showCaptureZones: boolean;
   showFobs: boolean;
+  showPressureZones: boolean;
+  showPressureHard: boolean;
+  showPressureSoft: boolean;
+  showPressureCombat: boolean;
+  showPressureDiagnostics: boolean;
+  showPressureConnections: boolean;
   measureMode: boolean;
   selectedMapKey: string;
   markerScale: number;
@@ -529,6 +547,12 @@ const emit = defineEmits<{
   (e: "update:show-player-coords", value: boolean): void;
   (e: "update:show-capture-zones", value: boolean): void;
   (e: "update:show-fobs", value: boolean): void;
+  (e: "update:show-pressure-zones", value: boolean): void;
+  (e: "update:show-pressure-hard", value: boolean): void;
+  (e: "update:show-pressure-soft", value: boolean): void;
+  (e: "update:show-pressure-combat", value: boolean): void;
+  (e: "update:show-pressure-diagnostics", value: boolean): void;
+  (e: "update:show-pressure-connections", value: boolean): void;
   (e: "update:measure-mode", value: boolean): void;
   (e: "update:selected-map-key", value: string): void;
   (e: "update:marker-scale", value: number): void;
@@ -595,6 +619,30 @@ const showCaptureZonesModel = computed({
 const showFobsModel = computed({
   get: () => props.showFobs,
   set: (value: boolean) => emit("update:show-fobs", value),
+});
+const showPressureZonesModel = computed({
+  get: () => props.showPressureZones,
+  set: (value: boolean) => emit("update:show-pressure-zones", value),
+});
+const showPressureHardModel = computed({
+  get: () => props.showPressureHard,
+  set: (value: boolean) => emit("update:show-pressure-hard", value),
+});
+const showPressureSoftModel = computed({
+  get: () => props.showPressureSoft,
+  set: (value: boolean) => emit("update:show-pressure-soft", value),
+});
+const showPressureCombatModel = computed({
+  get: () => props.showPressureCombat,
+  set: (value: boolean) => emit("update:show-pressure-combat", value),
+});
+const showPressureDiagnosticsModel = computed({
+  get: () => props.showPressureDiagnostics,
+  set: (value: boolean) => emit("update:show-pressure-diagnostics", value),
+});
+const showPressureConnectionsModel = computed({
+  get: () => props.showPressureConnections,
+  set: (value: boolean) => emit("update:show-pressure-connections", value),
 });
 const measureModeModel = computed({
   get: () => props.measureMode,
@@ -1720,6 +1768,19 @@ function linkConfidenceLabel(confidence: TacticalLinkedPlayer["linkConfidence"])
   line-height: 1.4;
 }
 .log-time { color: rgba(148, 163, 184, 0.7); margin-right: 5px; }
+
+.pressure-layer-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  margin: 7px 0 10px;
+  padding: 8px;
+  border: 1px solid rgba(94, 234, 212, 0.16);
+  border-radius: 8px;
+  background: rgba(13, 148, 136, 0.06);
+}
+.pressure-layer-options label { display: flex; align-items: center; gap: 5px; color: #9db5c8; font: 10px/1.2 monospace; }
+.pressure-layer-options input { accent-color: #2dd4bf; }
 
 /* ─── Common Helpers ──────────────────────────────── */
 .empty-state {
