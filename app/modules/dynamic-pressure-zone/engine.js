@@ -110,24 +110,26 @@ function calculateBaseZone({ teamId, main, chain, front, diagonalMeters, coordin
   const nearest = distances.reduce((best, item) => !best || item.distanceMeters < best.distanceMeters ? item : best, null);
   const currentFrontDistance = front ? distance(main, front) * coordinateScaleMeters : nearest?.distanceMeters ?? 0;
 
-  const hardRaw = Math.min(
-    diagonalMeters * positive(config.hard.mapFactor, 0.075),
-    (nearest?.distanceMeters ?? 0) * positive(config.hard.nearestObjectiveFactor, 0.35),
-  );
-  const hardClamped = clamp(hardRaw, positive(config.hard.minRadiusMeters, 250), positive(config.hard.maxRadiusMeters, 700));
+  const baseRadiusMultiplier = positive(config.baseRadiusMultiplier, 1.15);
+  const hardMapContribution = diagonalMeters * nonNegative(config.hard.mapFactor, 0.075);
+  const hardObjectiveContribution = (nearest?.distanceMeters ?? 0) * nonNegative(config.hard.nearestObjectiveFactor, 0.35);
+  const hardRaw = (hardMapContribution + hardObjectiveContribution) * baseRadiusMultiplier;
+  const hardMinRadius = nonNegative(config.hard.minRadiusMeters, 350);
+  const hardMaxRadius = nonNegative(config.hard.maxRadiusMeters, 1000);
+  const hardClamped = clamp(hardRaw, hardMinRadius, hardMaxRadius);
   const hardFrontCap = Math.max(
-    positive(config.hard.minRadiusMeters, 250),
-    currentFrontDistance - positive(config.hard.frontSafetyMarginMeters, 300),
+    hardMinRadius,
+    currentFrontDistance - nonNegative(config.hard.frontSafetyMarginMeters, 250),
   );
   const hardRadius = Math.min(hardClamped, hardFrontCap);
 
-  const softFloor = hardRadius + positive(config.soft.minExtraOverHardMeters, 100);
-  const softRaw = Math.min(
-    diagonalMeters * positive(config.soft.mapFactor, 0.14),
-    (nearest?.distanceMeters ?? 0) * positive(config.soft.nearestObjectiveFactor, 0.70),
-  );
-  const softClamped = clamp(softRaw, softFloor, Math.max(softFloor, positive(config.soft.maxRadiusMeters, 1600)));
-  const softFrontCap = Math.max(softFloor, currentFrontDistance - positive(config.soft.frontSafetyMarginMeters, 150));
+  const softFloor = hardRadius + nonNegative(config.soft.minExtraOverHardMeters, 200);
+  const softMapContribution = diagonalMeters * nonNegative(config.soft.mapFactor, 0.14);
+  const softObjectiveContribution = (nearest?.distanceMeters ?? 0) * nonNegative(config.soft.nearestObjectiveFactor, 0.70);
+  const softRaw = (softMapContribution + softObjectiveContribution) * baseRadiusMultiplier;
+  const softMaxRadius = nonNegative(config.soft.maxRadiusMeters, 2200);
+  const softClamped = clamp(softRaw, softFloor, Math.max(softFloor, softMaxRadius));
+  const softFrontCap = Math.max(softFloor, currentFrontDistance - nonNegative(config.soft.frontSafetyMarginMeters, 100));
   const softRadius = Math.min(softClamped, softFrontCap);
 
   return {
@@ -142,7 +144,21 @@ function calculateBaseZone({ teamId, main, chain, front, diagonalMeters, coordin
     softRadius,
     hardRadiusWorld: hardRadius / coordinateScaleMeters,
     softRadiusWorld: softRadius / coordinateScaleMeters,
-    formula: { hardRaw, hardFrontCap, softRaw, softFrontCap },
+    formula: {
+      baseRadiusMultiplier,
+      hardMapContribution,
+      hardObjectiveContribution,
+      hardRaw,
+      hardClamped,
+      hardFrontCap,
+      hardLimit: resolveLimit(hardRadius, hardRaw, hardClamped, hardFrontCap),
+      softMapContribution,
+      softObjectiveContribution,
+      softRaw,
+      softClamped,
+      softFrontCap,
+      softLimit: resolveLimit(softRadius, softRaw, softClamped, softFrontCap),
+    },
   };
 }
 
@@ -243,4 +259,16 @@ function inactiveState(reason, diagnostics = {}) {
 function positive(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
+function nonNegative(value, fallback) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallback;
+}
+
+function resolveLimit(radius, raw, clamped, frontCap) {
+  if (radius === frontCap && frontCap < clamped) return "front-safety-cap";
+  if (clamped < raw) return "maximum-radius";
+  if (clamped > raw) return "minimum-radius";
+  return "formula";
 }

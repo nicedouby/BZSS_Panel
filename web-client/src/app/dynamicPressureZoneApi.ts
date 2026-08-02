@@ -5,6 +5,7 @@ export interface PressureZoneConfig {
   minMapScale: number;
   maxMapScale: number;
   coordinateScaleMeters: number | null;
+  baseRadiusMultiplier: number;
   hard: {
     mapFactor: number;
     nearestObjectiveFactor: number;

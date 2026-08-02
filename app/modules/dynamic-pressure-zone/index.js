@@ -196,7 +196,9 @@ function buildLiveInput(snapshot, profile, baseConfig) {
     mains: profile?.mains ?? normalizeRuntimeMains(assets.mainZones),
     objectiveChain: objectives,
     objectiveState,
-    config: mergePressureZoneConfig(baseConfig, profile?.config),
+    // Base policy is global. Layer profiles describe geometry only; legacy
+    // profile.config fields must not silently shadow the settings page.
+    config: baseConfig,
   };
 }
 
