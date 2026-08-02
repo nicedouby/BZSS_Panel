@@ -74,15 +74,17 @@ export class DeveloperToolsService {
         const projectRoot = this.projectRoot.replace(/'/g, "''");
         const runScript = (this.projectRoot + "\\run.bat").replace(/'/g, "''");
         const script = [
+          `$projectRoot = '${projectRoot}'`,
+          `$runScript = '${runScript}'`,
           "$ErrorActionPreference = 'SilentlyContinue'",
           "Start-Sleep -Milliseconds 500",
           `Stop-Process -Id ${currentPid} -Force`,
           // Do not race the old process. Wait until it is actually gone before
           // starting run.bat again, otherwise the old wrapper can still own the port.
-          `do { Start-Sleep -Milliseconds 250; \\$old = Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue } while (\\$old)`,
+          `do { Start-Sleep -Milliseconds 250; $old = Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue } while ($old)`,
           "Start-Sleep -Milliseconds 1000",
           // Keep the normal Windows entry point, including its configured CPU affinity.
-          `Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', '\\'${runScript}\\'') -WorkingDirectory '\\'${projectRoot}\\' -WindowStyle Hidden`,
+          "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', $runScript) -WorkingDirectory $projectRoot -WindowStyle Hidden",
         ].join("; ");
         const child = this.processSpawner("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
           detached: true,
@@ -112,7 +114,7 @@ export class DeveloperToolsService {
 
   async runCommand(file, args, timeout) {
     try {
-          const executable = process.platform === "win32" && file === "npm" ? "npm.cmd" : file;
+      const executable = process.platform === "win32" && file === "npm" ? "npm.cmd" : file;
       return await this.executor(executable, args, { cwd: this.projectRoot, timeout, windowsHide: true, maxBuffer: 2 * 1024 * 1024 });
     } catch (error) {
       const details = compactOutput(error);
