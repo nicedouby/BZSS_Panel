@@ -3,7 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { validateTimeline } from "./timeline.js";
+import { normalizeTimeline, validateTimeline } from "./timeline.js";
 
 export class SuperWeatherPresetStore {
   constructor({ dataDirectory = "./data/bzss-super-weather", logger } = {}) {
@@ -18,7 +18,12 @@ export class SuperWeatherPresetStore {
     await fs.mkdir(this.dataDirectory, { recursive: true });
     try {
       const parsed = JSON.parse(await fs.readFile(this.filePath, "utf8"));
-      this.presets = (Array.isArray(parsed) ? parsed : parsed?.presets ?? []).map(normalizePreset);
+      const source = Array.isArray(parsed) ? parsed : parsed?.presets ?? [];
+      this.presets = source.map(normalizePreset);
+      if (Number(parsed?.version ?? 1) < 2 || JSON.stringify(source) !== JSON.stringify(this.presets)) {
+        await this.persist();
+        this.logger?.info?.("[SuperWeather] Migrated presets to zero-width transition nodes.");
+      }
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
       this.presets = [createDefaultPreset()];
@@ -84,7 +89,7 @@ export class SuperWeatherPresetStore {
       ...source,
       id: "",
       name: String(name ?? "").trim() || `${source.name} Copy`,
-      timeline: source.timeline.map((segment) => ({ ...segment, id: `${segment.type}-${crypto.randomUUID()}` })),
+      timeline: source.timeline.map((segment) => ({ ...segment, id: `weather-${crypto.randomUUID()}` })),
     });
   }
 
@@ -98,7 +103,7 @@ export class SuperWeatherPresetStore {
   async persist() {
     await fs.mkdir(this.dataDirectory, { recursive: true });
     const tempPath = `${this.filePath}.${process.pid}.tmp`;
-    const payload = `${JSON.stringify({ version: 1, presets: this.presets }, null, 2)}\n`;
+    const payload = `${JSON.stringify({ version: 2, presets: this.presets }, null, 2)}\n`;
     await fs.writeFile(tempPath, payload, "utf8");
     await fs.rename(tempPath, this.filePath);
   }
@@ -109,7 +114,7 @@ function normalizePreset(input = {}) {
     id: String(input.id ?? "").trim(),
     name: String(input.name ?? "").trim(),
     version: Math.max(1, Number(input.version) || 1),
-    timeline: clone(Array.isArray(input.timeline) ? input.timeline : []),
+    timeline: normalizeTimeline(input.timeline),
     endBehavior: "hold_last",
     createdAt: String(input.createdAt ?? ""),
     updatedAt: String(input.updatedAt ?? ""),
@@ -125,9 +130,9 @@ function createDefaultPreset() {
     createdAt: now,
     updatedAt: now,
     timeline: [
-      { id: "weather-clear", type: "weather", weatherType: 0, durationSeconds: 900 },
-      { id: "transition-rain", type: "transition", durationSeconds: 120 },
-      { id: "weather-rain", type: "weather", weatherType: 5, durationSeconds: 1800 },
+      { id: "weather-clear", type: "weather", weatherType: 0, durationSeconds: 2400, transitionToNextSeconds: 120 },
+      { id: "weather-rain", type: "weather", weatherType: 5, durationSeconds: 2400, transitionToNextSeconds: 90 },
+      { id: "weather-snow", type: "weather", weatherType: 10, durationSeconds: 2400, transitionToNextSeconds: 0 },
     ],
   });
 }

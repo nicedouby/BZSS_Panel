@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { compileTimeline, resolveTimeline, validateTimeline } from "../domain/super-weather/timeline.js";
+import { compileTimeline, normalizeTimeline, resolveTimeline, validateTimeline } from "../domain/super-weather/timeline.js";
 import { RconAnchoredClock } from "../domain/super-weather/rcon-clock.js";
 import { SuperWeatherPresetStore } from "../domain/super-weather/preset-store.js";
 import { SuperWeatherScheduler } from "../domain/super-weather/scheduler.js";
@@ -11,24 +11,30 @@ import { BzssCoreCommandService } from "../core/bzss-core-command-service.js";
 import { createPlugin as createSuperWeatherPlugin } from "../plugins/bzss-super-weather.js";
 
 const basicTimeline = [
-  { id: "clear", type: "weather", weatherType: 0, durationSeconds: 60 },
-  { id: "to-rain", type: "transition", durationSeconds: 20 },
-  { id: "rain", type: "weather", weatherType: 5, durationSeconds: 60 },
+  { id: "clear", type: "weather", weatherType: 0, durationSeconds: 60, transitionToNextSeconds: 20 },
+  { id: "rain", type: "weather", weatherType: 5, durationSeconds: 60, transitionToNextSeconds: 0 },
 ];
 
 function testTimelineCompiler() {
   const compiled = compileTimeline(basicTimeline);
-  assert.equal(compiled.totalDurationSeconds, 140);
+  assert.equal(compiled.totalDurationSeconds, 120, "transition parameters must not extend timeline duration");
   assertResolved(resolveTimeline(compiled, 0), "weather", "clear", 0, 0);
-  assertResolved(resolveTimeline(compiled, 60), "transition", "to-rain", 5, 20);
-  assertResolved(resolveTimeline(compiled, 72), "transition", "to-rain", 5, 8);
+  assertResolved(resolveTimeline(compiled, 60), "weather", "rain", 5, 20);
+  assertResolved(resolveTimeline(compiled, 72), "weather", "rain", 5, 8);
   assertResolved(resolveTimeline(compiled, 80), "weather", "rain", 5, 0);
   assert.equal(resolveTimeline(compiled, 900).held, true);
   assert.equal(validateTimeline([{ id: "bad", type: "transition", durationSeconds: 2 }]).ok, false);
-  assert.equal(validateTimeline([
-    { id: "one", type: "weather", weatherType: 0, durationSeconds: 2 },
-    { id: "two", type: "weather", weatherType: 1, durationSeconds: 2 },
-  ]).ok, false);
+
+  const legacy = [
+    { id: "one", type: "weather", weatherType: 0, durationSeconds: 60 },
+    { id: "old-transition", type: "transition", durationSeconds: 15 },
+    { id: "two", type: "weather", weatherType: 1, durationSeconds: 60 },
+  ];
+  assert.deepEqual(normalizeTimeline(legacy), [
+    { id: "one", type: "weather", weatherType: 0, durationSeconds: 60, transitionToNextSeconds: 15 },
+    { id: "two", type: "weather", weatherType: 1, durationSeconds: 60, transitionToNextSeconds: 0 },
+  ]);
+  assert.equal(compileTimeline(legacy).totalDurationSeconds, 120, "legacy Transition blocks must migrate without consuming time");
 }
 
 function assertResolved(actual, type, segmentId, targetWeather, remaining) {
@@ -115,11 +121,9 @@ async function testSchedulerJumpAndCrossing() {
 async function testMultipleSegmentJump() {
   const commands = [];
   const timeline = [
-    { id: "clear", type: "weather", weatherType: 0, durationSeconds: 30 },
-    { id: "t1", type: "transition", durationSeconds: 10 },
-    { id: "rain", type: "weather", weatherType: 5, durationSeconds: 30 },
-    { id: "t2", type: "transition", durationSeconds: 10 },
-    { id: "fog", type: "weather", weatherType: 2, durationSeconds: 300 },
+    { id: "clear", type: "weather", weatherType: 0, durationSeconds: 30, transitionToNextSeconds: 10 },
+    { id: "rain", type: "weather", weatherType: 5, durationSeconds: 30, transitionToNextSeconds: 10 },
+    { id: "fog", type: "weather", weatherType: 2, durationSeconds: 300, transitionToNextSeconds: 0 },
   ];
   const scheduler = new SuperWeatherScheduler({
     commandService: { async execute(command) { commands.push(command); return { ok: true }; } },
@@ -167,6 +171,7 @@ async function testPresetStore() {
     const store = new SuperWeatherPresetStore({ dataDirectory: dir });
     await store.init();
     assert.equal(store.list().length, 1);
+    assert.equal(compileTimeline(store.list()[0].timeline).totalDurationSeconds, 7200);
     const created = await store.create({ name: "Test", timeline: basicTimeline });
     const updated = await store.update(created.id, { name: "Test Updated" });
     assert.equal(updated.version, 2);
@@ -176,6 +181,28 @@ async function testPresetStore() {
     await assert.rejects(() => store.create({ name: "Bad", timeline: [{ id: "t", type: "transition", durationSeconds: 1 }] }), {
       code: "InvalidWeatherTimeline",
     });
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function testLegacyPresetMigration() {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-super-weather-migrate-"));
+  try {
+    await fs.writeFile(path.join(dir, "presets.json"), JSON.stringify({
+      version: 1,
+      presets: [{ id: "legacy", name: "Legacy", version: 1, timeline: [
+        { id: "clear", type: "weather", weatherType: 0, durationSeconds: 60 },
+        { id: "to-rain", type: "transition", durationSeconds: 20 },
+        { id: "rain", type: "weather", weatherType: 5, durationSeconds: 60 },
+      ] }],
+    }), "utf8");
+    const store = new SuperWeatherPresetStore({ dataDirectory: dir, logger: { info() {} } });
+    await store.init();
+    assert.deepEqual(store.get("legacy").timeline, basicTimeline);
+    const persisted = JSON.parse(await fs.readFile(path.join(dir, "presets.json"), "utf8"));
+    assert.equal(persisted.version, 2);
+    assert.equal(persisted.presets[0].timeline.some((item) => item.type === "transition"), false);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -233,5 +260,6 @@ await testSchedulerJumpAndCrossing();
 await testMultipleSegmentJump();
 await testRestartRestoreAndStaleRecovery();
 await testPresetStore();
+await testLegacyPresetMigration();
 await testPluginLifecycle();
 console.log("run-super-weather-tests.js passed");

@@ -1,60 +1,88 @@
 <template>
   <aside class="inspector">
-    <template v-if="segment">
+    <template v-if="weather">
       <header>
-        <span>{{ segment.type === "weather" ? "WEATHER SEGMENT" : "TRANSITION SEGMENT" }}</span>
-        <button v-if="segment.type === 'weather' && weatherCount > 1" type="button" @click="$emit('delete')">Delete</button>
+        <span>WEATHER SEGMENT</span>
+        <button v-if="weatherCount > 1" type="button" @click="$emit('delete')">Delete</button>
       </header>
-      <label v-if="segment.type === 'weather'">
+      <label>
         <span>Weather type</span>
-        <select :value="segment.weatherType" @change="updateWeather">
+        <select :value="weather.weatherType" @change="updateWeatherType">
           <option v-for="(name, index) in SUPER_WEATHER_NAMES" :key="name" :value="index">{{ index }} · {{ name }}</option>
         </select>
       </label>
-      <div v-else class="transition-route">
-        <span>Transition route</span>
-        <strong>{{ fromName }} → {{ toName }}</strong>
-        <small>From/To is derived from adjacent Weather segments.</small>
-      </div>
       <label>
-        <span>{{ segment.type === "weather" ? "Stable duration" : "Transition duration" }} (seconds)</span>
-        <input :value="segment.durationSeconds" type="number" min="1" step="1" @input="updateDuration" />
+        <span>Weather duration (seconds)</span>
+        <input :value="weather.durationSeconds" type="number" min="1" step="1" @input="updateWeatherDuration" />
       </label>
       <input
         class="duration-range"
-        :value="segment.durationSeconds"
+        :value="weather.durationSeconds"
         type="range"
-        min="1"
-        :max="segment.type === 'weather' ? 7200 : 900"
-        step="1"
-        @input="updateDuration"
+        min="60"
+        max="7200"
+        step="60"
+        @input="updateWeatherDuration"
       />
-      <p>{{ formatDuration(segment.durationSeconds) }} actual timeline time</p>
+      <p>{{ formatDuration(weather.durationSeconds) }} of actual timeline time</p>
     </template>
-    <div v-else class="empty">Select a Weather or Transition block to edit it.</div>
+
+    <template v-else-if="transition">
+      <header><span>TRANSITION NODE</span></header>
+      <div class="transition-route">
+        <span>SetWeather command</span>
+        <strong>{{ weatherName(transition.fromWeather) }} → {{ weatherName(transition.toWeather) }}</strong>
+        <small>This node has zero timeline width. It only supplies the Transition parameter when the right-side weather starts.</small>
+      </div>
+      <label>
+        <span>Transition parameter (seconds)</span>
+        <input :value="transition.seconds" type="number" min="0" max="900" step="1" @input="updateTransition" />
+      </label>
+      <input
+        class="duration-range transition-range"
+        :value="transition.seconds"
+        type="range"
+        min="0"
+        max="900"
+        step="1"
+        @input="updateTransition"
+      />
+      <p>Command: SetWeather {{ transition.toWeather }},{{ transition.seconds }}</p>
+    </template>
+
+    <div v-else class="empty">Select a Weather block or an arrow node to edit it.</div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { SUPER_WEATHER_NAMES, type SuperWeatherSegment } from "../../app/superWeatherApi";
+import { SUPER_WEATHER_NAMES, type SuperWeatherWeatherSegment } from "../../app/superWeatherApi";
 
-const props = defineProps<{
-  segment: SuperWeatherSegment | null;
-  fromWeather?: number | null;
-  toWeather?: number | null;
+defineProps<{
+  weather: SuperWeatherWeatherSegment | null;
+  transition: {
+    sourceId: string;
+    fromWeather: number;
+    toWeather: number;
+    seconds: number;
+  } | null;
   weatherCount: number;
 }>();
-const emit = defineEmits<{ update: [patch: Record<string, number>]; delete: [] }>();
-const fromName = computed(() => SUPER_WEATHER_NAMES[Number(props.fromWeather)] ?? "--");
-const toName = computed(() => SUPER_WEATHER_NAMES[Number(props.toWeather)] ?? "--");
+const emit = defineEmits<{
+  updateWeather: [patch: { weatherType?: number; durationSeconds?: number }];
+  updateTransition: [seconds: number];
+  delete: [];
+}>();
 
-function updateWeather(event: Event) {
-  emit("update", { weatherType: Number((event.target as HTMLSelectElement).value) });
+function updateWeatherType(event: Event) {
+  emit("updateWeather", { weatherType: Number((event.target as HTMLSelectElement).value) });
 }
-function updateDuration(event: Event) {
-  emit("update", { durationSeconds: Math.max(1, Math.floor(Number((event.target as HTMLInputElement).value) || 1)) });
+function updateWeatherDuration(event: Event) {
+  emit("updateWeather", { durationSeconds: Math.max(1, Math.floor(Number((event.target as HTMLInputElement).value) || 1)) });
 }
+function updateTransition(event: Event) {
+  emit("updateTransition", Math.max(0, Math.floor(Number((event.target as HTMLInputElement).value) || 0)));
+}
+function weatherName(value: number) { return SUPER_WEATHER_NAMES[value] ?? `Weather ${value}`; }
 function formatDuration(value: number) {
   const seconds = Math.max(0, Math.floor(Number(value) || 0));
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -68,7 +96,8 @@ header button { border: 0; background: transparent; color: #ff8f9b; font-size: 1
 label, .transition-route { display: grid; gap: 6px; margin-bottom: 12px; color: rgba(216, 232, 242, .7); font-size: 11px; }
 select, input[type="number"] { width: 100%; padding: 8px 9px; border: 1px solid rgba(123, 168, 195, .24); border-radius: 7px; background: #091625; color: #edf8ff; }
 .duration-range { width: 100%; accent-color: #58cfff; }
+.transition-range { accent-color: #c48cff; }
 .transition-route strong { color: #ead7ff; font-size: 12px; }
-.transition-route small, p, .empty { color: rgba(202, 221, 234, .48); font-size: 10px; }
+.transition-route small, p, .empty { color: rgba(202, 221, 234, .48); font-size: 10px; line-height: 1.45; }
 .empty { display: grid; place-items: center; min-height: 160px; text-align: center; }
 </style>

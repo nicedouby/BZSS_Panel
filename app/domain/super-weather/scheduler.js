@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-import { compileTimeline, resolveTimeline, weatherName } from "./timeline.js";
+import { compileTimeline, normalizeTimeline, resolveTimeline, weatherName } from "./timeline.js";
 import { RconAnchoredClock } from "./rcon-clock.js";
 
 export class SuperWeatherScheduler {
@@ -46,9 +46,11 @@ export class SuperWeatherScheduler {
     this.enabled = Boolean(runtime.enabled && runtime.activePresetId && Array.isArray(runtime.activeTimeline?.timeline));
     this.activePresetId = runtime.activePresetId ?? null;
     this.activePresetVersion = runtime.activeTimeline?.version ?? null;
-    this.activeTimeline = runtime.activeTimeline ?? null;
+    this.activeTimeline = runtime.activeTimeline
+      ? { ...runtime.activeTimeline, timeline: normalizeTimeline(runtime.activeTimeline.timeline) }
+      : null;
     try {
-      this.compiled = this.enabled ? compileTimeline(runtime.activeTimeline.timeline) : null;
+      this.compiled = this.enabled ? compileTimeline(this.activeTimeline.timeline) : null;
     } catch (error) {
       this.enabled = false;
       this.compiled = null;
@@ -67,8 +69,11 @@ export class SuperWeatherScheduler {
   async activate(preset) {
     this.activePresetId = preset.id;
     this.activePresetVersion = preset.version;
-    this.activeTimeline = JSON.parse(JSON.stringify(preset));
-    this.compiled = compileTimeline(preset.timeline);
+    this.activeTimeline = JSON.parse(JSON.stringify({
+      ...preset,
+      timeline: normalizeTimeline(preset.timeline),
+    }));
+    this.compiled = compileTimeline(this.activeTimeline.timeline);
     this.enabled = true;
     this.lastSegmentId = "";
     this.state = Number.isFinite(this.clock.rawRconSeconds) ? "SYNCING" : "WAITING_RCON";
@@ -187,27 +192,11 @@ export class SuperWeatherScheduler {
     if (this.busy) return this.getState();
     this.busy = true;
     try {
-      const previousSegmentId = this.lastSegmentId;
-      const previousSegment = this.compiled?.segments?.find((segment) => segment.id === previousSegmentId) ?? null;
-      const targetWeather = resolved.type === "transition" ? resolved.targetWeather : resolved.currentWeather;
-      const transitionSeconds = resolved.type === "transition" ? resolved.transitionRemainingSeconds : 0;
-      const transitionCompletedNormally = !force
-        && resolved.type === "weather"
-        && previousSegment?.type === "transition"
-        && previousSegment.targetWeather === targetWeather
-        && this.lastWeather === targetWeather;
+      const targetWeather = resolved.currentWeather;
+      const transitionSeconds = resolved.transitionRemainingSeconds;
 
       this.lastSegmentId = resolved.segmentId;
       this.currentSegment = resolved;
-      if (transitionCompletedNormally) {
-        this.state = "RUNNING";
-        this.lastAction = "transition-completed";
-        this.log("SUPER_WEATHER_RECONCILE", `${weatherName(targetWeather)} transition completed; no duplicate command required.`, {
-          segmentId: resolved.segmentId,
-        });
-        this.notify();
-        return this.getState();
-      }
 
       const parameter = `${targetWeather},${Math.max(0, Math.ceil(transitionSeconds))}`;
       const result = await this.commandService.execute({
