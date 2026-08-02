@@ -64,8 +64,11 @@
                     ? state?.currentSegment?.transitionNodeId
                     : null"
                   :logical-seconds="state?.logicalSeconds"
+                  :workspace-seconds="workspaceSeconds"
                   @select="selectedSegmentId = $event"
+                  @workspace-change="setWorkspaceSeconds"
                   @update-duration="updateTimelineDuration"
+                  @update-boundary="updateTimelineBoundary"
                   @reorder="reorderWeather"
                 />
               </div>
@@ -147,7 +150,10 @@ import WeatherTimeline from "./WeatherTimeline.vue";
 import WeatherInspector from "./WeatherInspector.vue";
 
 const STORAGE_KEY = "bzss.super-weather.window";
+const WORKSPACE_STORAGE_KEY = "bzss.super-weather.timeline-workspace";
 const WINDOW_STATE_VERSION = 2;
+const DEFAULT_WORKSPACE_SECONDS = 2 * 60 * 60;
+const ALLOWED_WORKSPACE_SECONDS = new Set([2 * 60 * 60, 6 * 60 * 60]);
 const MIN_WINDOW_WIDTH = 360;
 const MIN_WINDOW_HEIGHT = 300;
 const DEFAULT_WINDOW = { version: WINDOW_STATE_VERSION, x: 220, y: 140, width: 1200, height: 680, minimized: false };
@@ -165,6 +171,7 @@ const saved = ref<SuperWeatherPreset | null>(null);
 const windowEl = ref<HTMLElement | null>(null);
 const maximized = ref(false);
 const windowState = reactive(loadWindowState());
+const workspaceSeconds = ref(loadWorkspaceSeconds());
 let pollTimer: number | null = null;
 let dragState: { pointerId: number; offsetX: number; offsetY: number } | null = null;
 let resizeState: {
@@ -378,6 +385,27 @@ function updateTimelineDuration(id: string, durationSeconds: number) {
   if (segment) segment.durationSeconds = Math.max(1, Math.floor(durationSeconds));
 }
 
+function updateTimelineBoundary(
+  currentId: string,
+  currentDurationSeconds: number,
+  previousId: string,
+  previousDurationSeconds: number,
+) {
+  if (!draft.value) return;
+  const current = draft.value.timeline.find((item) => item.id === currentId);
+  const previous = draft.value.timeline.find((item) => item.id === previousId);
+  if (!current || !previous) return;
+  current.durationSeconds = Math.max(10, Math.floor(currentDurationSeconds));
+  previous.durationSeconds = Math.max(10, Math.floor(previousDurationSeconds));
+}
+
+function setWorkspaceSeconds(value: number) {
+  const next = Number(value);
+  if (!ALLOWED_WORKSPACE_SECONDS.has(next)) return;
+  workspaceSeconds.value = next;
+  localStorage.setItem(WORKSPACE_STORAGE_KEY, String(next));
+}
+
 function reorderWeather(fromId: string, toId: string) {
   if (!draft.value) return;
   const timeline = draft.value.timeline;
@@ -494,6 +522,10 @@ function loadWindowState() {
   catch { return { ...DEFAULT_WINDOW }; }
 }
 function persistWindowState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(windowState)); }
+function loadWorkspaceSeconds() {
+  const value = Number(localStorage.getItem(WORKSPACE_STORAGE_KEY));
+  return ALLOWED_WORKSPACE_SECONDS.has(value) ? value : DEFAULT_WORKSPACE_SECONDS;
+}
 
 function editable(preset: SuperWeatherPreset) { return { name: preset.name, timeline: preset.timeline, endBehavior: "hold_last" as const }; }
 function clone<T>(value: T): T { return value == null ? value : JSON.parse(JSON.stringify(value)); }
