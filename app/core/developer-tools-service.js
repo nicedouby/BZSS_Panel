@@ -1,6 +1,8 @@
 // -*- coding: utf-8 -*-
 
 import { execFile, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 const OUTPUT_LIMIT = 16_000;
 
@@ -70,61 +72,48 @@ export class DeveloperToolsService {
   }
 
   async scheduleRestart() {
-    if (this.running) return { ok: false, code: "DeveloperToolBusy", message: "Wait for the current developer operation to finish." };
+    if (this.running) {
+      return { ok: false, code: "DeveloperToolBusy", message: "Wait for the current developer operation to finish." };
+    }
+
     const currentPid = process.pid;
+    const supervisorPath = fileURLToPath(new URL("./restart-supervisor.mjs", import.meta.url));
+    const payload = JSON.stringify({
+      currentPid,
+      projectRoot: this.projectRoot,
+    });
+
     try {
-      if (process.platform === "win32") {
-        const projectRoot = this.projectRoot.replace(/'/g, "''");
-        const runScript = (this.projectRoot + "\\run.bat").replace(/'/g, "''");
-        const script = [
-          `$projectRoot = '${projectRoot}'`,
-          `$runScript = '${runScript}'`,
-          "$ErrorActionPreference = 'SilentlyContinue'",
-          "Start-Sleep -Milliseconds 500",
-          `Stop-Process -Id ${currentPid} -Force`,
-          // Do not race the old process. Wait until it is actually gone before
-          // starting run.bat again, otherwise the old wrapper can still own the port.
-          `do { Start-Sleep -Milliseconds 250; $old = Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue } while ($old)`,
-          "Start-Sleep -Milliseconds 1000",
-          // Keep the normal Windows entry point, including its configured CPU affinity.
-          // cmd /c must receive a quoted batch path when the project
-          // directory contains spaces.
-          "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', ('\"{0}\"' -f $runScript)) -WorkingDirectory $projectRoot -WindowStyle Hidden",
-        ].join("; ");
-        // Spawn PowerShell directly. The previous cmd.exe -> start ->
-        // powershell chain could emit EINVAL asynchronously on Windows,
-        // after this method had already reported success.
-        await spawnDetachedAndWait(this.processSpawner, "powershell.exe", [
-          "-NoProfile",
-          "-NonInteractive",
-          "-WindowStyle",
-          "Hidden",
-          "-Command",
-          script,
-        ], {
-          detached: true,
-          stdio: "ignore",
-          windowsHide: true,
-        });
-      } else {
-        const child = this.processSpawner(process.execPath, ["app/main.js"], {
-          cwd: this.projectRoot,
-          detached: true,
-          stdio: "ignore",
-        });
-        child.unref();
-        setTimeout(() => process.exit(0), 800).unref();
-      }
-      this.logger?.warn?.("Developer tools scheduled a panel restart.", { operation: "developerTools.restart", pid: currentPid });
+      // Use a standalone Node supervisor instead of passing a large PowerShell
+      // command through spawn(). This avoids Windows EINVAL argument parsing and
+      // lets the supervisor survive termination of this Panel process.
+      const child = this.processSpawner(process.execPath, [supervisorPath, payload], {
+        cwd: this.projectRoot,
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.unref?.();
+
+      this.logger?.warn?.("Developer tools scheduled a panel restart.", {
+        operation: "developerTools.restart",
+        pid: currentPid,
+        supervisorPid: child.pid ?? null,
+      });
       return {
         ok: true,
         operation: "restart",
         currentPid,
+        supervisorPid: child.pid ?? null,
         workingDirectory: this.projectRoot,
-        message: "The running Panel process will be stopped and a new process will be started from the detected project directory.",
+        message: "A standalone supervisor will stop this process and start the Panel again from the detected project directory.",
       };
     } catch (error) {
-      return { ok: false, code: "RestartScheduleFailed", message: error?.message ?? "Failed to schedule restart." };
+      return {
+        ok: false,
+        code: "RestartScheduleFailed",
+        message: error?.message ?? "Failed to schedule restart.",
+      };
     }
   }
 
@@ -135,7 +124,12 @@ export class DeveloperToolsService {
   async runCommand(file, args, timeout) {
     try {
       const executable = process.platform === "win32" && file === "npm" ? "npm.cmd" : file;
-      return await this.executor(executable, args, { cwd: this.projectRoot, timeout, windowsHide: true, maxBuffer: 2 * 1024 * 1024 });
+      return await this.executor(executable, args, {
+        cwd: this.projectRoot,
+        timeout,
+        windowsHide: true,
+        maxBuffer: 2 * 1024 * 1024,
+      });
     } catch (error) {
       const details = compactOutput(error);
       const failure = new Error(details || error?.message || "Developer command failed.");
@@ -161,40 +155,5 @@ function execFileAsync(file, args, options = {}) {
       }
       resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
-  });
-}
-
-function spawnDetachedAndWait(processSpawner, file, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    let child;
-    try {
-      child = processSpawner(file, args, options);
-    } catch (error) {
-      reject(error);
-      return;
-    }
-
-    let settled = false;
-    const finish = (error) => {
-      if (settled) return;
-      settled = true;
-      child.removeListener?.("error", onError);
-      child.removeListener?.("spawn", onSpawn);
-      if (error) reject(error);
-      else resolve(child);
-    };
-    const onError = (error) => finish(error);
-    const onSpawn = () => {
-      child.unref?.();
-      finish();
-    };
-
-    child.once?.("error", onError);
-    child.once?.("spawn", onSpawn);
-
-    // Test doubles and a few compatible process implementations may not emit
-    // spawn. A returned ChildProcess from Node always emits it, but do not
-    // leave the request hanging if a compatible implementation does not.
-    if (!child.once) finish(new Error("Restart supervisor did not return a ChildProcess."));
   });
 }
