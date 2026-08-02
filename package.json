@@ -31,7 +31,8 @@
     "test:tactical-replay-player": "node app/tests/run-tactical-replay-player-tests.js",
     "test:tactical-replay-native": "node app/tests/run-tactical-replay-native-tests.js",
     "test:dynamic-pressure-zone": "node app/tests/run-dynamic-pressure-zone-tests.js",
-    "test:playtime-avatar-refresh": "node app/tests/run-playtime-avatar-refresh-tests.js"
+    "test:playtime-avatar-refresh": "node app/tests/run-playtime-avatar-refresh-tests.js",
+    "test:super-weather": "node app/tests/run-super-weather-tests.js"
   },
   "dependencies": {
     "sqlite": "^5.1.1",
