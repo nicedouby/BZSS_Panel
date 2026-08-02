@@ -87,7 +87,9 @@ export class DeveloperToolsService {
           `do { Start-Sleep -Milliseconds 250; $old = Get-Process -Id ${currentPid} -ErrorAction SilentlyContinue } while ($old)`,
           "Start-Sleep -Milliseconds 1000",
           // Keep the normal Windows entry point, including its configured CPU affinity.
-          "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', $runScript) -WorkingDirectory $projectRoot -WindowStyle Hidden",
+          // cmd /c must receive a quoted batch path when the project
+          // directory contains spaces.
+          "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/d', '/c', 'call', ('\"{0}\"' -f $runScript)) -WorkingDirectory $projectRoot -WindowStyle Hidden",
         ].join("; ");
         // Spawn PowerShell directly. The previous cmd.exe -> start ->
         // powershell chain could emit EINVAL asynchronously on Windows,
