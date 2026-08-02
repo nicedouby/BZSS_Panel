@@ -17,8 +17,8 @@ const TEAM_LANE_HEADER_HEIGHT = 18;
 const TEAM_LANE_HEADER_GAP = 4;
 const SQUAD_HEADER_HEIGHT = 14;
 const SQUAD_GAP = 3;
-const DEFAULT_PLAYER_ROW_HEIGHT = 21;
-const MIN_PLAYER_ROW_HEIGHT = 13;
+const DEFAULT_PLAYER_ROW_HEIGHT = 24;
+const MIN_PLAYER_ROW_HEIGHT = 15;
 const PLAYER_STAT_COLUMNS = Object.freeze([
   { key: "kills", label: "K", width: 16, tone: "#63e6be" },
   { key: "downs", label: "W", width: 16, tone: "#38bdf8" },
@@ -824,13 +824,13 @@ function renderPlayerRow(team, player, x, y, index) {
     `<rect x="${x + 10}" y="${roleIconY}" width="${roleIconSize}" height="${roleIconSize}" rx="2" fill="#081321" stroke="#91a4b8" stroke-opacity=".42"/>`,
     player.roleIconData ? `<image href="${player.roleIconData}" x="${x + 10}" y="${roleIconY}" width="${roleIconSize}" height="${roleIconSize}" opacity=".9" preserveAspectRatio="xMidYMid meet"/>` : "",
     `<defs><clipPath id="${nameClipId}"><rect x="${x + 29}" y="${y}" width="${Math.max(20, layout.metricsStart - x - 34)}" height="${rowHeight}"/></clipPath></defs>`,
-    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name" clip-path="url(#${nameClipId})">${escapeXml(firstText(player?.name, "Unknown"))}</text>`,
+    `<text x="${x + 31}" y="${y + rowHeight - 6}" class="player-name" fill="${team.accent}" fill-opacity=".82" clip-path="url(#${nameClipId})">${escapeXml(firstText(player?.name, "Unknown"))}</text>`,
     `<path d="M${layout.metricsStart - 3} ${y + 2}V${y + rowHeight - 2}" stroke="#ffffff" stroke-opacity=".08"/>`,
   ];
   for (const column of layout.columns) {
     const value = metrics[column.key];
     svg.push(`<rect x="${column.x + 1}" y="${y + 2}" width="${column.width - 2}" height="${Math.max(9, rowHeight - 4)}" rx="2" class="player-stat-chip" fill="#dce9f7" fill-opacity=".055" stroke="#dce9f7" stroke-opacity=".08"/>`);
-    svg.push(`<text x="${column.center}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-stat mono" fill="#f2f7fb">${escapeXml(String(value))}</text>`);
+    svg.push(`<text x="${column.center}" y="${y + rowHeight - 6}" text-anchor="middle" class="player-stat mono" fill="${column.tone}" fill-opacity=".82">${escapeXml(String(value))}</text>`);
   }
   return svg.join("");
 }
@@ -1028,8 +1028,8 @@ function renderDefs() {
       .scoreboard-header-title{font-size:6px;font-weight:900;letter-spacing:.65px;fill:#a9bed1}
       .scoreboard-header-stat{font-size:6px;font-weight:900}
       .role-badge{font-size:8px;font-weight:900}
-      .player-name{font-size:8.5px;font-weight:900}
-      .player-stat{font-size:7.6px;font-weight:900}
+      .player-name{font-size:9.6px;font-weight:900}
+      .player-stat{font-size:8.8px;font-weight:900}
       .ft-badge{font-size:8px;font-weight:900;fill:#a9bdd0}
       .player-meta{font-size:8px;font-weight:800;fill:#d6e3ef}
       .player-ping{font-size:8px;font-weight:800;fill:#b8c7d5}.ping-unit{font-size:5px;opacity:.85}

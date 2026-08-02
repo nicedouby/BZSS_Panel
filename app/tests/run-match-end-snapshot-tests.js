@@ -353,7 +353,10 @@ function testPlayerCombatMetricsAndLaneHeaders() {
     assert.equal(svg.includes(`fill="${tone}"`), true);
   }
   assert.ok((svg.match(/class="player-stat-chip"/g) ?? []).length >= 44);
-  assert.ok((svg.match(/class="player-stat mono" fill="#f2f7fb"/g) ?? []).length >= 4);
+  assert.ok((svg.match(/class="player-name" fill="#37c8ff" fill-opacity=".82"/g) ?? []).length >= 2);
+  assert.ok((svg.match(/class="player-name" fill="#ef3b4f" fill-opacity=".82"/g) ?? []).length >= 2);
+  assert.ok((svg.match(/class="player-stat mono" fill="#63e6be" fill-opacity=".82"/g) ?? []).length >= 4);
+  assert.ok((svg.match(/class="player-stat mono" fill="#fb7185" fill-opacity=".82"/g) ?? []).length >= 4);
   assert.equal((svg.match(/class="runtime-metric-label">PLAYERS/g) ?? []).length, 1);
   assert.equal((svg.match(/class="runtime-metric-label">QUEUE/g) ?? []).length, 1);
   assert.equal((svg.match(/class="runtime-metric-label">TIME/g) ?? []).length, 1);
