@@ -13,6 +13,7 @@ export function createPlugin({ core, modules, config, logger }) {
     tickIntervalMs: Number(config.get(`plugins.${PLUGIN_ID}.tickIntervalMs`, 1000)) || 1000,
     maxExtrapolationSeconds: Number(config.get(`plugins.${PLUGIN_ID}.maxExtrapolationSeconds`, 180)) || 180,
     backwardJitterToleranceSeconds: Number(config.get(`plugins.${PLUGIN_ID}.backwardJitterToleranceSeconds`, 15)) || 15,
+    commandRetryDelayMs: Number(config.get(`plugins.${PLUGIN_ID}.commandRetryDelayMs`, 5000)) || 5000,
     dataDirectory: String(config.get(`plugins.${PLUGIN_ID}.dataDirectory`, "./data/bzss-super-weather")),
     persistRuntime: config.get(`plugins.${PLUGIN_ID}.persistRuntime`, true) !== false,
   };
@@ -27,6 +28,7 @@ export function createPlugin({ core, modules, config, logger }) {
     tickIntervalMs: settings.tickIntervalMs,
     maxExtrapolationSeconds: settings.maxExtrapolationSeconds,
     backwardJitterToleranceSeconds: settings.backwardJitterToleranceSeconds,
+    commandRetryDelayMs: settings.commandRetryDelayMs,
     onStateChange(runtime) {
       if (settings.persistRuntime) queuePersist(runtime);
     },
@@ -110,7 +112,7 @@ export function createPlugin({ core, modules, config, logger }) {
       name: "BZSS Super Weather",
       kind: "plugin",
       category: "Server Control",
-      version: "1.1.0",
+      version: "1.1.1",
       description: "RCON Record-time anchored weather scheduler with zero-width transition command nodes and persistent presets.",
     },
     apiName: "bzssSuperWeather",
