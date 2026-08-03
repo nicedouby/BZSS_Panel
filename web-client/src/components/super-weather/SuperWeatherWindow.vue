@@ -94,6 +94,32 @@
             <span class="action-note">Save updates the preset only. Apply explicitly reloads the running timeline.</span>
           </div>
 
+          <section class="command-output" aria-label="Weather command output">
+            <div class="command-output-header">
+              <div>
+                <span class="output-kicker">COMMAND OUTPUT</span>
+                <strong>SetWeather execution history</strong>
+              </div>
+              <span class="output-count">{{ commandOutputEntries.length }} / 100</span>
+            </div>
+            <div class="command-console" aria-live="polite">
+              <div
+                v-for="entry in commandOutputEntries"
+                :key="`${entry.at}-${entry.type}-${entry.message}`"
+                class="command-entry"
+                :class="entry.type === 'SUPER_WEATHER_ERROR' ? 'failed' : 'success'"
+              >
+                <div class="command-entry-meta">
+                  <time>{{ formatLogTime(entry.at) }}</time>
+                  <b>{{ commandStatusLabel(entry) }}</b>
+                  <span>{{ commandText(entry) }}</span>
+                </div>
+                <p>{{ entry.message }}</p>
+              </div>
+              <p v-if="!commandOutputEntries.length" class="command-empty">No weather commands have been executed yet.</p>
+            </div>
+          </section>
+
           <details class="diagnostics">
             <summary>Scheduler Diagnostics <span>{{ state?.diagnostics?.length ?? 0 }} / 100</span></summary>
             <div class="debug-grid">
@@ -189,6 +215,7 @@ const windowStyle = computed(() => maximized.value ? {} : {
   height: windowState.minimized ? "52px" : `${windowState.height}px`,
 });
 const dirty = computed(() => Boolean(draft.value && saved.value && JSON.stringify(editable(draft.value)) !== JSON.stringify(editable(saved.value))));
+const commandOutputEntries = computed(() => (state.value?.diagnostics ?? []).filter(isCommandDiagnostic));
 const selectedWeather = computed(() => selectedSegmentId.value.startsWith("transition:")
   ? null
   : draft.value?.timeline.find((item) => item.id === selectedSegmentId.value) ?? null);
@@ -540,6 +567,18 @@ function formatClock(value: number | null | undefined) {
   return hours > 0 ? `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}` : `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 function formatDrift(value: number | null | undefined) { const drift = Number(value) || 0; return `${drift >= 0 ? "+" : ""}${drift.toFixed(1)}s`; }
+function isCommandDiagnostic(entry: SuperWeatherState["diagnostics"][number]) {
+  return entry.type === "SUPER_WEATHER_SET_WEATHER"
+    || (entry.type === "SUPER_WEATHER_ERROR" && /(?:Weather|Test) command|SetWeather/i.test(entry.message));
+}
+function commandStatusLabel(entry: SuperWeatherState["diagnostics"][number]) {
+  return entry.type === "SUPER_WEATHER_ERROR" ? "FAILED" : "SUCCESS";
+}
+function commandText(entry: SuperWeatherState["diagnostics"][number]) {
+  const data = entry.data as { command?: unknown } | null | undefined;
+  if (typeof data?.command === "string" && data.command.trim()) return data.command;
+  return entry.message.match(/SetWeather:\s*\d+\s*,\s*\d+/)?.[0] ?? "SetWeather";
+}
 function formatLogTime(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString([], { hour12: false }); }
 </script>
 
@@ -611,6 +650,21 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .action-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .action-bar .primary { border-color: rgba(70, 198, 255, .48); color: #8ee3ff; background: rgba(20, 116, 158, .22); }
 .action-note { margin-left: auto; max-width: 310px; color: rgba(177, 205, 219, .46); font-size: 9px; text-align: right; }
+.command-output { min-width: 0; border: 1px solid rgba(77, 196, 240, .2); border-radius: 11px; background: rgba(3, 12, 21, .78); overflow: hidden; }
+.command-output-header { min-height: 42px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(103, 168, 194, .14); background: linear-gradient(90deg, rgba(13, 51, 70, .68), rgba(7, 20, 31, .7)); }
+.command-output-header > div { display: grid; gap: 3px; }
+.output-kicker { color: #6fd4f9; font-size: 8px; letter-spacing: .16em; }
+.command-output-header strong { color: #d7eef8; font-size: 11px; font-weight: 600; }
+.output-count { color: rgba(177, 211, 226, .52); font: 10px ui-monospace, monospace; }
+.command-console { max-height: 190px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+.command-entry { padding: 8px 12px; border-bottom: 1px solid rgba(103, 153, 177, .08); }
+.command-entry-meta { display: grid; grid-template-columns: 72px 62px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 9px; }
+.command-entry-meta time { color: rgba(178, 205, 219, .48); }
+.command-entry-meta b { color: #73e0ad; font-size: 8px; letter-spacing: .06em; }
+.command-entry.failed .command-entry-meta b { color: #ff9b83; }
+.command-entry-meta span { overflow: hidden; color: #9fd4e8; text-overflow: ellipsis; white-space: nowrap; }
+.command-entry p { margin: 4px 0 0 142px; overflow: hidden; color: rgba(216, 235, 243, .66); font: 10px/1.45 ui-sans-serif, system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.command-empty { margin: 0; padding: 18px 12px; color: rgba(187, 215, 229, .48); font: 10px ui-sans-serif, system-ui, sans-serif; text-align: center; }
 .diagnostics { border: 1px solid rgba(108, 159, 185, .16); border-radius: 10px; background: rgba(5, 15, 25, .68); }
 .diagnostics summary { padding: 10px 12px; cursor: pointer; color: #a8cadd; font-size: 10px; letter-spacing: .06em; }
 .diagnostics summary span { float: right; color: rgba(166, 200, 217, .42); }

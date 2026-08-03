@@ -199,23 +199,25 @@ export class SuperWeatherScheduler {
       this.currentSegment = resolved;
 
       const parameter = `${targetWeather},${Math.max(0, Math.ceil(transitionSeconds))}`;
+      const command = `SetWeather:${parameter}`;
       const result = await this.commandService.execute({
         directive: "SetWeather",
         parameter,
         source: "bzss-super-weather",
       });
-      this.lastCommand = `SetWeather:${parameter}`;
+      this.lastCommand = command;
       this.lastCommandAt = new Date().toISOString();
       this.lastAction = reason;
       if (!result.ok) {
         this.state = "ERROR";
-        this.log("SUPER_WEATHER_ERROR", `Weather command failed: ${result.message ?? result.error}`, { result });
+        this.log("SUPER_WEATHER_ERROR", `Weather command ${command} failed: ${result.message ?? result.error}`, { command, result });
         this.notify();
         return this.getState();
       }
       this.lastWeather = targetWeather;
       this.state = "RUNNING";
-      this.log("SUPER_WEATHER_SET_WEATHER", `${this.lastCommand} (${reason}).`, {
+      this.log("SUPER_WEATHER_SET_WEATHER", `${command} (${reason}).`, {
+        command,
         segmentId: resolved.segmentId,
         weatherName: weatherName(targetWeather),
         transitionRemainingSeconds: transitionSeconds,
@@ -235,13 +237,14 @@ export class SuperWeatherScheduler {
   async testWeather(weatherType, transitionSeconds = 0) {
     const weather = Number(weatherType);
     const transition = Math.max(0, Math.ceil(Number(transitionSeconds) || 0));
+    const command = `SetWeather:${weather},${transition}`;
     const result = await this.commandService.execute({
       directive: "SetWeather",
       parameter: `${weather},${transition}`,
       source: "bzss-super-weather-test",
     });
     this.log(result.ok ? "SUPER_WEATHER_SET_WEATHER" : "SUPER_WEATHER_ERROR",
-      `Test command SetWeather:${weather},${transition} ${result.ok ? "succeeded" : "failed"}.`);
+      `Test command ${command} ${result.ok ? "succeeded" : "failed"}.`, { command, result });
     this.notify();
     return result;
   }
