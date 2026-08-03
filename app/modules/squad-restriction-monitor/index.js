@@ -4,6 +4,7 @@ import {
   evaluateSquadName,
   loadSquadNamePolicy,
 } from "../../domain/squad-name-policy/index.js";
+import { isSquadSupervisionExempt } from "../../domain/squad-name-policy/schema.js";
 
 const MODULE_ID = "module.squadRestrictionMonitor";
 const API_NAME = "squadRestrictionMonitor";
@@ -168,8 +169,10 @@ export function createSquadRestrictionMonitorModule({ core, config, logger }) {
     const locked = Boolean(squad?.locked ?? squad?.isLocked);
     const playerCount = normalizePlayerCount(squad?.size ?? squad?.memberCount ?? squad?.playerCount);
     const rule = typeId ? settings.typeRules[typeId] ?? null : null;
+    const supervisionExempt = isSquadSupervisionExempt(classification);
     const restriction = evaluateRestriction({
       enabled: settings.enabled,
+      supervisionExempt,
       typeId,
       typeLabel,
       locked,
@@ -212,12 +215,13 @@ export function createSquadRestrictionMonitorModule({ core, config, logger }) {
   }
 }
 
-export function evaluateRestriction({ enabled = true, typeId = "", typeLabel = "", locked = false, playerCount = 0, rule = null } = {}) {
+export function evaluateRestriction({ enabled = true, supervisionExempt = false, typeId = "", typeLabel = "", locked = false, playerCount = 0, rule = null } = {}) {
   const normalizedRule = normalizeRule(rule);
   const base = {
     moduleId: MODULE_ID,
     enforcementEnabled: false,
-    evaluated: Boolean(enabled && normalizedRule),
+    supervisionExempt: Boolean(supervisionExempt),
+    evaluated: Boolean(enabled && normalizedRule && !supervisionExempt),
     status: "not_applicable",
     isViolation: false,
     typeId: text(typeId),
@@ -234,6 +238,13 @@ export function evaluateRestriction({ enabled = true, typeId = "", typeLabel = "
   };
 
   if (!enabled) return { ...base, status: "disabled" };
+  if (base.supervisionExempt) {
+    return {
+      ...base,
+      status: "exempt",
+      ruleSnapshot: null,
+    };
+  }
   if (!normalizedRule) return base;
   if (!base.locked) return { ...base, status: "compliant" };
 
