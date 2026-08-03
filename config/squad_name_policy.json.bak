@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 4,
+  "revision": 5,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-07-15T07:50:37.540Z",
+  "updatedAt": "2026-07-18T13:11:50.931Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -713,6 +713,40 @@
     }
   ],
   "entries": [
+    {
+      "id": "rule:manual_mrqdye8e",
+      "name": "机械化步兵",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "infantry",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": true,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:manual_mrqdycad",
+      "name": "新队名规则",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "matv",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": true,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
     {
       "id": "adf:mrap:pmvmag58:/game/vehicles/pmv/bppmvmag58.bppmvmag58",
       "name": "PMV Mag58",
