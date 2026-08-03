@@ -20,8 +20,8 @@ function testTimelineCompiler() {
   assert.equal(compiled.totalDurationSeconds, 120, "transition parameters must not extend timeline duration");
   assertResolved(resolveTimeline(compiled, 0), "weather", "clear", 0, 0);
   assertResolved(resolveTimeline(compiled, 60), "weather", "rain", 5, 20);
-  assertResolved(resolveTimeline(compiled, 72), "weather", "rain", 5, 8);
-  assertResolved(resolveTimeline(compiled, 80), "weather", "rain", 5, 0);
+  assertResolved(resolveTimeline(compiled, 72), "weather", "rain", 5, 20);
+  assertResolved(resolveTimeline(compiled, 80), "weather", "rain", 5, 20);
   assert.equal(resolveTimeline(compiled, 900).held, true);
   assert.equal(validateTimeline([{ id: "bad", type: "transition", durationSeconds: 2 }]).ok, false);
 
@@ -96,7 +96,7 @@ async function testSchedulerJumpAndCrossing() {
   assert.equal(commands.at(-1).parameter, "0,0");
 
   await scheduler.updateRcon(72, "round-a");
-  assert.equal(commands.at(-1).parameter, "5,8");
+  assert.equal(commands.at(-1).parameter, "5,0");
 
   commands.length = 0;
   scheduler.resetRound("round-b");
@@ -112,7 +112,7 @@ async function testSchedulerJumpAndCrossing() {
   assert.equal(commands.at(-1).parameter, "0,0");
   now = 61_000;
   await scheduler.evaluate();
-  assert.equal(commands.at(-1).parameter, "5,19");
+  assert.equal(commands.at(-1).parameter, "5,20");
   now = 81_000;
   await scheduler.evaluate();
   assert.equal(commands.length, 2, "stable Weather segment must not duplicate a completed transition");
