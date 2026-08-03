@@ -60,7 +60,7 @@ export class DeveloperToolsService {
     let result;
     if (operation === "fetch") result = await this.runGit(["fetch", "--prune", "origin"]);
     else if (operation === "pull") result = await this.runGit(["pull", "--ff-only"]);
-    else if (operation === "build") result = await this.runCommand("npm", ["run", "client:build"], 10 * 60_000);
+    else if (operation === "build") result = await this.runShellCommand("npm run client:build", 10 * 60_000);
     else return { ok: false, code: "UnsupportedDeveloperOperation", message: "Unsupported developer operation." };
 
     return {
@@ -118,6 +118,73 @@ export class DeveloperToolsService {
 
   runGit(args) {
     return this.runCommand("git", args, 2 * 60_000);
+  }
+
+  runShellCommand(command, timeout) {
+    return new Promise((resolve, reject) => {
+      const isWindows = process.platform === "win32";
+      const shellFile = isWindows ? (process.env.ComSpec || "cmd.exe") : "/bin/sh";
+      const shellArgs = isWindows
+        ? ["/d", "/s", "/c", command]
+        : ["-lc", command];
+
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const child = this.processSpawner(shellFile, shellArgs, {
+        cwd: this.projectRoot,
+        windowsHide: false,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...process.env },
+      });
+
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        callback(value);
+      };
+
+      const timer = setTimeout(() => {
+        child.kill();
+        const error = new Error(
+          `Shell command timed out after ${timeout} ms.\n${stdout}\n${stderr}`.trim(),
+        );
+        error.code = "ETIMEDOUT";
+        finish(reject, error);
+      }, timeout);
+
+      child.stdout?.on("data", (chunk) => {
+        stdout += String(chunk);
+      });
+      child.stderr?.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+
+      child.once("error", (error) => {
+        clearTimeout(timer);
+        error.stdout = stdout;
+        error.stderr = stderr;
+        finish(reject, error);
+      });
+
+      child.once("close", (code, signal) => {
+        clearTimeout(timer);
+        const result = { stdout, stderr };
+        if (code === 0) {
+          finish(resolve, result);
+          return;
+        }
+
+        const error = new Error(
+          compactOutput(result) ||
+            `Shell command failed with exit code ${code ?? "unknown"}${signal ? ` (signal ${signal})` : ""}.`,
+        );
+        error.code = code ?? 1;
+        error.stdout = stdout;
+        error.stderr = stderr;
+        finish(reject, error);
+      });
+    });
   }
 
   async runCommand(file, args, timeout) {
