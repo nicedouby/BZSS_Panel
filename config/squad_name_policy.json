@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 6,
+  "revision": 7,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-08-03T13:01:57.072Z",
+  "updatedAt": "2026-08-03T13:13:26.648Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -710,6 +710,19 @@
       "assetMode": "none",
       "enabled": true,
       "sortOrder": 110
+    },
+    {
+      "id": "supervision",
+      "label": "督战队",
+      "nature": "other",
+      "description": "督战与政工组织；不受建队、时长和锁队监督规则限制",
+      "defaultMaxPlayers": null,
+      "assetMode": "none",
+      "enabled": true,
+      "sortOrder": 120,
+      "ruleExemptions": {
+        "supervision": true
+      }
     }
   ],
   "entries": [
@@ -6550,6 +6563,74 @@
       "priority": 100,
       "source": "manual",
       "notes": "",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:opop_督战队",
+      "name": "OPOP 督战队",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "supervision",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": false,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "督战队：不受监督规则限制。",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:政工组织",
+      "name": "政工组织",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "supervision",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": false,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "督战队：不受监督规则限制。",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:别进我队",
+      "name": "别进我队",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "supervision",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": false,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "督战队：不受监督规则限制。",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:进群送预留位",
+      "name": "进群送预留位",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "supervision",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": false,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "督战队：不受监督规则限制。",
       "legacyVehicleType": "",
       "searchTokens": []
     }
