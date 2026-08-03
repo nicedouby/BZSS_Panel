@@ -5,11 +5,13 @@ import { RconAnchoredClock } from "./rcon-clock.js";
 
 export class SuperWeatherScheduler {
   constructor({ commandService, logger, tickIntervalMs = 1000, maxExtrapolationSeconds = 180,
-    backwardJitterToleranceSeconds = 15, jumpThresholdSeconds = 5, now, onStateChange } = {}) {
+    backwardJitterToleranceSeconds = 15, jumpThresholdSeconds = 5,
+    commandRetryDelayMs = 5000, now, onStateChange } = {}) {
     this.commandService = commandService;
     this.logger = logger;
     this.tickIntervalMs = Math.max(250, Number(tickIntervalMs) || 1000);
     this.jumpThresholdSeconds = Math.max(0.5, Number(jumpThresholdSeconds) || 5);
+    this.commandRetryDelayMs = Math.max(250, Number(commandRetryDelayMs) || 5000);
     this.onStateChange = onStateChange;
     this.clock = new RconAnchoredClock({ maxExtrapolationSeconds, backwardJitterToleranceSeconds, now });
     this.timer = null;
@@ -29,6 +31,8 @@ export class SuperWeatherScheduler {
     this.lastAction = "";
     this.currentSegment = null;
     this.diagnostics = [];
+    this.pendingRetry = null;
+    this.retryNotBeforeMs = 0;
   }
 
   start() {
@@ -61,6 +65,8 @@ export class SuperWeatherScheduler {
     this.lastWeather = Number.isInteger(runtime.lastAppliedWeather) ? runtime.lastAppliedWeather : null;
     this.lastCommand = String(runtime.lastCommand ?? "");
     this.lastCommandAt = String(runtime.lastCommandAt ?? "");
+    this.pendingRetry = null;
+    this.retryNotBeforeMs = 0;
     this.state = this.enabled ? "WAITING_RCON" : "DISABLED";
     if (this.enabled) this.log("SUPER_WEATHER_RESTORE", "Runtime restored; waiting for a reliable RCON anchor.");
     this.notify();
@@ -76,6 +82,8 @@ export class SuperWeatherScheduler {
     this.compiled = compileTimeline(this.activeTimeline.timeline);
     this.enabled = true;
     this.lastSegmentId = "";
+    this.pendingRetry = null;
+    this.retryNotBeforeMs = 0;
     this.state = Number.isFinite(this.clock.rawRconSeconds) ? "SYNCING" : "WAITING_RCON";
     this.log("SUPER_WEATHER_ACTIVATE", `Activated preset ${preset.name}.`, { presetId: preset.id, version: preset.version });
     this.notify();
@@ -114,13 +122,20 @@ export class SuperWeatherScheduler {
       return this.getState();
     }
 
-    if (roundChanged || update.firstAnchor || update.jumped || wasStale) {
-      const reason = roundChanged ? "round-reset" : wasStale ? "clock-recovered" : update.firstAnchor ? "initial-sync" : "rcon-jump";
+    if (roundChanged || update.firstAnchor || wasStale) {
+      const reason = roundChanged ? "round-reset" : wasStale ? "clock-recovered" : "initial-sync";
       return this.reconcile(reason, { force: true });
     }
+    if (update.jumped) {
+      // A coarse RCON sample can cross one or more zero-width Transition
+      // nodes. Resolve the final Weather immediately, but do not resend when
+      // the sample still belongs to the already-applied Weather segment.
+      return this.reconcile("rcon-jump", { force: false });
+    }
     this.state = "RUNNING";
-    this.notify();
-    return this.getState();
+    // Accepted samples are evaluated immediately. Waiting for the interval
+    // tick can otherwise miss a boundary when RCON updates are sparse.
+    return this.evaluate();
   }
 
   resetRound(roundKey) {
@@ -130,6 +145,8 @@ export class SuperWeatherScheduler {
     this.lastWeather = null;
     this.lastAction = "";
     this.currentSegment = null;
+    this.pendingRetry = null;
+    this.retryNotBeforeMs = 0;
     this.state = this.enabled ? "WAITING_RCON" : "DISABLED";
     this.log("SUPER_WEATHER_ROUND_RESET", `Round reset detected (${this.roundKey || "unknown"}).`);
     this.notify();
@@ -150,9 +167,22 @@ export class SuperWeatherScheduler {
       this.state = "WAITING_RCON";
       return this.getState();
     }
-    if (this.state === "ERROR") return this.getState();
     const resolved = resolveTimeline(this.compiled, clockState.logicalSeconds);
     this.currentSegment = resolved;
+    if (this.state === "ERROR" && this.pendingRetry) {
+      if (this.clock.now() < this.retryNotBeforeMs) return this.getState();
+      if (resolved.segmentId === this.pendingRetry.segmentId) {
+        return this.applyResolved(resolved, {
+          reason: "command-retry",
+          force: true,
+          transitionSecondsOverride: this.pendingRetry.transitionSeconds,
+        });
+      }
+      // The timeline moved beyond the failed target. Drop that stale retry
+      // and synchronize only the final Weather that is valid now.
+      this.pendingRetry = null;
+      this.retryNotBeforeMs = 0;
+    }
     if (resolved.segmentId !== this.lastSegmentId) {
       return this.applyResolved(resolved, { reason: "segment-crossing", force: false });
     }
@@ -194,52 +224,85 @@ export class SuperWeatherScheduler {
     )));
     if (!nodeSeconds || !resolved.transitionNodeId) return 0;
 
-    // A normal tick crossing from the left Weather reaches the zero-width
-    // node now, so it receives the node's exact parameter.
-    const previous = this.compiled?.segments?.[resolved.segmentIndex - 1] ?? null;
-    if (reason === "segment-crossing") {
-      return previous?.id === previousSegmentId ? nodeSeconds : 0;
+    const previousIndex = this.compiled?.segments?.findIndex(
+      (segment) => segment.id === previousSegmentId
+    ) ?? -1;
+    const crossedForward = previousIndex >= 0 && resolved.segmentIndex > previousIndex;
+
+    // Both the local interpolated clock and coarse RCON samples use interval
+    // crossing. If one or more nodes were crossed, execute only the final
+    // Weather and pass that Weather's Transition node value unchanged.
+    if (crossedForward && (reason === "segment-crossing" || reason === "rcon-jump")) {
+      return nodeSeconds;
     }
 
-    // Initial sync, restart recovery and RCON jumps may land after the node.
-    // In those cases the node has already been passed and must not be replayed.
+    // Initial sync, restart recovery and manual reconciliation should not
+    // replay an old Transition, except when the authoritative time is exactly
+    // on the node.
     const atNode = Math.abs(
       Number(resolved.timelinePositionSeconds) - Number(resolved.startSeconds)
     ) < 0.001;
     return atNode ? nodeSeconds : 0;
   }
 
-  async applyResolved(resolved, { reason, force }) {
+  async applyResolved(resolved, { reason, force, transitionSecondsOverride = null }) {
     if (this.busy) return this.getState();
+    if (!force && resolved.segmentId === this.lastSegmentId) {
+      // The force flag now has real meaning: ordinary RCON corrections inside
+      // the same Weather segment must not resend SetWeather.
+      if (this.pendingRetry) return this.getState();
+      this.currentSegment = resolved;
+      this.state = "RUNNING";
+      this.notify();
+      return this.getState();
+    }
     this.busy = true;
     try {
       const previousSegmentId = this.lastSegmentId;
       const targetWeather = resolved.currentWeather;
-      const transitionSeconds = this.getTransitionSeconds(resolved, {
-        reason,
-        previousSegmentId,
-      });
+      const transitionSeconds = Number.isFinite(transitionSecondsOverride)
+        ? Math.max(0, Math.ceil(Number(transitionSecondsOverride)))
+        : this.getTransitionSeconds(resolved, {
+          reason,
+          previousSegmentId,
+        });
 
       this.currentSegment = resolved;
 
       const parameter = `${targetWeather},${Math.max(0, Math.ceil(transitionSeconds))}`;
       const command = `SetWeather:${parameter}`;
-      const result = await this.commandService.execute({
-        directive: "SetWeather",
-        parameter,
-        source: "bzss-super-weather",
-      });
+      let result;
+      try {
+        result = await this.commandService.execute({
+          directive: "SetWeather",
+          parameter,
+          source: "bzss-super-weather",
+        });
+      } catch (error) {
+        result = { ok: false, error: error?.message ?? String(error) };
+      }
       this.lastCommand = command;
       this.lastCommandAt = new Date().toISOString();
       this.lastAction = reason;
       if (!result.ok) {
         this.state = "ERROR";
-        this.log("SUPER_WEATHER_ERROR", `Weather command ${command} failed: ${result.message ?? result.error}`, { command, result });
+        this.pendingRetry = {
+          segmentId: resolved.segmentId,
+          transitionSeconds,
+        };
+        this.retryNotBeforeMs = this.clock.now() + this.commandRetryDelayMs;
+        this.log("SUPER_WEATHER_ERROR", `Weather command ${command} failed: ${result.message ?? result.error}; retry scheduled.`, {
+          command,
+          result,
+          retryDelayMs: this.commandRetryDelayMs,
+        });
         this.notify();
         return this.getState();
       }
       this.lastSegmentId = resolved.segmentId;
       this.lastWeather = targetWeather;
+      this.pendingRetry = null;
+      this.retryNotBeforeMs = 0;
       this.state = "RUNNING";
       this.log("SUPER_WEATHER_SET_WEATHER", `${command} (${reason}).`, {
         command,
