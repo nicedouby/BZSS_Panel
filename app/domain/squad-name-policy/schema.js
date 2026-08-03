@@ -57,6 +57,7 @@ export function normalizeSquadType(rawType = {}, fallbackSortOrder = 0) {
     assetMode,
     enabled: source.enabled !== false,
     sortOrder: normalizeInteger(source.sortOrder, fallbackSortOrder),
+    ruleExemptions: isRecord(source.ruleExemptions) ? { ...source.ruleExemptions } : {},
   };
 }
 
@@ -124,9 +125,16 @@ export function buildRuleClassification(entry, squadType, reason = "") {
     ruleId: entry?.id || "",
     ...maxPlayers,
     assetPath: entry?.asset || "",
-    ruleExemptions: entry?.ruleExemptions ?? squadType?.ruleExemptions ?? {},
+    ruleExemptions: {
+      ...(squadType?.ruleExemptions ?? {}),
+      ...(entry?.ruleExemptions ?? {}),
+    },
     reason,
   };
+}
+
+export function isSquadSupervisionExempt(classification = {}) {
+  return classification?.ruleExemptions?.supervision === true;
 }
 
 export function normalizePlayerLimit(value) {
