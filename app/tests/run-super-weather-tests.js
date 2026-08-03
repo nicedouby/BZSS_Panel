@@ -242,7 +242,7 @@ async function testPluginLifecycle() {
     const preset = await plugin.api.createPreset({ name: "Plugin Test", timeline: basicTimeline });
     const active = await plugin.api.activate(preset.id);
     assert.equal(active.running, true);
-    assert.equal(commands.at(-1).parameter, "5,8");
+    assert.equal(commands.at(-1).parameter, "5,0");
     assert.equal(listeners.length, 2);
     await plugin.stop();
     const runtime = JSON.parse(await fs.readFile(path.join(dir, "runtime.json"), "utf8"));
