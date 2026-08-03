@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { classifySquadNameWithPolicy } from "../domain/squad-name-policy/index.js";
+import { isSquadSupervisionExempt } from "../domain/squad-name-policy/schema.js";
 import {
   SQUAD_NAME_RULE_PASSED_EVENT,
   SQUAD_RULE_CHAIN_MODULE_ID,
@@ -354,6 +355,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         approved: true,
         violation: false,
         reason: "未取得队名规范分类，已跳过阶梯建队自动处理。",
+      };
+    }
+
+    if (isSquadSupervisionExempt(record.classification)) {
+      return {
+        status: "supervision_exempt",
+        phase: "exempt",
+        phaseLabel: "supervision exempt",
+        approved: true,
+        violation: false,
+        reason: "督战队不受阶梯建队时长监督规则限制。",
       };
     }
 

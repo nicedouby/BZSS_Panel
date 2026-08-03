@@ -108,6 +108,31 @@ assert.equal(evaluateSquadName("机械化步兵队", samplePolicy).matched.match
 assert.equal(evaluateSquadName("龟壳", samplePolicy).matched.matchedKind, "infantry");
 assert.equal(evaluateSquadName("后勤队", samplePolicy).valid, true);
 
+const supervisionPolicy = normalizePolicyDocument({
+  ...samplePolicy,
+  types: [...samplePolicy.types, {
+    id: "supervision",
+    label: "督战队",
+    nature: "other",
+    description: "不受监督规则限制的督战队",
+    defaultMaxPlayers: null,
+    assetMode: "none",
+    enabled: true,
+    sortOrder: 120,
+    ruleExemptions: { supervision: true },
+  }],
+  entries: [...samplePolicy.entries, {
+    name: "OPOP 督战队",
+    typeId: "supervision",
+    enabled: true,
+  }],
+});
+const supervisionSquad = evaluateSquadName("OPOP 督战队", supervisionPolicy);
+assert.equal(supervisionSquad.valid, true);
+assert.equal(supervisionSquad.classification.typeId, "supervision");
+assert.equal(supervisionSquad.classification.nature, "other");
+assert.equal(supervisionSquad.classification.ruleExemptions.supervision, true);
+
 const bmpTeam = evaluateSquadName("BMP队", samplePolicy);
 assert.equal(bmpTeam.valid, true);
 assert.equal(bmpTeam.suffixStripped, true);

@@ -12,3 +12,6 @@ assert.match(source, /classification_missing/);
 assert.doesNotMatch(source, /domain\/squad\/squad_name_classifier/);
 
 console.log("stepwise squad policy integration tests passed");
+
+assert.match(source, /isSquadSupervisionExempt/);
+assert.match(source, /supervision_exempt/);
