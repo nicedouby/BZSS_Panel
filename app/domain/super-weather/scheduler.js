@@ -183,19 +183,43 @@ export class SuperWeatherScheduler {
     this.log("SUPER_WEATHER_RECONCILE", `Reconcile started (${reason}).`, {
       segmentId: resolved.segmentId,
       logicalSeconds,
-      transitionRemainingSeconds: resolved.transitionRemainingSeconds,
+      transitionNodeSeconds: resolved.transitionNodeSeconds ?? resolved.transitionTotalSeconds ?? 0,
     });
     return this.applyResolved(resolved, { reason, force: options.force !== false });
+  }
+
+  getTransitionSeconds(resolved, { reason, previousSegmentId } = {}) {
+    const nodeSeconds = Math.max(0, Math.ceil(Number(
+      resolved.transitionNodeSeconds ?? resolved.transitionTotalSeconds ?? 0
+    )));
+    if (!nodeSeconds || !resolved.transitionNodeId) return 0;
+
+    // A normal tick crossing from the left Weather reaches the zero-width
+    // node now, so it receives the node's exact parameter.
+    const previous = this.compiled?.segments?.[resolved.segmentIndex - 1] ?? null;
+    if (reason === "segment-crossing") {
+      return previous?.id === previousSegmentId ? nodeSeconds : 0;
+    }
+
+    // Initial sync, restart recovery and RCON jumps may land after the node.
+    // In those cases the node has already been passed and must not be replayed.
+    const atNode = Math.abs(
+      Number(resolved.timelinePositionSeconds) - Number(resolved.startSeconds)
+    ) < 0.001;
+    return atNode ? nodeSeconds : 0;
   }
 
   async applyResolved(resolved, { reason, force }) {
     if (this.busy) return this.getState();
     this.busy = true;
     try {
+      const previousSegmentId = this.lastSegmentId;
       const targetWeather = resolved.currentWeather;
-      const transitionSeconds = resolved.transitionRemainingSeconds;
+      const transitionSeconds = this.getTransitionSeconds(resolved, {
+        reason,
+        previousSegmentId,
+      });
 
-      this.lastSegmentId = resolved.segmentId;
       this.currentSegment = resolved;
 
       const parameter = `${targetWeather},${Math.max(0, Math.ceil(transitionSeconds))}`;
@@ -214,13 +238,15 @@ export class SuperWeatherScheduler {
         this.notify();
         return this.getState();
       }
+      this.lastSegmentId = resolved.segmentId;
       this.lastWeather = targetWeather;
       this.state = "RUNNING";
       this.log("SUPER_WEATHER_SET_WEATHER", `${command} (${reason}).`, {
         command,
         segmentId: resolved.segmentId,
         weatherName: weatherName(targetWeather),
-        transitionRemainingSeconds: transitionSeconds,
+        transitionNodeSeconds: resolved.transitionNodeSeconds ?? resolved.transitionTotalSeconds ?? 0,
+        appliedTransitionSeconds: transitionSeconds,
       });
       this.notify();
       return this.getState();
