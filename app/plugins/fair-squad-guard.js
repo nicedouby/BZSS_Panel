@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { classifySquadNameWithPolicy } from "../domain/squad-name-policy/index.js";
+import { isSquadSupervisionExempt } from "../domain/squad-name-policy/schema.js";
 import {
   SQUAD_RULE_CHAIN_MODULE_ID,
   SQUAD_RULE_SOURCES,
@@ -438,6 +439,14 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function decideCreation(record, clock) {
+    if (isSquadSupervisionExempt(record.classification)) {
+      return {
+        approved: true,
+        phase: "supervision_exempt",
+        phaseLabel: "supervision exempt",
+        reasons: ["督战队不受建队监督规则限制。"],
+      };
+    }
     const seconds = Math.max(0, Math.floor(Number(record.clockSeconds ?? clock.seconds ?? 0) || 0));
     if (seconds < runtimeConfig.noSquadCreationSeconds) {
       return {
