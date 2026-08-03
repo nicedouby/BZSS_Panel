@@ -113,8 +113,10 @@ export function resolveTimeline(compiledOrTimeline, seconds) {
   const resolvedIndex = index >= 0 ? index : compiled.segments.length - 1;
   const base = compiled.segments[resolvedIndex];
   const held = index < 0;
-  const elapsedInSegment = Math.max(0, position - base.startSeconds);
-  const transitionRemainingSeconds = Math.max(0, Math.ceil(base.transitionTotalSeconds - elapsedInSegment));
+  // Transition is a zero-width command node. It never counts down inside
+  // the target Weather segment; the command must receive the node's exact value.
+  const transitionNodeSeconds = Math.max(0, Math.ceil(base.transitionTotalSeconds));
+  const transitionRemainingSeconds = transitionNodeSeconds;
 
   return {
     type: "weather",
@@ -125,6 +127,8 @@ export function resolveTimeline(compiledOrTimeline, seconds) {
     currentWeather: base.currentWeather,
     targetWeather: base.targetWeather,
     transitionTotalSeconds: base.transitionTotalSeconds,
+    transitionNodeSeconds,
+    // Kept for API compatibility; this is the node parameter, not elapsed time.
     transitionRemainingSeconds,
     timelinePositionSeconds: position,
     held,
