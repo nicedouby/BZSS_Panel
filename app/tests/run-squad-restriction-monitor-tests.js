@@ -61,6 +61,18 @@ async function testPureRestrictionRules() {
   assert.equal(unlocked.status, "compliant");
   assert.equal(unlocked.isViolation, false);
 
+  const exempt = evaluateRestriction({
+    supervisionExempt: true,
+    typeId: "infantry",
+    typeLabel: "战斗步兵",
+    locked: true,
+    playerCount: 9,
+    rule: { allowLock: false },
+  });
+  assert.equal(exempt.status, "exempt");
+  assert.equal(exempt.evaluated, false);
+  assert.equal(exempt.isViolation, false);
+
   const forbidden = evaluateRestriction({
     typeId: "infantry",
     typeLabel: "战斗步兵",
@@ -121,6 +133,11 @@ async function testDefaultCategoryMatrix() {
   assert.equal(mortarFour.squadRestriction.isViolation, false);
   const mortarFive = api.evaluateSquad(squad("迫击炮队", { size: 5, locked: true }));
   assert.deepEqual(codes(mortarFive), ["locked_player_limit_exceeded"]);
+
+  const supervision = api.evaluateSquad(squad("OPOP 督战队", { size: 9, locked: true }));
+  assert.equal(supervision.squadTypeId, "supervision");
+  assert.equal(supervision.squadRestriction.status, "exempt");
+  assert.equal(supervision.squadRestriction.isViolation, false);
 
   const unknown = api.evaluateSquad(squad("完全未知的队名", { size: 9, locked: true }));
   assert.equal(unknown.squadRestriction.status, "not_applicable");
