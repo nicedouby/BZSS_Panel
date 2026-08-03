@@ -12,6 +12,9 @@ try {
     label: "Vue TypeScript check",
     entry: vueTscPath,
     args: process.argv.slice(2),
+    nodeArgs: [
+      "--max-old-space-size=4096",
+    ],
   });
 } catch (error) {
   console.error("[client-build] Unable to start vue-tsc.", error);

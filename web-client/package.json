@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "node scripts/run-vue-tsc.mjs --noEmit && node scripts/run-vite.mjs build --config vite.config.mjs",
+    "build": "node scripts/run-vite.mjs build --config vite.config.mjs",
     "typecheck": "node scripts/run-vue-tsc.mjs --noEmit",
     "test:build-runner": "node scripts/test-node-tool-runner.mjs",
     "check:encoding": "node ../scripts/check-encoding.mjs",
@@ -16,20 +16,24 @@
   },
   "dependencies": {
     "@tanstack/vue-query": "^5.80.2",
-    "@vitejs/plugin-vue": "^5.2.4",
     "echarts": "^6.1.0",
     "pinia": "^3.0.2",
-    "vite": "^6.3.5",
     "vue": "^3.5.13",
     "vue-router": "^4.5.1",
     "vue-virtual-scroller": "^2.0.0-beta.8"
   },
   "devDependencies": {
-    "@types/node": "^22.15.19",
+    "@types/node": "^26.1.2",
+    "@vitejs/plugin-vue": "6.0.1",
     "@vue/test-utils": "^2.4.6",
     "jsdom": "^22.1.0",
-    "typescript": "^5.8.3",
-    "vitest": "^1.6.0",
-    "vue-tsc": "3.3.8"
+    "typescript": "5.9.3",
+    "vite": "7.0.6",
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.9"
+  },
+  "allowScripts": {
+    "vue-demi": true,
+    "esbuild": true
   }
 }

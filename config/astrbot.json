@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "apiToken": "",
+  "apiToken": "12345",
   "trustedIps": [],
   "websocket": {
     "enabled": true,

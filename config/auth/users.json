@@ -272,6 +272,24 @@
       "createdAt": 1783761348663,
       "updatedAt": 1783761375172,
       "passwordChangedAt": 1783761348663
+    },
+    {
+      "id": "user:昔交",
+      "username": "昔交",
+      "usernameNormalized": "昔交",
+      "passwordHash": "scrypt$FM1xI5jvcT9mo47M1LJIzg$18rHejLyP2IuP9uzxZlRM8Lm0ldJynLp10FJh6DLWtsVpZVTyqIg9iiGNhX2Sz9boTkjlAmAltm6vhc_KEQA3g",
+      "role": "Admin",
+      "displayName": "昔交",
+      "steam64": "76561198744918666",
+      "viewerTeamAutoSwapEnabled": true,
+      "enabled": true,
+      "note": "",
+      "permissionGroupId": "group:mqahgir0f96hwgsk",
+      "authVersion": 1,
+      "permissions": [],
+      "createdAt": 1784711868521,
+      "updatedAt": 1784711868521,
+      "passwordChangedAt": 1784711868521
     }
   ],
   "permissionGroups": [
