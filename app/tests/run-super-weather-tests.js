@@ -96,15 +96,18 @@ async function testSchedulerJumpAndCrossing() {
   assert.equal(commands.at(-1).parameter, "0,0");
 
   await scheduler.updateRcon(72, "round-a");
-  assert.equal(commands.at(-1).parameter, "5,0");
+  assert.equal(commands.at(-1).parameter, "5,20",
+    "coarse RCON updates must execute the crossed Transition node with its exact value");
 
   commands.length = 0;
   scheduler.resetRound("round-b");
   await scheduler.updateRcon(50, "round-b");
   assert.equal(commands.at(-1).parameter, "0,0");
   await scheduler.updateRcon(90, "round-b");
-  assert.equal(commands.at(-1).parameter, "5,0");
+  assert.equal(commands.at(-1).parameter, "5,20");
   assert.equal(commands.length, 2, "jumping over a transition must apply only the final state");
+  await scheduler.updateRcon(100, "round-b");
+  assert.equal(commands.length, 2, "RCON correction inside the same Weather must not resend SetWeather");
 
   commands.length = 0;
   scheduler.resetRound("round-c");
@@ -116,6 +119,15 @@ async function testSchedulerJumpAndCrossing() {
   now = 81_000;
   await scheduler.evaluate();
   assert.equal(commands.length, 2, "stable Weather segment must not duplicate a completed transition");
+
+  commands.length = 0;
+  scheduler.resetRound("round-d");
+  await scheduler.updateRcon(50, "round-d");
+  assert.equal(commands.at(-1).parameter, "0,0");
+  now = 90_000;
+  await scheduler.updateRcon(61, "round-d");
+  assert.equal(commands.at(-1).parameter, "5,20",
+    "accepted non-jump RCON samples must evaluate a crossed node immediately");
 }
 
 async function testMultipleSegmentJump() {
@@ -132,7 +144,8 @@ async function testMultipleSegmentJump() {
   await scheduler.activate({ id: "multi", name: "Multi", version: 1, timeline });
   commands.length = 0;
   await scheduler.updateRcon(240, "round-a");
-  assert.deepEqual(commands.map((item) => item.parameter), ["2,0"]);
+  assert.deepEqual(commands.map((item) => item.parameter), ["2,10"],
+    "multi-node jumps must apply only the final Weather with its Transition node value");
 }
 
 async function testRestartRestoreAndStaleRecovery() {
@@ -163,6 +176,35 @@ async function testRestartRestoreAndStaleRecovery() {
   await scheduler.updateRcon(120, "round-a");
   assert.equal(scheduler.getState().clockState, "RUNNING");
   assert.equal(commands.at(-1).parameter, "5,0");
+}
+
+
+async function testCommandFailureRetry() {
+  let now = 0;
+  let attempts = 0;
+  const commands = [];
+  const scheduler = new SuperWeatherScheduler({
+    now: () => now,
+    commandRetryDelayMs: 1000,
+    commandService: {
+      async execute(command) {
+        commands.push(command);
+        attempts += 1;
+        if (attempts === 1) throw new Error("temporary command failure");
+        return { ok: true };
+      },
+    },
+  });
+  await scheduler.updateRcon(10, "retry-round");
+  await scheduler.activate({ id: "retry", name: "Retry", version: 1, timeline: basicTimeline });
+  assert.equal(scheduler.getState().clockState, "ERROR");
+  now = 999;
+  await scheduler.evaluate();
+  assert.equal(commands.length, 1, "failed commands must respect retry backoff");
+  now = 1000;
+  await scheduler.evaluate();
+  assert.equal(commands.length, 2, "failed commands must retry after backoff");
+  assert.equal(scheduler.getState().clockState, "RUNNING");
 }
 
 async function testPresetStore() {
@@ -259,6 +301,7 @@ await testCommandService();
 await testSchedulerJumpAndCrossing();
 await testMultipleSegmentJump();
 await testRestartRestoreAndStaleRecovery();
+await testCommandFailureRetry();
 await testPresetStore();
 await testLegacyPresetMigration();
 await testPluginLifecycle();
