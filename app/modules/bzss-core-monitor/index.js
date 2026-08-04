@@ -1314,6 +1314,8 @@ function applyPlayerPatch(record, patch, observedAt) {
     record.firstSeenAt = observedAt;
   }
   const isNoPawn = patch.presenceHint === "noPawn";
+  const isPendingDeployment = patch.presenceHint === "pendingDeployment";
+  const hasNoWorldPawn = isNoPawn || isPendingDeployment;
   record.lastSeenAt = observedAt;
   record.stale = false;
   record.playerId = firstDefinedNumber(patch.playerId, patch.playerIndex, record.playerId);
@@ -1326,8 +1328,8 @@ function applyPlayerPatch(record, patch, observedAt) {
   record.squadId = firstDefinedNumber(patch.squadId, record.squadId, null);
   record.isAdmin = firstDefinedBoolean(patch.isAdmin, record.isAdmin);
   record.isCommander = firstDefinedBoolean(patch.isCommander, record.isCommander);
-  record.position = isNoPawn ? null : cloneVector(patch.position ?? record.position);
-  record.yaw = isNoPawn ? null : firstDefinedNumber(patch.yaw, record.yaw, null);
+  record.position = hasNoWorldPawn ? null : cloneVector(patch.position ?? record.position);
+  record.yaw = hasNoWorldPawn ? null : firstDefinedNumber(patch.yaw, record.yaw, null);
   record.combatInfo = firstText(patch.combatInfo, record.combatInfo, "");
   if (Object.prototype.hasOwnProperty.call(patch, "presenceHint")) {
     record.presenceHint = String(patch.presenceHint ?? "").trim();
@@ -1341,7 +1343,7 @@ function applyPlayerPatch(record, patch, observedAt) {
     ? observedAt
     : record.scoreboardObservedAt ?? "";
   record.soldierInfo = patch.soldierInfo ? clonePlainObject(patch.soldierInfo) : (record.soldierInfo ? clonePlainObject(record.soldierInfo) : createEmptySoldierInfo());
-  if (isNoPawn) {
+  if (hasNoWorldPawn) {
     record.soldierInfo.position = null;
     record.soldierInfo.rotation = null;
   }
@@ -1349,6 +1351,10 @@ function applyPlayerPatch(record, patch, observedAt) {
     ? null
     : (patch.vehicleInfo ? clonePlainObject(patch.vehicleInfo) : (record.vehicleInfo ? clonePlainObject(record.vehicleInfo) : null));
   record.playerScoreboard = patch.playerScoreboard ? clonePlainObject(patch.playerScoreboard) : (record.playerScoreboard ? clonePlainObject(record.playerScoreboard) : createEmptyScoreboardInfo());
+  record.vehicleSeatIndex = Object.prototype.hasOwnProperty.call(patch, "vehicleSeatIndex")
+    ? firstDefinedNumber(patch.vehicleSeatIndex, null)
+    : (record.vehicleSeatIndex ?? null);
+  record.compactStateInfo = patch.compactStateInfo ? clonePlainObject(patch.compactStateInfo) : (record.compactStateInfo ?? null);
   record.ftIndex = firstDefinedNumber(patch.fireTeamIndex ?? patch.ftIndex, record.ftIndex, null);
   record.ftPosition = firstDefinedNumber(patch.fireTeamPosition ?? patch.ftPosition, record.ftPosition, null);
   record.ping = firstDefinedNumber(patch.ping, record.ping, null);
@@ -1373,6 +1379,8 @@ function createPlayerRecord(patch, observedAt) {
     yaw: firstDefinedNumber(patch.yaw, null),
     combatInfo: firstText(patch.combatInfo, ""),
     presenceHint: firstText(patch.presenceHint, ""),
+    vehicleSeatIndex: firstDefinedNumber(patch.vehicleSeatIndex, null),
+    compactStateInfo: patch.compactStateInfo ? clonePlainObject(patch.compactStateInfo) : null,
     firstSeenAt: observedAt,
     lastSeenAt: observedAt,
     runtimeObservedAt: patch.sourceType === "runtime" || patch.sourceType === "fullBlocks" ? observedAt : "",
@@ -1833,7 +1841,9 @@ function clonePlayerView(player) {
   const position = cloned.position ? { ...cloned.position } : null;
   const soldierInfo = cloned.soldierInfo ? clonePlainObject(cloned.soldierInfo) : createEmptySoldierInfo();
   const isNoPawn = cloned.presenceHint === "noPawn";
-  if (isNoPawn) {
+  const isPendingDeployment = cloned.presenceHint === "pendingDeployment";
+  const hasNoWorldPawn = isNoPawn || isPendingDeployment;
+  if (hasNoWorldPawn) {
     soldierInfo.position = null;
     soldierInfo.rotation = null;
   } else {
@@ -1847,8 +1857,8 @@ function clonePlayerView(player) {
   const playerScoreboard = cloned.playerScoreboard ? clonePlainObject(cloned.playerScoreboard) : createEmptyScoreboardInfo();
   const hasRuntime = Boolean(cloned.runtimeObservedAt);
   const hasScoreboard = Boolean(cloned.scoreboardObservedAt);
-  const presenceState = isNoPawn ? "noPawn" : (hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : (cloned.presenceHint === "rconOnly" ? "rconOnly" : "notSpawned")));
-  const stale = isNoPawn ? false : (hasRuntime ? Boolean(cloned.stale) : true);
+  const presenceState = isPendingDeployment ? "pendingDeployment" : (isNoPawn ? "noPawn" : (hasRuntime ? "active" : (hasScoreboard ? "scoreboardOnly" : (cloned.presenceHint === "rconOnly" ? "rconOnly" : "notSpawned"))));
+  const stale = hasNoWorldPawn ? false : (hasRuntime ? Boolean(cloned.stale) : true);
   return {
     playerId: cloned.playerId ?? null,
     playerIndex: cloned.playerIndex ?? null,
@@ -1865,6 +1875,8 @@ function clonePlayerView(player) {
     yaw: cloned.yaw ?? null,
     combatInfo: cloned.combatInfo ?? "",
     presenceHint: cloned.presenceHint ?? "",
+    vehicleSeatIndex: cloned.vehicleSeatIndex ?? null,
+    compactStateInfo: cloned.compactStateInfo ? clonePlainObject(cloned.compactStateInfo) : null,
     observedAt: cloned.lastSeenAt ?? cloned.observedAt ?? "",
     firstSeenAt: cloned.firstSeenAt ?? "",
     lastSeenAt: cloned.lastSeenAt ?? "",
@@ -1884,10 +1896,12 @@ function clonePlayerView(player) {
     role: cloned.role ?? "",
     rcon: cloned.rcon ? clonePlainObject(cloned.rcon) : null,
     telemetry: {
-      position: isNoPawn ? null : (position ? { ...position } : null),
-      yaw: isNoPawn ? null : (cloned.yaw ?? null),
+      position: hasNoWorldPawn ? null : (position ? { ...position } : null),
+      yaw: hasNoWorldPawn ? null : (cloned.yaw ?? null),
       combatInfo: cloned.combatInfo ?? "",
-      vehicleInfo: isNoPawn ? null : (cloned.vehicleInfo ? clonePlainObject(cloned.vehicleInfo) : null),
+      vehicleInfo: hasNoWorldPawn ? null : (cloned.vehicleInfo ? clonePlainObject(cloned.vehicleInfo) : null),
+      vehicleSeatIndex: cloned.vehicleSeatIndex ?? null,
+      pendingDeployment: isPendingDeployment,
     },
     presence: {
       state: presenceState,
@@ -1904,6 +1918,8 @@ function mergePlayerViews(base, runtimeView) {
   const runtimePresence = runtimeView?.presence ?? {};
   const basePresence = merged.presence ?? {};
   const runtimeIsNoPawn = runtimeView?.presenceHint === "noPawn" || runtimePresence.state === "noPawn";
+  const runtimeIsPendingDeployment = runtimeView?.presenceHint === "pendingDeployment" || runtimePresence.state === "pendingDeployment";
+  const runtimeHasNoWorldPawn = runtimeIsNoPawn || runtimeIsPendingDeployment;
   merged.playerId = firstDefinedNumber(merged.playerId, runtimeView?.playerId);
   merged.playerIndex = firstDefinedNumber(merged.playerIndex, runtimeView?.playerIndex);
   merged.playerName = firstText(merged.playerName, runtimeView?.playerName);
@@ -1917,23 +1933,25 @@ function mergePlayerViews(base, runtimeView) {
   merged.isAdmin = firstDefinedBoolean(runtimeView?.isAdmin, merged.isAdmin);
   merged.isCommander = firstDefinedBoolean(runtimeView?.isCommander, merged.isCommander);
   merged.telemetry = {
-    position: runtimeIsNoPawn ? null : (runtimeTelemetry.position ?? baseTelemetry.position ?? null),
-    yaw: runtimeIsNoPawn ? null : (runtimeTelemetry.yaw ?? baseTelemetry.yaw ?? null),
+    position: runtimeHasNoWorldPawn ? null : (runtimeTelemetry.position ?? baseTelemetry.position ?? null),
+    yaw: runtimeHasNoWorldPawn ? null : (runtimeTelemetry.yaw ?? baseTelemetry.yaw ?? null),
     combatInfo: firstText(runtimeTelemetry.combatInfo, baseTelemetry.combatInfo, ""),
-    vehicleInfo: runtimeIsNoPawn ? null : (runtimeTelemetry.vehicleInfo ?? baseTelemetry.vehicleInfo ?? null),
+    vehicleInfo: runtimeHasNoWorldPawn ? null : (runtimeTelemetry.vehicleInfo ?? baseTelemetry.vehicleInfo ?? null),
   };
-  merged.position = runtimeIsNoPawn ? null : (merged.telemetry.position ? { ...merged.telemetry.position } : merged.position ?? null);
-  merged.yaw = runtimeIsNoPawn ? null : (merged.telemetry.yaw ?? merged.yaw ?? null);
+  merged.position = runtimeHasNoWorldPawn ? null : (merged.telemetry.position ? { ...merged.telemetry.position } : merged.position ?? null);
+  merged.yaw = runtimeHasNoWorldPawn ? null : (merged.telemetry.yaw ?? merged.yaw ?? null);
   merged.combatInfo = merged.telemetry.combatInfo ?? merged.combatInfo ?? "";
   if (runtimeView?.vehicleInfo) {
-    merged.vehicleInfo = runtimeIsNoPawn ? null : clonePlainObject(runtimeView.vehicleInfo);
+    merged.vehicleInfo = runtimeHasNoWorldPawn ? null : clonePlainObject(runtimeView.vehicleInfo);
   }
   merged.soldierInfo = runtimeView?.soldierInfo ? clonePlainObject(runtimeView.soldierInfo) : merged.soldierInfo ?? createEmptySoldierInfo();
   merged.playerScoreboard = runtimeView?.playerScoreboard ? clonePlainObject(runtimeView.playerScoreboard) : (merged.playerScoreboard ?? createEmptyScoreboardInfo());
-  if (runtimeIsNoPawn) {
+  if (runtimeHasNoWorldPawn) {
     merged.soldierInfo.position = null;
     merged.soldierInfo.rotation = null;
   }
+  merged.vehicleSeatIndex = runtimeView?.vehicleSeatIndex ?? merged.vehicleSeatIndex ?? null;
+  merged.compactStateInfo = runtimeView?.compactStateInfo ?? merged.compactStateInfo ?? null;
   merged.ftIndex = runtimeView?.ftIndex ?? merged.ftIndex ?? null;
   merged.ftPosition = runtimeView?.ftPosition ?? merged.ftPosition ?? null;
   merged.ping = runtimeView?.ping ?? merged.ping ?? merged.playerScoreboard?.ping ?? null;
@@ -2145,7 +2163,7 @@ export function parseBzssCoreLogLine(line) {
   if (text.includes("VRI{") || text.includes("VehicleInfo{")) return parseBzssCoreVehicleLine(text);
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
-  if (/\{?\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:/i.test(text)) return parseBzssCorePieRuntimeLine(text);
+  if (/\{?\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:/i.test(text)) return parseCompactBzssRuntimeLine(text);
   if (isCompactBzssRuntimeLine(text)) return parseCompactBzssRuntimeLine(text);
   if (text.includes("PlayerBaseInfo{") && text.includes("SoldierInfo{") && text.includes("PlayerScoreboard{")) {
     const players = parseBzssCorePlayerBlocks(text);
@@ -2431,6 +2449,7 @@ function parseCompactRuntimeAnonymousInfo(rawText) {
     maxHealth,
     vehicleType: String(fields[2] ?? "").trim(),
     seatIndex: toFiniteNumber(fields[3]),
+    pendingDeployment: /^true$/i.test(String(fields[0] ?? "").trim()),
   };
 }
 
@@ -2473,13 +2492,21 @@ function parseCompactRuntimeRow(row) {
   const anonymousInfoToken = tailTokens.find((token) => token.startsWith("{")) ?? "";
   const combatInfo = combatInfoToken || anonymousInfoToken || "";
   const anonymousInfo = combatInfoToken ? null : parseCompactRuntimeAnonymousInfo(anonymousInfoToken);
+  const compactStateInfo = anonymousInfo ?? parseCompactRuntimeAnonymousInfo(
+    tailTokens.find((token) => /^\{\s*true\s*\}$/i.test(token)) ?? "",
+  );
+  const combatInfoIndex = tailTokens.indexOf(combatInfoToken);
+  const vehicleSeatIndex = combatInfoIndex >= 0
+    ? tailTokens.slice(combatInfoIndex + 1).map(toFiniteNumber).find((value) => value != null) ?? null
+    : null;
+  const pendingDeployment = Boolean(compactStateInfo?.pendingDeployment);
   const soldierInfo = combatInfoToken
     ? parseCompactRuntimeSoldierInfo(combatInfoToken)
     : createEmptySoldierInfo();
 
   let position = null;
   let yaw = null;
-  if (!invalidPawn) {
+  if (!invalidPawn && !pendingDeployment) {
     const x = toFiniteNumber(posTokens[0]);
     const y = toFiniteNumber(posTokens[1]);
     const z = toFiniteNumber(posTokens[2]);
@@ -2500,9 +2527,10 @@ function parseCompactRuntimeRow(row) {
     position,
     yaw,
     combatInfo,
-    presenceHint: invalidPawn ? "noPawn" : "",
+    presenceHint: pendingDeployment ? "pendingDeployment" : (invalidPawn ? "noPawn" : ""),
     soldierInfo,
-    compactStateInfo: anonymousInfo,
+    compactStateInfo,
+    vehicleSeatIndex,
     rawText: normalized,
   };
 }
