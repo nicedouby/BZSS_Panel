@@ -684,14 +684,17 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       rconPlayer?.state,
       "",
     ).trim().toLowerCase();
-    const inactive = Boolean(
-      bzssPlayer?.inactive
-      ?? bzssPlayer?.isInactive
-      ?? bzssPlayer?.active === false
-      ?? rconPlayer?.inactive
-      ?? rconPlayer?.isInactive
-      ?? rconPlayer?.active === false,
-    ) || presenceState === "inactive";
+    const inactive = (
+      bzssPlayer?.inactive === true
+      || bzssPlayer?.isInactive === true
+      || bzssPlayer?.active === false
+      || rconPlayer?.inactive === true
+      || rconPlayer?.isInactive === true
+      || rconPlayer?.active === false
+      || String(bzssPlayer?.inactive ?? "").trim().toLowerCase() === "inactive"
+      || String(rconPlayer?.inactive ?? "").trim().toLowerCase() === "inactive"
+      || presenceState === "inactive"
+    );
     const noPawn = presenceHint === "noPawn";
     const pendingDeployment = presenceHint === "pendingDeployment";
     const noWorldPawn = noPawn || pendingDeployment;
