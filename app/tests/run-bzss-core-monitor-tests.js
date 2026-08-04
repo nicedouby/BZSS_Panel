@@ -930,10 +930,44 @@ async function testChunkSubscriptionAndNoRawCapture() {
   });
 }
 
+function testCompactRuntimePresenceAndSeatIndex() {
+  const vehicleRow = "PIE: Error: {ID:0,Pos:795,1580,-3,-177,CI{0,115,M4A1,},1}/n/";
+  const parsedVehicle = parseBzssCoreLogLine(vehicleRow);
+  assert.ok(parsedVehicle);
+  assert.equal(parsedVehicle.type, "playerRuntime");
+  assert.equal(parsedVehicle.runtimePlayers.length, 1);
+  assert.equal(parsedVehicle.runtimePlayers[0].vehicleSeatIndex, 1);
+  assert.equal(parsedVehicle.runtimePlayers[0].presenceHint, "");
+  assert.deepEqual(parsedVehicle.runtimePlayers[0].position, { x: 79500, y: 158000, z: -300 });
+  assert.equal(parsedVehicle.runtimePlayers[0].yaw, -177);
+
+  const pendingRow = "PIE: Error: {ID:8,Pos:0,0,0,0,{true}}/n/";
+  const parsedPending = parseBzssCoreLogLine(pendingRow);
+  assert.ok(parsedPending);
+  assert.equal(parsedPending.runtimePlayers.length, 1);
+  assert.equal(parsedPending.runtimePlayers[0].presenceHint, "pendingDeployment");
+  assert.equal(parsedPending.runtimePlayers[0].position, null);
+  assert.equal(parsedPending.runtimePlayers[0].yaw, null);
+
+  const module = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  assert.equal(module.api.ingestLogLine(pendingRow).ok, true);
+  const player = module.api.getPlayers().find((item) => item.playerIndex === 8);
+  assert.ok(player);
+  assert.equal(player.presence?.state, "pendingDeployment");
+  assert.equal(player.telemetry?.position, null);
+  assert.equal(player.vehicleSeatIndex, null);
+}
+
 async function main() {
   testParsePlayerBlocks();
   testParseLogLine();
   testMonitorState();
+  testCompactRuntimePresenceAndSeatIndex();
   await testPriFrameAssembler();
   await testParseExplosionDamage();
   await testChunkSubscriptionAndNoRawCapture();

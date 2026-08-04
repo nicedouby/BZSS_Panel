@@ -94,13 +94,23 @@ export function createStepCalculator() {
     previous.set(steamID, current);
 
     const vehicleType = String(player?.vehicle?.vehicleType ?? "").trim();
-    const onVehicle = Boolean(
-      player?.telemetry?.ov
-      || player?.telemetry?.onVehicle
-      || player?.presence?.ov
-      || player?.presence?.onVehicle
-      || vehicleType,
+    const vehicleSeatIndex = toFiniteNumber(
+      player?.telemetry?.vehicleSeatIndex
+      ?? player?.vehicle?.vehicleSeatIndex
+      ?? player?.raw?.bzss?.vehicleSeatIndex
+      ?? player?.raw?.bzss?.compactStateInfo?.seatIndex,
     );
+    // New BZSS-Core Runtime rows explicitly use -1 for walking and a
+    // non-negative index for any vehicle seat. Prefer that over legacy OV flags.
+    const onVehicle = vehicleSeatIndex != null
+      ? vehicleSeatIndex >= 0
+      : Boolean(
+        player?.telemetry?.ov
+        || player?.telemetry?.onVehicle
+        || player?.presence?.ov
+        || player?.presence?.onVehicle
+        || vehicleType,
+      );
     if (onVehicle) return result(false, "onVehicle", details);
 
     if (distanceMeters === 0) return result(false, "stationary", details);
@@ -167,6 +177,12 @@ function isDuplicateSample(previousSample, current) {
   if (current.sourceTick && previousSample.sourceTick && current.sourceTick === previousSample.sourceTick) return true;
   if (current.sourceSeq && previousSample.sourceSeq && current.sourceSeq === previousSample.sourceSeq) return true;
   return current.observedAt === previousSample.observedAt;
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function normalizeSteamID(value) {

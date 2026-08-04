@@ -90,6 +90,12 @@ function testCalculatorFiltersAndBaselines() {
   const inVehicle = calculator.observe(makePlayer({ x: 1000, ms: 500, tick: 2, seq: 2, onVehicle: true }));
   assert.equal(inVehicle.reason, "onVehicle");
   assert.equal(inVehicle.steps, 0);
+
+  calculator.resetAll();
+  assert.equal(calculator.observe(makePlayer({ x: 0, ms: 0, tick: 1, seq: 1, vehicleSeatIndex: -1 })).reason, "warmingUp");
+  const seated = calculator.observe(makePlayer({ x: 1000, ms: 500, tick: 2, seq: 2, vehicleSeatIndex: 0 }));
+  assert.equal(seated.reason, "onVehicle");
+  assert.equal(seated.steps, 0);
   const afterVehicle = calculator.observe(makePlayer({ x: 1200, ms: 1000, tick: 3, seq: 3 }));
   assert.equal(afterVehicle.valid, true);
 
@@ -231,7 +237,7 @@ async function testOnlyConfirmedRoundEventsResetMatchCounters() {
   }
 }
 
-function makePlayer({ x, y = 0, z = 0, ms, tick, seq, onVehicle = false }) {
+function makePlayer({ x, y = 0, z = 0, ms, tick, seq, onVehicle = false, vehicleSeatIndex = null }) {
   const observedAt = ms == null ? "" : new Date(baseTime + ms).toISOString();
   return {
     identity: { steamID, name: "Tester" },
@@ -242,6 +248,7 @@ function makePlayer({ x, y = 0, z = 0, ms, tick, seq, onVehicle = false }) {
       sourceSeq: seq,
       observedAt,
       onVehicle,
+      vehicleSeatIndex,
     },
     freshness: { bzssCoreUpdatedAt: observedAt },
     vehicle: { vehicleType: "" },
