@@ -74,6 +74,15 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
     label: "手持无人机",
   },
 
+  // --- Jeep Anti-Tank ---
+  // Must be evaluated before the generic "tank" rule: JeepAntiTank contains
+  // the word "tank" and matching is intentionally first-match-wins.
+  {
+    patterns: ["jeep_antitank", "jeep_anti_tank", "jeepat", "at_jeep", "antitank_jeep", "technical_atgm", "technical_at", "technical_bgm", "kornet", "jeepantitank"],
+    icon: `${ICO_BASE}/map_jeep_antitank.PNG`,
+    label: "反坦克吉普",
+  },
+
   // --- Tanks (MBT) ---
   {
     patterns: ["tank", "mbt", "m1a2", "m1a1", "t72", "t-72", "t62", "t-62", "leopard", "challenger", "ztz99", "abrams"],
@@ -163,13 +172,6 @@ const VEHICLE_ICON_MATCHES: VehicleIconMatch[] = [
     patterns: ["jeep_artillery", "jeepart", "artillery_jeep", "artillery_truck", "technical_artillery", "mortar_truck", "jeepartillery"],
     icon: `${ICO_BASE}/map_jeep_artillery.PNG`,
     label: "火炮车",
-  },
-
-  // --- Jeep Anti-Tank ---
-  {
-    patterns: ["jeep_antitank", "jeep_anti_tank", "jeepat", "at_jeep", "antitank_jeep", "technical_atgm", "technical_at", "technical_bgm", "kornet", "jeepantitank"],
-    icon: `${ICO_BASE}/map_jeep_antitank.PNG`,
-    label: "反坦克吉普",
   },
 
   // --- Jeep Logistics ---
