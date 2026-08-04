@@ -1012,6 +1012,16 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
     const presenceState = String(player?.presence?.state ?? "");
     const presenceHint = String(player?.telemetry?.presenceHint ?? "");
     const isNoPawn = presenceHint === "noPawn" || presenceState === "noPawn";
+    const isInactive = Boolean(
+      player?.telemetry?.inactive
+      ?? player?.inactive
+      ?? player?.presence?.inactive
+      ?? rawRcon?.inactive
+      ?? rawRcon?.isInactive
+      ?? (player?.telemetry?.active === false)
+      ?? (player?.active === false)
+      ?? (rawRcon?.active === false),
+    ) || presenceState === "inactive";
     const rconDetail = rawRcon
       ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
       : null;
@@ -1031,8 +1041,8 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
     const isWalking = vehicleState
       ? vehicleState === "walking"
       : (!Boolean(player?.telemetry?.onVehicle ?? player?.vehicle?.onVehicle) && (Number.isNaN(vehicleSeatIndex) || vehicleSeatIndex < 0));
-    const position = isNoPawn || !isWalking ? null : sourcePosition;
-    const yaw = isNoPawn || !isWalking ? null : (player?.telemetry?.yaw ?? player?.yaw ?? null);
+    const position = isInactive || isNoPawn || !isWalking ? null : sourcePosition;
+    const yaw = isInactive || isNoPawn || !isWalking ? null : (player?.telemetry?.yaw ?? player?.yaw ?? null);
     const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
 
     return {
@@ -1054,9 +1064,10 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
       position,
       yaw,
       presenceHint: isNoPawn ? "noPawn" : presenceHint,
+      inactive: isInactive,
       presence: {
         ...(player?.presence ?? {}),
-        state: isNoPawn ? "noPawn" : presenceState,
+        state: isInactive ? "inactive" : (isNoPawn ? "noPawn" : presenceState),
       },
       hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
       hasPosition: Boolean(position),
