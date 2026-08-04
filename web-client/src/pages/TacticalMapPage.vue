@@ -1015,8 +1015,24 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
     const rconDetail = rawRcon
       ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
       : null;
-    const position = player?.telemetry?.position ?? player?.position ?? null;
-    const yaw = player?.telemetry?.yaw ?? player?.yaw ?? null;
+    const sourcePosition = player?.telemetry?.position ?? player?.position ?? null;
+    const vehicleState = String(
+      player?.telemetry?.vehicleState
+      ?? player?.vehicle?.vehicleState
+      ?? "",
+    ).trim().toLowerCase();
+    const vehicleSeatIndex = Number(
+      player?.telemetry?.vehicleSeatIndex
+      ?? player?.vehicle?.vehicleSeatIndex,
+    );
+    // Only walking players receive a personal marker. Vehicle locations are
+    // rendered from the independent vehicle runtime stream, so passengers and
+    // drivers must never leave a stale player marker on the map.
+    const isWalking = vehicleState
+      ? vehicleState === "walking"
+      : (!Boolean(player?.telemetry?.onVehicle ?? player?.vehicle?.onVehicle) && (Number.isNaN(vehicleSeatIndex) || vehicleSeatIndex < 0));
+    const position = isNoPawn || !isWalking ? null : sourcePosition;
+    const yaw = isNoPawn || !isWalking ? null : (player?.telemetry?.yaw ?? player?.yaw ?? null);
     const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
 
     return {
@@ -1043,7 +1059,7 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
         state: isNoPawn ? "noPawn" : presenceState,
       },
       hasTelemetry: Boolean(player?.telemetry?.hasTelemetry),
-      hasPosition: Boolean(player?.telemetry?.hasPosition || position),
+      hasPosition: Boolean(position),
       playerBaseInfo: {
         raw: "",
         fields: [],
