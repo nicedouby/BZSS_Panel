@@ -681,14 +681,17 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     const pendingDeployment = presenceHint === "pendingDeployment";
     const noWorldPawn = noPawn || pendingDeployment;
     const vehicleSeatIndex = numberOrNull(bzssPlayer?.vehicleSeatIndex, bzssPlayer?.compactStateInfo?.seatIndex, null);
-    const onVehicle = vehicleSeatIndex != null && vehicleSeatIndex >= 0;
-    const telemetryPosition = noWorldPawn
-      ? null
-      : clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null);
-    const telemetryRotation = noWorldPawn ? null : clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null);
-    const telemetryYaw = noWorldPawn ? null : numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null);
+    // BZSS-Core uses -1 for walking. Any explicit other value means the
+    // player is inside a vehicle and must not receive an individual map marker.
+    const onVehicle = vehicleSeatIndex != null && vehicleSeatIndex !== -1;
+    const canShowMapMarker = !noWorldPawn && !onVehicle;
+    const telemetryPosition = canShowMapMarker
+      ? clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null)
+      : null;
+    const telemetryRotation = canShowMapMarker ? clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null) : null;
+    const telemetryYaw = canShowMapMarker ? numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null) : null;
     const hasTelemetry = Boolean(bzssPlayer);
-    const hasPosition = !noWorldPawn && Boolean(telemetryPosition);
+    const hasPosition = Boolean(telemetryPosition);
 
     const player = {
       identity: {
