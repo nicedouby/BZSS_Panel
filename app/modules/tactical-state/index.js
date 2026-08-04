@@ -678,11 +678,17 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     const teamName = firstText(rconPlayer?.teamName, bzssPlayer?.teamName, teamId == null ? "" : `Team ${teamId}`);
     const presenceHint = firstText(bzssPlayer?.presenceHint, "");
     const noPawn = presenceHint === "noPawn";
-    const telemetryPosition = clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null);
-    const telemetryRotation = clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null);
-    const telemetryYaw = numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null);
+    const pendingDeployment = presenceHint === "pendingDeployment";
+    const noWorldPawn = noPawn || pendingDeployment;
+    const vehicleSeatIndex = numberOrNull(bzssPlayer?.vehicleSeatIndex, bzssPlayer?.compactStateInfo?.seatIndex, null);
+    const onVehicle = vehicleSeatIndex != null && vehicleSeatIndex >= 0;
+    const telemetryPosition = noWorldPawn
+      ? null
+      : clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null);
+    const telemetryRotation = noWorldPawn ? null : clonePlainObject(bzssPlayer?.soldierInfo?.rotation ?? null);
+    const telemetryYaw = noWorldPawn ? null : numberOrNull(bzssPlayer?.yaw, bzssPlayer?.soldierInfo?.rotation?.z, null);
     const hasTelemetry = Boolean(bzssPlayer);
-    const hasPosition = Boolean(telemetryPosition);
+    const hasPosition = !noWorldPawn && Boolean(telemetryPosition);
 
     const player = {
       identity: {
@@ -696,9 +702,11 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       },
       presence: {
         online: Boolean(rconPlayer),
-        state: noPawn
-          ? "noPawn"
-          : firstText(rconPlayer?.state, missingBzssTelemetry ? "onlineNoTelemetry" : "online"),
+        state: pendingDeployment
+          ? "pendingDeployment"
+          : (noPawn
+            ? "noPawn"
+            : firstText(rconPlayer?.state, missingBzssTelemetry ? "onlineNoTelemetry" : "online")),
         firstSeenAt: firstText(rconPlayer?.firstSeenAt, ""),
         lastSeenAt: firstText(rconPlayer?.lastSeenAt, generatedAt),
         squadlessSince: firstText(rconPlayer?.squadlessSince, ""),
@@ -719,12 +727,15 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         sourceSeq: bzssPlayer?.sourceSeq ?? null,
         sourceTick: bzssPlayer?.sourceTick ?? null,
         observedAt: firstText(bzssPlayer?.observedAt, ""),
-        health: noPawn ? null : numberOrNull(bzssPlayer?.soldierInfo?.health, null),
-        soldierClass: noPawn ? "" : firstText(bzssPlayer?.soldierInfo?.soldierClass, ""),
-        weaponClass: noPawn ? "" : firstText(bzssPlayer?.soldierInfo?.weaponClass, ""),
+        health: noWorldPawn ? null : numberOrNull(bzssPlayer?.soldierInfo?.health, null),
+        soldierClass: noWorldPawn ? "" : firstText(bzssPlayer?.soldierInfo?.soldierClass, ""),
+        weaponClass: noWorldPawn ? "" : firstText(bzssPlayer?.soldierInfo?.weaponClass, ""),
         fireTeamIndex: numberOrNull(bzssPlayer?.ftIndex, null),
         fireTeamPosition: numberOrNull(bzssPlayer?.ftPosition, null),
         presenceHint,
+        pendingDeployment,
+        vehicleSeatIndex,
+        onVehicle,
         hasTelemetry,
         hasPosition,
       },
@@ -745,6 +756,8 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         health: numberOrNull(bzssPlayer?.vehicleInfo?.health, null),
         maxHealth: numberOrNull(bzssPlayer?.vehicleInfo?.maxHealth, null),
         raw: firstText(bzssPlayer?.vehicleInfo?.raw, ""),
+        vehicleSeatIndex,
+        onVehicle,
       },
       network: {
         gamePing: numberOrNull(bzssPlayer?.ping, bzssPlayer?.playerScoreboard?.ping, null),
