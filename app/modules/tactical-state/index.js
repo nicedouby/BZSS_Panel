@@ -677,6 +677,21 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     const squadName = firstText(rconPlayer?.squadName, bzssPlayer?.squadName, squadId == null ? "" : `Squad ${squadId}`);
     const teamName = firstText(rconPlayer?.teamName, bzssPlayer?.teamName, teamId == null ? "" : `Team ${teamId}`);
     const presenceHint = firstText(bzssPlayer?.presenceHint, "");
+    const presenceState = firstText(
+      bzssPlayer?.presence?.state,
+      bzssPlayer?.state,
+      rconPlayer?.presence?.state,
+      rconPlayer?.state,
+      "",
+    ).trim().toLowerCase();
+    const inactive = Boolean(
+      bzssPlayer?.inactive
+      ?? bzssPlayer?.isInactive
+      ?? bzssPlayer?.active === false
+      ?? rconPlayer?.inactive
+      ?? rconPlayer?.isInactive
+      ?? rconPlayer?.active === false,
+    ) || presenceState === "inactive";
     const noPawn = presenceHint === "noPawn";
     const pendingDeployment = presenceHint === "pendingDeployment";
     const noWorldPawn = noPawn || pendingDeployment;
@@ -684,7 +699,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     // BZSS-Core uses -1 for walking. Any explicit other value means the
     // player is inside a vehicle and must not receive an individual map marker.
     const onVehicle = vehicleSeatIndex != null && vehicleSeatIndex !== -1;
-    const canShowMapMarker = !noWorldPawn && !onVehicle;
+    const canShowMapMarker = !inactive && !noWorldPawn && !onVehicle;
     const telemetryPosition = canShowMapMarker
       ? clonePlainObject(bzssPlayer?.position ?? bzssPlayer?.soldierInfo?.position ?? null)
       : null;
@@ -705,11 +720,13 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       },
       presence: {
         online: Boolean(rconPlayer),
-        state: pendingDeployment
-          ? "pendingDeployment"
-          : (noPawn
-            ? "noPawn"
-            : firstText(rconPlayer?.state, missingBzssTelemetry ? "onlineNoTelemetry" : "online")),
+        state: inactive
+          ? "inactive"
+          : (pendingDeployment
+            ? "pendingDeployment"
+            : (noPawn
+              ? "noPawn"
+              : firstText(rconPlayer?.state, missingBzssTelemetry ? "onlineNoTelemetry" : "online"))),
         firstSeenAt: firstText(rconPlayer?.firstSeenAt, ""),
         lastSeenAt: firstText(rconPlayer?.lastSeenAt, generatedAt),
         squadlessSince: firstText(rconPlayer?.squadlessSince, ""),
@@ -737,6 +754,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         fireTeamPosition: numberOrNull(bzssPlayer?.ftPosition, null),
         presenceHint,
         pendingDeployment,
+        inactive,
         vehicleSeatIndex,
         onVehicle,
         hasTelemetry,
