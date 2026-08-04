@@ -1012,16 +1012,20 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
     const presenceState = String(player?.presence?.state ?? "");
     const presenceHint = String(player?.telemetry?.presenceHint ?? "");
     const isNoPawn = presenceHint === "noPawn" || presenceState === "noPawn";
-    const isInactive = Boolean(
-      player?.telemetry?.inactive
-      ?? player?.inactive
-      ?? player?.presence?.inactive
-      ?? rawRcon?.inactive
-      ?? rawRcon?.isInactive
-      ?? (player?.telemetry?.active === false)
-      ?? (player?.active === false)
-      ?? (rawRcon?.active === false),
-    ) || presenceState === "inactive";
+    const isInactive = (
+      player?.telemetry?.inactive === true
+      || player?.inactive === true
+      || player?.presence?.inactive === true
+      || rawRcon?.inactive === true
+      || rawRcon?.isInactive === true
+      || player?.telemetry?.active === false
+      || player?.active === false
+      || rawRcon?.active === false
+      || String(player?.telemetry?.inactive ?? "").trim().toLowerCase() === "inactive"
+      || String(player?.inactive ?? "").trim().toLowerCase() === "inactive"
+      || String(rawRcon?.inactive ?? "").trim().toLowerCase() === "inactive"
+      || presenceState === "inactive"
+    );
     const rconDetail = rawRcon
       ? adaptPlayerDetail(rawRcon, player?.profile?.playtimeHours ?? null, combatLookup)
       : null;
