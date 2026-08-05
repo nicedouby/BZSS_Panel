@@ -18,7 +18,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   let timer = null;
   let chain = Promise.resolve();
   const unsubscribers = [];
-  const nextLeaderWarningAt = new Map();
 
   const state = {
     roundKey: "",
@@ -30,12 +29,13 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     broadcastFailureCount: 0,
     confirmedPrivateCount: 0,
     privateLeaderCount: 0,
-    broadcastCycleIds: [],
+    nextLeaderScanAtMs: 0,
+    broadcastCyclePlayers: [],
     broadcastCursor: 0,
     nextBroadcastAtMs: 0,
     lastWarningAt: "",
     lastBroadcastAt: "",
-    lastBroadcastIds: [],
+    lastBroadcastNames: [],
     lastError: "",
   };
 
@@ -60,12 +60,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.lastClockSeconds = 0;
     state.confirmedPrivateCount = 0;
     state.privateLeaderCount = 0;
-    state.broadcastCycleIds = [];
+    state.nextLeaderScanAtMs = 0;
+    state.broadcastCyclePlayers = [];
     state.broadcastCursor = 0;
     state.nextBroadcastAtMs = 0;
-    state.lastBroadcastIds = [];
+    state.lastBroadcastNames = [];
     state.lastError = "";
-    nextLeaderWarningAt.clear();
   }
 
   function clock() {
@@ -98,6 +98,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       .filter((player) => player.name && player.online !== false && player.stale !== true);
   }
 
+  // IMPORTANT: this plugin intentionally performs cache-only checks.
+  // It must never call playtime.lookupSteamID/refreshPlayer/refreshOnline, so repeated
+  // warnings for a private-profile squad leader do not create additional Steam API traffic.
   async function resolveConfirmedPrivate(players) {
     const result = [];
     const queue = dedupePlayers(players);
@@ -153,9 +156,9 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  async function sendBroadcast(playerIds, reason) {
-    const ids = playerIds.map((value) => text(value)).filter(Boolean);
-    if (!ids.length) return false;
+  async function sendBroadcast(playerNames, reason) {
+    const names = playerNames.map((value) => text(value)).filter(Boolean);
+    if (!names.length) return false;
     const broadcaster = modules?.adminWarn?.sendAdminBroadcast ?? modules?.adminWarn?.broadcastMessage;
     if (typeof broadcaster !== "function") {
       state.broadcastFailureCount += 1;
@@ -163,7 +166,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       return false;
     }
 
-    const message = `${cfg.broadcastPrefix}\n${ids.join("  ")}`;
+    const message = `${cfg.broadcastPrefix}\n${names.join("  ")}`;
     try {
       const result = await broadcaster.call(modules.adminWarn, {
         message,
@@ -179,7 +182,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       }
       state.broadcastCount += 1;
       state.lastBroadcastAt = new Date().toISOString();
-      state.lastBroadcastIds = ids;
+      state.lastBroadcastNames = names;
       return true;
     } catch (error) {
       state.broadcastFailureCount += 1;
@@ -191,62 +194,54 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   async function processLeaderWarnings(privateLeaders, nowMs) {
     state.privateLeaderCount = privateLeaders.length;
-    const activeKeys = new Set();
-
     for (const player of privateLeaders) {
-      const key = player.steamID || player.eosID || player.playerID || player.name;
-      if (!key) continue;
-      activeKeys.add(key);
-      const nextAt = Number(nextLeaderWarningAt.get(key) || 0);
-      if (nowMs < nextAt) continue;
       await sendWarning(player, "steam_playtime_profile_private");
-      nextLeaderWarningAt.set(key, nowMs + cfg.leaderWarningIntervalMs);
     }
-
-    for (const key of [...nextLeaderWarningAt.keys()]) {
-      if (!activeKeys.has(key)) nextLeaderWarningAt.delete(key);
-    }
+    state.nextLeaderScanAtMs = nowMs + cfg.leaderWarningIntervalMs;
   }
 
   async function processBroadcastCycle(privatePlayers, nowMs) {
     if (nowMs < state.nextBroadcastAtMs) return;
 
-    if (!state.broadcastCycleIds.length || state.broadcastCursor >= state.broadcastCycleIds.length) {
-      const ids = [...new Set(
-        privatePlayers
-          .map((player) => player.playerID)
-          .filter(isNumericPlayerId),
-      )].sort(compareNumericIds);
+    if (!state.broadcastCyclePlayers.length || state.broadcastCursor >= state.broadcastCyclePlayers.length) {
+      const seen = new Set();
+      const entries = [];
+      for (const player of privatePlayers) {
+        const key = playerIdentityKey(player);
+        const name = text(player.name);
+        if (!key || !name || seen.has(key)) continue;
+        seen.add(key);
+        entries.push({ key, name });
+      }
+      entries.sort((a, b) => a.name.localeCompare(b.name, "zh-CN"));
 
-      state.broadcastCycleIds = ids;
+      state.broadcastCyclePlayers = entries;
       state.broadcastCursor = 0;
 
-      if (!ids.length) {
+      if (!entries.length) {
         state.nextBroadcastAtMs = nowMs + cfg.broadcastCycleCooldownMs;
         return;
       }
     }
 
-    const currentPrivateIds = new Set(
-      privatePlayers.map((player) => player.playerID).filter(isNumericPlayerId),
-    );
+    const currentPrivateKeys = new Set(privatePlayers.map(playerIdentityKey).filter(Boolean));
 
     let batch = [];
-    while (state.broadcastCursor < state.broadcastCycleIds.length && batch.length === 0) {
-      const candidates = state.broadcastCycleIds.slice(
+    while (state.broadcastCursor < state.broadcastCyclePlayers.length && batch.length === 0) {
+      const candidates = state.broadcastCyclePlayers.slice(
         state.broadcastCursor,
         state.broadcastCursor + cfg.broadcastBatchSize,
       );
       state.broadcastCursor += cfg.broadcastBatchSize;
-      batch = candidates.filter((playerId) => currentPrivateIds.has(playerId));
+      batch = candidates.filter((entry) => currentPrivateKeys.has(entry.key));
     }
 
     if (batch.length) {
-      await sendBroadcast(batch, "steam_playtime_private_roster");
+      await sendBroadcast(batch.map((entry) => entry.name), "steam_playtime_private_roster");
     }
 
-    if (state.broadcastCursor >= state.broadcastCycleIds.length) {
-      state.broadcastCycleIds = [];
+    if (state.broadcastCursor >= state.broadcastCyclePlayers.length) {
+      state.broadcastCyclePlayers = [];
       state.broadcastCursor = 0;
       state.nextBroadcastAtMs = nowMs + cfg.broadcastCycleCooldownMs;
     } else {
@@ -275,16 +270,33 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (current.seconds < cfg.startAfterSeconds) return publicState();
 
     const players = roster();
-    const leaderCandidates = players.filter((player) => player.isLeader && player.teamID && player.squadID);
+    const leaderScanDue = nowMs >= state.nextLeaderScanAtMs;
     const broadcastDue = nowMs >= state.nextBroadcastAtMs;
-    const privatePlayers = broadcastDue ? await resolveConfirmedPrivate(players) : null;
-    const privateLeaders = privatePlayers
-      ? privatePlayers.filter((player) => player.isLeader && player.teamID && player.squadID)
-      : await resolveConfirmedPrivate(leaderCandidates);
 
-    if (privatePlayers) state.confirmedPrivateCount = privatePlayers.length;
-    await processLeaderWarnings(privateLeaders, nowMs);
-    if (privatePlayers) await processBroadcastCycle(privatePlayers, nowMs);
+    let privatePlayers = null;
+    let privateLeaders = null;
+
+    // A due full-roster broadcast scan can also satisfy the leader scan, avoiding
+    // duplicate local database reads on the same tick.
+    if (broadcastDue) {
+      privatePlayers = await resolveConfirmedPrivate(players);
+      state.confirmedPrivateCount = privatePlayers.length;
+      if (leaderScanDue) {
+        privateLeaders = privatePlayers.filter((player) => player.isLeader && player.teamID && player.squadID);
+      }
+    }
+
+    if (leaderScanDue && !privateLeaders) {
+      const leaderCandidates = players.filter((player) => player.isLeader && player.teamID && player.squadID);
+      privateLeaders = await resolveConfirmedPrivate(leaderCandidates);
+    }
+
+    if (leaderScanDue) {
+      await processLeaderWarnings(privateLeaders ?? [], nowMs);
+    }
+    if (broadcastDue && privatePlayers) {
+      await processBroadcastCycle(privatePlayers, nowMs);
+    }
 
     if (!state.lastError || reason === "poll") state.lastError = "";
     return publicState();
@@ -296,7 +308,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     subscribed: isSubscribed(),
     active: isActive(),
     config: { ...cfg },
-    trackedLeaderWarningCount: nextLeaderWarningAt.size,
+    steamLookupMode: "local_cache_only",
   });
 
   return {
@@ -304,17 +316,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "督促时长公开",
       kind: "plugin",
-      version: "1.0.2",
+      version: "1.1.0",
       category: "Moderation",
-      description: "开局5分钟后持续提醒未公开 Steam 时长的小队长，并分批广播已确认未公开资料的在线玩家数字ID。",
+      description: "开局5分钟后持续提醒已确认未公开 Steam 时长的小队长，并按玩家名字分批广播未公开资料的在线玩家。插件只读本地 Steam 时长缓存，不主动请求 Steam API。",
       configSchema: [
         { key: "enabled", type: "boolean", default: true, description: "是否启用插件" },
         { key: "startAfterSeconds", type: "number", default: 300, description: "开局多少秒后启用提醒和广播" },
-        { key: "leaderWarningIntervalMs", type: "number", default: 10000, description: "未公开资料的小队长重复警告间隔" },
-        { key: "broadcastBatchSize", type: "number", default: 5, description: "每批广播的玩家数字ID数量" },
+        { key: "leaderWarningIntervalMs", type: "number", default: 10000, description: "未公开资料的小队长重复警告及本地缓存复查间隔" },
+        { key: "broadcastBatchSize", type: "number", default: 5, description: "每批广播的玩家名字数量" },
         { key: "broadcastBatchIntervalMs", type: "number", default: 120000, description: "同一轮广播不同批次之间的间隔" },
         { key: "broadcastCycleCooldownMs", type: "number", default: 600000, description: "完整广播一轮后的冷却时间" },
-        { key: "pollIntervalMs", type: "number", default: 1000, description: "插件检查周期" },
+        { key: "pollIntervalMs", type: "number", default: 1000, description: "插件调度检查周期；Steam 本地缓存不会按此频率查询" },
         { key: "warningMessage", type: "string", default: DEFAULT_WARNING_MESSAGE, description: "发送给小队长的警告内容" },
         { key: "broadcastPrefix", type: "string", default: DEFAULT_BROADCAST_PREFIX, description: "公开广播前缀" },
       ],
@@ -339,6 +351,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           players,
           confirmedPrivatePlayers: privatePlayers,
           privateLeaders: privatePlayers.filter((player) => player.isLeader && player.teamID && player.squadID),
+          steamLookupMode: "local_cache_only",
         };
       },
     },
@@ -363,7 +376,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       timer = setInterval(() => void enqueue(() => evaluate("poll")), cfg.pollIntervalMs);
       timer.unref?.();
       void enqueue(() => evaluate("startup"));
-      log?.info?.(`[SteamPlaytimePublicityReminder] started. start=${cfg.startAfterSeconds}s warn=${cfg.leaderWarningIntervalMs}ms batch=${cfg.broadcastBatchSize}/${cfg.broadcastBatchIntervalMs}ms cooldown=${cfg.broadcastCycleCooldownMs}ms`);
+      log?.info?.(`[SteamPlaytimePublicityReminder] started. cache-only Steam checks; start=${cfg.startAfterSeconds}s warn=${cfg.leaderWarningIntervalMs}ms batch=${cfg.broadcastBatchSize}/${cfg.broadcastBatchIntervalMs}ms cooldown=${cfg.broadcastCycleCooldownMs}ms`);
     },
 
     async stop() {
@@ -372,7 +385,6 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       for (const unsubscribe of unsubscribers.splice(0)) {
         try { unsubscribe(); } catch {}
       }
-      nextLeaderWarningAt.clear();
       await chain.catch(() => {});
       log?.info?.("[SteamPlaytimePublicityReminder] stopped.");
     },
@@ -469,27 +481,28 @@ function identityKeys(player) {
   ].filter(Boolean);
 }
 
+function playerIdentityKey(player) {
+  return player?.steamID
+    ? `steam:${player.steamID}`
+    : player?.eosID
+      ? `eos:${player.eosID}`
+      : player?.playerID
+        ? `player:${player.playerID}`
+        : player?.name
+          ? `name:${player.name}`
+          : "";
+}
+
 function dedupePlayers(players) {
   const seen = new Set();
   const result = [];
   for (const player of players ?? []) {
-    const key = player.steamID || player.eosID || player.playerID || player.name;
+    const key = playerIdentityKey(player);
     if (!key || seen.has(key)) continue;
     seen.add(key);
     result.push(player);
   }
   return result;
-}
-
-function isNumericPlayerId(value) {
-  return /^\d+$/u.test(text(value));
-}
-
-function compareNumericIds(a, b) {
-  const left = Number(a);
-  const right = Number(b);
-  if (Number.isFinite(left) && Number.isFinite(right) && left !== right) return left - right;
-  return String(a).localeCompare(String(b), "en");
 }
 
 function number(value, fallback, min, max) {
@@ -510,6 +523,7 @@ function id(value) {
 export const __test = {
   isConfirmedPrivatePlaytimeRow,
   mergePlayers,
+  playerIdentityKey,
 };
 
 export default { createPlugin };
