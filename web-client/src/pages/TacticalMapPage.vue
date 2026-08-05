@@ -3236,6 +3236,9 @@ function scheduleDragFrame(clientX: number, clientY: number) {
 function isDragBlockedTarget(target: HTMLElement | null) {
   if (!target) return false;
   return Boolean(
+    // Toolbar controls must remain fixed in the viewport. A pointer gesture
+    // that starts on a toolbar button must never be interpreted as map panning.
+    target.closest(".tactical-map-toolbar") ||
     target.closest(".glass-panel") ||
     target.closest(".tactical-sidebar") ||
     target.closest(".player-tooltip") ||
