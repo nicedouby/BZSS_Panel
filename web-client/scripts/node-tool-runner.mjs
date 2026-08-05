@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import process from "node:process";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -10,10 +10,9 @@ const STABLE_NODE_MAJOR = 24;
 export function createStableNodeToolEnv(source = process.env) {
   const env = { ...source };
 
-  // Do not inherit user-level flags into Vite/vue-tsc child processes.
   delete env.NODE_OPTIONS;
 
-  // Avoid the Node 26 module compile-cache disposal crash during large builds.
+  // 禁用 Node 编译缓存，避免 Windows 下 Node 原生崩溃
   env.NODE_DISABLE_COMPILE_CACHE = "1";
 
   return env;
@@ -42,11 +41,9 @@ export function createNodeToolExecArgs({
         .filter(Boolean)
     : [];
 
-  const runtimeArgs = [
-    `--max-old-space-size=${heapSize}`,
-  ];
+  const runtimeArgs = [`--max-old-space-size=${heapSize}`];
 
-  // Keep this workaround only when the selected child runtime is Node 26+.
+  // 只有 Node 26 及以上版本才添加 --no-maglev
   if (process.platform === "win32" && Number(nodeMajor) >= 26) {
     runtimeArgs.push("--no-maglev");
   }
@@ -118,6 +115,7 @@ export async function runNodeTool({
     console.error(
       `[client-build] ${toolLabel} failed with exit code ${code} after ${elapsed} ms.`,
     );
+
     console.error(
       `[client-build] Runtime: ${runtime.version}, platform ${process.platform} ${process.arch}`,
     );
@@ -129,9 +127,8 @@ export async function runNodeTool({
 async function resolveBuildNodeRuntime() {
   const currentMajor = getNodeMajor(process.version);
 
-  if (
-    currentMajor === STABLE_NODE_MAJOR
-  ) {
+  // 当前进程就是 Node 24，直接使用
+  if (currentMajor === STABLE_NODE_MAJOR) {
     return {
       major: currentMajor,
       path: process.execPath,
@@ -154,9 +151,9 @@ async function resolveBuildNodeRuntime() {
 
   throw new Error(
     [
-      `A stable Node 24 LTS runtime is required for client builds.`,
+      "A stable Node 24 LTS runtime is required for client builds.",
       `The current process is ${process.version} at ${process.execPath}.`,
-      `Install Node 24 LTS or set BZSS_NODE_RUNTIME to the full path of node.exe.`,
+      "Install Node 24 LTS or set BZSS_NODE_RUNTIME to the full path of node.exe.",
     ].join(" "),
   );
 }
@@ -201,13 +198,17 @@ function getNodeRuntimeCandidates() {
       );
     }
 
-    // Include every node.exe directory currently visible in PATH.
+    // 检查 PATH 中的 node.exe
     for (const directory of String(process.env.PATH ?? "").split(";")) {
-      add(join(directory, "node.exe"));
+      if (directory.trim()) {
+        add(join(directory, "node.exe"));
+      }
     }
   } else {
     for (const directory of String(process.env.PATH ?? "").split(":")) {
-      add(join(directory, "node"));
+      if (directory.trim()) {
+        add(join(directory, "node"));
+      }
     }
   }
 
@@ -223,15 +224,31 @@ function addNodeVersionDirectories(root, add) {
 
   try {
     for (const name of readdirSync(normalizedRoot)) {
-      if (/^v?24\\./i.test(name)) {
-        add(join(normalizedRoot, name, process.platform === "win32" ? "node.exe" : "bin/node"));
+      // 注意：这里必须使用单反斜杠
+      if (/^v?24\./i.test(name)) {
+        add(
+          join(
+            normalizedRoot,
+            name,
+            process.platform === "win32"
+              ? "node.exe"
+              : "bin/node",
+          ),
+        );
       }
     }
   } catch {
-    // Missing NVM_HOME or an inaccessible directory is not fatal.
+    // 目录不存在或无法访问时忽略
   }
 
-  add(join(normalizedRoot, process.platform === "win32" ? "node.exe" : "bin/node"));
+  add(
+    join(
+      normalizedRoot,
+      process.platform === "win32"
+        ? "node.exe"
+        : "bin/node",
+    ),
+  );
 }
 
 async function inspectNodeRuntime(candidate) {
@@ -256,7 +273,11 @@ async function inspectNodeRuntime(candidate) {
       return null;
     }
 
-    return { major, path: candidate, version };
+    return {
+      major,
+      path: candidate,
+      version,
+    };
   } catch {
     return null;
   }
@@ -264,7 +285,10 @@ async function inspectNodeRuntime(candidate) {
 
 function getNodeMajor(version) {
   const normalized = String(version ?? "").trim();
-  const match = normalized.match(/^v?(\\d+)(?:\\.|$)/);
+
+  // 注意：这里必须是 \d 和 \.
+  const match = normalized.match(/^v?(\d+)(?:\.|$)/);
+
   return match ? Number(match[1]) : 0;
 }
 
@@ -274,6 +298,17 @@ async function runNodeToolProcess({
   execArgs,
 }) {
   return await new Promise((resolve) => {
+    let settled = false;
+
+    const finish = (code) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve(code);
+    };
+
     const child = execFile(
       executable,
       execArgs,
@@ -282,22 +317,21 @@ async function runNodeToolProcess({
         windowsHide: false,
       },
       (error) => {
-        if (error) {
-          console.error(
-            `[client-build] ${toolLabel} process error:`,
-            error,
-          );
-
-          resolve(
-            typeof error.code === "number"
-              ? error.code
-              : 1,
-          );
-
+        if (!error) {
+          finish(0);
           return;
         }
 
-        resolve(0);
+        console.error(
+          `[client-build] ${toolLabel} process error:`,
+          error,
+        );
+
+        finish(
+          typeof error.code === "number"
+            ? error.code
+            : 1,
+        );
       },
     );
 
@@ -315,7 +349,7 @@ async function runNodeToolProcess({
         error,
       );
 
-      resolve(1);
+      finish(1);
     });
 
     child.once("exit", (exitCode, signal) => {
@@ -324,11 +358,11 @@ async function runNodeToolProcess({
           `[client-build] ${toolLabel} terminated by signal ${signal}.`,
         );
 
-        resolve(1);
+        finish(1);
         return;
       }
 
-      resolve(exitCode ?? 0);
+      finish(exitCode ?? 0);
     });
   });
 }
