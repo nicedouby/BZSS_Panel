@@ -43,8 +43,9 @@ export function createNodeToolExecArgs({
 
   const runtimeArgs = [`--max-old-space-size=${heapSize}`];
 
-  // 只有 Node 26 及以上版本才添加 --no-maglev
-  if (process.platform === "win32" && Number(nodeMajor) >= 26) {
+  // Windows 上的 Vite/Rollup 大型构建可能触发 V8 原生访问冲突（3221225477）。
+  // Node 24 也支持该兼容参数，因此所有 Windows 构建运行时统一启用。
+  if (process.platform === "win32") {
     runtimeArgs.push("--no-maglev");
   }
 
