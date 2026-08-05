@@ -22,6 +22,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   const state = {
     roundKey: "",
+    blockedRoundKey: "",
     lastClockSeconds: 0,
     warningCount: 0,
     warningFailureCount: 0,
@@ -55,6 +56,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   function resetRound(roundKey = "") {
     state.roundKey = text(roundKey);
+    state.blockedRoundKey = "";
     state.lastClockSeconds = 0;
     state.confirmedPrivateCount = 0;
     state.privateLeaderCount = 0;
@@ -261,6 +263,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     state.lastClockSeconds = current.seconds;
     if (!current.trusted) return publicState();
 
+    if (state.blockedRoundKey) {
+      if (current.roundKey === state.blockedRoundKey) return publicState();
+      state.blockedRoundKey = "";
+    }
+
     if (state.roundKey !== current.roundKey) {
       resetRound(current.roundKey);
       state.lastClockSeconds = current.seconds;
@@ -293,7 +300,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "督促时长公开",
       kind: "plugin",
-      version: "1.0.0",
+      version: "1.0.1",
       category: "Moderation",
       description: "开局5分钟后持续提醒未公开 Steam 时长的小队长，并分批广播已确认未公开资料的在线玩家数字ID。",
       configSchema: [
@@ -341,7 +348,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
       if (core?.eventBus?.onCoreEvent) {
         unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
-          void enqueue(async () => resetRound(""));
+          void enqueue(async () => {
+            const oldRoundKey = state.roundKey || clock().roundKey;
+            resetRound("");
+            state.blockedRoundKey = oldRoundKey;
+          });
         }));
       }
 
