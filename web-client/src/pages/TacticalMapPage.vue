@@ -1435,6 +1435,7 @@ const capturePointDrag = ref<{
   renderedMapHeight: number;
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
   moved: boolean;
+  captureTarget: HTMLElement | null;
   mapX: number;
   mapY: number;
   gameX: number;
@@ -3066,6 +3067,15 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
     return;
   }
   const bounds = activeMapConfig.value.bounds;
+  const captureTarget = event.currentTarget instanceof HTMLElement
+    ? event.currentTarget
+    : null;
+  try {
+    captureTarget?.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Window-level listeners below remain the fallback when pointer capture
+    // is unavailable (for example in an embedded webview).
+  }
   capturePointDrag.value = {
     markerId: zone.id,
     pointIndex: zone.pointIndex,
@@ -3083,6 +3093,7 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
       maxY: bounds.maxY,
     },
     moved: false,
+    captureTarget,
     mapX: zone.mapX,
     mapY: zone.mapY,
     gameX,
@@ -3119,6 +3130,9 @@ function cancelCapturePointDrag(event?: Event) {
     ? Number((event as PointerEvent).pointerId)
     : null;
   if (!drag || (eventPointerId !== null && eventPointerId !== drag.pointerId)) return;
+  try {
+    drag.captureTarget?.releasePointerCapture?.(drag.pointerId);
+  } catch {}
   detachCapturePointDragListeners();
   capturePointDrag.value = null;
   hoverCoords.value = null;
@@ -3133,6 +3147,9 @@ async function finishCapturePointDrag(event: PointerEvent) {
   const drag = capturePointDrag.value;
   if (!drag) return;
 
+  try {
+    drag.captureTarget?.releasePointerCapture?.(drag.pointerId);
+  } catch {}
   detachCapturePointDragListeners();
 
   if (!drag.moved) {
@@ -4143,7 +4160,7 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker__tooltip {
   position: absolute;
-  left: 0;
+  left: calc(14px * var(--vehicle-marker-scale, 1));
   top: 0;
   z-index: 95;
   display: flex;
@@ -4156,14 +4173,14 @@ onBeforeUnmount(deactivateMapPage);
   pointer-events: none;
   white-space: nowrap;
   opacity: 0;
-  transform-origin: 0 0;
-  transform: scale(var(--vehicle-marker-scale, 1)) translate(15px, -50%);
-  transition: opacity .12s ease;
+  transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(2px);
+  transform-origin: left center;
+  transition: opacity .12s ease, transform .12s ease;
 }
 
 .vehicle-marker:hover .vehicle-marker__tooltip {
   opacity: 1;
-  transform: scale(var(--vehicle-marker-scale, 1)) translate(15px, -50%);
+  transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(0);
 }
 
 .vehicle-marker__occupant {
