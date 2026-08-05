@@ -196,10 +196,12 @@ function calculateBaseZone({
   }
   hardRadius = Math.min(hardRadius, hardMaxRadius);
 
-  const resolvedSpacing = positiveOrNull(firstObjectiveSpacing)
-    ?? positiveOrNull(averageObjectiveSpacing)
-    ?? positive(config.soft.fallbackExtensionMeters, 200);
-  const softExtensionRaw = resolvedSpacing * nonNegative(config.soft.objectiveSpacingRatio, 0.20);
+  const resolvedSpacing = positiveOrNull(firstObjectiveSpacing) ?? positiveOrNull(averageObjectiveSpacing);
+  const softSpacingRatio = nonNegative(config.soft.objectiveSpacingRatio, 0.20);
+  const fallbackExtension = nonNegative(config.soft.fallbackExtensionMeters, 200);
+  const softExtensionRaw = resolvedSpacing != null
+    ? resolvedSpacing * softSpacingRatio
+    : fallbackExtension;
   const softExtension = clamp(
     softExtensionRaw,
     nonNegative(config.soft.minExtensionMeters, 100),
@@ -214,7 +216,11 @@ function calculateBaseZone({
     ? Math.max(hardRadius, firstObjectiveDistance - objectiveSafetyMargin)
     : Number.POSITIVE_INFINITY;
   const softRadius = Math.min(softCandidate, softObjectiveCap);
-  const softLimit = softRadius < softCandidate ? "objective-safety-margin" : "objective-spacing";
+  const softLimit = softRadius < softCandidate
+    ? "objective-safety-margin"
+    : resolvedSpacing != null
+      ? "objective-spacing"
+      : "fallback-extension";
 
   if (firstObjectiveDistance != null && firstObjectiveDistance <= hardRadius) {
     warnings.push(`TEAM_${teamId}_FIRST_OBJECTIVE_OVERLAPS_HARD_ZONE`);
@@ -249,6 +255,8 @@ function calculateBaseZone({
       hardObjectiveLimit,
       hardLimit,
       resolvedSpacing,
+      softSpacingRatio,
+      fallbackExtension,
       softExtensionRaw,
       softExtension,
       objectiveSafetyMargin,
@@ -300,7 +308,6 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
     longitudinalRadiusMeters: longitudinalRadius,
     lateralRadiusMeters: lateralRadius,
     polygon,
-    excludeZoneIds: ["team1-hard", "team2-hard"],
   };
   return {
     zone: {
@@ -329,7 +336,6 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
       longitudinalRadius,
       lateralRadius,
       polygon,
-      hardExclusionZoneIds: geometry.excludeZoneIds,
     },
   };
 }
