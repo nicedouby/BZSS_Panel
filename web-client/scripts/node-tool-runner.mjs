@@ -5,8 +5,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const STABLE_NODE_MIN_MAJOR = 24;
-const STABLE_NODE_MAX_MAJOR = 25;
+const STABLE_NODE_MAJOR = 24;
 
 export function createStableNodeToolEnv(source = process.env) {
   const env = { ...source };
@@ -131,8 +130,7 @@ async function resolveBuildNodeRuntime() {
   const currentMajor = getNodeMajor(process.version);
 
   if (
-    currentMajor >= STABLE_NODE_MIN_MAJOR &&
-    currentMajor <= STABLE_NODE_MAX_MAJOR
+    currentMajor === STABLE_NODE_MAJOR
   ) {
     return {
       major: currentMajor,
@@ -148,8 +146,7 @@ async function resolveBuildNodeRuntime() {
 
     if (
       runtime &&
-      runtime.major >= STABLE_NODE_MIN_MAJOR &&
-      runtime.major <= STABLE_NODE_MAX_MAJOR
+      runtime.major === STABLE_NODE_MAJOR
     ) {
       return runtime;
     }
@@ -266,7 +263,8 @@ async function inspectNodeRuntime(candidate) {
 }
 
 function getNodeMajor(version) {
-  const match = String(version ?? "").match(/v?(\\d+)/);
+  const normalized = String(version ?? "").trim();
+  const match = normalized.match(/^v?(\\d+)(?:\\.|$)/);
   return match ? Number(match[1]) : 0;
 }
 
