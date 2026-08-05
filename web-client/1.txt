@@ -1,0 +1,16 @@
+cd E:\BZSS_SQ_Server\BZSS_Panel\web-client
+
+node -v
+npm -v
+
+npm.cmd pkg set engines.node=">=24.19.0 <25"
+npm.cmd pkg set devDependencies.vite="6.4.2"
+npm.cmd pkg set devDependencies.rollup="4.62.4"
+npm.cmd pkg delete devDependencies."@rollup/wasm-node"
+npm.cmd pkg delete overrides.rollup
+
+Remove-Item -Recurse -Force .\node_modules -ErrorAction SilentlyContinue
+
+npm.cmd install --include=dev
+
+npm.cmd list vite rollup --depth=0
