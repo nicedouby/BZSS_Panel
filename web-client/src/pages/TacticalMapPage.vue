@@ -3977,7 +3977,7 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker__tooltip {
   position: absolute;
-  left: calc(14px * var(--vehicle-marker-scale, 1));
+  left: 0;
   top: 0;
   z-index: 95;
   display: flex;
@@ -3990,14 +3990,14 @@ onBeforeUnmount(deactivateMapPage);
   pointer-events: none;
   white-space: nowrap;
   opacity: 0;
-  transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(2px);
-  transform-origin: left center;
-  transition: opacity .12s ease, transform .12s ease;
+  transform-origin: 0 0;
+  transform: scale(var(--vehicle-marker-scale, 1)) translate(15px, -50%);
+  transition: opacity .12s ease;
 }
 
 .vehicle-marker:hover .vehicle-marker__tooltip {
   opacity: 1;
-  transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(0);
+  transform: scale(var(--vehicle-marker-scale, 1)) translate(15px, -50%);
 }
 
 .vehicle-marker__occupant {
