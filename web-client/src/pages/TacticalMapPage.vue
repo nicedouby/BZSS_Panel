@@ -133,6 +133,7 @@
               ? `点位 ${zone.pointIndex} · 拖拽修改位置 · X ${Math.round(zone.gameX ?? 0)} Y ${Math.round(zone.gameY ?? 0)}`
               : (zone.raw || zone.name)"
             @pointerdown.stop.prevent="startCapturePointDrag(zone, $event)"
+            @dragstart.prevent
           >
             <span v-if="capturePointEditMode" class="capture-point-index">P{{ zone.pointIndex }}</span>
             <span
@@ -149,6 +150,7 @@
                   class="zone-flag-image"
                   :src="zone.flagUrl"
                   :alt="zone.factionLabel"
+                  draggable="false"
                 />
                 <span v-else class="zone-flag-placeholder"></span>
                 <span class="capture-flag-neutral-sweep"></span>
@@ -1425,11 +1427,18 @@ const capturePointDrag = ref<{
   markerId: string;
   pointIndex: number;
   pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startMapX: number;
+  startMapY: number;
+  renderedMapWidth: number;
+  renderedMapHeight: number;
+  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+  moved: boolean;
   mapX: number;
   mapY: number;
   gameX: number;
   gameY: number;
-  captureTarget: HTMLElement | null;
 } | null>(null);
 const capturePointFeedback = ref<{ tone: "info" | "ok" | "error"; text: string } | null>(null);
 let capturePointFeedbackTimer: number | null = null;
@@ -2998,26 +3007,41 @@ function setCapturePointFeedback(tone: "info" | "ok" | "error", text: string, ti
   }, timeoutMs);
 }
 
-function capturePointPositionFromClient(clientX: number, clientY: number) {
-  if (!mapRef.value) return null;
-  const rect = mapRef.value.getBoundingClientRect();
-  if (!(rect.width > 0) || !(rect.height > 0)) return null;
-  const pctX = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  const pctY = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
-  const bounds = activeMapConfig.value.bounds;
+function capturePointPositionFromClient(
+  drag: NonNullable<typeof capturePointDrag.value>,
+  clientX: number,
+  clientY: number,
+) {
+  if (!(drag.renderedMapWidth > 0) || !(drag.renderedMapHeight > 0)) return null;
+  // Preserve the position at which the user grabbed the flag.  Converting the
+  // pointer directly to a map coordinate makes the zero-sized marker anchor
+  // jump to the flag image, which is rendered above that anchor.
+  const mapX = Math.max(0, Math.min(100,
+    drag.startMapX + ((clientX - drag.startClientX) / drag.renderedMapWidth) * 100,
+  ));
+  const mapY = Math.max(0, Math.min(100,
+    drag.startMapY + ((clientY - drag.startClientY) / drag.renderedMapHeight) * 100,
+  ));
+  const pctX = mapX / 100;
+  const pctY = mapY / 100;
+  const bounds = drag.bounds;
   return {
-    mapX: pctX * 100,
-    mapY: pctY * 100,
+    mapX,
+    mapY,
     gameX: bounds.minX + pctX * (bounds.maxX - bounds.minX),
     gameY: bounds.minY + pctY * (bounds.maxY - bounds.minY),
   };
 }
 
 function updateCapturePointDrag(clientX: number, clientY: number) {
-  if (!capturePointDrag.value) return;
-  const position = capturePointPositionFromClient(clientX, clientY);
+  const drag = capturePointDrag.value;
+  if (!drag) return;
+  const position = capturePointPositionFromClient(drag, clientX, clientY);
   if (!position) return;
-  capturePointDrag.value = { ...capturePointDrag.value, ...position };
+  const moved = drag.moved
+    || Math.abs(clientX - drag.startClientX) > 2
+    || Math.abs(clientY - drag.startClientY) > 2;
+  capturePointDrag.value = { ...drag, ...position, moved };
   hoverCoords.value = {
     x: 0,
     y: 0,
@@ -3028,6 +3052,7 @@ function updateCapturePointDrag(clientX: number, clientY: number) {
 
 function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
   if (!capturePointEditMode.value || capturePointCommandPending.value || event.button !== 0) return;
+  if (!mapRef.value) return;
   const gameX = Number(zone.gameX);
   const gameY = Number(zone.gameY);
   if (!Number.isFinite(gameX) || !Number.isFinite(gameY)) {
@@ -3035,27 +3060,43 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
     return;
   }
 
-  const captureTarget = event.currentTarget as HTMLElement | null;
-  captureTarget?.setPointerCapture?.(event.pointerId);
+  const mapRect = mapRef.value.getBoundingClientRect();
+  if (!(mapRect.width > 0) || !(mapRect.height > 0)) {
+    setCapturePointFeedback("error", "地图尚未完成布局，请稍后重试");
+    return;
+  }
+  const bounds = activeMapConfig.value.bounds;
   capturePointDrag.value = {
     markerId: zone.id,
     pointIndex: zone.pointIndex,
     pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startMapX: zone.mapX,
+    startMapY: zone.mapY,
+    renderedMapWidth: mapRect.width,
+    renderedMapHeight: mapRect.height,
+    bounds: {
+      minX: bounds.minX,
+      maxX: bounds.maxX,
+      minY: bounds.minY,
+      maxY: bounds.maxY,
+    },
+    moved: false,
     mapX: zone.mapX,
     mapY: zone.mapY,
     gameX,
     gameY,
-    captureTarget,
   };
-  updateCapturePointDrag(event.clientX, event.clientY);
   playerInfoPanel.value = null;
   playerActionMenu.value = null;
   mapCommandMenu.value = null;
   setCapturePointFeedback("info", `正在移动点位 ${zone.pointIndex}`, 60_000);
 
-  window.addEventListener("pointermove", onCapturePointDrag, { passive: false });
-  window.addEventListener("pointerup", finishCapturePointDrag);
-  window.addEventListener("pointercancel", cancelCapturePointDrag);
+  window.addEventListener("pointermove", onCapturePointDrag, { capture: true, passive: false });
+  window.addEventListener("pointerup", finishCapturePointDrag, true);
+  window.addEventListener("pointercancel", cancelCapturePointDrag, true);
+  window.addEventListener("blur", cancelCapturePointDrag);
 }
 
 function onCapturePointDrag(event: PointerEvent) {
@@ -3066,17 +3107,18 @@ function onCapturePointDrag(event: PointerEvent) {
 }
 
 function detachCapturePointDragListeners() {
-  window.removeEventListener("pointermove", onCapturePointDrag);
-  window.removeEventListener("pointerup", finishCapturePointDrag);
-  window.removeEventListener("pointercancel", cancelCapturePointDrag);
+  window.removeEventListener("pointermove", onCapturePointDrag, true);
+  window.removeEventListener("pointerup", finishCapturePointDrag, true);
+  window.removeEventListener("pointercancel", cancelCapturePointDrag, true);
+  window.removeEventListener("blur", cancelCapturePointDrag);
 }
 
-function cancelCapturePointDrag(event?: PointerEvent) {
+function cancelCapturePointDrag(event?: Event) {
   const drag = capturePointDrag.value;
-  if (!drag || (event && event.pointerId !== drag.pointerId)) return;
-  try {
-    drag.captureTarget?.releasePointerCapture?.(drag.pointerId);
-  } catch {}
+  const eventPointerId = event && "pointerId" in event
+    ? Number((event as PointerEvent).pointerId)
+    : null;
+  if (!drag || (eventPointerId !== null && eventPointerId !== drag.pointerId)) return;
   detachCapturePointDragListeners();
   capturePointDrag.value = null;
   hoverCoords.value = null;
@@ -3091,10 +3133,14 @@ async function finishCapturePointDrag(event: PointerEvent) {
   const drag = capturePointDrag.value;
   if (!drag) return;
 
-  try {
-    drag.captureTarget?.releasePointerCapture?.(drag.pointerId);
-  } catch {}
   detachCapturePointDragListeners();
+
+  if (!drag.moved) {
+    capturePointDrag.value = null;
+    hoverCoords.value = null;
+    setCapturePointFeedback("info", `点位 ${drag.pointIndex} 未移动，未发送命令`);
+    return;
+  }
 
   const gameX = Math.round(drag.gameX);
   const gameY = Math.round(drag.gameY);
@@ -3834,6 +3880,10 @@ function handleWindowKeyDown(e: KeyboardEvent) {
 
   const key = e.key.toUpperCase();
   if (key === "ESCAPE") {
+    if (capturePointDrag.value) {
+      cancelCapturePointDrag();
+      return;
+    }
     if (pressureSettingsOpen.value) {
       pressureSettingsOpen.value = false;
       return;
@@ -3911,6 +3961,7 @@ function deactivateMapPage() {
   mapPageActive = false;
   stopTacticalMapViewerPresence();
   stopDrag();
+  if (capturePointDrag.value) cancelCapturePointDrag();
 
   if (isStandaloneMapRoute.value) {
     tacticalStateStore.stopStream();
