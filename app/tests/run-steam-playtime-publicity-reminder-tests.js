@@ -7,6 +7,8 @@ function createHarness() {
   const clock = { seconds: 0, key: "round-a" };
   const playtimes = new Map();
   const now = 1_000_000;
+  let localCacheReads = 0;
+  let steamApiLookups = 0;
 
   const players = [
     { playerID: 1, name: "PrivateLeader", steamID: "1001", eosID: "e1", teamID: 1, squadID: 1, isLeader: true, online: true },
@@ -63,7 +65,20 @@ function createHarness() {
     playerState: { getPlayerList() { return players; } },
     playtime: {
       async getBySteamID(steamID) {
+        localCacheReads += 1;
         return playtimes.get(steamID) ?? null;
+      },
+      async lookupSteamID() {
+        steamApiLookups += 1;
+        throw new Error("publicity reminder must not request Steam API");
+      },
+      async refreshPlayer() {
+        steamApiLookups += 1;
+        throw new Error("publicity reminder must not refresh Steam player");
+      },
+      async refreshOnline() {
+        steamApiLookups += 1;
+        throw new Error("publicity reminder must not refresh Steam online roster");
       },
     },
     adminWarn: {
@@ -84,7 +99,7 @@ function createHarness() {
         return {
           enabled: true,
           startAfterSeconds: 300,
-          pollIntervalMs: 30000,
+          pollIntervalMs: 1000,
           leaderWarningIntervalMs: 10000,
           broadcastBatchSize: 5,
           broadcastBatchIntervalMs: 120000,
@@ -103,7 +118,14 @@ function createHarness() {
     warnings,
     broadcasts,
     now,
+    getLocalCacheReads: () => localCacheReads,
+    getSteamApiLookups: () => steamApiLookups,
   };
+}
+
+function broadcastNames(message) {
+  const lines = String(message ?? "").split("\n");
+  return String(lines[1] ?? "").split(/\s{2,}/u).map((value) => value.trim()).filter(Boolean);
 }
 
 async function testPrivateDetectionRequiresCompletedRefresh() {
@@ -120,6 +142,7 @@ async function testWarningAndBroadcastSchedule() {
   await h.plugin.api.evaluateNow(h.now);
   assert.equal(h.warnings.length, 0);
   assert.equal(h.broadcasts.length, 0);
+  assert.equal(h.getSteamApiLookups(), 0);
 
   h.clock.seconds = 300;
   await h.plugin.api.evaluateNow(h.now);
@@ -130,26 +153,48 @@ async function testWarningAndBroadcastSchedule() {
     "你的steam个人资料尚未公开\n为了其他玩家的游戏体验，请公开你的steam个人资料",
   );
   assert.equal(h.broadcasts.length, 1);
-  assert.equal(h.broadcasts[0].message, "当前未公开steam个人资料的玩家有\n1  2  6  7  8");
+  assert.match(h.broadcasts[0].message, /^当前未公开steam个人资料的玩家有\n/u);
+  assert.equal(broadcastNames(h.broadcasts[0].message).length, 5);
+  assert.equal(h.getSteamApiLookups(), 0);
 
+  const readsAfterFirstTick = h.getLocalCacheReads();
   await h.plugin.api.evaluateNow(h.now + 9_999);
   assert.equal(h.warnings.length, 1);
   assert.equal(h.broadcasts.length, 1);
+  assert.equal(h.getLocalCacheReads(), readsAfterFirstTick, "leader cache should not be reread every 1 second poll");
+  assert.equal(h.getSteamApiLookups(), 0);
 
   await h.plugin.api.evaluateNow(h.now + 10_000);
   assert.equal(h.warnings.length, 2);
   assert.equal(h.broadcasts.length, 1);
+  assert.equal(h.getSteamApiLookups(), 0);
 
   await h.plugin.api.evaluateNow(h.now + 120_000);
   assert.equal(h.warnings.length, 3);
   assert.equal(h.broadcasts.length, 2);
-  assert.equal(h.broadcasts[1].message, "当前未公开steam个人资料的玩家有\n9  10");
+  assert.equal(broadcastNames(h.broadcasts[1].message).length, 2);
+
+  const allBroadcastNames = [
+    ...broadcastNames(h.broadcasts[0].message),
+    ...broadcastNames(h.broadcasts[1].message),
+  ].sort();
+  assert.deepEqual(allBroadcastNames, [
+    "PrivateLeader",
+    "PrivateMember10",
+    "PrivateMember2",
+    "PrivateMember6",
+    "PrivateMember7",
+    "PrivateMember8",
+    "PrivateMember9",
+  ].sort());
+  assert.equal(h.getSteamApiLookups(), 0);
 
   // A complete cycle cools down for ten minutes from the final batch.
   await h.plugin.api.evaluateNow(h.now + 120_000 + 599_999);
   assert.equal(h.broadcasts.length, 2);
   await h.plugin.api.evaluateNow(h.now + 120_000 + 600_000);
   assert.equal(h.broadcasts.length, 3);
+  assert.equal(h.getSteamApiLookups(), 0);
 }
 
 async function testWarningStopsWhenLocalCacheBecomesPublic() {
@@ -161,6 +206,7 @@ async function testWarningStopsWhenLocalCacheBecomesPublic() {
   h.playtimes.set("1001", { steam_game_seconds: 7200, fetched_at: 200000 });
   await h.plugin.api.evaluateNow(h.now + 10_000);
   assert.equal(h.warnings.length, 1);
+  assert.equal(h.getSteamApiLookups(), 0);
 }
 
 async function testNewRoundRestartsImmediateFiveMinuteEvaluation() {
@@ -175,6 +221,7 @@ async function testNewRoundRestartsImmediateFiveMinuteEvaluation() {
   await h.plugin.api.evaluateNow(h.now + 1_000);
   assert.equal(h.warnings.length, 2);
   assert.equal(h.broadcasts.length, 2);
+  assert.equal(h.getSteamApiLookups(), 0);
 }
 
 try {
