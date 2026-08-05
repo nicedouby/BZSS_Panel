@@ -8,6 +8,11 @@ export function createStableNodeToolEnv(source = process.env) {
   // 閬垮厤澶栭儴 NODE_OPTIONS 褰卞搷瀛愯繘绋?
   delete env.NODE_OPTIONS;
 
+  // Vite 7 enables Node's module compile cache automatically. Node 26.5.x
+  // can crash while disposing the isolate after a large Rollup build when
+  // that cache is enabled. Keep the workaround local to build-tool children.
+  env.NODE_DISABLE_COMPILE_CACHE = "1";
+
   return env;
 }
 
@@ -36,6 +41,15 @@ export function createNodeToolExecArgs({
   const runtimeArgs = [
     `--max-old-space-size=${heapSize}`,
 ];
+
+  // Node 26.5.x has a V8/Maglev crash path on Windows during large module
+  // builds (fatal "unreachable code" / 0x80000003). This does not change
+  // application runtime behavior; it only disables the affected JIT tier
+  // for the short-lived build process.
+  const nodeMajor = Number.parseInt(String(process.versions.node).split(".")[0], 10);
+  if (process.platform === "win32" && nodeMajor >= 26) {
+    runtimeArgs.push("--no-maglev");
+  }
 
   for (const arg of extraNodeArgs) {
     if (!runtimeArgs.includes(arg)) {

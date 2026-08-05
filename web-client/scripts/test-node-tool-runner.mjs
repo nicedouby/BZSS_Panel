@@ -8,6 +8,8 @@ export function createStableNodeToolEnv(source = process.env) {
   // 避免外部 NODE_OPTIONS 干扰 Node26 子进程
   delete env.NODE_OPTIONS;
 
+  env.NODE_DISABLE_COMPILE_CACHE = "1";
+
   return env;
 }
 
@@ -29,6 +31,11 @@ export function createNodeToolExecArgs({
 
 
   const runtimeArgs = [];
+
+  const nodeMajor = Number.parseInt(String(process.versions.node).split(".")[0], 10);
+  if (process.platform === "win32" && nodeMajor >= 26) {
+    runtimeArgs.push("--no-maglev");
+  }
 
 
   const heapSize = Number(maxOldSpaceSizeMb);
@@ -52,12 +59,6 @@ export function createNodeToolExecArgs({
 
 
       if (!arg) {
-        continue;
-      }
-
-
-      // Node26 不使用旧 V8 workaround
-      if (arg === "--no-maglev") {
         continue;
       }
 
