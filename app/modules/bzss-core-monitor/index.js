@@ -2220,7 +2220,7 @@ export function parseBzssCoreVehicleLine(line) {
     const driverPlayerId = toFiniteNumber(extractVehicleRuntimeField(raw, ["ID", "DriverID", "DriverPlayerID", "PlayerID"]));
     const type = extractVehicleRuntimeField(raw, ["VT", "VehicleType", "Type"]);
     const health = parseVehicleHealth(extractVehicleRuntimeField(raw, ["H", "HP", "Health", "HealthPercent"]));
-    const speed = extractVehicleRuntimeField(raw, ["S", "Speed", "Velocity", "Vel"]);
+    const speed = parseVehicleRuntimeSpeed(raw);
     const team = extractVehicleRuntimeField(raw, ["T", "TID", "TeamID", "Team"]);
     const seatSnapshotPresent = hasVehicleSeatPlayerSnapshot(raw);
     const seatPlayerIds = parseVehicleSeatPlayerIds(raw);
@@ -2246,7 +2246,7 @@ export function parseBzssCoreVehicleLine(line) {
       healthPercent: health,
       position: scalePosition(parseVehicleRuntimePosition(raw)),
       yaw: parseVehicleRuntimeYaw(raw),
-      speed: toFiniteNumber(speed),
+      speed,
       teamId: toFiniteNumber(team),
       observedAt,
       raw: `{${raw}}`,
@@ -2286,6 +2286,39 @@ function extractVehicleRuntimeField(text, names) {
 
 function hasVehicleSeatPlayerSnapshot(text) {
   return /(?:^|[,;{])\s*(?:PS|SeatPlayers|SeatsPlayers)\s*[:=]/i.test(String(text ?? ""));
+}
+
+function parseVehicleRuntimeSpeed(text) {
+  const source = String(text ?? "");
+  // S may be a scalar, a value with units, or an Unreal velocity vector.
+  // Read through embedded vector commas until the next named vehicle field.
+  const match = source.match(
+    /(?:^|[,;{])\s*(?:S|Speed|Velocity|Vel)\s*[:=]\s*(.*?)(?=[,;]\s*(?:T|TID|TeamID|Team|PS|SeatPlayers|SeatsPlayers|ID|DriverID|DriverPlayerID|VT|VehicleType|Type|H|HP|Health|P|Pos|Position)\s*[:=]|}|$)/i,
+  );
+  const value = String(match?.[1] ?? "").trim();
+  if (!value) return null;
+
+  const namedVector = value.match(
+    /X\s*[=:]\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*[,\s]+Y\s*[=:]\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*[,\s]+Z\s*[=:]\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)/i,
+  );
+  if (namedVector) {
+    const components = namedVector.slice(1, 4).map(toFiniteNumber);
+    if (components.every((component) => component != null)) {
+      return Math.hypot(...components);
+    }
+  }
+
+  const compactVector = value
+    .replace(/^\(+|\)+$/g, "")
+    .match(/^\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*,\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*,\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s*$/i);
+  if (compactVector) {
+    return Math.hypot(...compactVector.slice(1, 4).map(Number));
+  }
+
+  // Accept scalar Blueprint strings such as `12.5`, `12.5 cm/s`, or
+  // `Speed=12.5` without accidentally treating a partial vector as scalar.
+  const scalar = value.match(/^(?:Speed\s*[:=]\s*)?(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?)(?:\s*(?:cm\/s|m\/s|km\/h|uu\/s))?\s*$/i);
+  return scalar ? toFiniteNumber(scalar[1]) : null;
 }
 
 function parseVehicleSeatPlayerIds(text) {
