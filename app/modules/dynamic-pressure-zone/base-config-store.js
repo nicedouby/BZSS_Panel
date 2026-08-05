@@ -5,22 +5,23 @@ import path from "node:path";
 import { DEFAULT_PRESSURE_ZONE_CONFIG, mergePressureZoneConfig } from "./defaults.js";
 
 const FIELD_RULES = {
-  referenceDiagonalMeters: [500, 20000],
+  referenceMapSizeMeters: [500, 20000],
+  mapScaleInfluence: [0, 1],
   minMapScale: [0.1, 5],
   maxMapScale: [0.1, 5],
-  baseRadiusMultiplier: [0.25, 4],
-  "hard.mapFactor": [0, 2],
-  "hard.nearestObjectiveFactor": [0, 3],
+  "hard.baseRadiusMeters": [50, 5000],
   "hard.minRadiusMeters": [0, 10000],
   "hard.maxRadiusMeters": [0, 20000],
-  "hard.frontSafetyMarginMeters": [0, 10000],
-  "soft.mapFactor": [0, 3],
-  "soft.nearestObjectiveFactor": [0, 5],
-  "soft.minExtraOverHardMeters": [0, 10000],
-  "soft.maxRadiusMeters": [0, 30000],
-  "soft.frontSafetyMarginMeters": [0, 10000],
-  "combat.gapFactor": [0, 5],
-  "combat.lateralFactor": [0, 5],
+  "hard.emergencyMinimumRadiusMeters": [0, 5000],
+  "hard.maxBaseToFirstObjectiveRatio": [0.05, 0.98],
+  "soft.objectiveSpacingRatio": [0, 1],
+  "soft.minExtensionMeters": [0, 10000],
+  "soft.maxExtensionMeters": [0, 15000],
+  "soft.fallbackExtensionMeters": [0, 10000],
+  "soft.objectiveSafetyMarginMeters": [0, 10000],
+  "combat.gapFactor": [0, 2],
+  "combat.mapScaleInfluence": [0, 1],
+  "combat.lateralFactor": [0.1, 5],
   "combat.minRadiusMeters": [0, 20000],
   "combat.maxRadiusMeters": [0, 30000],
   "combat.polygonArcSegments": [6, 128],
@@ -57,27 +58,29 @@ export function createBaseConfigStore({ dataDir = "data/dynamic-pressure-zone", 
 export function normalizeBaseConfig(value = {}) {
   const merged = mergePressureZoneConfig(DEFAULT_PRESSURE_ZONE_CONFIG, value);
   const normalized = {
-    referenceDiagonalMeters: checked("referenceDiagonalMeters", merged.referenceDiagonalMeters),
+    schemaVersion: 2,
+    referenceMapSizeMeters: checked("referenceMapSizeMeters", merged.referenceMapSizeMeters),
+    mapScaleInfluence: checked("mapScaleInfluence", merged.mapScaleInfluence),
     minMapScale: checked("minMapScale", merged.minMapScale),
     maxMapScale: checked("maxMapScale", merged.maxMapScale),
     coordinateScaleMeters: nullablePositive("coordinateScaleMeters", merged.coordinateScaleMeters),
-    baseRadiusMultiplier: checked("baseRadiusMultiplier", merged.baseRadiusMultiplier),
     hard: {
-      mapFactor: checked("hard.mapFactor", merged.hard.mapFactor),
-      nearestObjectiveFactor: checked("hard.nearestObjectiveFactor", merged.hard.nearestObjectiveFactor),
+      baseRadiusMeters: checked("hard.baseRadiusMeters", merged.hard.baseRadiusMeters),
       minRadiusMeters: checked("hard.minRadiusMeters", merged.hard.minRadiusMeters),
       maxRadiusMeters: checked("hard.maxRadiusMeters", merged.hard.maxRadiusMeters),
-      frontSafetyMarginMeters: checked("hard.frontSafetyMarginMeters", merged.hard.frontSafetyMarginMeters),
+      emergencyMinimumRadiusMeters: checked("hard.emergencyMinimumRadiusMeters", merged.hard.emergencyMinimumRadiusMeters),
+      maxBaseToFirstObjectiveRatio: checked("hard.maxBaseToFirstObjectiveRatio", merged.hard.maxBaseToFirstObjectiveRatio),
     },
     soft: {
-      mapFactor: checked("soft.mapFactor", merged.soft.mapFactor),
-      nearestObjectiveFactor: checked("soft.nearestObjectiveFactor", merged.soft.nearestObjectiveFactor),
-      minExtraOverHardMeters: checked("soft.minExtraOverHardMeters", merged.soft.minExtraOverHardMeters),
-      maxRadiusMeters: checked("soft.maxRadiusMeters", merged.soft.maxRadiusMeters),
-      frontSafetyMarginMeters: checked("soft.frontSafetyMarginMeters", merged.soft.frontSafetyMarginMeters),
+      objectiveSpacingRatio: checked("soft.objectiveSpacingRatio", merged.soft.objectiveSpacingRatio),
+      minExtensionMeters: checked("soft.minExtensionMeters", merged.soft.minExtensionMeters),
+      maxExtensionMeters: checked("soft.maxExtensionMeters", merged.soft.maxExtensionMeters),
+      fallbackExtensionMeters: checked("soft.fallbackExtensionMeters", merged.soft.fallbackExtensionMeters),
+      objectiveSafetyMarginMeters: checked("soft.objectiveSafetyMarginMeters", merged.soft.objectiveSafetyMarginMeters),
     },
     combat: {
       gapFactor: checked("combat.gapFactor", merged.combat.gapFactor),
+      mapScaleInfluence: checked("combat.mapScaleInfluence", merged.combat.mapScaleInfluence),
       lateralFactor: checked("combat.lateralFactor", merged.combat.lateralFactor),
       minRadiusMeters: checked("combat.minRadiusMeters", merged.combat.minRadiusMeters),
       maxRadiusMeters: checked("combat.maxRadiusMeters", merged.combat.maxRadiusMeters),
@@ -87,6 +90,12 @@ export function normalizeBaseConfig(value = {}) {
 
   if (normalized.minMapScale > normalized.maxMapScale) throw new Error("minMapScale cannot exceed maxMapScale.");
   if (normalized.hard.minRadiusMeters > normalized.hard.maxRadiusMeters) throw new Error("hard.minRadiusMeters cannot exceed hard.maxRadiusMeters.");
+  if (normalized.hard.emergencyMinimumRadiusMeters > normalized.hard.minRadiusMeters) {
+    throw new Error("hard.emergencyMinimumRadiusMeters cannot exceed hard.minRadiusMeters.");
+  }
+  if (normalized.soft.minExtensionMeters > normalized.soft.maxExtensionMeters) {
+    throw new Error("soft.minExtensionMeters cannot exceed soft.maxExtensionMeters.");
+  }
   if (normalized.combat.minRadiusMeters > normalized.combat.maxRadiusMeters) throw new Error("combat.minRadiusMeters cannot exceed combat.maxRadiusMeters.");
   return normalized;
 }
