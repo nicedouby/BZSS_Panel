@@ -134,6 +134,21 @@ function testParseLogLine() {
   assert.deepEqual(compactVehicleFrame.vehicles[0].occupantPlayerIds, [42, 17]);
   assert.equal(compactVehicleFrame.vehicles[0].occupied, true);
 
+  const vectorSpeedVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:X=100.500 Y=-25.000 Z=8.125-90,S:X=300 Y=400 Z=0,T:1,PS:42,}}",
+  );
+  assert.equal(vectorSpeedVehicleFrame.vehicles[0].speed, 500);
+
+  const compactVectorSpeedVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:X=100.500 Y=-25.000 Z=8.125-90,S:(3,4,12),T:1,PS:42,}}",
+  );
+  assert.equal(compactVectorSpeedVehicleFrame.vehicles[0].speed, 13);
+
+  const unitSpeedVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:X=100.500 Y=-25.000 Z=8.125-90,S:17.25 cm/s,T:1,PS:42,}}",
+  );
+  assert.equal(unitSpeedVehicleFrame.vehicles[0].speed, 17.25);
+
   const commaCompactVehicleFrame = parseBzssCoreVehicleLine(
     "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:100.500,-25.000,8.125,-135,S:12,T:1,PS:42,}}",
   );
