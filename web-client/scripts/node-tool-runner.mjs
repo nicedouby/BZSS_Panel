@@ -1,16 +1,20 @@
-﻿import { execFile } from "node:child_process";
+import { execFile } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import process from "node:process";
+import { dirname, join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const STABLE_NODE_MIN_MAJOR = 24;
+const STABLE_NODE_MAX_MAJOR = 25;
 
 export function createStableNodeToolEnv(source = process.env) {
   const env = { ...source };
 
-  // Node 26:
-  // 閬垮厤澶栭儴 NODE_OPTIONS 褰卞搷瀛愯繘绋?
+  // Do not inherit user-level flags into Vite/vue-tsc child processes.
   delete env.NODE_OPTIONS;
 
-  // Vite 7 enables Node's module compile cache automatically. Node 26.5.x
-  // can crash while disposing the isolate after a large Rollup build when
-  // that cache is enabled. Keep the workaround local to build-tool children.
+  // Avoid the Node 26 module compile-cache disposal crash during large builds.
   env.NODE_DISABLE_COMPILE_CACHE = "1";
 
   return env;
@@ -21,6 +25,7 @@ export function createNodeToolExecArgs({
   args = [],
   nodeArgs = [],
   maxOldSpaceSizeMb = 4096,
+  nodeMajor = getNodeMajor(process.version),
 } = {}) {
   const normalizedEntry = String(entry ?? "").trim();
 
@@ -34,20 +39,16 @@ export function createNodeToolExecArgs({
 
   const extraNodeArgs = Array.isArray(nodeArgs)
     ? nodeArgs
-        .map((v) => String(v ?? "").trim())
+        .map((value) => String(value ?? "").trim())
         .filter(Boolean)
     : [];
 
   const runtimeArgs = [
     `--max-old-space-size=${heapSize}`,
-];
+  ];
 
-  // Node 26.5.x has a V8/Maglev crash path on Windows during large module
-  // builds (fatal "unreachable code" / 0x80000003). This does not change
-  // application runtime behavior; it only disables the affected JIT tier
-  // for the short-lived build process.
-  const nodeMajor = Number.parseInt(String(process.versions.node).split(".")[0], 10);
-  if (process.platform === "win32" && nodeMajor >= 26) {
+  // Keep this workaround only when the selected child runtime is Node 26+.
+  if (process.platform === "win32" && Number(nodeMajor) >= 26) {
     runtimeArgs.push("--no-maglev");
   }
 
@@ -58,7 +59,7 @@ export function createNodeToolExecArgs({
   }
 
   const toolArgs = Array.isArray(args)
-    ? args.map((v) => String(v))
+    ? args.map((value) => String(value))
     : [];
 
   return [
@@ -76,20 +77,22 @@ export async function runNodeTool({
   maxOldSpaceSizeMb = 4096,
 }) {
   const toolLabel = String(label || "Node tool");
-
   const startedAt = Date.now();
+
+  const runtime = await resolveBuildNodeRuntime();
 
   const execArgs = createNodeToolExecArgs({
     entry,
     args,
     nodeArgs,
     maxOldSpaceSizeMb,
+    nodeMajor: runtime.major,
   });
 
   const entryIndex = execArgs.indexOf(String(entry));
 
   console.log(
-    `[client-build] Starting ${toolLabel} with Node ${process.version}`,
+    `[client-build] Starting ${toolLabel} with ${runtime.version} at ${runtime.path}`,
   );
 
   console.log(
@@ -102,6 +105,7 @@ export async function runNodeTool({
 
   const code = await runNodeToolProcess({
     toolLabel,
+    executable: runtime.path,
     execArgs,
   });
 
@@ -115,31 +119,171 @@ export async function runNodeTool({
     console.error(
       `[client-build] ${toolLabel} failed with exit code ${code} after ${elapsed} ms.`,
     );
-
     console.error(
-      `[client-build] Runtime: Node ${process.version}, platform ${process.platform} ${process.arch}`,
+      `[client-build] Runtime: ${runtime.version}, platform ${process.platform} ${process.arch}`,
     );
   }
 
   return code;
 }
 
+async function resolveBuildNodeRuntime() {
+  const currentMajor = getNodeMajor(process.version);
+
+  if (
+    currentMajor >= STABLE_NODE_MIN_MAJOR &&
+    currentMajor <= STABLE_NODE_MAX_MAJOR
+  ) {
+    return {
+      major: currentMajor,
+      path: process.execPath,
+      version: process.version,
+    };
+  }
+
+  const candidates = getNodeRuntimeCandidates();
+
+  for (const candidate of candidates) {
+    const runtime = await inspectNodeRuntime(candidate);
+
+    if (
+      runtime &&
+      runtime.major >= STABLE_NODE_MIN_MAJOR &&
+      runtime.major <= STABLE_NODE_MAX_MAJOR
+    ) {
+      return runtime;
+    }
+  }
+
+  throw new Error(
+    [
+      `A stable Node 24 LTS runtime is required for client builds.`,
+      `The current process is ${process.version} at ${process.execPath}.`,
+      `Install Node 24 LTS or set BZSS_NODE_RUNTIME to the full path of node.exe.`,
+    ].join(" "),
+  );
+}
+
+function getNodeRuntimeCandidates() {
+  const candidates = [];
+  const seen = new Set();
+
+  const add = (value) => {
+    const candidate = String(value ?? "").trim();
+
+    if (!candidate || seen.has(candidate)) {
+      return;
+    }
+
+    seen.add(candidate);
+    candidates.push(candidate);
+  };
+
+  const configuredRuntime =
+    process.env.BZSS_NODE_RUNTIME ||
+    process.env.BZSS_NODE_PATH;
+
+  add(configuredRuntime);
+
+  if (process.platform === "win32") {
+    const nvmRoots = [
+      process.env.NVM_HOME,
+      process.env.APPDATA
+        ? join(process.env.APPDATA, "nvm")
+        : "",
+    ];
+
+    for (const root of nvmRoots) {
+      addNodeVersionDirectories(root, add);
+    }
+
+    if (process.env.ProgramFiles) {
+      addNodeVersionDirectories(
+        join(process.env.ProgramFiles, "nodejs"),
+        add,
+      );
+    }
+
+    // Include every node.exe directory currently visible in PATH.
+    for (const directory of String(process.env.PATH ?? "").split(";")) {
+      add(join(directory, "node.exe"));
+    }
+  } else {
+    for (const directory of String(process.env.PATH ?? "").split(":")) {
+      add(join(directory, "node"));
+    }
+  }
+
+  return candidates;
+}
+
+function addNodeVersionDirectories(root, add) {
+  const normalizedRoot = String(root ?? "").trim();
+
+  if (!normalizedRoot) {
+    return;
+  }
+
+  try {
+    for (const name of readdirSync(normalizedRoot)) {
+      if (/^v?24\\./i.test(name)) {
+        add(join(normalizedRoot, name, process.platform === "win32" ? "node.exe" : "bin/node"));
+      }
+    }
+  } catch {
+    // Missing NVM_HOME or an inaccessible directory is not fatal.
+  }
+
+  add(join(normalizedRoot, process.platform === "win32" ? "node.exe" : "bin/node"));
+}
+
+async function inspectNodeRuntime(candidate) {
+  if (!existsSync(candidate)) {
+    return null;
+  }
+
+  try {
+    const { stdout } = await execFileAsync(
+      candidate,
+      ["--version"],
+      {
+        env: createStableNodeToolEnv(),
+        windowsHide: true,
+      },
+    );
+
+    const version = String(stdout).trim();
+    const major = getNodeMajor(version);
+
+    if (!major) {
+      return null;
+    }
+
+    return { major, path: candidate, version };
+  } catch {
+    return null;
+  }
+}
+
+function getNodeMajor(version) {
+  const match = String(version ?? "").match(/v?(\\d+)/);
+  return match ? Number(match[1]) : 0;
+}
 
 async function runNodeToolProcess({
   toolLabel,
+  executable,
   execArgs,
 }) {
   return await new Promise((resolve) => {
-
     const child = execFile(
-      process.execPath,
+      executable,
       execArgs,
       {
         env: createStableNodeToolEnv(),
         windowsHide: false,
       },
       (error) => {
-
         if (error) {
           console.error(
             `[client-build] ${toolLabel} process error:`,
@@ -159,7 +303,6 @@ async function runNodeToolProcess({
       },
     );
 
-
     if (child.stdout) {
       child.stdout.pipe(process.stdout);
     }
@@ -168,35 +311,26 @@ async function runNodeToolProcess({
       child.stderr.pipe(process.stderr);
     }
 
-
     child.once("error", (error) => {
-
       console.error(
         `[client-build] Unable to start ${toolLabel}:`,
         error,
       );
 
       resolve(1);
-
     });
 
-
     child.once("exit", (exitCode, signal) => {
-
       if (signal) {
-
         console.error(
           `[client-build] ${toolLabel} terminated by signal ${signal}.`,
         );
 
         resolve(1);
         return;
-
       }
 
       resolve(exitCode ?? 0);
-
     });
-
   });
 }
