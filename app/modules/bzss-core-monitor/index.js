@@ -2219,13 +2219,21 @@ export function parseBzssCoreVehicleLine(line) {
   const vehicles = rawVehicles.map((raw, frameIndex) => {
     const driverPlayerId = toFiniteNumber(extractVehicleRuntimeField(raw, ["ID", "DriverID", "DriverPlayerID", "PlayerID"]));
     const type = extractVehicleRuntimeField(raw, ["VT", "VehicleType", "Type"]);
-    const health = parseVehicleHealth(extractVehicleRuntimeField(raw, ["HP", "Health", "HealthPercent"]));
-    const speed = extractVehicleRuntimeField(raw, ["Speed", "Velocity", "Vel"]);
-    const team = extractVehicleRuntimeField(raw, ["TID", "TeamID", "Team"]);
+    const health = parseVehicleHealth(extractVehicleRuntimeField(raw, ["H", "HP", "Health", "HealthPercent"]));
+    const speed = extractVehicleRuntimeField(raw, ["S", "Speed", "Velocity", "Vel"]);
+    const team = extractVehicleRuntimeField(raw, ["T", "TID", "TeamID", "Team"]);
+    const seatPlayerIds = parseVehicleSeatPlayerIds(raw);
+    const normalizedDriverPlayerId = driverPlayerId != null && driverPlayerId >= 0 ? driverPlayerId : null;
+    const occupantPlayerIds = [...new Set([
+      ...(normalizedDriverPlayerId == null ? [] : [normalizedDriverPlayerId]),
+      ...seatPlayerIds,
+    ])];
     return {
       frameIndex,
-      driverPlayerId: driverPlayerId != null && driverPlayerId >= 0 ? driverPlayerId : null,
-      occupied: driverPlayerId != null && driverPlayerId >= 0,
+      driverPlayerId: normalizedDriverPlayerId,
+      occupied: occupantPlayerIds.length > 0,
+      seatPlayerIds,
+      occupantPlayerIds,
       vehicleType: String(type ?? "").trim(),
       healthPercent: health,
       position: scalePosition(parseVehicleRuntimePosition(raw)),
@@ -2241,7 +2249,16 @@ export function parseBzssCoreVehicleLine(line) {
     type: "vehicles",
     vehicles,
     observedAt,
-    rawFields: [frameName, "ID", "DriverID", "VT", "VehicleType", "HP", "Health", "Pos", "Position", "Speed", "TID", "TeamID"],
+    rawFields: [
+      frameName,
+      "ID", "DriverID",
+      "VT", "VehicleType",
+      "H", "HP", "Health",
+      "P", "Pos", "Position",
+      "S", "Speed",
+      "T", "TID", "TeamID",
+      "PS", "SeatPlayers", "SeatsPlayers",
+    ],
   };
 }
 
@@ -2257,6 +2274,20 @@ function extractVehicleRuntimeField(text, names) {
   const aliases = names.map(escapeRegex).join("|");
   const match = String(text ?? "").match(new RegExp(`(?:^|[,;{])\\s*(?:${aliases})\\s*[:=]\\s*([^,;}]+)`, "i"));
   return String(match?.[1] ?? "").trim();
+}
+
+function parseVehicleSeatPlayerIds(text) {
+  // The compact Blueprint format emits PS last. Empty seats are represented by
+  // empty comma-delimited entries, while occupied seats contain a player ID.
+  const match = String(text ?? "").match(
+    /(?:^|[,;{])\s*(?:PS|SeatPlayers|SeatsPlayers)\s*[:=]\s*([^;}]*?)(?=}|$)/i,
+  );
+  return String(match?.[1] ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(toFiniteNumber)
+    .filter((value) => value != null && value >= 0);
 }
 
 function parseVehicleHealth(value) {
@@ -2279,7 +2310,7 @@ function parseVehicleRuntimePosition(text) {
   // decimal places, so read that fixed-width portion before the trailing yaw.
   // This also handles a negative yaw (`Z=-134.696-25.861773`).
   const packedBlueprintPosition = source.match(
-    /(?:Pos(?:ition)?\s*)?X\s*[=:]\s*(-?\d+(?:\.\d+)?)[,\s]+Y\s*[=:]\s*(-?\d+(?:\.\d+)?)[,\s]+Z\s*[=:]\s*(-?\d+\.\d{3})(?:-?\d+(?:\.\d+)?)?(?=\s*,\s*(?:Speed|Velocity|Vel)\s*[:=])/i,
+    /(?:P|Pos(?:ition)?)?\s*[:=]?\s*X\s*[=:]\s*(-?\d+(?:\.\d+)?)[,\s]+Y\s*[=:]\s*(-?\d+(?:\.\d+)?)[,\s]+Z\s*[=:]\s*(-?\d+\.\d{3})(?:-?\d+(?:\.\d+)?)?(?=\s*,\s*(?:S|Speed|Velocity|Vel)\s*[:=])/i,
   );
   if (packedBlueprintPosition) {
     return {
@@ -2288,7 +2319,7 @@ function parseVehicleRuntimePosition(text) {
       z: toFiniteNumber(packedBlueprintPosition[3]),
     };
   }
-  const named = source.match(/(?:^|[,;{])\s*(?:Pos|Position|Location)\s*[:=]\s*(.*?)(?=[,;]\s*(?:Speed|Velocity|Vel|TID|TeamID|Team|ID|DriverID|DriverPlayerID|VT|VehicleType|Type|HP|Health)\s*[:=]|$)/i);
+  const named = source.match(/(?:^|[,;{])\s*(?:P|Pos|Position|Location)\s*[:=]\s*(.*?)(?=[,;]\s*(?:S|Speed|Velocity|Vel|T|TID|TeamID|Team|PS|SeatPlayers|SeatsPlayers|ID|DriverID|DriverPlayerID|VT|VehicleType|Type|H|HP|Health)\s*[:=]|$)/i);
   const positionText = String(named?.[1] ?? source).trim();
   const vectorMatch = positionText.match(/(?:Pos(?:ition)?\s*)?X\s*[=:]\s*(-?[0-9.]+)[,\s]+Y\s*[=:]\s*(-?[0-9.]+)[,\s]+Z\s*[=:]\s*(-?[0-9.]+)/i);
   if (vectorMatch) {
@@ -2305,7 +2336,7 @@ function parseVehicleRuntimeYaw(text) {
   // Blueprint VRI writes yaw immediately after the fixed three-decimal Z value:
   // `Z=-134.74960.261795,Speed...` or `Z=-134.696-25.861773,Speed...`.
   const match = String(text ?? "").match(
-    /Z\s*[=:]\s*-?\d+\.\d{3}\s*(-?\d+(?:\.\d+)?)\s*,\s*(?:Speed|Velocity|Vel)\s*[:=]/i,
+    /Z\s*[=:]\s*-?\d+\.\d{3}\s*(-?\d+(?:\.\d+)?)\s*,\s*(?:S|Speed|Velocity|Vel)\s*[:=]/i,
   );
   return toFiniteNumber(match?.[1]);
 }
