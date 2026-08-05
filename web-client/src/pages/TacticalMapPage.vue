@@ -1310,11 +1310,14 @@ function getRuntimePlayerId(player: any): string | null {
 const vehicleOccupantPlayerIds = computed(() => {
   const ids = new Set<string>();
   for (const vehicle of runtimeVehicles.value) {
-    const candidates = [
-      vehicle?.driverPlayerId,
-      ...(Array.isArray(vehicle?.seatPlayerIds) ? vehicle.seatPlayerIds : []),
-      ...(Array.isArray(vehicle?.occupantPlayerIds) ? vehicle.occupantPlayerIds : []),
-    ];
+    // An occupantPlayerIds array is authoritative even when empty. Falling back
+    // on an empty array resurrects the stale driver ID after everybody exits.
+    const candidates = Array.isArray(vehicle?.occupantPlayerIds)
+      ? vehicle.occupantPlayerIds
+      : [
+          vehicle?.driverPlayerId,
+          ...(Array.isArray(vehicle?.seatPlayerIds) ? vehicle.seatPlayerIds : []),
+        ];
     for (const candidate of candidates) {
       const id = normalizeRuntimePlayerId(candidate);
       if (id != null) ids.add(id);
@@ -2471,7 +2474,10 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
     const speed = Number(vehicle?.speed);
     const driverId = normalizeRuntimePlayerId(vehicle?.driverPlayerId);
     const driverPlayerId = driverId == null ? null : Number(driverId);
-    const rawOccupantIds = Array.isArray(vehicle?.occupantPlayerIds) && vehicle.occupantPlayerIds.length > 0
+    // Empty occupantPlayerIds means the latest seat snapshot is explicitly
+    // empty. Only legacy payloads without that array may fall back to ID/seats.
+    const hasOccupantSnapshot = Array.isArray(vehicle?.occupantPlayerIds);
+    const rawOccupantIds = hasOccupantSnapshot
       ? vehicle.occupantPlayerIds
       : [
           ...(driverPlayerId == null ? [] : [driverPlayerId]),
@@ -2490,7 +2496,7 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
         role: id === driverId ? "驾驶位" : "载具座位",
       };
     });
-    const occupied = Boolean(vehicle?.occupied) || occupants.length > 0;
+    const occupied = occupants.length > 0 || (!hasOccupantSnapshot && Boolean(vehicle?.occupied));
     const healthText = Number.isFinite(health) ? `HP ${Math.round(health)}%` : "HP --";
     const speedText = Number.isFinite(speed) ? `速度 ${speed.toFixed(1)}` : "速度 --";
     const tooltipParts = [
