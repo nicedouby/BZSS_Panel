@@ -3927,11 +3927,16 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker__hitbox {
   position: absolute;
-  left: -22px;
-  top: -22px;
-  width: 44px;
-  height: 44px;
+  left: -16px;
+  top: -16px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
+  transform: scale(var(--vehicle-marker-scale, 1));
+  transform-origin: center;
+  pointer-events: auto;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.001);
 }
 
 .vehicle-marker__frame {
@@ -3946,6 +3951,8 @@ onBeforeUnmount(deactivateMapPage);
   transform-origin: center;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .92));
   will-change: transform;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 .vehicle-marker__icon {
@@ -3970,12 +3977,12 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker__tooltip {
   position: absolute;
-  left: 18px;
-  top: 50%;
+  left: calc(14px * var(--vehicle-marker-scale, 1));
+  top: 0;
   z-index: 95;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   padding: 0;
   border: none;
   background: transparent;
@@ -3983,22 +3990,23 @@ onBeforeUnmount(deactivateMapPage);
   pointer-events: none;
   white-space: nowrap;
   opacity: 0;
-  transform: translateY(-50%) translateX(4px);
+  transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(2px);
+  transform-origin: left center;
   transition: opacity .12s ease, transform .12s ease;
 }
 
 .vehicle-marker:hover .vehicle-marker__tooltip {
   opacity: 1;
-  transform: translateY(-50%) translateX(0);
+  transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(0);
 }
 
 .vehicle-marker__occupant {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11px;
+  gap: 3px;
+  font-size: 10px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95);
   color: var(--vehicle-accent, #94a3b8);
 }
@@ -4018,7 +4026,7 @@ onBeforeUnmount(deactivateMapPage);
 .vehicle-marker__occupant-seat {
   flex: 0 0 auto;
   font-weight: 700;
-  opacity: 0.88;
+  opacity: 0.85;
 }
 
 .vehicle-marker__occupant-name {
