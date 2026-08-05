@@ -186,11 +186,18 @@
   pointer-events: none !important;
 }
 .capture-zone-marker .capture-zone-flag {
-  left: 12px;
-  top: 18px;
+  /*
+   * The marker button is a 58px hit area centered on the map coordinate.
+   * Keep the flag's own center on that same coordinate.
+   */
+  left: 29px;
+  top: 29px;
+  transition: transform 120ms ease-out, filter 120ms ease-out;
 }
 .map-viewport.is-capture-point-editing .capture-zone-marker { cursor: grab; }
-.map-viewport.is-capture-point-editing .capture-zone-marker:hover .zone-flag-group {
+.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag {
+  /* Hover feedback scales around the flag center; it must not move the point. */
+  transform: scale(var(--capture-marker-scale, 1)) scale(1.08);
   filter: drop-shadow(0 0 7px rgba(250, 204, 21, .9)) brightness(1.12);
 }
 .capture-zone-marker.is-point-dragging { z-index: 20; cursor: grabbing; }
