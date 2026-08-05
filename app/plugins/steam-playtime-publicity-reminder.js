@@ -189,12 +189,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
   }
 
-  async function processLeaderWarnings(privatePlayers, nowMs) {
-    const leaders = privatePlayers.filter((player) => player.isLeader && player.teamID && player.squadID);
-    state.privateLeaderCount = leaders.length;
+  async function processLeaderWarnings(privateLeaders, nowMs) {
+    state.privateLeaderCount = privateLeaders.length;
     const activeKeys = new Set();
 
-    for (const player of leaders) {
+    for (const player of privateLeaders) {
       const key = player.steamID || player.eosID || player.playerID || player.name;
       if (!key) continue;
       activeKeys.add(key);
@@ -276,11 +275,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     if (current.seconds < cfg.startAfterSeconds) return publicState();
 
     const players = roster();
-    const privatePlayers = await resolveConfirmedPrivate(players);
-    state.confirmedPrivateCount = privatePlayers.length;
+    const leaderCandidates = players.filter((player) => player.isLeader && player.teamID && player.squadID);
+    const broadcastDue = nowMs >= state.nextBroadcastAtMs;
+    const privatePlayers = broadcastDue ? await resolveConfirmedPrivate(players) : null;
+    const privateLeaders = privatePlayers
+      ? privatePlayers.filter((player) => player.isLeader && player.teamID && player.squadID)
+      : await resolveConfirmedPrivate(leaderCandidates);
 
-    await processLeaderWarnings(privatePlayers, nowMs);
-    await processBroadcastCycle(privatePlayers, nowMs);
+    if (privatePlayers) state.confirmedPrivateCount = privatePlayers.length;
+    await processLeaderWarnings(privateLeaders, nowMs);
+    if (privatePlayers) await processBroadcastCycle(privatePlayers, nowMs);
 
     if (!state.lastError || reason === "poll") state.lastError = "";
     return publicState();
@@ -300,7 +304,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "督促时长公开",
       kind: "plugin",
-      version: "1.0.1",
+      version: "1.0.2",
       category: "Moderation",
       description: "开局5分钟后持续提醒未公开 Steam 时长的小队长，并分批广播已确认未公开资料的在线玩家数字ID。",
       configSchema: [
