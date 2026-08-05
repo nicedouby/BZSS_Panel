@@ -159,7 +159,26 @@
 .main-zone-marker,
 .capture-zone-marker { position: absolute; width: 0; height: 0; padding: 0; overflow: visible; border: 0; background: transparent; }
 .main-zone-marker { pointer-events: none; }
-.capture-zone-marker { pointer-events: auto; cursor: pointer; touch-action: none; }
+/*
+ * Keep a real hit area around capture points.  A zero-sized button with only
+ * an overflowing flag as its visual content is not reliably hit-testable in
+ * all Chromium zoom/layout combinations; the map then receives pointerdown
+ * instead of the point marker.
+ */
+.capture-zone-marker {
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.capture-zone-marker .capture-zone-flag {
+  left: 12px;
+  top: 18px;
+}
 .map-viewport.is-capture-point-editing .capture-zone-marker { cursor: grab; }
 .map-viewport.is-capture-point-editing .capture-zone-marker:hover .zone-flag-group {
   filter: drop-shadow(0 0 7px rgba(250, 204, 21, .9)) brightness(1.12);
@@ -173,8 +192,8 @@
 }
 .capture-point-index {
   position: absolute;
-  left: 0;
-  top: -31px;
+  left: 29px;
+  top: -2px;
   min-width: 20px;
   padding: 2px 5px;
   transform: translateX(-50%) scale(var(--capture-marker-scale, 1));
