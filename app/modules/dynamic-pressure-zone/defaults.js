@@ -3,8 +3,8 @@
 export const PRESSURE_ZONE_PRIORITIES = Object.freeze({
   FREE: 0,
   SOFT: 50,
-  COMBAT: 80,
   HARD: 100,
+  COMBAT: 120,
 });
 
 export const DEFAULT_PRESSURE_ZONE_CONFIG = Object.freeze({
