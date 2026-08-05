@@ -2222,16 +2222,24 @@ export function parseBzssCoreVehicleLine(line) {
     const health = parseVehicleHealth(extractVehicleRuntimeField(raw, ["H", "HP", "Health", "HealthPercent"]));
     const speed = extractVehicleRuntimeField(raw, ["S", "Speed", "Velocity", "Vel"]);
     const team = extractVehicleRuntimeField(raw, ["T", "TID", "TeamID", "Team"]);
+    const seatSnapshotPresent = hasVehicleSeatPlayerSnapshot(raw);
     const seatPlayerIds = parseVehicleSeatPlayerIds(raw);
     const normalizedDriverPlayerId = driverPlayerId != null && driverPlayerId >= 0 ? driverPlayerId : null;
-    const occupantPlayerIds = [...new Set([
-      ...(normalizedDriverPlayerId == null ? [] : [normalizedDriverPlayerId]),
-      ...seatPlayerIds,
-    ])];
+    // PS is the authoritative current-seat snapshot. An explicitly empty PS
+    // must clear stale driver/passenger IDs instead of falling back to ID.
+    const occupantPlayerIds = [...new Set(
+      seatSnapshotPresent
+        ? seatPlayerIds
+        : [
+            ...(normalizedDriverPlayerId == null ? [] : [normalizedDriverPlayerId]),
+            ...seatPlayerIds,
+          ],
+    )];
     return {
       frameIndex,
       driverPlayerId: normalizedDriverPlayerId,
       occupied: occupantPlayerIds.length > 0,
+      seatSnapshotPresent,
       seatPlayerIds,
       occupantPlayerIds,
       vehicleType: String(type ?? "").trim(),
@@ -2274,6 +2282,10 @@ function extractVehicleRuntimeField(text, names) {
   const aliases = names.map(escapeRegex).join("|");
   const match = String(text ?? "").match(new RegExp(`(?:^|[,;{])\\s*(?:${aliases})\\s*[:=]\\s*([^,;}]+)`, "i"));
   return String(match?.[1] ?? "").trim();
+}
+
+function hasVehicleSeatPlayerSnapshot(text) {
+  return /(?:^|[,;{])\s*(?:PS|SeatPlayers|SeatsPlayers)\s*[:=]/i.test(String(text ?? ""));
 }
 
 function parseVehicleSeatPlayerIds(text) {
