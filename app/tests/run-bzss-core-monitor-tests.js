@@ -117,6 +117,29 @@ function testParseLogLine() {
   assert.deepEqual(packedBlueprintVehicleFrame.vehicles[0].position, { x: 56641.3, y: 9338.9, z: -13474.9 });
   assert.deepEqual(packedBlueprintVehicleFrame.vehicles[1].position, { x: 55068, y: 7239.5, z: -13469.6 });
 
+  const compactVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600.0/800.0),P:X=100.500 Y=-25.000 Z=8.125-90,S:12,T:1,PS:42,,,17,}}",
+  );
+  assert.equal(compactVehicleFrame.vehicles.length, 1);
+  assert.equal(compactVehicleFrame.vehicles[0].driverPlayerId, 42);
+  assert.equal(compactVehicleFrame.vehicles[0].vehicleType, "JeepAntiTank");
+  assert.equal(compactVehicleFrame.vehicles[0].healthPercent, 75);
+  assert.deepEqual(compactVehicleFrame.vehicles[0].position, { x: 10050, y: -2500, z: 812.5 });
+  assert.equal(compactVehicleFrame.vehicles[0].yaw, -90);
+  assert.equal(compactVehicleFrame.vehicles[0].speed, 12);
+  assert.equal(compactVehicleFrame.vehicles[0].teamId, 1);
+  assert.deepEqual(compactVehicleFrame.vehicles[0].seatPlayerIds, [42, 17]);
+  assert.deepEqual(compactVehicleFrame.vehicles[0].occupantPlayerIds, [42, 17]);
+  assert.equal(compactVehicleFrame.vehicles[0].occupied, true);
+
+  const passengerOnlyVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:-1,VT:TruckTransport,H:(750/750),P:X=1.000 Y=2.000 Z=3.0000,S:0,T:2,PS:,,17,}}",
+  );
+  assert.equal(passengerOnlyVehicleFrame.vehicles[0].driverPlayerId, null);
+  assert.deepEqual(passengerOnlyVehicleFrame.vehicles[0].seatPlayerIds, [17]);
+  assert.deepEqual(passengerOnlyVehicleFrame.vehicles[0].occupantPlayerIds, [17]);
+  assert.equal(passengerOnlyVehicleFrame.vehicles[0].occupied, true);
+
   const runtime = parseBzssCoreLogLine("PIE: Error: PlayerBaseInfo{}");
   assert.equal(runtime.type, "playerRuntime");
   assert.equal(runtime.runtimePlayers.length, 0);
