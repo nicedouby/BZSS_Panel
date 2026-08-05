@@ -595,129 +595,28 @@
         </div>
       </header>
 
-      <section class="map-control-dock" aria-label="地图操作">
-        <div class="map-control-dock__nav">
-        <button class="ctrl-btn" title="放大" @click="zoomIn">
-          <span class="icon-span">+</span>
-        </button>
-        <button class="ctrl-btn" title="缩小" @click="zoomOut">
-          <span class="icon-span">-</span>
-        </button>
-        <button class="ctrl-btn" title="适配视口 (F)" @click="resetView">
-          <span class="icon-span">↺</span>
-        </button>
-        </div>
-        <div class="map-control-dock__menu-row">
-          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'layers' }" @click="toggleMapControlPanel('layers')" :aria-expanded="activeMapControlPanel === 'layers'">图层</button>
-          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'tools' || measureMode || combatHotspot != null }" @click="toggleMapControlPanel('tools')" :aria-expanded="activeMapControlPanel === 'tools'">工具</button>
-          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'help' }" @click="toggleMapControlPanel('help')" :aria-expanded="activeMapControlPanel === 'help'">帮助</button>
-        </div>
-        <div v-if="activeMapControlPanel === 'layers'" class="map-control-popover">
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showGrid }"
-          @click="showGrid = !showGrid"
-          :aria-pressed="showGrid"
-          title="网格开关 (G)"
-        >
-          网格
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showCaptureZones }"
-          @click="showCaptureZones = !showCaptureZones"
-          :aria-pressed="showCaptureZones"
-          title="地标区域图层"
-        >
-          地标
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showFobs }"
-          @click="showFobs = !showFobs"
-          :aria-pressed="showFobs"
-          title="FOB图层"
-        >
-          FOB
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showPlayerNames }"
-          @click="showPlayerNames = !showPlayerNames"
-          :aria-pressed="showPlayerNames"
-          title="玩家姓名图层"
-        >
-          姓名
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showPlayerCoords }"
-          @click="showPlayerCoords = !showPlayerCoords"
-          :aria-pressed="showPlayerCoords"
-          title="玩家坐标图层"
-        >
-          坐标
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: filterAliveOnly }"
-          @click="filterAliveOnly = !filterAliveOnly"
-          :aria-pressed="filterAliveOnly"
-          title="只显示存活玩家"
-        >
-          存活
-        </button>
-        </div>
-        <div v-if="activeMapControlPanel === 'tools'" class="map-control-popover">
-        <button
-          v-if="canEditCapturePoints"
-          class="ctrl-btn text-btn capture-point-edit-btn"
-          :class="{ active: capturePointEditMode }"
-          :disabled="capturePointCommandPending"
-          @click="toggleCapturePointEditMode"
-          :aria-pressed="capturePointEditMode"
-          title="改点模式：拖拽旗帜，松开后发送 DragCapturePoint 命令"
-        >
-          {{ capturePointCommandPending ? "提交中" : "改点" }}
-        </button>
-        <button
-          class="ctrl-btn text-btn measure-btn"
-          :class="{ active: measureMode }"
-          @click="toggleMeasureMode"
-          :aria-pressed="measureMode"
-          title="多点测距 (M)"
-        >
-          测距
-        </button>
-        <button
-          v-if="measurePoints.length"
-          class="ctrl-btn text-btn"
-          @click="clearMeasurePoints"
-          title="清空测距点"
-        >
-          清空
-        </button>
-        <button
-          class="ctrl-btn text-btn hotspot-ctrl-btn"
-          :class="{ active: combatHotspot != null }"
-          @click="calculateCombatHotspot"
-          title="计算并生成作战热点中心及1000m半径"
-        >
-          热点
-        </button>
-        <button
-          v-if="combatHotspot != null"
-          class="ctrl-btn text-btn"
-          @click="clearCombatHotspot"
-          title="清除作战热点"
-        >
-          清除热点
-        </button>
-        </div>
-        <div v-if="activeMapControlPanel === 'help'" class="map-control-popover map-control-popover--help">
-          <span><kbd>右键</kbd> 指令</span><span><kbd>双击</kbd> 资料</span><span><kbd>滚轮</kbd> 缩放</span><span><kbd>拖拽</kbd> 移动</span><span><kbd>M</kbd> 测距</span><span><kbd>G</kbd> 网格</span><span><kbd>F</kbd> 复位</span>
-        </div>
-      </section>
+      <TacticalMapToolbar
+        v-model:show-grid="showGrid"
+        v-model:show-capture-zones="showCaptureZones"
+        v-model:show-fobs="showFobs"
+        v-model:show-player-names="showPlayerNames"
+        v-model:show-player-coords="showPlayerCoords"
+        v-model:filter-alive-only="filterAliveOnly"
+        :can-edit-capture-points="canEditCapturePoints"
+        :capture-point-edit-mode="capturePointEditMode"
+        :capture-point-command-pending="capturePointCommandPending"
+        :measure-mode="measureMode"
+        :has-measure-points="measurePoints.length > 0"
+        :has-combat-hotspot="combatHotspot != null"
+        @zoom-in="zoomIn"
+        @zoom-out="zoomOut"
+        @reset-view="resetView"
+        @toggle-capture-point-edit="toggleCapturePointEditMode"
+        @toggle-measure="toggleMeasureMode"
+        @clear-measure="clearMeasurePoints"
+        @calculate-hotspot="calculateCombatHotspot"
+        @clear-hotspot="clearCombatHotspot"
+      />
 
       <div
         v-if="capturePointEditMode || capturePointFeedback"
@@ -884,6 +783,7 @@ import {
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import TacticalMapToolbar from "../components/tactical-map/TacticalMapToolbar.vue";
 import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
@@ -1543,12 +1443,6 @@ const showPressureConnections = ref(false);
 let pressureZoneFetchTimer: number | null = null;
 let pressureZoneRequestSequence = 0;
 const filterAliveOnly = ref(false);
-const activeMapControlPanel = ref<"layers" | "tools" | "help" | null>(null);
-
-function toggleMapControlPanel(panel: "layers" | "tools" | "help") {
-  activeMapControlPanel.value = activeMapControlPanel.value === panel ? null : panel;
-}
-
 // Icon scaling and tags visibility refs
 const markerScale = ref(1.15);
 const showPlayerNames = ref(true);
@@ -4296,8 +4190,7 @@ onBeforeUnmount(deactivateMapPage);
 .tactical-recording-action:hover:not(:disabled) { background: #48d6aa; color: #06251e; }
 .tactical-recording-action:disabled { cursor: wait; opacity: .55; }
 
-.map-control-dock { position: absolute; z-index: 60; bottom: 16px; left: 16px; display: grid; gap: 7px; }
-.map-control-dock__nav, .map-control-dock__menu-row, .map-control-popover, .map-coordinate-readout { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
+.map-coordinate-readout { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
 .capture-point-edit-status {
   position: absolute;
   z-index: 61;
@@ -4316,14 +4209,6 @@ onBeforeUnmount(deactivateMapPage);
 }
 .capture-point-edit-status.is-ok { border-color: rgba(74, 222, 128, .58); color: #86efac; }
 .capture-point-edit-status.is-error { border-color: rgba(248, 113, 113, .68); color: #fca5a5; }
-.map-control-dock__nav, .map-control-dock__menu-row { display: flex; width: fit-content; padding: 4px; }
-.map-control-dock .ctrl-btn { min-width: 34px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: #b8ccd9; }
-.map-control-dock .ctrl-btn:hover, .map-control-dock .ctrl-btn.active { background: rgba(72, 214, 170, .2); color: #a7f6d4; }
-.map-control-dock .ctrl-btn.text-btn { width: auto; min-width: 46px; padding: 0 10px; font-size: 11px; }
-.map-control-popover { display: grid; grid-template-columns: repeat(3, minmax(54px, 1fr)); width: min(260px, calc(100vw - 32px)); gap: 3px; padding: 5px; }
-.map-control-popover--help { grid-template-columns: 1fr 1fr; padding: 10px; color: #aac0ce; font-size: 11px; }
-.map-control-popover--help span { display: flex; align-items: center; gap: 6px; }
-.map-control-popover kbd { min-width: 30px; padding: 2px 4px; border: 1px solid rgba(148, 163, 184, .3); border-radius: 4px; color: #e1edf5; background: rgba(30, 41, 59, .7); font: inherit; text-align: center; }
 .map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
 .map-coordinate-readout span { color: #60768a; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
 .map-coordinate-readout b { color: #dcebf3; font-weight: 650; }
@@ -4443,7 +4328,6 @@ onBeforeUnmount(deactivateMapPage);
   .tactical-live-status, .tactical-recording-status { font-size: 0; }
   .tactical-command-bar__identity strong { font-size: 13px; }
   .tactical-command-bar__identity span:last-child { display: none; }
-  .map-control-dock { bottom: 8px; left: 8px; }
   .map-coordinate-readout { right: 8px; bottom: 8px; }
   .pressure-settings-modal { padding: 0; }
   .pressure-settings-modal__panel { width: 100%; height: 100%; border: 0; border-radius: 0; }
