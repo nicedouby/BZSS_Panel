@@ -332,29 +332,18 @@
               </svg>
             </span>
             <div class="vehicle-marker__tooltip" role="tooltip">
-              <div class="vehicle-marker__tooltip-header">
-                <strong>{{ vehicle.vehicleType }}</strong>
-                <span>T{{ vehicle.teamId ?? "--" }}</span>
-              </div>
-              <div class="vehicle-marker__tooltip-stats">
-                <span>{{ vehicle.healthText }}</span>
-                <span>{{ vehicle.speedText }}</span>
-              </div>
-              <div class="vehicle-marker__tooltip-title">
-                座椅玩家（{{ vehicle.occupants.length }}）
-              </div>
               <div v-if="vehicle.occupants.length" class="vehicle-marker__occupants">
                 <div
                   v-for="occupant in vehicle.occupants"
                   :key="`${vehicle.id}:occupant:${occupant.playerId}`"
                   class="vehicle-marker__occupant"
+                  :class="`team-${occupant.teamId ?? vehicle.teamId ?? 0}`"
                 >
-                  <span>{{ occupant.role }}</span>
-                  <strong>{{ occupant.playerName }}</strong>
-                  <small>#{{ occupant.playerId }}</small>
+                  <span class="vehicle-marker__occupant-role">{{ occupant.role }}</span>
+                  <span class="vehicle-marker__occupant-name">{{ occupant.playerName }}</span>
                 </div>
               </div>
-              <div v-else class="vehicle-marker__empty">当前无人乘坐</div>
+              <div v-else class="vehicle-marker__empty">无玩家</div>
             </div>
           </div>
         </div>
@@ -975,7 +964,8 @@ interface FobMarker {
 interface VehicleOccupant {
   playerId: number;
   playerName: string;
-  role: "驾驶位" | "载具座位";
+  role: string;
+  teamId: number | null;
 }
 
 interface VehicleMarker {
@@ -2485,17 +2475,24 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
           ...(driverPlayerId == null ? [] : [driverPlayerId]),
           ...(Array.isArray(vehicle?.seatPlayerIds) ? vehicle.seatPlayerIds : []),
         ];
-    const uniqueOccupantIds = [...new Set(
+    const uniqueOccupantIds: string[] = [...new Set<string>(
       rawOccupantIds
-        .map(normalizeRuntimePlayerId)
-        .filter((id): id is string => id != null),
+        .map((item: unknown) => normalizeRuntimePlayerId(item))
+        .filter((id: string | null): id is string => id != null),
     )];
-    const occupants: VehicleOccupant[] = uniqueOccupantIds.map((id) => {
+    const occupants: VehicleOccupant[] = uniqueOccupantIds.map((id: string) => {
       const linkedPlayer = playersByRuntimeId.get(id);
+      const rawRole = linkedPlayer?.role || "";
+      const resolvedRole = resolveRoleIcon(rawRole);
+      const roleLabel = (resolvedRole.label && resolvedRole.label !== "未指定" && resolvedRole.label !== "未知")
+        ? resolvedRole.label
+        : (id === driverId ? "驾驶员" : "乘员");
+      const teamId = linkedPlayer?.teamId ?? normalizedTeamId;
       return {
         playerId: Number(id),
         playerName: linkedPlayer ? getPlayerLabel(linkedPlayer) : `Player ${id}`,
-        role: id === driverId ? "驾驶位" : "载具座位",
+        role: roleLabel,
+        teamId,
       };
     });
     const occupied = occupants.length > 0 || (!hasOccupantSnapshot && Boolean(vehicle?.occupied));
@@ -3972,84 +3969,68 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker__tooltip {
   position: absolute;
-  left: 0;
-  bottom: 22px;
-  z-index: 3;
-  width: 190px;
-  height: auto;
-  padding: 7px 8px;
-  border: 1px solid rgba(148, 163, 184, .34);
-  border-radius: 6px;
-  background: rgba(8, 15, 25, .96);
-  color: #d5dde8;
-  opacity: 0;
+  left: 18px;
+  top: 50%;
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
   pointer-events: none;
-  transform: translateX(-50%) translateY(3px);
-  transition: opacity .1s ease, transform .1s ease;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-50%) translateX(4px);
+  transition: opacity .12s ease, transform .12s ease;
 }
+
 .vehicle-marker:hover .vehicle-marker__tooltip {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(-50%) translateX(0);
 }
-.vehicle-marker__tooltip-header,
-.vehicle-marker__tooltip-stats,
+
+.vehicle-marker__occupants {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .vehicle-marker__occupant {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95);
+  color: var(--vehicle-accent, #94a3b8);
 }
-.vehicle-marker__tooltip-header {
-  justify-content: space-between;
-  color: var(--vehicle-accent);
+
+.vehicle-marker__occupant.team-1 {
+  color: #7dd3fc;
 }
-.vehicle-marker__tooltip-header strong {
-  max-width: 138px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+
+.vehicle-marker__occupant.team-2 {
+  color: #f87171;
 }
-.vehicle-marker__tooltip-stats {
-  margin-top: 5px;
-  color: #94a3b8;
-  font-size: 11px;
-}
-.vehicle-marker__tooltip-title {
-  margin-top: 6px;
-  padding-top: 5px;
-  border-top: 1px solid rgba(148, 163, 184, .2);
-  color: #cbd5e1;
-  font-size: 11px;
-  font-weight: 700;
-}
-.vehicle-marker__occupants {
-  display: grid;
-  grid-auto-rows: minmax(18px, auto);
-  gap: 2px;
-  margin-top: 4px;
-}
-.vehicle-marker__occupant {
-  min-width: 0;
-  font-size: 11px;
-}
-.vehicle-marker__occupant > span {
+
+.vehicle-marker__occupant-role {
   flex: 0 0 auto;
-  min-width: 46px;
-  color: var(--vehicle-accent);
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
-.vehicle-marker__occupant > strong {
-  overflow: hidden;
-  color: #f8fafc;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+
+.vehicle-marker__occupant-name {
+  flex: 0 0 auto;
 }
-.vehicle-marker__occupant > small {
-  margin-left: auto;
-  color: #64748b;
-}
+
 .vehicle-marker__empty {
-  margin-top: 5px;
-  color: #64748b;
   font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95);
 }
 
 
