@@ -1,27 +1,29 @@
 import { apiGet, apiPost, request } from "./apiClient";
 
 export interface PressureZoneConfig {
-  referenceDiagonalMeters: number;
+  schemaVersion: number;
+  referenceMapSizeMeters: number;
+  mapScaleInfluence: number;
   minMapScale: number;
   maxMapScale: number;
   coordinateScaleMeters: number | null;
-  baseRadiusMultiplier: number;
   hard: {
-    mapFactor: number;
-    nearestObjectiveFactor: number;
+    baseRadiusMeters: number;
     minRadiusMeters: number;
     maxRadiusMeters: number;
-    frontSafetyMarginMeters: number;
+    emergencyMinimumRadiusMeters: number;
+    maxBaseToFirstObjectiveRatio: number;
   };
   soft: {
-    mapFactor: number;
-    nearestObjectiveFactor: number;
-    minExtraOverHardMeters: number;
-    maxRadiusMeters: number;
-    frontSafetyMarginMeters: number;
+    objectiveSpacingRatio: number;
+    minExtensionMeters: number;
+    maxExtensionMeters: number;
+    fallbackExtensionMeters: number;
+    objectiveSafetyMarginMeters: number;
   };
   combat: {
     gapFactor: number;
+    mapScaleInfluence: number;
     lateralFactor: number;
     minRadiusMeters: number;
     maxRadiusMeters: number;
@@ -59,23 +61,49 @@ export interface PressureZoneItem {
   geometry: PressureZoneGeometry;
 }
 
+export interface PressureZoneMapState {
+  bounds: TacticalMapBoundsLike;
+  widthMeters: number;
+  heightMeters: number;
+  effectiveSizeMeters: number;
+  diagonalMeters: number;
+  referenceMapSizeMeters: number;
+  rawScaleFactor: number;
+  scaleFactor: number;
+  sizeSource: "bounds" | "input-map-size" | string;
+  coordinateScaleMeters: number;
+  worldUnitsPerMeter: number;
+}
+
+export interface PressureZoneBaseState {
+  teamId: number;
+  main: { x: number; y: number };
+  firstObjective?: { id: string; name: string; x: number; y: number } | null;
+  secondObjective?: { id: string; name: string; x: number; y: number } | null;
+  firstObjectiveId?: string | null;
+  firstObjectiveDistance?: number | null;
+  firstObjectiveSpacing?: number | null;
+  nearestObjectiveId?: string | null;
+  nearestObjectiveDistance?: number | null;
+  currentFrontObjectiveId?: string | null;
+  currentFrontDistance?: number | null;
+  hardRadius: number;
+  softRadius: number;
+  hardRadiusWorld: number;
+  softRadiusWorld: number;
+  limitingFactor?: string;
+  formula?: Record<string, unknown>;
+}
+
 export interface PressureZoneState {
   active: boolean;
   reason?: string;
   layer?: string;
   mapKey?: string;
   profileSource?: string;
-  map?: {
-    bounds: TacticalMapBoundsLike;
-    widthMeters: number;
-    heightMeters: number;
-    diagonalMeters: number;
-    scaleFactor: number;
-    coordinateScaleMeters: number;
-    worldUnitsPerMeter: number;
-  } | null;
+  map?: PressureZoneMapState | null;
   combat?: any;
-  bases?: { team1?: any; team2?: any };
+  bases?: { team1?: PressureZoneBaseState; team2?: PressureZoneBaseState };
   zones: PressureZoneItem[];
   diagnostics?: any;
 }
