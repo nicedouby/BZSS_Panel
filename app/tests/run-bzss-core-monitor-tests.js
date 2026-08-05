@@ -116,6 +116,8 @@ function testParseLogLine() {
   assert.equal(packedBlueprintVehicleFrame.vehicles.length, 2);
   assert.deepEqual(packedBlueprintVehicleFrame.vehicles[0].position, { x: 56641.3, y: 9338.9, z: -13474.9 });
   assert.deepEqual(packedBlueprintVehicleFrame.vehicles[1].position, { x: 55068, y: 7239.5, z: -13469.6 });
+  assert.equal(packedBlueprintVehicleFrame.vehicles[0].yaw, 60.261795);
+  assert.equal(packedBlueprintVehicleFrame.vehicles[1].yaw, -25.861773);
 
   const compactVehicleFrame = parseBzssCoreVehicleLine(
     "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600.0/800.0),P:X=100.500 Y=-25.000 Z=8.125-90,S:12,T:1,PS:42,,,17,}}",
@@ -131,6 +133,17 @@ function testParseLogLine() {
   assert.deepEqual(compactVehicleFrame.vehicles[0].seatPlayerIds, [42, 17]);
   assert.deepEqual(compactVehicleFrame.vehicles[0].occupantPlayerIds, [42, 17]);
   assert.equal(compactVehicleFrame.vehicles[0].occupied, true);
+
+  const commaCompactVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:100.500,-25.000,8.125,-135,S:12,T:1,PS:42,}}",
+  );
+  assert.deepEqual(commaCompactVehicleFrame.vehicles[0].position, { x: 10050, y: -2500, z: 812.5 });
+  assert.equal(commaCompactVehicleFrame.vehicles[0].yaw, -135);
+
+  const explicitYawVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:X=100.500 Y=-25.000 Z=8.125,Yaw:47.5,S:12,T:1,PS:42,}}",
+  );
+  assert.equal(explicitYawVehicleFrame.vehicles[0].yaw, 47.5);
 
   const passengerOnlyVehicleFrame = parseBzssCoreVehicleLine(
     "PIE: Warning: VRI{{ID:-1,VT:TruckTransport,H:(750/750),P:X=1.000 Y=2.000 Z=3.0000,S:0,T:2,PS:,,17,}}",
