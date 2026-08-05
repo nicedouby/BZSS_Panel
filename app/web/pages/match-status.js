@@ -337,15 +337,15 @@ function renderSquad(squad) {
             <div class="match-squad-name">${esc(squad.squadName)}</div>
           </div>
           <div class="match-squad-subtitle">
+            ${squad.creatorName ? `<span class="match-squad-creator">${esc(displayName(squad.creatorName, "未知"))}</span>` : ""}
             <span class="match-badge ${squad.locked ? "locked" : "open"}">${squad.locked ? "锁队" : "公开"}</span>
-            <span class="match-squad-creator">创建人 ${esc(displayName(squad.creatorName, "未知"))}</span>
+            <span class="match-badge count">${squad.members.length || squad.size || 0} 人</span>
           </div>
         </div>
         <div class="match-squad-stats">
-          <span>K ${totals.kills}</span>
-          <span>D ${totals.downs}</span>
-          <span>死 ${totals.deaths}</span>
-          <span>人数 ${squad.members.length || squad.size || 0}</span>
+          <span class="sq-kd">
+            <em class="kd-kill">${totals.kills}</em><i>/</i><em class="kd-down">${totals.downs}</em><i>/</i><em class="kd-death">${totals.deaths}</em>
+          </span>
         </div>
       </div>
 
@@ -371,24 +371,27 @@ function renderMember(member) {
   const stats = getMatchStats(member);
   const stateLabel = formatState(member.state);
   const roleLabel = member.role || "未知角色";
-  const teamLabel = member._resolvedUnassigned ? "待确认队伍" : `Team ${member._resolvedTeamID ?? "?"}`;
-  const squadLabel = member._resolvedUnassigned ? "未编队" : `Squad ${member._resolvedSquadID ?? "?"}`;
   const squadlessText = member._resolvedUnassigned ? formatSquadlessSeconds(member?.squadlessSeconds) : "";
+  const memberClasses = ["match-member-row"];
+  if (member.isLeader) memberClasses.push("is-leader");
+  if (member._resolvedUnassigned) memberClasses.push("is-unassigned");
 
   return `
-    <button class="match-member-row" type="button" data-player-index="${member._playerIndex}">
+    <button class="${memberClasses.join(" ")}" type="button" data-player-index="${member._playerIndex}">
       <div class="match-member-main">
         <span class="match-member-name">${esc(displayName(member.name))}</span>
         ${member.isLeader ? '<span class="match-badge leader">队长</span>' : ""}
       </div>
-      <div class="match-member-meta">
-        <span class="match-member-stat playtime-stat">${esc(formatPlaytime(member))}</span>
-        ${member._resolvedUnassigned ? "" : `<span class="match-member-squad-id">#${esc(member._resolvedSquadID)}</span>`}
-        ${squadlessText ? `<span class="match-member-stat">${esc(squadlessText)}</span>` : ""}
-        <span class="match-member-stat">${esc(stateLabel)}</span>
-        <span class="match-member-stat">${esc(roleLabel)}</span>
-        <span class="match-member-stat">${esc(teamLabel)} / ${esc(squadLabel)}</span>
-        <span class="match-member-stat">K ${stats.kills} / D ${stats.downs} / 死 ${stats.deaths}</span>
+      <div class="match-member-mid">
+        <span class="match-member-role">${esc(roleLabel)}</span>
+        ${squadlessText ? `<span class="match-member-squadless">${esc(squadlessText)}</span>` : ""}
+        <span class="match-member-state" data-state="${esc(formatState(member.state))}">${esc(stateLabel)}</span>
+      </div>
+      <div class="match-member-right">
+        <span class="match-member-kd">
+          <em class="kd-kill">${stats.kills}</em><i class="kd-sep">/</i><em class="kd-down">${stats.downs}</em><i class="kd-sep">/</i><em class="kd-death">${stats.deaths}</em>
+        </span>
+        <span class="match-member-playtime">${esc(formatPlaytime(member))}</span>
       </div>
     </button>
   `;

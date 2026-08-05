@@ -636,11 +636,55 @@ body::before {
 .match-squad-stats {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
   color: #dbeafe;
   font-size: 12px;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-squad-stats > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.match-squad-stats > span:first-child { color: #4ade80; }
+.match-squad-stats > span:nth-child(2) { color: #facc15; }
+.match-squad-stats > span:nth-child(3) { color: #f87171; }
+
+.match-squad-stats .sq-kd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.match-squad-stats .sq-kd em {
+  font-style: normal;
+  min-width: 1.4em;
+  text-align: center;
+}
+
+.match-squad-stats .sq-kd .kd-kill { color: #4ade80; }
+.match-squad-stats .sq-kd .kd-down { color: #facc15; }
+.match-squad-stats .sq-kd .kd-death { color: #f87171; }
+
+.match-squad-stats .sq-kd i {
+  font-style: normal;
+  font-weight: 400;
+  color: rgba(148, 163, 184, 0.35);
+  padding: 0 1px;
+}
+
+.match-badge.count {
+  color: #cbd5e1;
+  border-color: rgba(148, 163, 184, 0.2);
 }
 
 .match-member-list {
@@ -650,20 +694,32 @@ body::before {
 
 .match-member-row {
   width: 100%;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.2fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   text-align: left;
   border-radius: 10px;
-  padding: 11px 12px;
+  padding: 10px 12px;
   border: 1px solid rgba(96, 165, 250, 0.12);
   background: rgba(8, 13, 27, 0.72);
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
 .match-member-row:hover {
-  transform: translateY(-1px);
-  border-color: rgba(96, 239, 255, 0.34);
+  border-color: rgba(96, 239, 255, 0.45);
+  background: rgba(18, 28, 52, 0.85);
+}
+
+.match-member-row.is-leader {
+  border-color: rgba(96, 165, 250, 0.28);
+  border-left: 3px solid rgba(96, 165, 250, 0.65);
+  padding-left: 9px;
+}
+
+.match-member-row.is-unassigned {
+  opacity: 0.72;
+  border-style: dashed;
 }
 
 .match-playtime-card {
@@ -790,43 +846,119 @@ body::before {
   gap: 8px;
 }
 
-.match-member-name {
-  font-weight: 700;
-  word-break: break-word;
-}
-
-.match-member-meta {
+.match-member-mid {
+  min-width: 0;
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.match-member-stat {
-  padding: 2px 0;
+.match-member-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+  white-space: nowrap;
 }
 
-.match-member-stat.playtime-stat {
-  color: #8cf3e3;
-  font-weight: 800;
+.match-member-name {
+  font-weight: 700;
+  font-size: 14px;
+  word-break: break-word;
+  line-height: 1.3;
 }
 
-.match-member-squad-id {
+.match-member-role {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 16px;
-  padding: 0 5px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 900;
-  color: #fff;
-  background-color: var(--accent);
-  opacity: 0.8;
-  margin-right: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(148, 163, 184, 0.12);
+  color: #cbd5e1;
+  line-height: 1.6;
+}
+
+.match-member-squadless {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(253, 230, 138, 0.1);
+  color: #fde68a;
+  line-height: 1.6;
+}
+
+.match-member-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.match-member-state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #64748b;
+  flex-shrink: 0;
+}
+
+.match-member-state[data-state="Alive"]::before,
+.match-member-state[data-state="Wounded"]::before {
+  background: #22c55e;
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.5);
+}
+
+.match-member-state[data-state="Dead"]::before {
+  background: #ef4444;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+}
+
+.match-member-state[data-state="Down"]::before {
+  background: #f59e0b;
+  box-shadow: 0 0 4px rgba(245, 158, 11, 0.5);
+}
+
+.match-member-kd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.match-member-kd em {
+  font-style: normal;
+  min-width: 1.6em;
+  text-align: center;
+}
+
+.match-member-kd .kd-kill { color: #4ade80; }
+.match-member-kd .kd-down { color: #facc15; }
+.match-member-kd .kd-death { color: #f87171; }
+
+.match-member-kd .kd-sep {
+  font-style: normal;
+  font-weight: 400;
+  color: rgba(148, 163, 184, 0.35);
+  padding: 0 1px;
+}
+
+.match-member-playtime {
+  font-size: 12px;
+  font-weight: 700;
+  color: #8cf3e3;
+  font-variant-numeric: tabular-nums;
 }
 
 .match-empty {
@@ -1926,16 +2058,23 @@ body::before {
     grid-template-columns: 1fr;
   }
 
-  .match-team-header,
-  .match-squad-header,
   .match-member-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .match-member-right {
+    justify-content: flex-start;
+  }
+
+  .match-team-header,
+  .match-squad-header {
     flex-direction: column;
     align-items: stretch;
   }
 
   .match-team-meta,
-  .match-squad-stats,
-  .match-member-meta {
+  .match-squad-stats {
     justify-content: flex-start;
   }
 
