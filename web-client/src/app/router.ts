@@ -70,6 +70,18 @@ export const router = createRouter({
         superAdminOnly: true,
       },
     },
+    {
+      path: "/plugins/steam-playtime-publicity-reminder",
+      name: "steam-playtime-publicity-reminder",
+      component: () => import("../pages/SteamPlaytimePublicityReminderPage.vue"),
+      meta: {
+        title: "督促时长公开",
+        refreshPolicy: "polling",
+        layoutMode: "workspace",
+        contentPadding: "none",
+        superAdminOnly: true,
+      },
+    },
     ...buildPageRoutes(),
     {
       path: "/combat-clean",
