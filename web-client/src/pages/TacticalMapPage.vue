@@ -292,6 +292,7 @@
             }"
             :title="vehicle.tooltip"
           >
+            <span class="vehicle-marker__hitbox" aria-hidden="true"></span>
             <span class="vehicle-marker__frame">
               <svg
                 class="vehicle-marker__icon"
@@ -330,6 +331,31 @@
                 />
               </svg>
             </span>
+            <div class="vehicle-marker__tooltip" role="tooltip">
+              <div class="vehicle-marker__tooltip-header">
+                <strong>{{ vehicle.vehicleType }}</strong>
+                <span>T{{ vehicle.teamId ?? "--" }}</span>
+              </div>
+              <div class="vehicle-marker__tooltip-stats">
+                <span>{{ vehicle.healthText }}</span>
+                <span>{{ vehicle.speedText }}</span>
+              </div>
+              <div class="vehicle-marker__tooltip-title">
+                座椅玩家（{{ vehicle.occupants.length }}）
+              </div>
+              <div v-if="vehicle.occupants.length" class="vehicle-marker__occupants">
+                <div
+                  v-for="occupant in vehicle.occupants"
+                  :key="`${vehicle.id}:occupant:${occupant.playerId}`"
+                  class="vehicle-marker__occupant"
+                >
+                  <span>{{ occupant.role }}</span>
+                  <strong>{{ occupant.playerName }}</strong>
+                  <small>#{{ occupant.playerId }}</small>
+                </div>
+              </div>
+              <div v-else class="vehicle-marker__empty">当前无人乘坐</div>
+            </div>
           </div>
         </div>
 
@@ -946,6 +972,12 @@ interface FobMarker {
   raw?: string;
 }
 
+interface VehicleOccupant {
+  playerId: number;
+  playerName: string;
+  role: "驾驶位" | "载具座位";
+}
+
 interface VehicleMarker {
   id: string;
   teamId: number | null;
@@ -954,6 +986,9 @@ interface VehicleMarker {
   mapY: number;
   yaw: number | null;
   occupied: boolean;
+  healthText: string;
+  speedText: string;
+  occupants: VehicleOccupant[];
   iconPath: string | null;
   iconLabel: string;
   tooltip: string;
@@ -1097,6 +1132,9 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
         healthText: "",
         health: player?.vehicle?.health ?? null,
         maxHealth: player?.vehicle?.maxHealth ?? null,
+        vehicleState,
+        vehicleSeatIndex: Number.isNaN(vehicleSeatIndex) ? null : vehicleSeatIndex,
+        onVehicle: !isWalking,
         position,
         rotation,
       },
@@ -1255,6 +1293,89 @@ const runtimeVehicles = computed(() => {
   if (assetsVehicles.length > 0) return assetsVehicles;
   return storeVehicles.value;
 });
+
+function normalizeRuntimePlayerId(value: unknown): string | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 ? String(Math.trunc(numeric)) : null;
+}
+
+function getRuntimePlayerId(player: any): string | null {
+  return normalizeRuntimePlayerId(
+    player?.playerIndex
+    ?? player?.playerId
+    ?? player?.identity?.playerID
+    ?? player?.bzss?.identity?.playerID
+    ?? player?.raw?.bzss?.identity?.playerID,
+  );
+}
+
+const vehicleOccupantPlayerIds = computed(() => {
+  const ids = new Set<string>();
+  for (const vehicle of runtimeVehicles.value) {
+    const candidates = [
+      vehicle?.driverPlayerId,
+      ...(Array.isArray(vehicle?.seatPlayerIds) ? vehicle.seatPlayerIds : []),
+      ...(Array.isArray(vehicle?.occupantPlayerIds) ? vehicle.occupantPlayerIds : []),
+    ];
+    for (const candidate of candidates) {
+      const id = normalizeRuntimePlayerId(candidate);
+      if (id != null) ids.add(id);
+    }
+  }
+  return ids;
+});
+
+function hasVehiclePlayerState(player: any): boolean {
+  const vehicleState = String(
+    player?.vehicleInfo?.vehicleState
+    ?? player?.telemetry?.vehicleState
+    ?? player?.vehicle?.vehicleState
+    ?? player?.bzss?.telemetry?.vehicleState
+    ?? player?.bzss?.vehicle?.vehicleState
+    ?? "",
+  ).trim().toLowerCase();
+  const seatIndex = Number(
+    player?.vehicleInfo?.vehicleSeatIndex
+    ?? player?.telemetry?.vehicleSeatIndex
+    ?? player?.vehicle?.vehicleSeatIndex
+    ?? player?.bzss?.telemetry?.vehicleSeatIndex
+    ?? player?.bzss?.vehicle?.vehicleSeatIndex,
+  );
+  const onVehicle = Boolean(
+    player?.vehicleInfo?.onVehicle
+    ?? player?.telemetry?.onVehicle
+    ?? player?.vehicle?.onVehicle
+    ?? player?.bzss?.telemetry?.onVehicle
+    ?? player?.bzss?.vehicle?.onVehicle,
+  );
+  return vehicleState
+    ? vehicleState !== "walking"
+    : (onVehicle || (Number.isFinite(seatIndex) && seatIndex >= 0));
+}
+
+function shouldSuppressPlayerMarker(player: any): boolean {
+  const presenceState = String(player?.presence?.state ?? player?.bzss?.presence?.state ?? "").trim().toLowerCase();
+  const presenceHint = String(
+    player?.presenceHint
+    ?? player?.telemetry?.presenceHint
+    ?? player?.bzss?.telemetry?.presenceHint
+    ?? "",
+  ).trim().toLowerCase();
+  const inactive = (
+    player?.inactive === true
+    || player?.presence?.inactive === true
+    || player?.telemetry?.inactive === true
+    || player?.bzss?.inactive === true
+    || player?.bzss?.telemetry?.inactive === true
+    || presenceState === "inactive"
+  );
+  const playerId = getRuntimePlayerId(player);
+  return inactive
+    || presenceState === "nopawn"
+    || presenceHint === "nopawn"
+    || hasVehiclePlayerState(player)
+    || (playerId != null && vehicleOccupantPlayerIds.value.has(playerId));
+}
 const emptyMapConfig: TacticalMapConfig = {
   key: "",
   name: "Unknown",
@@ -1321,7 +1442,9 @@ const lastKnownFobPositions = ref(new Map<string, { x: number; y: number }>());
 // Cache to prevent players disappearing when data is missing temporarily
 const cachedPlayers = shallowRef(new Map<string, { player: TacticalLinkedPlayer; lastSeen: number }>());
 const positionedPlayers = computed<TacticalLinkedPlayer[]>(() => {
-  return [...cachedPlayers.value.values()].map((entry) => entry.player);
+  return [...cachedPlayers.value.values()]
+    .map((entry) => entry.player)
+    .filter((player) => !shouldSuppressPlayerMarker(player));
 });
 
 const hoveredPlayer = ref<TacticalLinkedPlayer | null>(null);
@@ -1819,9 +1942,11 @@ watch(
       const presenceState = String((player as any)?.presence?.state ?? "");
       const presenceHint = String((player as any)?.presenceHint ?? (player as any)?.telemetry?.presenceHint ?? "");
       const isNoPawn = presenceState === "noPawn" || presenceHint === "noPawn";
+      const suppressMarker = shouldSuppressPlayerMarker(player);
 
-      if (isNoPawn) {
+      if (isNoPawn || suppressMarker) {
         changed = cachedPlayers.value.delete(key) || changed;
+        playerTargets.delete(key);
         continue;
       }
 
@@ -2313,6 +2438,12 @@ const markers = computed<MapMarker[]>(() => {
 const vehicleMarkers = computed<VehicleMarker[]>(() => {
   const bounds = activeMapConfig.value.bounds;
   const markers: VehicleMarker[] = [];
+  const playersByRuntimeId = new Map<string, TacticalLinkedPlayer>();
+  for (const player of players.value) {
+    const playerId = getRuntimePlayerId(player);
+    if (playerId != null) playersByRuntimeId.set(playerId, player);
+  }
+
   for (const [index, vehicle] of runtimeVehicles.value.entries()) {
     const x = Number(vehicle?.position?.x);
     const y = Number(vehicle?.position?.y);
@@ -2323,13 +2454,37 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
     const icon = resolveVehicleIcon(vehicleType);
     const health = Number(vehicle?.healthPercent);
     const speed = Number(vehicle?.speed);
-    const driverPlayerId = Number(vehicle?.driverPlayerId);
-    const occupied = Boolean(vehicle?.occupied) || (Number.isFinite(driverPlayerId) && driverPlayerId >= 0);
+    const driverId = normalizeRuntimePlayerId(vehicle?.driverPlayerId);
+    const driverPlayerId = driverId == null ? null : Number(driverId);
+    const rawOccupantIds = Array.isArray(vehicle?.occupantPlayerIds) && vehicle.occupantPlayerIds.length > 0
+      ? vehicle.occupantPlayerIds
+      : [
+          ...(driverPlayerId == null ? [] : [driverPlayerId]),
+          ...(Array.isArray(vehicle?.seatPlayerIds) ? vehicle.seatPlayerIds : []),
+        ];
+    const uniqueOccupantIds = [...new Set(
+      rawOccupantIds
+        .map(normalizeRuntimePlayerId)
+        .filter((id): id is string => id != null),
+    )];
+    const occupants: VehicleOccupant[] = uniqueOccupantIds.map((id) => {
+      const linkedPlayer = playersByRuntimeId.get(id);
+      return {
+        playerId: Number(id),
+        playerName: linkedPlayer ? getPlayerLabel(linkedPlayer) : `Player ${id}`,
+        role: id === driverId ? "驾驶位" : "载具座位",
+      };
+    });
+    const occupied = Boolean(vehicle?.occupied) || occupants.length > 0;
+    const healthText = Number.isFinite(health) ? `HP ${Math.round(health)}%` : "HP --";
+    const speedText = Number.isFinite(speed) ? `速度 ${speed.toFixed(1)}` : "速度 --";
     const tooltipParts = [
       `T${normalizedTeamId ?? "--"} · ${vehicleType}`,
-      Number.isFinite(health) ? `HP ${Math.round(health)}%` : "HP --",
-      Number.isFinite(speed) ? `Speed ${speed.toFixed(1)}` : "Speed --",
-      occupied ? `Driver ${driverPlayerId >= 0 ? driverPlayerId : "occupied"}` : "无人驾驶",
+      healthText,
+      speedText,
+      ...(occupants.length > 0
+        ? occupants.map((occupant) => `${occupant.role}：${occupant.playerName} (#${occupant.playerId})`)
+        : ["当前无人乘坐"]),
     ];
     markers.push({
       id: `runtime-vehicle:${normalizedTeamId ?? 0}:${vehicleType}:${index}`,
@@ -2339,6 +2494,9 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
       mapY: project(y, bounds.minY, bounds.maxY),
       yaw: Number.isFinite(Number(vehicle?.yaw)) ? Number(vehicle.yaw) : null,
       occupied,
+      healthText,
+      speedText,
+      occupants,
       iconPath: icon.icon.startsWith("/") ? icon.icon : null,
       iconLabel: icon.label,
       tooltip: tooltipParts.join(" · "),
@@ -3745,6 +3903,16 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker.team-1 { --vehicle-accent: #60a5fa; --vehicle-glow: rgba(59, 130, 246, .64); }
 .vehicle-marker.team-2 { --vehicle-accent: #f87171; --vehicle-glow: rgba(248, 113, 113, .64); }
+.vehicle-marker:hover { z-index: 90; }
+
+.vehicle-marker__hitbox {
+  position: absolute;
+  left: -22px;
+  top: -22px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
 
 .vehicle-marker__frame {
   position: absolute;
@@ -3778,6 +3946,89 @@ onBeforeUnmount(deactivateMapPage);
   color: var(--vehicle-accent);
   font-size: 13px;
   line-height: 1;
+}
+
+.vehicle-marker__tooltip {
+  position: absolute;
+  left: 0;
+  bottom: 24px;
+  z-index: 3;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--vehicle-accent) 58%, transparent);
+  border-radius: 9px;
+  background: rgba(3, 10, 20, .96);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .52), 0 0 18px var(--vehicle-glow);
+  color: #dbeafe;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(5px) scale(.97);
+  transform-origin: bottom center;
+  transition: opacity .12s ease, transform .12s ease;
+}
+.vehicle-marker:hover .vehicle-marker__tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0) scale(1);
+}
+.vehicle-marker__tooltip-header,
+.vehicle-marker__tooltip-stats,
+.vehicle-marker__occupant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vehicle-marker__tooltip-header {
+  justify-content: space-between;
+  color: var(--vehicle-accent);
+}
+.vehicle-marker__tooltip-header strong {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vehicle-marker__tooltip-stats {
+  margin-top: 5px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+.vehicle-marker__tooltip-title {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(148, 163, 184, .2);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 700;
+}
+.vehicle-marker__occupants {
+  display: grid;
+  gap: 4px;
+  margin-top: 5px;
+}
+.vehicle-marker__occupant {
+  min-width: 0;
+  font-size: 11px;
+}
+.vehicle-marker__occupant > span {
+  flex: 0 0 auto;
+  min-width: 46px;
+  color: var(--vehicle-accent);
+}
+.vehicle-marker__occupant > strong {
+  overflow: hidden;
+  color: #f8fafc;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vehicle-marker__occupant > small {
+  margin-left: auto;
+  color: #64748b;
+}
+.vehicle-marker__empty {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 11px;
 }
 
 
