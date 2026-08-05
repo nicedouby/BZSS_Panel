@@ -4,7 +4,7 @@
       <div
       ref="containerRef"
       class="map-viewport"
-      :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging, 'is-loading': isInitialMapLoading }"
+      :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging, 'is-loading': isInitialMapLoading, 'is-capture-point-editing': capturePointEditMode }"
       @pointerdown="startDrag"
       @wheel.prevent="onWheel"
     >
@@ -26,8 +26,8 @@
         <div
           ref="mapRef"
           class="map-transform-container"
-          :class="{ 'is-dragging': isDragging }"
-          :style="[mapTransformStyle, { cursor: measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab' }]"
+          :class="{ 'is-dragging': isDragging, 'is-capture-point-editing': capturePointEditMode }"
+          :style="[mapTransformStyle, { cursor: capturePointEditMode ? 'default' : measureMode ? 'crosshair' : isDragging ? 'grabbing' : 'grab' }]"
           @mousemove="onMapMousemove"
           @click="onMapClick"
           @contextmenu.prevent="handleMapRightClick"
@@ -38,7 +38,7 @@
             :tile-base-path="activeMapConfig.tileBasePath"
             :max-zoom="activeMapConfig.maxZoomLevel"
             :tiles-enabled="tilesEnabled"
-            :interaction-active="isDragging"
+            :interaction-active="isDragging || capturePointDrag != null"
             :viewport-width="vpWidth"
             :viewport-height="vpHeight"
             :fallback-image="activeMapConfig.image"
@@ -115,17 +115,27 @@
         <!-- Capture Zone Overlay -->
         <div v-if="showCaptureZones" class="capture-zone-layer">
           <button
-            v-for="zone in captureZoneMarkers"
+            v-for="zone in captureZoneDisplayMarkers"
             :key="zone.id"
             class="capture-zone-marker"
+            :class="{
+              'is-editable': capturePointEditMode,
+              'is-point-dragging': capturePointDrag?.markerId === zone.id,
+              'is-command-pending': capturePointCommandPending && capturePointOverrides.has(zone.id),
+            }"
             type="button"
             :style="{
               left: `${zone.mapX}%`,
               top: `${zone.mapY}%`,
               '--capture-marker-scale': dynamicMarkerScale,
             }"
-            :title="zone.raw || zone.name"
+            :title="capturePointEditMode
+              ? `点位 ${zone.pointIndex} · 拖拽修改位置 · X ${Math.round(zone.gameX ?? 0)} Y ${Math.round(zone.gameY ?? 0)}`
+              : (zone.raw || zone.name)"
+            @pointerdown.stop.prevent="startCapturePointDrag(zone, $event)"
+            @dragstart.prevent
           >
+            <span v-if="capturePointEditMode" class="capture-point-index">P{{ zone.pointIndex }}</span>
             <span
               class="zone-flag-group capture-zone-flag"
               :class="[
@@ -140,6 +150,7 @@
                   class="zone-flag-image"
                   :src="zone.flagUrl"
                   :alt="zone.factionLabel"
+                  draggable="false"
                 />
                 <span v-else class="zone-flag-placeholder"></span>
                 <span class="capture-flag-neutral-sweep"></span>
@@ -586,119 +597,37 @@
         </div>
       </header>
 
-      <section class="map-control-dock" aria-label="地图操作">
-        <div class="map-control-dock__nav">
-        <button class="ctrl-btn" title="放大" @click="zoomIn">
-          <span class="icon-span">+</span>
-        </button>
-        <button class="ctrl-btn" title="缩小" @click="zoomOut">
-          <span class="icon-span">-</span>
-        </button>
-        <button class="ctrl-btn" title="适配视口 (F)" @click="resetView">
-          <span class="icon-span">↺</span>
-        </button>
-        </div>
-        <div class="map-control-dock__menu-row">
-          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'layers' }" @click="toggleMapControlPanel('layers')" :aria-expanded="activeMapControlPanel === 'layers'">图层</button>
-          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'tools' || measureMode || combatHotspot != null }" @click="toggleMapControlPanel('tools')" :aria-expanded="activeMapControlPanel === 'tools'">工具</button>
-          <button class="ctrl-btn text-btn" :class="{ active: activeMapControlPanel === 'help' }" @click="toggleMapControlPanel('help')" :aria-expanded="activeMapControlPanel === 'help'">帮助</button>
-        </div>
-        <div v-if="activeMapControlPanel === 'layers'" class="map-control-popover">
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showGrid }"
-          @click="showGrid = !showGrid"
-          :aria-pressed="showGrid"
-          title="网格开关 (G)"
-        >
-          网格
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showCaptureZones }"
-          @click="showCaptureZones = !showCaptureZones"
-          :aria-pressed="showCaptureZones"
-          title="地标区域图层"
-        >
-          地标
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showFobs }"
-          @click="showFobs = !showFobs"
-          :aria-pressed="showFobs"
-          title="FOB图层"
-        >
-          FOB
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showPlayerNames }"
-          @click="showPlayerNames = !showPlayerNames"
-          :aria-pressed="showPlayerNames"
-          title="玩家姓名图层"
-        >
-          姓名
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: showPlayerCoords }"
-          @click="showPlayerCoords = !showPlayerCoords"
-          :aria-pressed="showPlayerCoords"
-          title="玩家坐标图层"
-        >
-          坐标
-        </button>
-        <button
-          class="ctrl-btn text-btn"
-          :class="{ active: filterAliveOnly }"
-          @click="filterAliveOnly = !filterAliveOnly"
-          :aria-pressed="filterAliveOnly"
-          title="只显示存活玩家"
-        >
-          存活
-        </button>
-        </div>
-        <div v-if="activeMapControlPanel === 'tools'" class="map-control-popover">
-        <button
-          class="ctrl-btn text-btn measure-btn"
-          :class="{ active: measureMode }"
-          @click="toggleMeasureMode"
-          :aria-pressed="measureMode"
-          title="多点测距 (M)"
-        >
-          测距
-        </button>
-        <button
-          v-if="measurePoints.length"
-          class="ctrl-btn text-btn"
-          @click="clearMeasurePoints"
-          title="清空测距点"
-        >
-          清空
-        </button>
-        <button
-          class="ctrl-btn text-btn hotspot-ctrl-btn"
-          :class="{ active: combatHotspot != null }"
-          @click="calculateCombatHotspot"
-          title="计算并生成作战热点中心及1000m半径"
-        >
-          热点
-        </button>
-        <button
-          v-if="combatHotspot != null"
-          class="ctrl-btn text-btn"
-          @click="clearCombatHotspot"
-          title="清除作战热点"
-        >
-          清除热点
-        </button>
-        </div>
-        <div v-if="activeMapControlPanel === 'help'" class="map-control-popover map-control-popover--help">
-          <span><kbd>右键</kbd> 指令</span><span><kbd>双击</kbd> 资料</span><span><kbd>滚轮</kbd> 缩放</span><span><kbd>拖拽</kbd> 移动</span><span><kbd>M</kbd> 测距</span><span><kbd>G</kbd> 网格</span><span><kbd>F</kbd> 复位</span>
-        </div>
-      </section>
+      <TacticalMapToolbar
+        v-model:show-grid="showGrid"
+        v-model:show-capture-zones="showCaptureZones"
+        v-model:show-fobs="showFobs"
+        v-model:show-player-names="showPlayerNames"
+        v-model:show-player-coords="showPlayerCoords"
+        v-model:filter-alive-only="filterAliveOnly"
+        :can-edit-capture-points="canEditCapturePoints"
+        :capture-point-edit-mode="capturePointEditMode"
+        :capture-point-command-pending="capturePointCommandPending"
+        :measure-mode="measureMode"
+        :has-measure-points="measurePoints.length > 0"
+        :has-combat-hotspot="combatHotspot != null"
+        @zoom-in="zoomIn"
+        @zoom-out="zoomOut"
+        @reset-view="resetView"
+        @toggle-capture-point-edit="toggleCapturePointEditMode"
+        @toggle-measure="toggleMeasureMode"
+        @clear-measure="clearMeasurePoints"
+        @calculate-hotspot="calculateCombatHotspot"
+        @clear-hotspot="clearCombatHotspot"
+      />
 
+      <div
+        v-if="capturePointEditMode || capturePointFeedback"
+        class="capture-point-edit-status font-mono"
+        :class="`is-${capturePointFeedback?.tone ?? 'info'}`"
+        aria-live="polite"
+      >
+        {{ capturePointFeedback?.text ?? "改点模式：按住点位旗帜拖拽，松开后提交" }}
+      </div>
       <div class="map-coordinate-readout font-mono" aria-live="polite">
         <span>坐标</span><b>X {{ hoverCoords ? Math.round(hoverCoords.gameX) : '-' }}</b><b>Y {{ hoverCoords ? Math.round(hoverCoords.gameY) : '-' }}</b>
       </div>
@@ -838,6 +767,7 @@ import {
   type BzssCoreFobInfo,
   type BzssCoreTrackedPlayerInfo,
   type BzssCoreTrackedVector,
+  executeBzssCoreCommand,
 } from "../app/bzssCoreApi";
 import { useAuthStore } from "../stores/auth.store";
 import { useServerStore } from "../stores/server.store";
@@ -855,6 +785,7 @@ import {
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
+import TacticalMapToolbar from "../components/tactical-map/TacticalMapToolbar.vue";
 import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
@@ -911,6 +842,7 @@ interface CaptureZoneMarker {
   type: "captureZone";
   id: string;
   name: string;
+  pointIndex: number;
   teamId: number | null;
   mapX: number;
   mapY: number;
@@ -1242,6 +1174,9 @@ const canManageRcon = computed(() => {
 const canManagePressureSettings = computed(() => Boolean(
   authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("settings.manage"),
 ));
+const canEditCapturePoints = computed(() => Boolean(
+  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
+));
 
 const snapshot = computed(() => {
   if (props.snapshot) return props.snapshot;
@@ -1485,6 +1420,28 @@ provideTacticalMapViewport({ zoom: camera.zoom, panX: camera.x, panY: camera.y }
 
 const showGrid = ref(true);
 const showCaptureZones = ref(true);
+const capturePointEditMode = ref(false);
+const capturePointCommandPending = ref(false);
+const capturePointOverrides = ref(new Map<string, { mapX: number; mapY: number; gameX: number; gameY: number }>());
+const capturePointDrag = ref<{
+  markerId: string;
+  pointIndex: number;
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  startMapX: number;
+  startMapY: number;
+  renderedMapWidth: number;
+  renderedMapHeight: number;
+  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+  moved: boolean;
+  mapX: number;
+  mapY: number;
+  gameX: number;
+  gameY: number;
+} | null>(null);
+const capturePointFeedback = ref<{ tone: "info" | "ok" | "error"; text: string } | null>(null);
+let capturePointFeedbackTimer: number | null = null;
 const showFobs = ref(true);
 const showPressureZones = ref(true);
 const showPressureHard = ref(true);
@@ -1495,12 +1452,6 @@ const showPressureConnections = ref(false);
 let pressureZoneFetchTimer: number | null = null;
 let pressureZoneRequestSequence = 0;
 const filterAliveOnly = ref(false);
-const activeMapControlPanel = ref<"layers" | "tools" | "help" | null>(null);
-
-function toggleMapControlPanel(panel: "layers" | "tools" | "help") {
-  activeMapControlPanel.value = activeMapControlPanel.value === panel ? null : panel;
-}
-
 // Icon scaling and tags visibility refs
 const markerScale = ref(1.15);
 const showPlayerNames = ref(true);
@@ -2130,6 +2081,7 @@ function onMapClick(e: MouseEvent) {
     dragMoved = false;
     return;
   }
+  if (capturePointEditMode.value) return;
 
   // Clicking on blank space closes info panels and menus
   playerInfoPanel.value = null;
@@ -2532,7 +2484,7 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
   const bounds = activeMapConfig.value.bounds;
   const staticCaptureZones = Array.isArray(staticAssets.value?.captureZones) ? staticAssets.value.captureZones : [];
   const markers: CaptureZoneMarker[] = [];
-  for (const zone of zones) {
+  for (const [zoneIndex, zone] of zones.entries()) {
     const name = String(zone.name ?? "").trim();
     if (!name) continue;
     const pos = zone?.position;
@@ -2577,6 +2529,7 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
       type: "captureZone",
       id: `capture-zone-${name}`,
       name,
+      pointIndex: zoneIndex + 1,
       teamId,
       mapX: project(x, bounds.minX, bounds.maxX),
       mapY: project(y, bounds.minY, bounds.maxY),
@@ -2595,6 +2548,22 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     });
   }
   return markers;
+});
+
+const captureZoneDisplayMarkers = computed<CaptureZoneMarker[]>(() => {
+  return captureZoneMarkers.value.map((marker) => {
+    const preview = capturePointDrag.value?.markerId === marker.id
+      ? capturePointDrag.value
+      : capturePointOverrides.value.get(marker.id);
+    if (!preview) return marker;
+    return {
+      ...marker,
+      mapX: preview.mapX,
+      mapY: preview.mapY,
+      gameX: preview.gameX,
+      gameY: preview.gameY,
+    };
+  });
 });
 
 const teamFactionById = computed(() => {
@@ -3029,6 +2998,197 @@ function handleTilesReady() {
   tilesReady.value = true;
 }
 
+function setCapturePointFeedback(tone: "info" | "ok" | "error", text: string, timeoutMs = 3200) {
+  capturePointFeedback.value = { tone, text };
+  if (capturePointFeedbackTimer !== null) window.clearTimeout(capturePointFeedbackTimer);
+  capturePointFeedbackTimer = window.setTimeout(() => {
+    capturePointFeedback.value = null;
+    capturePointFeedbackTimer = null;
+  }, timeoutMs);
+}
+
+function capturePointPositionFromClient(
+  drag: NonNullable<typeof capturePointDrag.value>,
+  clientX: number,
+  clientY: number,
+) {
+  if (!(drag.renderedMapWidth > 0) || !(drag.renderedMapHeight > 0)) return null;
+  // Preserve the position at which the user grabbed the flag.  Converting the
+  // pointer directly to a map coordinate makes the zero-sized marker anchor
+  // jump to the flag image, which is rendered above that anchor.
+  const mapX = Math.max(0, Math.min(100,
+    drag.startMapX + ((clientX - drag.startClientX) / drag.renderedMapWidth) * 100,
+  ));
+  const mapY = Math.max(0, Math.min(100,
+    drag.startMapY + ((clientY - drag.startClientY) / drag.renderedMapHeight) * 100,
+  ));
+  const pctX = mapX / 100;
+  const pctY = mapY / 100;
+  const bounds = drag.bounds;
+  return {
+    mapX,
+    mapY,
+    gameX: bounds.minX + pctX * (bounds.maxX - bounds.minX),
+    gameY: bounds.minY + pctY * (bounds.maxY - bounds.minY),
+  };
+}
+
+function updateCapturePointDrag(clientX: number, clientY: number) {
+  const drag = capturePointDrag.value;
+  if (!drag) return;
+  const position = capturePointPositionFromClient(drag, clientX, clientY);
+  if (!position) return;
+  const moved = drag.moved
+    || Math.abs(clientX - drag.startClientX) > 2
+    || Math.abs(clientY - drag.startClientY) > 2;
+  capturePointDrag.value = { ...drag, ...position, moved };
+  hoverCoords.value = {
+    x: 0,
+    y: 0,
+    gameX: position.gameX,
+    gameY: position.gameY,
+  };
+}
+
+function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
+  if (!capturePointEditMode.value || capturePointCommandPending.value || event.button !== 0) return;
+  if (!mapRef.value) return;
+  const gameX = Number(zone.gameX);
+  const gameY = Number(zone.gameY);
+  if (!Number.isFinite(gameX) || !Number.isFinite(gameY)) {
+    setCapturePointFeedback("error", `点位 ${zone.pointIndex} 没有有效坐标`);
+    return;
+  }
+
+  const mapRect = mapRef.value.getBoundingClientRect();
+  if (!(mapRect.width > 0) || !(mapRect.height > 0)) {
+    setCapturePointFeedback("error", "地图尚未完成布局，请稍后重试");
+    return;
+  }
+  const bounds = activeMapConfig.value.bounds;
+  capturePointDrag.value = {
+    markerId: zone.id,
+    pointIndex: zone.pointIndex,
+    pointerId: event.pointerId,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startMapX: zone.mapX,
+    startMapY: zone.mapY,
+    renderedMapWidth: mapRect.width,
+    renderedMapHeight: mapRect.height,
+    bounds: {
+      minX: bounds.minX,
+      maxX: bounds.maxX,
+      minY: bounds.minY,
+      maxY: bounds.maxY,
+    },
+    moved: false,
+    mapX: zone.mapX,
+    mapY: zone.mapY,
+    gameX,
+    gameY,
+  };
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
+  setCapturePointFeedback("info", `正在移动点位 ${zone.pointIndex}`, 60_000);
+
+  window.addEventListener("pointermove", onCapturePointDrag, { capture: true, passive: false });
+  window.addEventListener("pointerup", finishCapturePointDrag, true);
+  window.addEventListener("pointercancel", cancelCapturePointDrag, true);
+  window.addEventListener("blur", cancelCapturePointDrag);
+}
+
+function onCapturePointDrag(event: PointerEvent) {
+  const drag = capturePointDrag.value;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  event.preventDefault();
+  updateCapturePointDrag(event.clientX, event.clientY);
+}
+
+function detachCapturePointDragListeners() {
+  window.removeEventListener("pointermove", onCapturePointDrag, true);
+  window.removeEventListener("pointerup", finishCapturePointDrag, true);
+  window.removeEventListener("pointercancel", cancelCapturePointDrag, true);
+  window.removeEventListener("blur", cancelCapturePointDrag);
+}
+
+function cancelCapturePointDrag(event?: Event) {
+  const drag = capturePointDrag.value;
+  const eventPointerId = event && "pointerId" in event
+    ? Number((event as PointerEvent).pointerId)
+    : null;
+  if (!drag || (eventPointerId !== null && eventPointerId !== drag.pointerId)) return;
+  detachCapturePointDragListeners();
+  capturePointDrag.value = null;
+  hoverCoords.value = null;
+  setCapturePointFeedback("info", "已取消本次改点");
+}
+
+async function finishCapturePointDrag(event: PointerEvent) {
+  const active = capturePointDrag.value;
+  if (!active || event.pointerId !== active.pointerId) return;
+  event.preventDefault();
+  updateCapturePointDrag(event.clientX, event.clientY);
+  const drag = capturePointDrag.value;
+  if (!drag) return;
+
+  detachCapturePointDragListeners();
+
+  if (!drag.moved) {
+    capturePointDrag.value = null;
+    hoverCoords.value = null;
+    setCapturePointFeedback("info", `点位 ${drag.pointIndex} 未移动，未发送命令`);
+    return;
+  }
+
+  const gameX = Math.round(drag.gameX);
+  const gameY = Math.round(drag.gameY);
+  const overrides = new Map(capturePointOverrides.value);
+  overrides.set(drag.markerId, { mapX: drag.mapX, mapY: drag.mapY, gameX, gameY });
+  capturePointOverrides.value = overrides;
+  capturePointDrag.value = null;
+  capturePointCommandPending.value = true;
+  setCapturePointFeedback("info", `正在提交 DragCapturePoint:${drag.pointIndex},${gameX},${gameY}`, 60_000);
+
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "DragCapturePoint",
+      parameter: `${drag.pointIndex},${gameX},${gameY}`,
+    });
+    if (!result?.ok) {
+      throw new Error(String((result as any)?.message ?? "BZSS Core 拒绝了改点命令"));
+    }
+    setCapturePointFeedback("ok", `点位 ${drag.pointIndex} 已移动到 X ${gameX}, Y ${gameY}`);
+  } catch (error) {
+    const rolledBack = new Map(capturePointOverrides.value);
+    rolledBack.delete(drag.markerId);
+    capturePointOverrides.value = rolledBack;
+    setCapturePointFeedback("error", error instanceof Error ? error.message : "改点命令发送失败", 6000);
+  } finally {
+    capturePointCommandPending.value = false;
+    hoverCoords.value = null;
+  }
+}
+
+function toggleCapturePointEditMode() {
+  if (capturePointCommandPending.value || !canEditCapturePoints.value) return;
+  capturePointEditMode.value = !capturePointEditMode.value;
+  showCaptureZones.value = true;
+  measureMode.value = false;
+  if (!capturePointEditMode.value) {
+    cancelCapturePointDrag();
+    capturePointFeedback.value = null;
+  } else {
+    setCapturePointFeedback("info", "改点模式：按住点位旗帜拖拽，松开后提交", 60_000);
+  }
+}
+
+onBeforeUnmount(() => {
+  detachCapturePointDragListeners();
+  if (capturePointFeedbackTimer !== null) window.clearTimeout(capturePointFeedbackTimer);
+});
+
 // Drag & Pan & Zoom Event Handlers
 const dragStartCoords = { x: 0, y: 0 };
 let dragMoved = false;
@@ -3060,6 +3220,7 @@ function isDragBlockedTarget(target: HTMLElement | null) {
     target.closest(".player-tooltip") ||
     target.closest(".player-tooltip-simple") ||
     target.closest(".player-marker") ||
+    target.closest(".capture-zone-marker") ||
     target.closest(".map-floating-panel")
   );
 }
@@ -3719,6 +3880,10 @@ function handleWindowKeyDown(e: KeyboardEvent) {
 
   const key = e.key.toUpperCase();
   if (key === "ESCAPE") {
+    if (capturePointDrag.value) {
+      cancelCapturePointDrag();
+      return;
+    }
     if (pressureSettingsOpen.value) {
       pressureSettingsOpen.value = false;
       return;
@@ -3796,6 +3961,7 @@ function deactivateMapPage() {
   mapPageActive = false;
   stopTacticalMapViewerPresence();
   stopDrag();
+  if (capturePointDrag.value) cancelCapturePointDrag();
 
   if (isStandaloneMapRoute.value) {
     tacticalStateStore.stopStream();
@@ -4075,16 +4241,25 @@ onBeforeUnmount(deactivateMapPage);
 .tactical-recording-action:hover:not(:disabled) { background: #48d6aa; color: #06251e; }
 .tactical-recording-action:disabled { cursor: wait; opacity: .55; }
 
-.map-control-dock { position: absolute; z-index: 60; bottom: 16px; left: 16px; display: grid; gap: 7px; }
-.map-control-dock__nav, .map-control-dock__menu-row, .map-control-popover, .map-coordinate-readout { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
-.map-control-dock__nav, .map-control-dock__menu-row { display: flex; width: fit-content; padding: 4px; }
-.map-control-dock .ctrl-btn { min-width: 34px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: #b8ccd9; }
-.map-control-dock .ctrl-btn:hover, .map-control-dock .ctrl-btn.active { background: rgba(72, 214, 170, .2); color: #a7f6d4; }
-.map-control-dock .ctrl-btn.text-btn { width: auto; min-width: 46px; padding: 0 10px; font-size: 11px; }
-.map-control-popover { display: grid; grid-template-columns: repeat(3, minmax(54px, 1fr)); width: min(260px, calc(100vw - 32px)); gap: 3px; padding: 5px; }
-.map-control-popover--help { grid-template-columns: 1fr 1fr; padding: 10px; color: #aac0ce; font-size: 11px; }
-.map-control-popover--help span { display: flex; align-items: center; gap: 6px; }
-.map-control-popover kbd { min-width: 30px; padding: 2px 4px; border: 1px solid rgba(148, 163, 184, .3); border-radius: 4px; color: #e1edf5; background: rgba(30, 41, 59, .7); font: inherit; text-align: center; }
+.map-coordinate-readout { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
+.capture-point-edit-status {
+  position: absolute;
+  z-index: 61;
+  left: 50%;
+  bottom: 18px;
+  max-width: min(620px, calc(100vw - 360px));
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(250, 204, 21, .55);
+  border-radius: 9px;
+  background: rgba(15, 23, 42, .94);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .32);
+  color: #fde68a;
+  font-size: 11px;
+  pointer-events: none;
+}
+.capture-point-edit-status.is-ok { border-color: rgba(74, 222, 128, .58); color: #86efac; }
+.capture-point-edit-status.is-error { border-color: rgba(248, 113, 113, .68); color: #fca5a5; }
 .map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
 .map-coordinate-readout span { color: #60768a; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
 .map-coordinate-readout b { color: #dcebf3; font-weight: 650; }
@@ -4204,7 +4379,6 @@ onBeforeUnmount(deactivateMapPage);
   .tactical-live-status, .tactical-recording-status { font-size: 0; }
   .tactical-command-bar__identity strong { font-size: 13px; }
   .tactical-command-bar__identity span:last-child { display: none; }
-  .map-control-dock { bottom: 8px; left: 8px; }
   .map-coordinate-readout { right: 8px; bottom: 8px; }
   .pressure-settings-modal { padding: 0; }
   .pressure-settings-modal__panel { width: 100%; height: 100%; border: 0; border-radius: 0; }

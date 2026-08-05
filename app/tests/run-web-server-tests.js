@@ -178,6 +178,34 @@ async function testBzssCoreCreateVehicleAcceptsOptionalTeamId() {
   assert.equal(invalidRaw.error, "InvalidCreateVehicleTeamId");
 }
 
+async function testDragCapturePointValidation() {
+  const server = createServer();
+
+  assert.equal(
+    server.normalizeBzssCoreDirective("DragCapturePoint", "1,150,25").command,
+    "DragCapturePoint:1,150,25",
+  );
+  assert.equal(
+    server.normalizeBzssCoreDirective("DragCapturePoint", "12,-150.5,25.25").command,
+    "DragCapturePoint:12,-150.5,25.25",
+  );
+
+  const invalidIndex = server.normalizeBzssCoreDirective("DragCapturePoint", "0,150,25");
+  assert.equal(invalidIndex.ok, false);
+  assert.equal(invalidIndex.error, "InvalidDragCapturePointIndex");
+
+  const invalidCoordinates = server.normalizeBzssCoreDirective("DragCapturePoint", "1,NaN,25");
+  assert.equal(invalidCoordinates.ok, false);
+  assert.equal(invalidCoordinates.error, "InvalidDragCapturePointCoordinates");
+
+  const invalidRaw = server.normalizeBzssCoreCommand({
+    raw: true,
+    command: "DragCapturePoint:1,Infinity,25",
+  });
+  assert.equal(invalidRaw.ok, false);
+  assert.equal(invalidRaw.error, "InvalidDragCapturePointCoordinates");
+}
+
 async function testAutomaticHealUsesBinaryParameter() {
   const server = createServer();
   assert.equal(server.normalizeBzssCoreDirective("SetAutomaticHeal", "1").command, "SetAutomaticHeal:1");
@@ -3914,6 +3942,7 @@ await testReadJsonBodyRejectsInvalidJson();
 await testReadJsonBodyRejectsOversizedPayload();
 await testGetPluginApiReturnsMatchingPluginApi();
 await testBzssCoreCreateVehicleAcceptsOptionalTeamId();
+await testDragCapturePointValidation();
 await testAutomaticHealUsesBinaryParameter();
 await testHealthEndpointDoesNotRequireAuth();
 await testAuthSessionAndLoginIncludeSteamAvatar();

@@ -13,6 +13,7 @@ const ALLOWED_DIRECTIVES = new Set([
   "CreateVehicle",
   "AdminTrack",
   "RemoveAdminTrack",
+  "DragCapturePoint",
 ]);
 
 /**
@@ -121,6 +122,10 @@ export class BzssCoreCommandService {
         const validation = this.validateCreateVehicleParameter(match[2]);
         if (!validation.ok) return validation;
       }
+      if (match?.[1] === "DragCapturePoint") {
+        const validation = this.validateDragCapturePointParameter(match[2]);
+        if (!validation.ok) return validation;
+      }
       return { ok: true, directive: "Raw", parameter: rawCommand, command: rawCommand, raw: true };
     }
 
@@ -150,7 +155,26 @@ export class BzssCoreCommandService {
       const validation = this.validateCreateVehicleParameter(text);
       if (!validation.ok) return validation;
     }
+    if (normalizedDirective === "DragCapturePoint") {
+      const validation = this.validateDragCapturePointParameter(text);
+      if (!validation.ok) return validation;
+    }
     return { ok: true, directive: normalizedDirective, parameter: text, command: `${normalizedDirective}:${text}` };
+  }
+
+  validateDragCapturePointParameter(parameter) {
+    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
+    if (parts.length !== 3) {
+      return invalid("InvalidDragCapturePointParameter", "DragCapturePoint requires point index, X, and Y.");
+    }
+    const pointIndex = Number(parts[0]);
+    if (!/^\d+$/.test(parts[0]) || !Number.isSafeInteger(pointIndex) || pointIndex < 1) {
+      return invalid("InvalidDragCapturePointIndex", "DragCapturePoint point index must be a positive integer.");
+    }
+    if (!parts[1] || !parts[2] || !Number.isFinite(Number(parts[1])) || !Number.isFinite(Number(parts[2]))) {
+      return invalid("InvalidDragCapturePointCoordinates", "DragCapturePoint X and Y must be finite numbers.");
+    }
+    return { ok: true };
   }
 
   validateCreateVehicleParameter(parameter) {

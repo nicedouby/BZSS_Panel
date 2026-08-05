@@ -27,6 +27,7 @@
     "@vitejs/plugin-vue": "6.0.1",
     "@vue/test-utils": "^2.4.6",
     "jsdom": "^22.1.0",
+    "rollup": "npm:@rollup/wasm-node@^4.62.4",
     "typescript": "5.9.3",
     "vite": "7.0.6",
     "vitest": "^4.1.10",
