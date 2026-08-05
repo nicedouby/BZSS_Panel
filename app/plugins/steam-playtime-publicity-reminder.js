@@ -2,6 +2,7 @@
 
 const PLUGIN_ID = "plugin.steam-playtime-publicity-reminder";
 const PLUGIN_CONFIG_KEY = "steam-playtime-publicity-reminder";
+const PAGE_ROUTE = "/plugins/steam-playtime-publicity-reminder";
 
 const DEFAULT_START_AFTER_SECONDS = 300;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
@@ -51,7 +52,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   function isActive() {
-    return cfg.enabled && isSubscribed();
+    return cfg.enabled && cfg.featureEnabled && isSubscribed();
+  }
+
+  function clearOperationalState() {
+    state.confirmedPrivateCount = 0;
+    state.privateLeaderCount = 0;
+    state.nextLeaderScanAtMs = 0;
+    state.broadcastCyclePlayers = [];
+    state.broadcastCursor = 0;
+    state.nextBroadcastAtMs = 0;
   }
 
   function resetRound(roundKey = "") {
@@ -251,7 +261,10 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   async function evaluate(reason = "poll", nowMs = Date.now()) {
     cfg = readConfig(config);
-    if (!isActive()) return publicState();
+    if (!isActive()) {
+      clearOperationalState();
+      return publicState();
+    }
 
     const current = clock();
     state.lastClockSeconds = current.seconds;
@@ -305,6 +318,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const publicState = () => ({
     ...state,
     enabled: cfg.enabled,
+    featureEnabled: cfg.featureEnabled,
     subscribed: isSubscribed(),
     active: isActive(),
     config: { ...cfg },
@@ -316,11 +330,12 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "督促时长公开",
       kind: "plugin",
-      version: "1.1.0",
+      version: "1.2.0",
       category: "Moderation",
       description: "开局5分钟后持续提醒已确认未公开 Steam 时长的小队长，并按玩家名字分批广播未公开资料的在线玩家。插件只读本地 Steam 时长缓存，不主动请求 Steam API。",
+      config: { ...cfg },
       configSchema: [
-        { key: "enabled", type: "boolean", default: true, description: "是否启用插件" },
+        { key: "featureEnabled", type: "boolean", default: true, description: "是否启用督促时长公开功能；关闭后插件管理页仍保持可用" },
         { key: "startAfterSeconds", type: "number", default: 300, description: "开局多少秒后启用提醒和广播" },
         { key: "leaderWarningIntervalMs", type: "number", default: 10000, description: "未公开资料的小队长重复警告及本地缓存复查间隔" },
         { key: "broadcastBatchSize", type: "number", default: 5, description: "每批广播的玩家名字数量" },
@@ -358,10 +373,20 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
     async start() {
       cfg = readConfig(config);
-      if (!isActive()) {
-        log?.info?.("[SteamPlaytimePublicityReminder] plugin disabled or unsubscribed.");
-        return;
-      }
+
+      core?.webRegistry?.registerPage?.({
+        id: "web.steamPlaytimePublicityReminder",
+        title: "督促时长公开",
+        group: "插件",
+        route: PAGE_ROUTE,
+        source: PLUGIN_ID,
+        description: "查看未公开 Steam 时长玩家并启用或关闭提醒与广播功能。",
+        required: false,
+        superAdminOnly: true,
+        enabled: true,
+        order: 45,
+        icon: "⏱",
+      });
 
       if (core?.eventBus?.onCoreEvent) {
         unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
@@ -373,10 +398,17 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         }));
       }
 
+      // Keep the lightweight scheduler alive even when featureEnabled=false.
+      // This allows the management page to re-enable the feature immediately without a panel restart.
       timer = setInterval(() => void enqueue(() => evaluate("poll")), cfg.pollIntervalMs);
       timer.unref?.();
       void enqueue(() => evaluate("startup"));
-      log?.info?.(`[SteamPlaytimePublicityReminder] started. cache-only Steam checks; start=${cfg.startAfterSeconds}s warn=${cfg.leaderWarningIntervalMs}ms batch=${cfg.broadcastBatchSize}/${cfg.broadcastBatchIntervalMs}ms cooldown=${cfg.broadcastCycleCooldownMs}ms`);
+
+      if (isActive()) {
+        log?.info?.(`[SteamPlaytimePublicityReminder] started. cache-only Steam checks; start=${cfg.startAfterSeconds}s warn=${cfg.leaderWarningIntervalMs}ms batch=${cfg.broadcastBatchSize}/${cfg.broadcastBatchIntervalMs}ms cooldown=${cfg.broadcastCycleCooldownMs}ms`);
+      } else {
+        log?.info?.("[SteamPlaytimePublicityReminder] management scheduler started with feature disabled; no warnings or broadcasts will be sent.");
+      }
     },
 
     async stop() {
@@ -399,6 +431,7 @@ function readConfig(config) {
 
   return {
     enabled: raw.enabled !== false,
+    featureEnabled: raw.featureEnabled !== false,
     startAfterSeconds: number(raw.startAfterSeconds, DEFAULT_START_AFTER_SECONDS, 0, 86400),
     pollIntervalMs: number(raw.pollIntervalMs, DEFAULT_POLL_INTERVAL_MS, 250, 30000),
     leaderWarningIntervalMs: number(raw.leaderWarningIntervalMs, DEFAULT_LEADER_WARNING_INTERVAL_MS, 1000, 3600000),
