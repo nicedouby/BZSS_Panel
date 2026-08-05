@@ -331,19 +331,20 @@
                 />
               </svg>
             </span>
-            <div class="vehicle-marker__tooltip" role="tooltip">
-              <div v-if="vehicle.occupants.length" class="vehicle-marker__occupants">
-                <div
-                  v-for="occupant in vehicle.occupants"
-                  :key="`${vehicle.id}:occupant:${occupant.playerId}`"
-                  class="vehicle-marker__occupant"
-                  :class="`team-${occupant.teamId ?? vehicle.teamId ?? 0}`"
-                >
-                  <span class="vehicle-marker__occupant-role">{{ occupant.role }}</span>
-                  <span class="vehicle-marker__occupant-name">{{ occupant.playerName }}</span>
-                </div>
+            <div
+              v-if="vehicle.occupants.length"
+              class="vehicle-marker__tooltip"
+              role="tooltip"
+            >
+              <div
+                v-for="(occupant, idx) in vehicle.occupants"
+                :key="`${vehicle.id}:occupant:${occupant.playerId}`"
+                class="vehicle-marker__occupant"
+                :class="getPerspectiveClass(occupant.teamId ?? vehicle.teamId)"
+              >
+                <span class="vehicle-marker__occupant-seat">#{{ idx + 1 }}</span>
+                <span class="vehicle-marker__occupant-name">{{ occupant.playerName }}</span>
               </div>
-              <div v-else class="vehicle-marker__empty">无玩家</div>
             </div>
           </div>
         </div>
@@ -3974,7 +3975,7 @@ onBeforeUnmount(deactivateMapPage);
   z-index: 95;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   padding: 0;
   border: none;
   background: transparent;
@@ -3991,46 +3992,38 @@ onBeforeUnmount(deactivateMapPage);
   transform: translateY(-50%) translateX(0);
 }
 
-.vehicle-marker__occupants {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
 .vehicle-marker__occupant {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 4px;
+  font-size: 11px;
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.2;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95);
   color: var(--vehicle-accent, #94a3b8);
 }
 
-.vehicle-marker__occupant.team-1 {
-  color: #7dd3fc;
+.vehicle-marker__occupant.tone-friendly {
+  color: #37c8ff;
 }
 
-.vehicle-marker__occupant.team-2 {
-  color: #f87171;
+.vehicle-marker__occupant.tone-enemy {
+  color: #ff5b6e;
 }
 
-.vehicle-marker__occupant-role {
+.vehicle-marker__occupant.tone-neutral {
+  color: #cbd5e1;
+}
+
+.vehicle-marker__occupant-seat {
   flex: 0 0 auto;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  opacity: 0.88;
 }
 
 .vehicle-marker__occupant-name {
   flex: 0 0 auto;
-}
-
-.vehicle-marker__empty {
-  font-size: 11px;
   font-weight: 600;
-  color: #94a3b8;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 2px rgba(0, 0, 0, 0.95);
 }
 
 
