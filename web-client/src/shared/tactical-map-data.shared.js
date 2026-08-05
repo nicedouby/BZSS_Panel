@@ -84,6 +84,11 @@ const MAP_IMAGE_BY_KEY = {
 const TACTICAL_MAP_PREVIEW_PATH = "/assets/map-previews";
 const TACTICAL_MAP_MAX_ZOOM_LEVEL = 2;
 
+// Squad/UE world coordinates stored in map-corners.json are centimeters.
+// Keep the conversion explicit in map metadata so consumers do not need to
+// infer the unit from the magnitude of a map's coordinate bounds.
+const SQUAD_WORLD_UNITS_PER_METER = 100;
+
 const MAP_NAME_BY_KEY = {
   AlBasrah_AAS_v1: "Al Basrah",
   Anvil_RAAS_v1: "Anvil",
@@ -147,6 +152,8 @@ function buildConfig(key, entry) {
   if (![minX, minY, maxX, maxY].every(Number.isFinite)) return null;
 
   const name = MAP_NAME_BY_KEY[key] ?? key.replace(/_RAAS_v1$/i, "");
+  const widthMeters = Math.abs(maxX - minX) / SQUAD_WORLD_UNITS_PER_METER;
+  const heightMeters = Math.abs(maxY - minY) / SQUAD_WORLD_UNITS_PER_METER;
   return {
     key,
     name,
@@ -154,6 +161,9 @@ function buildConfig(key, entry) {
     tileBasePath: `/assets/map-tiles/${key}`,
     maxZoomLevel: TACTICAL_MAP_MAX_ZOOM_LEVEL,
     bounds: { minX, minY, maxX, maxY },
+    worldUnitsPerMeter: SQUAD_WORLD_UNITS_PER_METER,
+    widthMeters,
+    heightMeters,
     aliases: buildAliases(key, name),
   };
 }
@@ -165,9 +175,15 @@ export const TACTICAL_MAP_CONFIGS = Object.fromEntries(
     .map((config) => [config.key, config]),
 );
 
-export const TACTICAL_MAP_LIST = Object.values(TACTICAL_MAP_CONFIGS).sort((a, b) =>
-  a.name.localeCompare(b.name, "en"),
-);
+// User-selectable map lists carry the dimensions in the label. The canonical
+// config name remains unchanged, so command bars and automatic map resolution
+// continue to display the short map name.
+export const TACTICAL_MAP_LIST = Object.values(TACTICAL_MAP_CONFIGS)
+  .map((config) => ({
+    ...config,
+    name: `${config.name} · ${Math.round(config.widthMeters)} × ${Math.round(config.heightMeters)} m`,
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name, "en"));
 
 export function getDefaultTacticalMapKey() {
   return TACTICAL_MAP_LIST[0]?.key ?? null;
