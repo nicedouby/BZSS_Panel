@@ -1074,12 +1074,10 @@ function adaptTacticalStatePlayersForMapUncached(playersList: any[] = [], combat
       player?.telemetry?.vehicleSeatIndex
       ?? player?.vehicle?.vehicleSeatIndex,
     );
-    // Only walking players receive a personal marker. Vehicle locations are
-    // rendered from the independent vehicle runtime stream, so passengers and
-    // drivers must never leave a stale player marker on the map.
-    const isWalking = vehicleState
-      ? vehicleState === "walking"
-      : (!Boolean(player?.telemetry?.onVehicle ?? player?.vehicle?.onVehicle) && (Number.isNaN(vehicleSeatIndex) || vehicleSeatIndex < 0));
+    // Runtime uses -1 for walking and non-negative values for vehicle seats.
+    // Keep legacy players visible when no vehicle signal exists.
+    const vehiclePresence = resolvePlayerVehiclePresence(player);
+    const isWalking = vehiclePresence !== "vehicle";
     const position = isInactive || isNoPawn || !isWalking ? null : sourcePosition;
     const yaw = isInactive || isNoPawn || !isWalking ? null : (player?.telemetry?.yaw ?? player?.yaw ?? null);
     const rotation = player?.telemetry?.rotation ?? player?.soldierInfo?.rotation ?? null;
@@ -1325,32 +1323,48 @@ const vehicleOccupantPlayerIds = computed(() => {
   return ids;
 });
 
-function hasVehiclePlayerState(player: any): boolean {
-  const vehicleState = String(
+function resolvePlayerVehiclePresence(player: any): "walking" | "vehicle" | "unknown" {
+  const rawVehicleState = (
     player?.vehicleInfo?.vehicleState
     ?? player?.telemetry?.vehicleState
     ?? player?.vehicle?.vehicleState
     ?? player?.bzss?.telemetry?.vehicleState
     ?? player?.bzss?.vehicle?.vehicleState
-    ?? "",
-  ).trim().toLowerCase();
-  const seatIndex = Number(
+  );
+  if (rawVehicleState !== null && rawVehicleState !== undefined && String(rawVehicleState).trim() !== "") {
+    const state = String(rawVehicleState).trim().toLowerCase();
+    if (["walking", "onfoot", "on_foot", "foot", "-1", "false"].includes(state)) return "walking";
+    const numericState = Number(state);
+    if (Number.isFinite(numericState)) return numericState >= 0 ? "vehicle" : "walking";
+    return "vehicle";
+  }
+
+  const rawSeatIndex = (
     player?.vehicleInfo?.vehicleSeatIndex
     ?? player?.telemetry?.vehicleSeatIndex
     ?? player?.vehicle?.vehicleSeatIndex
     ?? player?.bzss?.telemetry?.vehicleSeatIndex
-    ?? player?.bzss?.vehicle?.vehicleSeatIndex,
+    ?? player?.bzss?.vehicle?.vehicleSeatIndex
   );
-  const onVehicle = Boolean(
+  if (rawSeatIndex !== null && rawSeatIndex !== undefined && String(rawSeatIndex).trim() !== "") {
+    const seatIndex = Number(rawSeatIndex);
+    if (Number.isFinite(seatIndex)) return seatIndex >= 0 ? "vehicle" : "walking";
+  }
+
+  const rawOnVehicle = (
     player?.vehicleInfo?.onVehicle
     ?? player?.telemetry?.onVehicle
     ?? player?.vehicle?.onVehicle
     ?? player?.bzss?.telemetry?.onVehicle
-    ?? player?.bzss?.vehicle?.onVehicle,
+    ?? player?.bzss?.vehicle?.onVehicle
   );
-  return vehicleState
-    ? vehicleState !== "walking"
-    : (onVehicle || (Number.isFinite(seatIndex) && seatIndex >= 0));
+  if (rawOnVehicle === true || rawOnVehicle === 1 || String(rawOnVehicle).trim().toLowerCase() === "true") return "vehicle";
+  if (rawOnVehicle === false || rawOnVehicle === 0 || String(rawOnVehicle).trim().toLowerCase() === "false") return "walking";
+  return "unknown";
+}
+
+function hasVehiclePlayerState(player: any): boolean {
+  return resolvePlayerVehiclePresence(player) === "vehicle";
 }
 
 function shouldSuppressPlayerMarker(player: any): boolean {
@@ -1370,11 +1384,15 @@ function shouldSuppressPlayerMarker(player: any): boolean {
     || presenceState === "inactive"
   );
   const playerId = getRuntimePlayerId(player);
+  const vehiclePresence = resolvePlayerVehiclePresence(player);
   return inactive
     || presenceState === "nopawn"
     || presenceHint === "nopawn"
-    || hasVehiclePlayerState(player)
-    || (playerId != null && vehicleOccupantPlayerIds.value.has(playerId));
+    || vehiclePresence === "vehicle"
+    // The vehicle stream can arrive one snapshot later than player telemetry.
+    // Explicit walking state is authoritative so a player reappears immediately
+    // after leaving a seat instead of being suppressed by stale occupant data.
+    || (vehiclePresence === "unknown" && playerId != null && vehicleOccupantPlayerIds.value.has(playerId));
 }
 const emptyMapConfig: TacticalMapConfig = {
   key: "",
@@ -3898,11 +3916,10 @@ onBeforeUnmount(deactivateMapPage);
   height: 0;
   overflow: visible;
   --vehicle-accent: #94a3b8;
-  --vehicle-glow: rgba(148, 163, 184, .5);
 }
 
-.vehicle-marker.team-1 { --vehicle-accent: #60a5fa; --vehicle-glow: rgba(59, 130, 246, .64); }
-.vehicle-marker.team-2 { --vehicle-accent: #f87171; --vehicle-glow: rgba(248, 113, 113, .64); }
+.vehicle-marker.team-1 { --vehicle-accent: #7da2d6; }
+.vehicle-marker.team-2 { --vehicle-accent: #d68a8a; }
 .vehicle-marker:hover { z-index: 90; }
 
 .vehicle-marker__hitbox {
@@ -3951,25 +3968,23 @@ onBeforeUnmount(deactivateMapPage);
 .vehicle-marker__tooltip {
   position: absolute;
   left: 0;
-  bottom: 24px;
+  bottom: 22px;
   z-index: 3;
-  min-width: 220px;
-  max-width: 320px;
-  padding: 10px;
-  border: 1px solid color-mix(in srgb, var(--vehicle-accent) 58%, transparent);
-  border-radius: 9px;
-  background: rgba(3, 10, 20, .96);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, .52), 0 0 18px var(--vehicle-glow);
-  color: #dbeafe;
+  width: 190px;
+  height: auto;
+  padding: 7px 8px;
+  border: 1px solid rgba(148, 163, 184, .34);
+  border-radius: 6px;
+  background: rgba(8, 15, 25, .96);
+  color: #d5dde8;
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%) translateY(5px) scale(.97);
-  transform-origin: bottom center;
-  transition: opacity .12s ease, transform .12s ease;
+  transform: translateX(-50%) translateY(3px);
+  transition: opacity .1s ease, transform .1s ease;
 }
 .vehicle-marker:hover .vehicle-marker__tooltip {
   opacity: 1;
-  transform: translateX(-50%) translateY(0) scale(1);
+  transform: translateX(-50%) translateY(0);
 }
 .vehicle-marker__tooltip-header,
 .vehicle-marker__tooltip-stats,
@@ -3983,7 +3998,7 @@ onBeforeUnmount(deactivateMapPage);
   color: var(--vehicle-accent);
 }
 .vehicle-marker__tooltip-header strong {
-  max-width: 240px;
+  max-width: 138px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3994,8 +4009,8 @@ onBeforeUnmount(deactivateMapPage);
   font-size: 11px;
 }
 .vehicle-marker__tooltip-title {
-  margin-top: 8px;
-  padding-top: 7px;
+  margin-top: 6px;
+  padding-top: 5px;
   border-top: 1px solid rgba(148, 163, 184, .2);
   color: #cbd5e1;
   font-size: 11px;
@@ -4003,8 +4018,9 @@ onBeforeUnmount(deactivateMapPage);
 }
 .vehicle-marker__occupants {
   display: grid;
-  gap: 4px;
-  margin-top: 5px;
+  grid-auto-rows: minmax(18px, auto);
+  gap: 2px;
+  margin-top: 4px;
 }
 .vehicle-marker__occupant {
   min-width: 0;
