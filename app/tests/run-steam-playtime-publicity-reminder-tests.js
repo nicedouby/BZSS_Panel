@@ -10,6 +10,17 @@ function createHarness() {
   let localCacheReads = 0;
   let steamApiLookups = 0;
 
+  const runtimeConfig = {
+    enabled: true,
+    featureEnabled: true,
+    startAfterSeconds: 300,
+    pollIntervalMs: 1000,
+    leaderWarningIntervalMs: 10000,
+    broadcastBatchSize: 5,
+    broadcastBatchIntervalMs: 120000,
+    broadcastCycleCooldownMs: 600000,
+  };
+
   const players = [
     { playerID: 1, name: "PrivateLeader", steamID: "1001", eosID: "e1", teamID: 1, squadID: 1, isLeader: true, online: true },
     { playerID: 2, name: "PrivateMember2", steamID: "1002", eosID: "e2", teamID: 1, squadID: 1, isLeader: false, online: true },
@@ -96,15 +107,7 @@ function createHarness() {
   const config = {
     get(key, fallback) {
       if (key === "plugins.steam-playtime-publicity-reminder") {
-        return {
-          enabled: true,
-          startAfterSeconds: 300,
-          pollIntervalMs: 1000,
-          leaderWarningIntervalMs: 10000,
-          broadcastBatchSize: 5,
-          broadcastBatchIntervalMs: 120000,
-          broadcastCycleCooldownMs: 600000,
-        };
+        return runtimeConfig;
       }
       return fallback;
     },
@@ -114,6 +117,7 @@ function createHarness() {
     plugin: createPlugin({ core, modules, config }),
     players,
     playtimes,
+    runtimeConfig,
     clock,
     warnings,
     broadcasts,
@@ -209,6 +213,26 @@ async function testWarningStopsWhenLocalCacheBecomesPublic() {
   assert.equal(h.getSteamApiLookups(), 0);
 }
 
+async function testFeatureCanBeDisabledAndReenabledAtRuntime() {
+  const h = createHarness();
+  h.clock.seconds = 300;
+
+  h.runtimeConfig.featureEnabled = false;
+  await h.plugin.api.evaluateNow(h.now);
+  assert.equal(h.warnings.length, 0);
+  assert.equal(h.broadcasts.length, 0);
+  assert.equal(h.getLocalCacheReads(), 0, "disabled feature must not scan local playtime cache");
+  assert.equal(h.getSteamApiLookups(), 0);
+  assert.equal(h.plugin.api.getState().active, false);
+
+  h.runtimeConfig.featureEnabled = true;
+  await h.plugin.api.evaluateNow(h.now + 1000);
+  assert.equal(h.warnings.length, 1);
+  assert.equal(h.broadcasts.length, 1);
+  assert.equal(h.plugin.api.getState().active, true);
+  assert.equal(h.getSteamApiLookups(), 0);
+}
+
 async function testNewRoundRestartsImmediateFiveMinuteEvaluation() {
   const h = createHarness();
   h.clock.seconds = 300;
@@ -228,6 +252,7 @@ try {
   await testPrivateDetectionRequiresCompletedRefresh();
   await testWarningAndBroadcastSchedule();
   await testWarningStopsWhenLocalCacheBecomesPublic();
+  await testFeatureCanBeDisabledAndReenabledAtRuntime();
   await testNewRoundRestartsImmediateFiveMinuteEvaluation();
   console.log("Steam playtime publicity reminder tests passed successfully!");
 } catch (error) {
