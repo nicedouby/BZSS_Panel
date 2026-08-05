@@ -2471,7 +2471,9 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
     const normalizedTeamId = teamId === 1 || teamId === 2 ? teamId : null;
     const icon = resolveVehicleIcon(vehicleType);
     const health = Number(vehicle?.healthPercent);
-    const speed = vehicle?.speed == null || String(vehicle.speed).trim() === ""\n      ? Number.NaN\n      : Number(vehicle.speed);
+    const speed = vehicle?.speed == null || String(vehicle.speed).trim() === ""
+      ? Number.NaN
+      : Number(vehicle.speed);
     const driverId = normalizeRuntimePlayerId(vehicle?.driverPlayerId);
     const driverPlayerId = driverId == null ? null : Number(driverId);
     // Empty occupantPlayerIds means the latest seat snapshot is explicitly
