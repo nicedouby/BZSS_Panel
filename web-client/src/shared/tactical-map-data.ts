@@ -19,6 +19,9 @@ export interface TacticalMapConfig {
   tileBasePath: string;
   maxZoomLevel: number;
   bounds: TacticalMapBounds;
+  worldUnitsPerMeter: number;
+  widthMeters: number;
+  heightMeters: number;
   aliases: string[];
 }
 
@@ -52,6 +55,9 @@ export const EMPTY_TACTICAL_MAP_CONFIG: TacticalMapConfig = {
   tileBasePath: "",
   maxZoomLevel: 0,
   bounds: { minX: 0, minY: 0, maxX: 1000, maxY: 1000 },
+  worldUnitsPerMeter: 1,
+  widthMeters: 1000,
+  heightMeters: 1000,
   aliases: [],
 };
 
