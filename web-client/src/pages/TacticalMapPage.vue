@@ -113,7 +113,11 @@
         </div>
 
         <!-- Capture Zone Overlay -->
-        <div v-if="showCaptureZones" class="capture-zone-layer">
+        <div
+          v-if="showCaptureZones"
+          class="capture-zone-layer"
+          :class="{ 'is-editing': capturePointEditMode }"
+        >
           <button
             v-for="zone in captureZoneDisplayMarkers"
             :key="zone.id"
@@ -254,7 +258,7 @@
         </div>
 
         <!-- Player Markers Layer -->
-        <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }">
+        <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging || capturePointEditMode ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }">
           <PlayerMarker
             v-for="player in displayedPlayers"
             :key="getPlayerKey(player)"
@@ -287,7 +291,7 @@
         </div>
 
         <!-- BZSS-Core Vehicle Runtime Layer -->
-        <div class="vehicle-markers-layer" :style="{ pointerEvents: measureMode || isDragging ? 'none' : 'auto' }">
+        <div class="vehicle-markers-layer" :style="{ pointerEvents: measureMode || isDragging || capturePointEditMode ? 'none' : 'auto' }">
           <div
             v-for="vehicle in vehicleMarkers"
             :key="vehicle.id"
