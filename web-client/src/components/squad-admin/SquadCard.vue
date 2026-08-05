@@ -28,6 +28,11 @@
 
         <!-- 元信息行：均时 + 创建者 + 时间 -->
         <div class="squad-meta-row">
+          <div class="squad-kd-row">
+            <span class="sq-kd-kill">{{ squadCombatTotals.kills }}</span><span class="sq-kd-sep">/</span>
+            <span class="sq-kd-down">{{ squadCombatTotals.downs }}</span><span class="sq-kd-sep">/</span>
+            <span class="sq-kd-death">{{ squadCombatTotals.deaths }}</span>
+          </div>
           <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
             <span class="squad-meta-playtime">{{ squadAveragePlaytimeText }}</span>
             <span v-if="squadAveragePingText !== '--'" class="squad-meta-ping" style="font-size: 10px; color: var(--color-text-secondary); white-space: nowrap;">
@@ -187,6 +192,18 @@ const squadAveragePingText = computed(() => {
   if (pings.length === 0) return "--";
   const sum = pings.reduce((acc, val) => acc + val, 0);
   return `${Math.round(sum / pings.length)}ms`;
+});
+
+const squadCombatTotals = computed(() => {
+  const playersList = squadPlayers.value;
+  let kills = 0, downs = 0, deaths = 0;
+  for (const player of playersList) {
+    const stats = getPlayerCombatStats(player);
+    kills += Math.trunc(Number(stats?.kills ?? 0));
+    downs += Math.trunc(Number(stats?.downs ?? 0));
+    deaths += Math.trunc(Number(stats?.deaths ?? 0));
+  }
+  return { kills, downs, deaths };
 });
 
 const squadWarnings = computed(() => {
@@ -430,6 +447,22 @@ function handlePlayerToggleCheck(payload: { player: PlayerRowViewModel; event: M
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.squad-kd-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.squad-kd-row .sq-kd-kill { color: #4ade80; min-width: 1.4em; text-align: center; }
+.squad-kd-row .sq-kd-down { color: #facc15; min-width: 1.4em; text-align: center; }
+.squad-kd-row .sq-kd-death { color: #f87171; min-width: 1.4em; text-align: center; }
+.squad-kd-row .sq-kd-sep { color: rgba(148, 163, 184, 0.35); font-weight: 400; padding: 0 1px; }
 
 .squad-meta-right {
   display: flex;
