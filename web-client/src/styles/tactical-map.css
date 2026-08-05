@@ -159,7 +159,39 @@
 .main-zone-marker,
 .capture-zone-marker { position: absolute; width: 0; height: 0; padding: 0; overflow: visible; border: 0; background: transparent; }
 .main-zone-marker { pointer-events: none; }
-.capture-zone-marker { pointer-events: auto; cursor: pointer; }
+.capture-zone-marker { pointer-events: auto; cursor: pointer; touch-action: none; }
+.map-viewport.is-capture-point-editing .capture-zone-marker { cursor: grab; }
+.map-viewport.is-capture-point-editing .capture-zone-marker:hover .zone-flag-group {
+  filter: drop-shadow(0 0 7px rgba(250, 204, 21, .9)) brightness(1.12);
+}
+.capture-zone-marker.is-point-dragging { z-index: 20; cursor: grabbing; }
+.capture-zone-marker.is-point-dragging .zone-flag-group {
+  filter: drop-shadow(0 0 9px rgba(250, 204, 21, 1)) brightness(1.18);
+}
+.capture-zone-marker.is-command-pending .zone-flag-group {
+  animation: capture-point-command-pulse .75s ease-in-out infinite alternate;
+}
+.capture-point-index {
+  position: absolute;
+  left: 0;
+  top: -31px;
+  min-width: 20px;
+  padding: 2px 5px;
+  transform: translateX(-50%) scale(var(--capture-marker-scale, 1));
+  transform-origin: 50% 100%;
+  border: 1px solid rgba(250, 204, 21, .85);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, .94);
+  box-shadow: 0 0 8px rgba(250, 204, 21, .35);
+  color: #fde68a;
+  font: 800 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  pointer-events: none;
+}
+@keyframes capture-point-command-pulse {
+  from { opacity: .55; }
+  to { opacity: 1; }
+}
 
 .zone-flag-group {
   position: absolute; left: -17px; top: -11px; display: block;
