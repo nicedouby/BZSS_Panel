@@ -2333,12 +2333,45 @@ function parseVehicleRuntimePosition(text) {
 }
 
 function parseVehicleRuntimeYaw(text) {
-  // Blueprint VRI writes yaw immediately after the fixed three-decimal Z value:
+  const source = String(text ?? "");
+
+  // Prefer an explicit heading whenever the Blueprint payload provides one.
+  // Keep the aliases narrow so the position's Y coordinate is never mistaken
+  // for a yaw value.
+  const explicit = source.match(
+    /(?:^|[,;{])\s*(?:Yaw|Heading|RotationYaw|RotYaw)\s*[:=]\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (explicit) return toFiniteNumber(explicit[1]);
+
+  // Also accept Unreal rotator text such as `Rotation:P=0 Y=-90 R=0`.
+  const rotator = source.match(
+    /(?:Rotation|Rot)\s*[:=]\s*(?:P\s*[=:]\s*-?\d+(?:\.\d+)?\s+)?Y\s*[=:]\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (rotator) return toFiniteNumber(rotator[1]);
+
+  const namedPosition = source.match(
+    /(?:^|[,;{])\s*(?:P|Pos|Position|Location)\s*[:=]\s*(.*?)(?=[,;]\s*(?:S|Speed|Velocity|Vel|T|TID|TeamID|Team|PS|SeatPlayers|SeatsPlayers|ID|DriverID|DriverPlayerID|VT|VehicleType|Type|H|HP|Health)\s*[:=]|$)/i,
+  );
+  const positionText = String(namedPosition?.[1] ?? "").trim();
+
+  // New compact VRI may emit P as four comma-separated numbers: x,y,z,yaw.
+  const compact = positionText.match(
+    /^\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*(-?\d+(?:\.\d+)?)\s*$/,
+  );
+  if (compact) return toFiniteNumber(compact[1]);
+
+  // Labeled vectors may append yaw after Z using a comma.
+  const labeledTail = positionText.match(
+    /Z\s*[=:]\s*-?\d+(?:\.\d+)?\s*,\s*(-?\d+(?:\.\d+)?)\s*$/,
+  );
+  if (labeledTail) return toFiniteNumber(labeledTail[1]);
+
+  // Legacy Blueprint VRI writes yaw immediately after a fixed three-decimal Z:
   // `Z=-134.74960.261795,Speed...` or `Z=-134.696-25.861773,Speed...`.
-  const match = String(text ?? "").match(
+  const packed = source.match(
     /Z\s*[=:]\s*-?\d+\.\d{3}\s*(-?\d+(?:\.\d+)?)\s*,\s*(?:S|Speed|Velocity|Vel)\s*[:=]/i,
   );
-  return toFiniteNumber(match?.[1]);
+  return toFiniteNumber(packed?.[1]);
 }
 
 function parsePriRuntimeRows(rows, observedAt, rawPrefix = "PRI{{") {
