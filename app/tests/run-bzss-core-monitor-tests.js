@@ -153,6 +153,15 @@ function testParseLogLine() {
   assert.deepEqual(passengerOnlyVehicleFrame.vehicles[0].occupantPlayerIds, [17]);
   assert.equal(passengerOnlyVehicleFrame.vehicles[0].occupied, true);
 
+  const emptySeatVehicleFrame = parseBzssCoreVehicleLine(
+    "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:100.500,-25.000,8.125,-135,S:0,T:1,PS:,,,,,}}",
+  );
+  assert.equal(emptySeatVehicleFrame.vehicles[0].driverPlayerId, 42);
+  assert.equal(emptySeatVehicleFrame.vehicles[0].seatSnapshotPresent, true);
+  assert.deepEqual(emptySeatVehicleFrame.vehicles[0].seatPlayerIds, []);
+  assert.deepEqual(emptySeatVehicleFrame.vehicles[0].occupantPlayerIds, []);
+  assert.equal(emptySeatVehicleFrame.vehicles[0].occupied, false);
+
   const runtime = parseBzssCoreLogLine("PIE: Error: PlayerBaseInfo{}");
   assert.equal(runtime.type, "playerRuntime");
   assert.equal(runtime.runtimePlayers.length, 0);
