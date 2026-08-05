@@ -1363,9 +1363,6 @@ function resolvePlayerVehiclePresence(player: any): "walking" | "vehicle" | "unk
   return "unknown";
 }
 
-function hasVehiclePlayerState(player: any): boolean {
-  return resolvePlayerVehiclePresence(player) === "vehicle";
-}
 
 function shouldSuppressPlayerMarker(player: any): boolean {
   const presenceState = String(player?.presence?.state ?? player?.bzss?.presence?.state ?? "").trim().toLowerCase();
