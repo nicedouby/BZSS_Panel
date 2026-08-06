@@ -579,7 +579,7 @@
         :capture-point-edit-mode="capturePointEditMode"
         :capture-point-command-pending="capturePointCommandPending"
         :has-combat-hotspot="combatHotspot != null"
-        @close="mapCommandMenu = null"
+        @close="closeMapCommandMenu"
         @start-measure="onStartMeasure(mapCommandMenu)"
         @add-point="onAddPoint(mapCommandMenu)"
         @undo-point="onUndoPoint"
@@ -590,7 +590,6 @@
         @calculate-hotspot="calculateCombatHotspot"
         @clear-hotspot="clearCombatHotspot"
         @toggle-layer="onToggleLayer"
-        @open-ticket-editor="scoreDashboardRef?.openEditor()"
       />
 
       <header class="tactical-command-bar">
@@ -611,14 +610,6 @@
           >{{ tacticalRecording.pending ? "处理中…" : tacticalRecording.recordingEnabled ? "停止录制" : "开始录制" }}</button>
         </div>
       </header>
-
-      <ScoreCircleDashboard
-        ref="scoreDashboardRef"
-        :tickets="tickets"
-        :can-edit="canEditTickets"
-        :server-id="currentServerId"
-        @tickets-updated="serverStore.markStale"
-      />
 
       <div
         v-if="capturePointEditMode || capturePointFeedback"
@@ -786,7 +777,6 @@ import {
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
-import ScoreCircleDashboard from "../components/tactical-map/ScoreCircleDashboard.vue";
 import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
@@ -932,7 +922,6 @@ const authStore = useAuthStore();
 const route = useRoute();
 const tacticalStateStore = useTacticalStateStore();
 const isStandaloneMapRoute = computed(() => route.path === "/tactical-map" || route.name === "tactical-map");
-const scoreDashboardRef = ref<InstanceType<typeof ScoreCircleDashboard> | null>(null);
 
 const storeSnapshot = computed(() => tacticalStateStore.snapshot ?? null);
 const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets?.captureZones) ? tacticalStateStore.assets.captureZones : []);
@@ -1178,9 +1167,6 @@ const canManagePressureSettings = computed(() => Boolean(
 ));
 const canEditCapturePoints = computed(() => Boolean(
   authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
-));
-const canEditTickets = computed(() => Boolean(
-  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("rcon.settickets")
 ));
 
 const snapshot = computed(() => {
@@ -2117,13 +2103,26 @@ function onMapClick(e: MouseEvent) {
   });
 }
 
+let lastMenuCloseTime = 0;
+
+function closeMapCommandMenu() {
+  lastMenuCloseTime = Date.now();
+  mapCommandMenu.value = null;
+}
+
 function handleMapRightClick(e: MouseEvent) {
+  // Ignore if menu closed within 300ms (prevents contextmenu event from re-opening on right click release)
+  if (Date.now() - lastMenuCloseTime < 300) {
+    return;
+  }
+
   // Ignore if right click was inside controls
   const target = e.target as HTMLElement;
   if (
     target.closest(".glass-panel") ||
     target.closest(".tactical-sidebar") ||
-    target.closest(".map-floating-panel")
+    target.closest(".map-floating-panel") ||
+    target.closest(".radial-context-menu")
   ) {
     return;
   }

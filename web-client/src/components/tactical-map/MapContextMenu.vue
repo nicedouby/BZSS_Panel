@@ -23,10 +23,10 @@
       <div v-if="measureActive" class="core-sub text-cyan">
         {{ measureCount === 0 ? "测距开启" : `${measureCount} 点` }}
       </div>
-      <div v-else class="core-sub">松开关闭</div>
+      <div v-else class="core-sub">点击/松开关闭</div>
     </div>
 
-    <!-- Main Radial Action Buttons (Circle Layout: 8 sectors) -->
+    <!-- Main Radial Action Buttons (8 Sectors) -->
     <div v-if="!showLayerRing" class="radial-sector-group">
       <!-- 0 deg: Measure -->
       <button
@@ -42,7 +42,7 @@
         <span class="radial-btn-label">{{ measureActive ? "添加点" : "开始测距" }}</span>
       </button>
 
-      <!-- 45 deg: Point Edit -->
+      <!-- 45 deg: Point Edit Mode -->
       <button
         v-if="canEditCapturePoints"
         type="button"
@@ -64,7 +64,7 @@
         class="radial-btn"
         :class="{ 'is-active': hasCombatHotspot, 'is-hovered': hoverIndex === 2 }"
         style="--angle: 90deg;"
-        title="计算/更新交战热点"
+        title="计算/更新交战集中热点"
         @pointerdown.stop
         @click="handleAction('calculate-hotspot')"
       >
@@ -73,27 +73,27 @@
         <span class="active-dot" :class="{ active: hasCombatHotspot }"></span>
       </button>
 
-      <!-- 135 deg: Tickets Config -->
+      <!-- 135 deg: Focus Here -->
       <button
         type="button"
         class="radial-btn"
         :class="{ 'is-hovered': hoverIndex === 3 }"
         style="--angle: 135deg;"
-        title="设置双方阵营票数"
+        title="地图视角聚焦于此"
         @pointerdown.stop
-        @click="handleAction('open-ticket-editor')"
+        @click="handleAction('focus-here')"
       >
-        <span class="radial-btn-icon">⚙️</span>
-        <span class="radial-btn-label">设置票数</span>
+        <span class="radial-btn-icon">👁️</span>
+        <span class="radial-btn-label">聚焦此处</span>
       </button>
 
-      <!-- 180 deg: Layers Control -->
+      <!-- 180 deg: Layers Subring Trigger -->
       <button
         type="button"
         class="radial-btn"
         :class="{ 'is-hovered': hoverIndex === 4 }"
         style="--angle: 180deg;"
-        title="展开地图图层控制"
+        title="展开地图图层显示开关"
         @pointerdown.stop
         @click="showLayerRing = true"
       >
@@ -116,26 +116,12 @@
         <span class="radial-btn-label">清空测距</span>
       </button>
 
-      <!-- 270 deg: Focus Here -->
+      <!-- 270 deg: Copy Coords -->
       <button
         type="button"
         class="radial-btn"
         :class="{ 'is-hovered': hoverIndex === 6 }"
         style="--angle: 270deg;"
-        title="地图视角聚焦于此"
-        @pointerdown.stop
-        @click="handleAction('focus-here')"
-      >
-        <span class="radial-btn-icon">👁️</span>
-        <span class="radial-btn-label">聚焦此处</span>
-      </button>
-
-      <!-- 315 deg: Copy Coords -->
-      <button
-        type="button"
-        class="radial-btn"
-        :class="{ 'is-hovered': hoverIndex === 7 }"
-        style="--angle: 315deg;"
         title="复制世界坐标"
         @pointerdown.stop
         @click="handleAction('copy-coords')"
@@ -143,9 +129,23 @@
         <span class="radial-btn-icon">📋</span>
         <span class="radial-btn-label">复制坐标</span>
       </button>
+
+      <!-- 315 deg: Close Wheel -->
+      <button
+        type="button"
+        class="radial-btn close-btn"
+        :class="{ 'is-hovered': hoverIndex === 7 }"
+        style="--angle: 315deg;"
+        title="关闭轮盘"
+        @pointerdown.stop
+        @click="handleAction('close')"
+      >
+        <span class="radial-btn-icon">✕</span>
+        <span class="radial-btn-label">关闭菜单</span>
+      </button>
     </div>
 
-    <!-- Sub Radial Ring: Layers Control (6 sectors: 0, 60, 120, 180, 240, 300) -->
+    <!-- Sub Radial Ring: Layers Control Submenu (6 sectors: 0, 60, 120, 180, 240, 300) -->
     <div v-else class="radial-sector-group layer-subring">
       <button
         type="button"
@@ -270,7 +270,6 @@ const emit = defineEmits<{
   (e: "clear-measure"): void;
   (e: "copy-coords"): void;
   (e: "focus-here"): void;
-  (e: "open-ticket-editor"): void;
 
   // Context Menu Actions
   (e: "toggle-capture-point-edit"): void;
@@ -285,6 +284,7 @@ const hoverIndex = ref<number | null>(null);
 
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
+let dragMoved = false;
 
 const menuStyle = computed(() => {
   return {
@@ -295,19 +295,19 @@ const menuStyle = computed(() => {
 
 const measurePrimaryLabel = computed(() => props.measureActive ? "重新从此处测距" : "从此处开始测距");
 
-// Main Ring Action Map
+// Main Ring Action Map (8 sectors)
 const mainActions: Array<string | null> = [
-  "measure",               // 0 deg
-  "toggle-capture-edit",   // 45 deg
-  "calculate-hotspot",     // 90 deg
-  "open-ticket-editor",    // 135 deg
-  "show-layer-ring",       // 180 deg
-  "clear-measure",         // 225 deg
-  "focus-here",            // 270 deg
-  "copy-coords",           // 315 deg
+  "measure",               // 0 deg (Top)
+  "toggle-capture-edit",   // 45 deg (Top-Right)
+  "calculate-hotspot",     // 90 deg (Right)
+  "focus-here",            // 135 deg (Bottom-Right)
+  "show-layer-ring",       // 180 deg (Bottom)
+  "clear-measure",         // 225 deg (Bottom-Left)
+  "copy-coords",           // 270 deg (Left)
+  "close",                 // 315 deg (Top-Left)
 ];
 
-// Layer Subring Action Map
+// Layer Subring Action Map (6 sectors)
 const subActions: Array<string | null> = [
   "back-main",            // 0 deg
   "toggle-layer-alive",   // 60 deg
@@ -321,6 +321,10 @@ function onWindowPointerMove(event: PointerEvent) {
   const dx = event.clientX - offsetLeft.value;
   const dy = event.clientY - offsetTop.value;
   const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance > 20) {
+    dragMoved = true;
+  }
 
   if (distance <= 30) {
     hoverIndex.value = -1; // Hovering center core
@@ -342,18 +346,17 @@ function onWindowPointerMove(event: PointerEvent) {
 }
 
 function onWindowPointerUp(event: PointerEvent) {
-  // If user dragged to a sector or released right mouse button
+  // If user dragged to a sector and released mouse button
   const dx = event.clientX - offsetLeft.value;
   const dy = event.clientY - offsetTop.value;
   const distance = Math.sqrt(dx * dx + dy * dy);
 
-  if (distance > 30 && hoverIndex.value !== null && hoverIndex.value >= 0) {
+  if (dragMoved && distance > 30 && hoverIndex.value !== null && hoverIndex.value >= 0) {
     if (!showLayerRing.value) {
       const act = mainActions[hoverIndex.value];
       if (act === "measure") handleAction(props.measureActive ? "add-point" : "start-measure");
       else if (act === "toggle-capture-edit") handleAction("toggle-capture-point-edit");
       else if (act === "calculate-hotspot") handleAction("calculate-hotspot");
-      else if (act === "open-ticket-editor") handleAction("open-ticket-editor");
       else if (act === "show-layer-ring") {
         showLayerRing.value = true;
         return;
@@ -361,6 +364,7 @@ function onWindowPointerUp(event: PointerEvent) {
       else if (act === "clear-measure") handleAction("clear-measure");
       else if (act === "focus-here") handleAction("focus-here");
       else if (act === "copy-coords") handleAction("copy-coords");
+      else if (act === "close") handleAction("close");
     } else {
       const act = subActions[hoverIndex.value];
       if (act === "back-main") {
@@ -370,10 +374,10 @@ function onWindowPointerUp(event: PointerEvent) {
         handleAction(act as any);
       }
     }
+  } else if (dragMoved && distance <= 30) {
+    // Released in center core -> close
+    emit("close");
   }
-
-  // Release right click or drag always closes the menu
-  emit("close");
 }
 
 onMounted(() => {
@@ -414,7 +418,6 @@ function handleAction(
     | "clear-measure"
     | "copy-coords"
     | "focus-here"
-    | "open-ticket-editor"
     | "toggle-capture-point-edit"
     | "calculate-hotspot"
     | "clear-hotspot"
@@ -431,7 +434,6 @@ function handleAction(
   else if (event === "clear-measure") emit("clear-measure");
   else if (event === "copy-coords") emit("copy-coords");
   else if (event === "focus-here") emit("focus-here");
-  else if (event === "open-ticket-editor") emit("open-ticket-editor");
   else if (event === "toggle-capture-point-edit") emit("toggle-capture-point-edit");
   else if (event === "calculate-hotspot") emit("calculate-hotspot");
   else if (event === "clear-hotspot") emit("clear-hotspot");
@@ -634,14 +636,17 @@ function handleAction(
   box-shadow: 0 0 6px #00e5ff;
 }
 
-.back-btn {
+.back-btn,
+.close-btn {
   background: rgba(239, 68, 68, 0.15);
   border-color: rgba(239, 68, 68, 0.4);
   color: #f87171;
 }
 
 .back-btn.is-hovered,
-.back-btn:hover {
+.back-btn:hover,
+.close-btn.is-hovered,
+.close-btn:hover {
   background: rgba(239, 68, 68, 0.3) !important;
   border-color: #ef4444 !important;
   box-shadow: 0 0 18px rgba(239, 68, 68, 0.6) !important;
