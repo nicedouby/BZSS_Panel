@@ -51,6 +51,8 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
       ? { ...current }
       : createBaseRecord(logEvent, getNextOrder(logEvent.serverId, logEvent.matchId), getNextGeneration(slotKey));
     const key = buildSquadLifecycleKey(logEvent.serverId, logEvent.matchId, logEvent.teamId, logEvent.squadId, next.generation);
+    const originalSquadName = String(logEvent.originalSquadName ?? logEvent.squadName ?? "").trim();
+    const currentSquadName = String(logEvent.currentSquadName ?? next.currentSquadName ?? "").trim();
 
     next.key = key;
     next.slotKey = slotKey;
@@ -58,13 +60,18 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     next.matchId = String(logEvent.matchId ?? "").trim();
     next.teamId = logEvent.teamId ?? null;
     next.squadId = logEvent.squadId ?? null;
-    next.squadName = String(logEvent.squadName ?? "").trim();
+    next.originalSquadName = originalSquadName;
+    next.currentSquadName = currentSquadName;
+    // Backward-compatible squadName remains the authoritative log creation name once confirmed.
+    next.squadName = originalSquadName || currentSquadName;
     next.factionName = String(logEvent.factionName ?? "").trim();
     next.creatorName = String(logEvent.creatorName ?? "").trim();
     next.creatorSteamId = String(logEvent.creatorSteamId ?? "").trim();
     next.creatorEosId = String(logEvent.creatorEosId ?? "").trim();
     next.rawLog = String(logEvent.rawLog ?? "");
     next.sourceEventId = String(logEvent.sourceEventId ?? "");
+    next.sourceMode = String(logEvent.sourceMode ?? next.sourceMode ?? "live").trim().toLowerCase() || "live";
+    next.canTriggerActions = logEvent.canTriggerActions !== false;
     next.logConfirmedAt = logConfirmedAt;
 
     if (Number.isFinite(eventCreatedAtMs)) {
@@ -99,6 +106,7 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     for (const squad of squads) {
       const teamId = squad.teamID ?? squad.teamId ?? null;
       const squadId = squad.squadID ?? squad.squadId ?? null;
+      const currentSquadName = String(squad.squadName ?? squad.name ?? "").trim();
       const slotKey = buildSquadLifecycleSlotKey(serverId, matchId, teamId, squadId);
       const current = getCurrentRecord(slotKey);
       const next = current ? { ...current } : createBaseRecord({
@@ -106,7 +114,7 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
         matchId,
         teamId,
         squadId,
-        squadName: squad.squadName ?? squad.name ?? "",
+        squadName: currentSquadName,
         factionName: squad.teamName ?? "",
         creatorName: squad.creatorName ?? "",
         creatorSteamId: squad.creatorSteamID ?? squad.creatorSteamId ?? "",
@@ -122,7 +130,13 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
       next.matchId = matchId;
       next.teamId = teamId;
       next.squadId = squadId;
-      next.squadName = String(squad.squadName ?? squad.name ?? "").trim();
+      next.currentSquadName = currentSquadName;
+      // RCON is current display state only. It must not overwrite a log-confirmed creation name.
+      if (!String(next.originalSquadName ?? "").trim()) {
+        next.squadName = currentSquadName;
+      } else {
+        next.squadName = String(next.originalSquadName).trim();
+      }
       next.factionName = String(squad.teamName ?? next.factionName ?? "").trim();
       next.creatorName = String(squad.creatorName ?? next.creatorName ?? "").trim();
       next.creatorSteamId = String(squad.creatorSteamID ?? squad.creatorSteamId ?? next.creatorSteamId ?? "").trim();
@@ -297,12 +311,16 @@ function createBaseRecord(source, order, generation) {
     teamId: source.teamId ?? null,
     squadId: source.squadId ?? null,
     squadName: String(source.squadName ?? "").trim(),
+    originalSquadName: String(source.originalSquadName ?? "").trim(),
+    currentSquadName: String(source.currentSquadName ?? source.squadName ?? "").trim(),
     factionName: String(source.factionName ?? "").trim(),
     creatorName: String(source.creatorName ?? "").trim(),
     creatorSteamId: String(source.creatorSteamId ?? "").trim(),
     creatorEosId: String(source.creatorEosId ?? "").trim(),
     rawLog: String(source.rawLog ?? ""),
     sourceEventId: String(source.sourceEventId ?? ""),
+    sourceMode: String(source.sourceMode ?? "live").trim().toLowerCase() || "live",
+    canTriggerActions: source.canTriggerActions !== false,
     slotKey: "",
     generation: Number(generation ?? source.generation ?? 0) || 1,
     createdAtMs: 0,
