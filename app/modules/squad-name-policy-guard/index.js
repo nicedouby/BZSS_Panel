@@ -37,6 +37,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     warningsSent: 0,
     warningsSkipped: 0,
     duplicatesSkipped: 0,
+    auditOnlySkipped: 0,
     errors: 0,
   };
   let serial = Promise.resolve();
@@ -151,6 +152,19 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
       });
     }
 
+    // Recovery/replay/backfill events may rebuild lifecycle state, but they must never
+    // enter the policy action chain. This is the hard safety barrier for cold starts,
+    // database migrations and LogPost catch-up.
+    if (!isLiveActionEvent(normalized)) {
+      stats.auditOnlySkipped += 1;
+      return rememberRecord({
+        event: normalized,
+        source,
+        status: "audit_only",
+        reason: "non_live_event_actions_blocked",
+      });
+    }
+
     const dedupeKey = buildDedupeKey(normalized);
     if (processedKeys.has(dedupeKey)) {
       stats.duplicatesSkipped += 1;
@@ -176,6 +190,8 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
       emitSquadNameRulePassed(core, {
         serverId: normalized.serverId,
         matchId: normalized.matchId,
+        sourceMode: normalized.sourceMode,
+        canTriggerActions: normalized.canTriggerActions,
         teamId: normalized.teamId,
         squadId: normalized.squadId,
         squadName: normalized.squadName,
@@ -248,6 +264,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
     return record;
   }
+
   function rememberRecord(record) {
     const now = nowIso();
     const saved = {
@@ -295,7 +312,8 @@ function normalizeSquadEvent(event = {}) {
     matchId: text(event.matchId ?? event.sessionId ?? event.sessionID),
     teamId: nullableNumber(event.teamId ?? event.teamID),
     squadId: nullableNumber(event.squadId ?? event.squadID),
-    squadName: text(event.squadName ?? event.name),
+    squadName: text(event.originalSquadName ?? event.squadName ?? event.name),
+    currentSquadName: text(event.currentSquadName),
     teamName: text(event.teamName ?? event.factionName),
     creatorName: text(event.creatorName ?? event.leaderName),
     creatorSteamId: text(event.creatorSteamId ?? event.creatorSteamID ?? event.steamId ?? event.steamID ?? event.leaderSteamId),
@@ -303,7 +321,7 @@ function normalizeSquadEvent(event = {}) {
     source: text(event.source),
     sourceMode: text(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode) || "live",
     canTriggerActions: normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true),
-    time: text(event.time ?? event.createdAt ?? event.observedAt) || nowIso(),
+    time: text(event.createdAt ?? event.time ?? event.observedAt) || nowIso(),
     generation: nullableNumber(event.generation ?? event.record?.generation) ?? 1,
   };
 }
@@ -429,6 +447,13 @@ function normalizeBoolean(value, fallback = false) {
   if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
   if (normalized === "false" || normalized === "0" || normalized === "no") return false;
   return fallback;
+}
+
+function isLiveActionEvent(event = {}) {
+  const sourceMode = text(event.sourceMode ?? event.SourceMode ?? event.rawEvent?.SourceMode).toLowerCase();
+  const canTriggerActions = normalizeBoolean(event.canTriggerActions ?? event.CanTriggerActions ?? event.rawEvent?.CanTriggerActions, true);
+  if (sourceMode && sourceMode !== "live") return false;
+  return canTriggerActions !== false;
 }
 
 function cloneValue(value) {
