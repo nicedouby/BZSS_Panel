@@ -21,6 +21,7 @@ export const squadNameRules = Object.freeze({
       "ied",
       "步兵",
       "步兵队",
+      "command squad",
     ]),
     contains: Object.freeze([
       "步兵",
