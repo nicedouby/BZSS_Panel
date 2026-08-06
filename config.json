@@ -821,18 +821,18 @@
         "infantry": [
           {
             "startSeconds": 0,
-            "endSeconds": 30,
-            "minHoursExclusive": 800
+            "endSeconds": 60,
+            "minHoursExclusive": 500
           },
           {
-            "startSeconds": 30,
-            "endSeconds": 50,
-            "minHoursExclusive": 600
-          },
-          {
-            "startSeconds": 50,
-            "endSeconds": 100,
+            "startSeconds": 60,
+            "endSeconds": 120,
             "minHoursExclusive": 400
+          },
+          {
+            "startSeconds": 120,
+            "endSeconds": 180,
+            "minHoursExclusive": 200
           }
         ],
         "vehicle": [
@@ -920,18 +920,18 @@
           "infantry": [
             {
               "startSeconds": 0,
-              "endSeconds": 30,
-              "minHoursExclusive": 800
+              "endSeconds": 60,
+              "minHoursExclusive": 500
             },
             {
-              "startSeconds": 30,
-              "endSeconds": 50,
-              "minHoursExclusive": 600
-            },
-            {
-              "startSeconds": 50,
-              "endSeconds": 100,
+              "startSeconds": 60,
+              "endSeconds": 120,
               "minHoursExclusive": 400
+            },
+            {
+              "startSeconds": 120,
+              "endSeconds": 180,
+              "minHoursExclusive": 200
             }
           ],
           "vehicle": [
@@ -984,7 +984,9 @@
             {
               "id": "welcome",
               "enabled": true,
-              "message": "欢迎来到 BZSS 服务器，本服服规相较其他服务器较为不同，\n请完整阅读并遵守服务器规则，祝你游戏愉快。\n若没有看到进阵营选择页面，请按J输入kxr"
+              "message": "欢迎来到 BZSS 服务器，本服服规相较其他服务器较为不同，\
+请完整阅读并遵守服务器规则，祝你游戏愉快。\
+若没有看到进阵营选择页面，请按J输入kxr"
             }
           ]
         },
