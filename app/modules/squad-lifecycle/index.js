@@ -109,7 +109,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       }
     },
 
-  async stop() {
+    async stop() {
       for (const unsubscriber of unsubscribers.splice(0)) unsubscriber();
       pendingCreateLogs.clear();
       recentCreateEventKeys.clear();
@@ -182,6 +182,8 @@ export function createSquadLifecycleModule({ core, config, logger }) {
         squadName: parsed.squadName,
         creatorName: parsed.creatorName,
         parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
+        sourceMode: parsed.sourceMode,
+        canTriggerActions: parsed.canTriggerActions,
       },
     });
 
@@ -203,6 +205,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       creatorEosId: parsed.creatorEosId,
       rawLog: parsed.rawLog,
       sourceEventId: parsed.sourceEventId,
+      sourceMode: parsed.sourceMode,
+      canTriggerActions: parsed.canTriggerActions,
+      parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
       teamId: null,
       needsTeamId: true,
       createdAt: Date.now(),
@@ -219,6 +224,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       existingPending.creatorEosId = pending.creatorEosId;
       existingPending.rawLog = pending.rawLog;
       existingPending.sourceEventId = pending.sourceEventId;
+      existingPending.sourceMode = pending.sourceMode;
+      existingPending.canTriggerActions = pending.canTriggerActions;
+      existingPending.parsedFromRawLogLine = pending.parsedFromRawLogLine;
       existingPending.teamId = pending.teamId;
       existingPending.needsTeamId = pending.needsTeamId;
       if (debugEnabled) {
@@ -273,23 +281,31 @@ export function createSquadLifecycleModule({ core, config, logger }) {
         continue;
       }
 
+      // The log creation name is authoritative. RCON only supplies the missing TeamID
+      // and the current display name; it must never replace the original creation name.
+      const currentSquadName = String(matched.squadName ?? matched.name ?? "").trim();
       const flushedParsed = {
         ...pending,
         teamId: matched.teamID ?? matched.teamId ?? null,
-        squadName: matched.squadName ?? pending.squadName,
+        squadName: pending.squadName,
+        originalSquadName: pending.squadName,
+        currentSquadName,
       };
       const record = reducer.handleSquadCreateLogEvent(flushedParsed);
       pendingCreateLogs.delete(buildPendingKey(pending));
       emitSquadCreatedEvent(serverId, matchId, flushedParsed, record);
 
-      logWithFallback(moduleLogger, "info", `[SquadLifecycle] pending create flushed to LOG: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || matched.squadName || ""}`, {
+      logWithFallback(moduleLogger, "info", `[SquadLifecycle] pending create flushed to LOG: T${matched.teamID ?? matched.teamId ?? ""} S${pending.squadId} ${pending.squadName || currentSquadName || ""}`, {
         operation: "squadLifecycle.flushPending",
         data: {
           serverId: pending.serverId,
           matchId: pending.matchId,
           squadId: pending.squadId,
           squadName: pending.squadName,
+          currentSquadName,
           teamId: matched.teamID ?? matched.teamId ?? null,
+          sourceMode: pending.sourceMode,
+          canTriggerActions: pending.canTriggerActions,
         },
       });
     }
@@ -406,6 +422,8 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       squadId: pending.squadId ?? null,
       squadName: pending.squadName ?? "",
       creatorName: pending.creatorName ?? "",
+      sourceMode: pending.sourceMode ?? "live",
+      canTriggerActions: pending.canTriggerActions !== false,
     };
   }
 
@@ -426,12 +444,14 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     const createdAt = Number.isFinite(createdAtMs) && createdAtMs > 0
       ? new Date(createdAtMs).toISOString()
       : String(parsed.eventTime ?? "");
-    const classification = classifySquadName(parsed.squadName);
+    const originalSquadName = String(parsed.originalSquadName ?? parsed.squadName ?? "").trim();
+    const currentSquadName = String(parsed.currentSquadName ?? "").trim();
+    const classification = classifySquadName(originalSquadName);
     const creationSignature = buildCreationSignature({
       serverId,
       matchId,
       squadId: parsed.squadId,
-      squadName: parsed.squadName,
+      squadName: originalSquadName,
       creatorName: parsed.creatorName,
       creatorSteamId: parsed.creatorSteamId,
       creatorEosId: parsed.creatorEosId,
@@ -443,11 +463,15 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       eventName: "module.squadLifecycle.squadCreated",
       layer: "module",
       source: "module.squadLifecycle",
+      sourceMode: String(parsed.sourceMode ?? "live").trim().toLowerCase() || "live",
+      canTriggerActions: parsed.canTriggerActions !== false,
       serverId,
       matchId,
       time: new Date().toISOString(),
       squadId: parsed.squadId,
-      squadName: parsed.squadName,
+      squadName: originalSquadName,
+      originalSquadName,
+      currentSquadName,
       factionName: parsed.factionName,
       teamId: parsed.teamId ?? record?.teamId ?? null,
       creatorName: parsed.creatorName,
@@ -485,7 +509,6 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     if (parsed?.parsedFromRawLogLine) return false;
     return true;
   }
-
 }
 
 function buildPendingKey(pending) {
