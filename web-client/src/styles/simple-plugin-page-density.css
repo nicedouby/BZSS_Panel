@@ -1,0 +1,292 @@
+/*
+ * Simple plugin page density / readability rules.
+ *
+ * These rules intentionally make simple plugin pages behave like long-form
+ * administration documents instead of fullscreen dashboards. Keep this file
+ * loaded after simple-plugin-page.css.
+ */
+
+.content-shell.content-shell--simple-plugin {
+  --simple-plugin-gap: 10px;
+  --simple-plugin-radius: 13px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px 24px;
+}
+
+.content-shell.content-shell--simple-plugin > * {
+  min-height: auto !important;
+  height: auto !important;
+}
+
+/* Compact page header --------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .page,
+.content-shell.content-shell--simple-plugin .simple-plugin-page {
+  min-height: auto;
+}
+
+.content-shell.content-shell--simple-plugin .page {
+  padding: 16px 18px 28px;
+}
+
+.content-shell.content-shell--simple-plugin .page-header {
+  gap: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 0;
+}
+
+.content-shell.content-shell--simple-plugin .eyebrow {
+  margin-bottom: 4px;
+  font-size: 8px;
+  letter-spacing: .13em;
+}
+
+.content-shell.content-shell--simple-plugin .page h1,
+.content-shell.content-shell--simple-plugin .simple-plugin-page .title {
+  font-size: clamp(20px, 1.45vw, 22px);
+  line-height: 1.18;
+  letter-spacing: -.018em;
+}
+
+.content-shell.content-shell--simple-plugin .page-header p,
+.content-shell.content-shell--simple-plugin .simple-plugin-page .subtitle {
+  margin-top: 4px;
+  max-width: 88ch;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.content-shell.content-shell--simple-plugin .header-actions,
+.content-shell.content-shell--simple-plugin .simple-plugin-page .actions {
+  gap: 6px;
+}
+
+.content-shell.content-shell--simple-plugin .updated,
+.content-shell.content-shell--simple-plugin .simple-plugin-page__updated {
+  font-size: 10px;
+}
+
+/* Compact status strip ------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .metrics,
+.content-shell.content-shell--simple-plugin .hero-grid {
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.content-shell.content-shell--simple-plugin .metric {
+  min-height: 66px;
+  padding: 10px 12px;
+  gap: 4px;
+  align-content: center;
+}
+
+.content-shell.content-shell--simple-plugin .metric span,
+.content-shell.content-shell--simple-plugin .control-card .label {
+  font-size: 10px;
+}
+
+.content-shell.content-shell--simple-plugin .metric strong {
+  font-size: clamp(18px, 1.5vw, 21px);
+  line-height: 1.05;
+}
+
+.content-shell.content-shell--simple-plugin .metric small {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+/* Panels are content containers, never clipping masks ----------------- */
+.content-shell.content-shell--simple-plugin .panel {
+  padding: 14px;
+  overflow: visible;
+}
+
+.content-shell.content-shell--simple-plugin .panel + .panel {
+  margin-top: 10px;
+}
+
+.content-shell.content-shell--simple-plugin .panel-head {
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.content-shell.content-shell--simple-plugin .panel-head h2,
+.content-shell.content-shell--simple-plugin .page h2 {
+  font-size: 14px;
+}
+
+.content-shell.content-shell--simple-plugin .panel-head p,
+.content-shell.content-shell--simple-plugin .control-card p,
+.content-shell.content-shell--simple-plugin .cache-note p {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.42;
+}
+
+.content-shell.content-shell--simple-plugin .grid.two {
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Forms / actions ------------------------------------------------------ */
+.content-shell.content-shell--simple-plugin .form-grid {
+  gap: 8px 10px;
+}
+
+.content-shell.content-shell--simple-plugin .form-grid label {
+  gap: 4px;
+  font-size: 10px;
+}
+
+.content-shell.content-shell--simple-plugin input,
+.content-shell.content-shell--simple-plugin select,
+.content-shell.content-shell--simple-plugin textarea {
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.content-shell.content-shell--simple-plugin .toggle-row {
+  min-height: 34px;
+  padding: 6px 9px;
+}
+
+.content-shell.content-shell--simple-plugin .button,
+.content-shell.content-shell--simple-plugin .power-button {
+  min-height: 31px;
+  padding-inline: 11px;
+  font-size: 11px;
+}
+
+.content-shell.content-shell--simple-plugin .trigger-grid {
+  gap: 8px;
+}
+
+.content-shell.content-shell--simple-plugin .trigger {
+  min-height: 70px;
+  padding: 10px 11px;
+}
+
+.content-shell.content-shell--simple-plugin .trigger strong {
+  font-size: 12px;
+}
+
+.content-shell.content-shell--simple-plugin .trigger span {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.content-shell.content-shell--simple-plugin .status-list {
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.content-shell.content-shell--simple-plugin .status-list div {
+  padding: 7px 8px;
+}
+
+/* Preview content must remain readable -------------------------------- */
+.content-shell.content-shell--simple-plugin .preview-grid {
+  gap: 8px;
+}
+
+.content-shell.content-shell--simple-plugin .preview-grid article {
+  min-height: 112px;
+  padding: 10px;
+}
+
+.content-shell.content-shell--simple-plugin .preview-grid h3 {
+  margin-bottom: 7px;
+}
+
+.content-shell.content-shell--simple-plugin pre {
+  min-height: 44px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 9px 10px;
+  font-size: 11px;
+  line-height: 1.48;
+}
+
+.content-shell.content-shell--simple-plugin .record-message {
+  min-height: 0;
+  max-height: 120px;
+}
+
+/* Diagnostic / audit tables get an actual viewport instead of collapsing. */
+.content-shell.content-shell--simple-plugin .panel > .table-wrap {
+  min-height: 150px;
+  max-height: min(52vh, 520px);
+  overflow: auto;
+}
+
+.content-shell.content-shell--simple-plugin th,
+.content-shell.content-shell--simple-plugin td {
+  padding: 8px 9px;
+}
+
+.content-shell.content-shell--simple-plugin th {
+  font-size: 9px;
+}
+
+.content-shell.content-shell--simple-plugin td {
+  font-size: 11px;
+}
+
+.content-shell.content-shell--simple-plugin .empty {
+  min-height: 92px;
+  padding: 24px 14px;
+}
+
+/* Shared-component based simple plugin pages --------------------------- */
+.content-shell.content-shell--simple-plugin .simple-plugin-page {
+  gap: 10px;
+  padding: 16px 18px 28px;
+}
+
+.content-shell.content-shell--simple-plugin .simple-plugin-page .stat-grid {
+  gap: 8px;
+}
+
+.content-shell.content-shell--simple-plugin .simple-plugin-page .stat-card {
+  min-height: 66px;
+  padding: 10px 12px;
+  gap: 4px;
+}
+
+.content-shell.content-shell--simple-plugin .simple-plugin-page .stat-card__value {
+  font-size: 20px;
+}
+
+.content-shell.content-shell--simple-plugin .simple-plugin-page .page-card {
+  overflow: visible;
+}
+
+@media (max-width: 1080px) {
+  .content-shell.content-shell--simple-plugin .panel > .table-wrap {
+    max-height: 460px;
+  }
+}
+
+@media (max-width: 760px) {
+  .content-shell.content-shell--simple-plugin .page,
+  .content-shell.content-shell--simple-plugin .simple-plugin-page {
+    padding: 12px 10px calc(18px + var(--safe-bottom));
+  }
+
+  .content-shell.content-shell--simple-plugin .page-header {
+    margin-bottom: 8px;
+  }
+
+  .content-shell.content-shell--simple-plugin .metric {
+    min-height: 58px;
+  }
+
+  .content-shell.content-shell--simple-plugin .panel > .table-wrap {
+    min-height: 180px;
+    max-height: 440px;
+  }
+}
