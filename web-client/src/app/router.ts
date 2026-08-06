@@ -65,7 +65,7 @@ export const router = createRouter({
       meta: {
         title: "开局时长提醒",
         refreshPolicy: "polling",
-        layoutMode: "workspace",
+        layoutMode: "document",
         contentPadding: "none",
         pagePreset: "simple-plugin",
         superAdminOnly: true,
@@ -78,7 +78,7 @@ export const router = createRouter({
       meta: {
         title: "督促时长公开",
         refreshPolicy: "polling",
-        layoutMode: "workspace",
+        layoutMode: "document",
         contentPadding: "none",
         pagePreset: "simple-plugin",
         superAdminOnly: true,
