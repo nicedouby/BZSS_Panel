@@ -45,7 +45,7 @@
       },
       {
         "path": "web.title",
-        "label": "Web Title",
+        "label": "Panel Title",
         "type": "string",
         "restartRequired": true
       },
