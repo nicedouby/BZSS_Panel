@@ -9,6 +9,7 @@ import "./styles/primitives.css";
 import "./styles/utilities.css";
 import "./styles/squad-admin.css";
 import "./styles/simple-plugin-page.css";
+import "./styles/simple-plugin-page-density.css";
 import "./styles/logpost-diagnostics-fixed.css";
 
 import { renderFatalBootError, isResizeObserverError } from "./app/bootError";
