@@ -821,18 +821,28 @@
         "infantry": [
           {
             "startSeconds": 0,
-            "endSeconds": 60,
+            "endSeconds": 50,
             "minHoursExclusive": 500
           },
           {
-            "startSeconds": 60,
-            "endSeconds": 120,
+            "startSeconds": 50,
+            "endSeconds": 70,
             "minHoursExclusive": 400
           },
           {
-            "startSeconds": 120,
-            "endSeconds": 180,
+            "startSeconds": 70,
+            "endSeconds": 90,
+            "minHoursExclusive": 300
+          },
+          {
+            "startSeconds": 90,
+            "endSeconds": 120,
             "minHoursExclusive": 200
+          },
+          {
+            "startSeconds": 120,
+            "endSeconds": 150,
+            "minHoursExclusive": 100
           }
         ],
         "vehicle": [
@@ -920,18 +930,28 @@
           "infantry": [
             {
               "startSeconds": 0,
-              "endSeconds": 60,
+              "endSeconds": 50,
               "minHoursExclusive": 500
             },
             {
-              "startSeconds": 60,
-              "endSeconds": 120,
+              "startSeconds": 50,
+              "endSeconds": 70,
               "minHoursExclusive": 400
             },
             {
-              "startSeconds": 120,
-              "endSeconds": 180,
+              "startSeconds": 70,
+              "endSeconds": 90,
+              "minHoursExclusive": 300
+            },
+            {
+              "startSeconds": 90,
+              "endSeconds": 120,
               "minHoursExclusive": 200
+            },
+            {
+              "startSeconds": 120,
+              "endSeconds": 150,
+              "minHoursExclusive": 100
             }
           ],
           "vehicle": [
