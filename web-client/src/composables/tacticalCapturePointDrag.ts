@@ -40,6 +40,10 @@ type DragSession = {
   feedbackOriginalText: string;
 };
 
+type CaptureDragWindow = Window & {
+  __bzssTacticalCapturePointDragInstalled?: boolean;
+};
+
 let installed = false;
 let activeDrag: DragSession | null = null;
 let commandPending = false;
@@ -155,8 +159,18 @@ function resolveBounds(viewport: HTMLElement, mapElement: HTMLElement, layer: HT
   return { minX: x.min, maxX: x.max, minY: y.min, maxY: y.max };
 }
 
+function ensurePreviewAttached(session: DragSession) {
+  if (session.preview && session.preview.parentElement !== session.layer) {
+    session.layer.appendChild(session.preview);
+  }
+}
+
 function createPreview(session: DragSession) {
-  if (session.preview) return session.preview;
+  if (session.preview) {
+    ensurePreviewAttached(session);
+    return session.preview;
+  }
+
   const preview = session.marker.cloneNode(true) as HTMLButtonElement;
   preview.dataset.captureDragPreview = "true";
   preview.classList.remove("is-runtime-capture-drag-source", "is-point-dragging", "is-command-pending");
@@ -228,6 +242,7 @@ function waitForCommittedMarker(session: DragSession, timeoutMs = 4500) {
   return new Promise<void>((resolve) => {
     const startedAt = performance.now();
     const check = () => {
+      ensurePreviewAttached(session);
       const marker = findLiveMarker(session.layer, session.pointIndex);
       const mapX = marker ? parsePercent(marker.style.left) : null;
       const mapY = marker ? parsePercent(marker.style.top) : null;
@@ -378,13 +393,16 @@ function blockWheelDuringDrag(event: WheelEvent) {
 
 export function ensureTacticalCapturePointDragController() {
   if (installed || typeof window === "undefined") return;
-  installed = true;
+  const targetWindow = window as CaptureDragWindow;
+  if (targetWindow.__bzssTacticalCapturePointDragInstalled) return;
 
-  window.addEventListener("pointerdown", startDrag, true);
-  window.addEventListener("pointermove", moveDrag, true);
-  window.addEventListener("pointerup", (event) => void finishActiveDrag(event), true);
-  window.addEventListener("pointercancel", cancelDragEvent, true);
-  window.addEventListener("keydown", handleKeyDown, true);
-  window.addEventListener("wheel", blockWheelDuringDrag, { capture: true, passive: false });
-  window.addEventListener("blur", cancelActiveDrag);
+  installed = true;
+  targetWindow.__bzssTacticalCapturePointDragInstalled = true;
+  targetWindow.addEventListener("pointerdown", startDrag, true);
+  targetWindow.addEventListener("pointermove", moveDrag, true);
+  targetWindow.addEventListener("pointerup", (event) => void finishActiveDrag(event), true);
+  targetWindow.addEventListener("pointercancel", cancelDragEvent, true);
+  targetWindow.addEventListener("keydown", handleKeyDown, true);
+  targetWindow.addEventListener("wheel", blockWheelDuringDrag, { capture: true, passive: false });
+  targetWindow.addEventListener("blur", cancelActiveDrag);
 }
