@@ -1,19 +1,24 @@
 /*
  * Capture-point editing keeps the real interaction target at its original
- * coordinate while a pointer-events:none preview follows the cursor. The hit
- * area is also zoom-compensated so it does not balloon with the map transform.
+ * coordinate while a pointer-events:none preview follows the cursor.
+ *
+ * HARD RULE: hover / focus / pointer-down must never move the real flag.
+ * The marker button is only a hit target. The visual flag is absolutely
+ * anchored to the exact center of that hit target and is removed from flex
+ * layout so hover state can never reflow it toward the bottom-right.
  */
 .map-viewport.is-capture-point-editing .capture-zone-marker {
   width: calc(58px * var(--capture-marker-scale, 1));
   height: calc(58px * var(--capture-marker-scale, 1));
+  transform: translate(-50%, -50%) !important;
+  transform-origin: 50% 50% !important;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 /*
- * Hard interaction rule:
- * hovering, pressing, focusing, or merely acquiring pointer capture must never
- * move or resize the real capture-point flag. The flag stays pixel-stable at
- * its map coordinate until pointer movement passes the drag threshold and the
- * separate preview is created.
+ * The flag center is mathematically pinned to the marker coordinate.
+ * All interaction states intentionally share the exact same geometry.
  */
 .map-viewport.is-capture-point-editing .capture-zone-marker .capture-zone-flag,
 .map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag,
@@ -22,16 +27,32 @@
 .map-viewport.is-capture-point-editing .capture-zone-marker:focus-visible .capture-zone-flag,
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-point-dragging .capture-zone-flag,
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-zone-flag {
-  transform: scale(var(--capture-marker-scale, 1)) !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 34px !important;
+  margin: 0 !important;
+  transform: translate(-50%, -50%) scale(var(--capture-marker-scale, 1)) !important;
   transform-origin: 50% 50% !important;
   transition: filter 120ms ease-out !important;
 }
 
-/* Pointer-down alone is not a drag. Keep the source fully unchanged while the
- * pointer is still inside the movement threshold. */
+/* Pointer-down alone is not a drag. Keep the source visually identical until
+ * pointer movement has actually passed the movement threshold. */
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-zone-flag,
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-point-index {
   opacity: 1 !important;
+}
+
+/* The point-index label is also pinned independently from the flag geometry. */
+.map-viewport.is-capture-point-editing .capture-zone-marker .capture-point-index,
+.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-point-index,
+.map-viewport.is-capture-point-editing .capture-zone-marker:active .capture-point-index,
+.map-viewport.is-capture-point-editing .capture-zone-marker:focus .capture-point-index,
+.map-viewport.is-capture-point-editing .capture-zone-marker:focus-visible .capture-point-index {
+  left: 50% !important;
+  transform: translateX(-50%) scale(var(--capture-marker-scale, 1)) !important;
+  transform-origin: 50% 100% !important;
 }
 
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview {
@@ -40,11 +61,14 @@
   z-index: 43;
 }
 
-/* Only the independent preview may visually indicate that an actual drag has
- * started. It never participates in hit testing. */
+/* Only the independent preview moves after the drag threshold is crossed. */
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview .capture-zone-flag {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
   opacity: 1;
-  transform: scale(var(--capture-marker-scale, 1)) !important;
+  transform: translate(-50%, -50%) scale(var(--capture-marker-scale, 1)) !important;
+  transform-origin: 50% 50% !important;
   filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.95)) brightness(1.18);
 }
 
