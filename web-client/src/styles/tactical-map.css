@@ -197,15 +197,14 @@
   transition: transform 120ms ease-out, filter 120ms ease-out;
 }
 .map-viewport.is-capture-point-editing .capture-zone-marker { cursor: grab; }
-.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag {
-  /* Hover feedback scales around the flag center; it must not move the point. */
-  transform: scale(var(--capture-marker-scale, 1)) scale(1.08);
-  filter: drop-shadow(0 0 7px rgba(250, 204, 21, .9)) brightness(1.12);
+.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker:active .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-point-dragging .capture-zone-flag {
+  /* Hover and selection/drag feedback scales around flag center; it must not move the point. */
+  transform: scale(var(--capture-marker-scale, 1)) scale(1.1);
+  filter: drop-shadow(0 0 9px rgba(250, 204, 21, .95)) brightness(1.16);
 }
 .capture-zone-marker.is-point-dragging { z-index: 20; cursor: grabbing; }
-.capture-zone-marker.is-point-dragging .zone-flag-group {
-  filter: drop-shadow(0 0 9px rgba(250, 204, 21, 1)) brightness(1.18);
-}
 .capture-zone-marker.is-command-pending .zone-flag-group {
   animation: capture-point-command-pulse .75s ease-in-out infinite alternate;
 }

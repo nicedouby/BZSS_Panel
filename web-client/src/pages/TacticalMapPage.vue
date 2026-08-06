@@ -782,6 +782,7 @@ import { resolveVehicleIcon } from "../utils/vehicle-icons";
 import type { PlayerDetailViewModel } from "../types/squad-admin.types";
 import {
   getDefaultTacticalMapKey,
+  EMPTY_TACTICAL_MAP_CONFIG,
   TACTICAL_MAP_CONFIGS,
   TACTICAL_MAP_LIST,
   getStaticTacticalAssets,
@@ -1324,15 +1325,6 @@ function shouldSuppressPlayerMarker(player: any): boolean {
     // after leaving a seat instead of being suppressed by stale occupant data.
     || (vehiclePresence === "unknown" && playerId != null && vehicleOccupantPlayerIds.value.has(playerId));
 }
-const emptyMapConfig: TacticalMapConfig = {
-  key: "",
-  name: "Unknown",
-  image: "",
-  tileBasePath: "",
-  maxZoomLevel: 1,
-  bounds: { minX: 0, minY: 0, maxX: 1000, maxY: 1000 },
-  aliases: [],
-};
 
 const serverMapName = computed(() => {
   const serverMap = String(serverStore.snapshot?.mapName ?? "").trim();
@@ -1355,7 +1347,7 @@ const activeMapConfig = computed<TacticalMapConfig>(() => {
     key = detectedMapKey.value;
   }
   const fallbackKey = getDefaultTacticalMapKey() ?? TACTICAL_MAP_LIST[0]?.key ?? "";
-  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_CONFIGS[fallbackKey] || TACTICAL_MAP_LIST[0] || emptyMapConfig;
+  return TACTICAL_MAP_CONFIGS[key] || TACTICAL_MAP_CONFIGS[fallbackKey] || TACTICAL_MAP_LIST[0] || EMPTY_TACTICAL_MAP_CONFIG;
 });
 
 const pressureSettingsOpen = ref(false);
@@ -3044,9 +3036,16 @@ function updateCapturePointDrag(clientX: number, clientY: number) {
   const position = capturePointPositionFromClient(drag, clientX, clientY);
   if (!position) return;
   const moved = drag.moved
-    || Math.abs(clientX - drag.startClientX) > 2
-    || Math.abs(clientY - drag.startClientY) > 2;
-  capturePointDrag.value = { ...drag, ...position, moved };
+    || Math.abs(clientX - drag.startClientX) > 4
+    || Math.abs(clientY - drag.startClientY) > 4;
+
+  if (!moved) {
+    // Keep marker strictly in place when selected/clicked until pointer moves past drag threshold
+    capturePointDrag.value = { ...drag, moved: false };
+    return;
+  }
+
+  capturePointDrag.value = { ...drag, ...position, moved: true };
   hoverCoords.value = {
     x: 0,
     y: 0,
