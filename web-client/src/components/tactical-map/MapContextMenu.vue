@@ -4,6 +4,11 @@
     class="radial-context-menu"
     :style="menuStyle"
     @click.stop
+    @pointerdown.stop
+    @pointerup.stop
+    @pointercancel.stop
+    @dblclick.stop
+    @wheel.stop
     @contextmenu.prevent.stop
   >
     <!-- Radial Outer Ring Glow -->
@@ -12,8 +17,12 @@
     <!-- Center Core Hub: Click Center to Exit / Close -->
     <div
       class="radial-center-core font-mono"
+      role="button"
+      tabindex="0"
       title="点击关闭轮盘"
       @click.stop="handleAction('close')"
+      @keydown.enter.prevent.stop="handleAction('close')"
+      @keydown.space.prevent.stop="handleAction('close')"
     >
       <div class="core-tag">COORDS</div>
       <div class="core-coords">
@@ -211,7 +220,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps<{
   x: number;
@@ -261,6 +270,9 @@ const showLayerRing = ref(false);
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
 
+const MENU_RADIUS = 140;
+const MENU_EDGE_GAP = 10;
+
 const menuStyle = computed(() => {
   return {
     left: `${offsetLeft.value}px`,
@@ -270,37 +282,59 @@ const menuStyle = computed(() => {
 
 const measurePrimaryLabel = computed(() => props.measureActive ? "重新从此处测距" : "从此处开始测距");
 
-function onDocumentKeyDown(event: KeyboardEvent) {
-  if (event.key === "Escape") {
-    emit("close");
-  }
+function clampMenuAxis(value: number, availableSize: number) {
+  const minimum = MENU_RADIUS + MENU_EDGE_GAP;
+  const maximum = availableSize - MENU_RADIUS - MENU_EDGE_GAP;
+  if (maximum < minimum) return Math.max(0, availableSize / 2);
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
-onMounted(() => {
-  if (menuRef.value) {
-    const parentRect = menuRef.value.parentElement?.getBoundingClientRect() || {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    };
+function syncMenuPosition() {
+  const menu = menuRef.value;
+  if (!menu) return;
 
-    const radius = 140;
-    let left = props.x;
-    let top = props.y;
+  const parentRect = menu.parentElement?.getBoundingClientRect();
+  const width = parentRect?.width || window.innerWidth;
+  const height = parentRect?.height || window.innerHeight;
 
-    if (left - radius < 10) left = radius + 10;
-    if (left + radius > parentRect.width - 10) left = parentRect.width - radius - 10;
-    if (top - radius < 10) top = radius + 10;
-    if (top + radius > parentRect.height - 10) top = parentRect.height - radius - 10;
+  offsetLeft.value = clampMenuAxis(props.x, width);
+  offsetTop.value = clampMenuAxis(props.y, height);
+}
 
-    offsetLeft.value = left;
-    offsetTop.value = top;
+function onDocumentKeyDown(event: KeyboardEvent) {
+  if (event.key !== "Escape") return;
+
+  if (showLayerRing.value) {
+    showLayerRing.value = false;
+    return;
   }
 
+  emit("close");
+}
+
+function onViewportResize() {
+  syncMenuPosition();
+}
+
+watch(
+  () => [props.x, props.y, props.gameX, props.gameY] as const,
+  () => {
+    // A second right-click reuses this component instance. Reset the wheel and
+    // recalculate its clamped screen position instead of leaving it at the old point.
+    showLayerRing.value = false;
+    nextTick(syncMenuPosition);
+  },
+);
+
+onMounted(() => {
+  nextTick(syncMenuPosition);
   window.addEventListener("keydown", onDocumentKeyDown);
+  window.addEventListener("resize", onViewportResize);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onDocumentKeyDown);
+  window.removeEventListener("resize", onViewportResize);
 });
 
 function handleAction(
@@ -322,6 +356,8 @@ function handleAction(
     | "toggle-layer-zones"
     | "toggle-layer-grid"
 ) {
+  let keepOpen = false;
+
   if (event === "start-measure") emit("start-measure");
   else if (event === "add-point") emit("add-point");
   else if (event === "undo-point") emit("undo-point");
@@ -331,14 +367,27 @@ function handleAction(
   else if (event === "toggle-capture-point-edit") emit("toggle-capture-point-edit");
   else if (event === "calculate-hotspot") emit("calculate-hotspot");
   else if (event === "clear-hotspot") emit("clear-hotspot");
-  else if (event === "toggle-layer-alive") emit("toggle-layer", "alive");
-  else if (event === "toggle-layer-names") emit("toggle-layer", "names");
-  else if (event === "toggle-layer-coords") emit("toggle-layer", "coords");
-  else if (event === "toggle-layer-fobs") emit("toggle-layer", "fobs");
-  else if (event === "toggle-layer-zones") emit("toggle-layer", "zones");
-  else if (event === "toggle-layer-grid") emit("toggle-layer", "grid");
+  else if (event === "toggle-layer-alive") {
+    emit("toggle-layer", "alive");
+    keepOpen = true;
+  } else if (event === "toggle-layer-names") {
+    emit("toggle-layer", "names");
+    keepOpen = true;
+  } else if (event === "toggle-layer-coords") {
+    emit("toggle-layer", "coords");
+    keepOpen = true;
+  } else if (event === "toggle-layer-fobs") {
+    emit("toggle-layer", "fobs");
+    keepOpen = true;
+  } else if (event === "toggle-layer-zones") {
+    emit("toggle-layer", "zones");
+    keepOpen = true;
+  } else if (event === "toggle-layer-grid") {
+    emit("toggle-layer", "grid");
+    keepOpen = true;
+  }
 
-  emit("close");
+  if (!keepOpen) emit("close");
 }
 </script>
 
@@ -351,6 +400,7 @@ function handleAction(
   transform: translate(-50%, -50%);
   z-index: 1000;
   user-select: none;
+  touch-action: none;
   animation: radialPopIn 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -397,9 +447,11 @@ function handleAction(
   cursor: pointer;
   z-index: 10;
   transition: all 0.18s ease;
+  outline: none;
 }
 
-.radial-center-core:hover {
+.radial-center-core:hover,
+.radial-center-core:focus-visible {
   transform: translate(-50%, -50%) scale(1.08);
   background: rgba(239, 68, 68, 0.2);
   border-color: #ef4444;
