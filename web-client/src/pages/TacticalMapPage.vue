@@ -589,6 +589,7 @@
         @calculate-hotspot="calculateCombatHotspot"
         @clear-hotspot="clearCombatHotspot"
         @toggle-layer="onToggleLayer"
+        @open-ticket-editor="scoreDashboardRef?.openEditor()"
       />
 
       <header class="tactical-command-bar">
@@ -611,6 +612,7 @@
       </header>
 
       <ScoreCircleDashboard
+        ref="scoreDashboardRef"
         :tickets="tickets"
         :can-edit="canEditTickets"
         :server-id="currentServerId"
@@ -929,6 +931,7 @@ const authStore = useAuthStore();
 const route = useRoute();
 const tacticalStateStore = useTacticalStateStore();
 const isStandaloneMapRoute = computed(() => route.path === "/tactical-map" || route.name === "tactical-map");
+const scoreDashboardRef = ref<InstanceType<typeof ScoreCircleDashboard> | null>(null);
 
 const storeSnapshot = computed(() => tacticalStateStore.snapshot ?? null);
 const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets?.captureZones) ? tacticalStateStore.assets.captureZones : []);

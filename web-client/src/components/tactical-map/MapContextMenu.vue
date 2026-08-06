@@ -1,141 +1,211 @@
 <template>
   <div
     ref="menuRef"
-    class="map-context-menu map-floating-panel"
+    class="radial-context-menu"
     :style="menuStyle"
     @click.stop
     @contextmenu.prevent.stop
   >
-    <div class="menu-header font-mono">
-      <div class="header-title">COORDS SPECIFICATION</div>
-      <div class="coords-display">
-        <span class="coord-tag">GX:</span> <span class="coord-val">{{ Math.round(gameX) }}</span>
-        <span class="coord-tag spacer">GY:</span> <span class="coord-val text-yellow">{{ Math.round(gameY) }}</span>
+    <!-- Radial Outer Ring Glow -->
+    <div class="radial-ring-background"></div>
+
+    <!-- Center Core Info Hub -->
+    <div class="radial-center-core font-mono" @click="handleAction('close')">
+      <div class="core-tag">COORDS</div>
+      <div class="core-coords">
+        <span class="gx">X: {{ Math.round(gameX) }}</span>
+        <span class="gy">Y: {{ Math.round(gameY) }}</span>
       </div>
-      <div v-if="measureActive" class="measure-state">{{ measureCount === 0 ? "测距未开始" : `测距中 · ${measureCount} 点` }}</div>
+      <div v-if="measureActive" class="core-sub text-cyan">
+        {{ measureCount === 0 ? "测距已开启" : `${measureCount} 点` }}
+      </div>
+      <div v-else class="core-sub">点击关闭</div>
     </div>
 
-    <div class="menu-divider"></div>
-
-    <ul class="menu-list">
-      <!-- Section: Measurement & Focus -->
-      <div class="menu-section-header">战术测距</div>
-      <li class="menu-item" @click="handleAction('start-measure')">
-        <span class="menu-icon">📏</span>
-        <span class="menu-label">{{ measurePrimaryLabel }}</span>
-      </li>
-      <li class="menu-item" @click="handleAction('add-point')">
-        <span class="menu-icon">📍</span>
-        <span class="menu-label">{{ measureAppendLabel }}</span>
-      </li>
-      <li
-        class="menu-item"
-        :class="{ disabled: !hasPoints }"
-        @click="hasPoints && handleAction('undo-point')"
+    <!-- Main Radial Action Buttons (Circle Layout) -->
+    <div v-if="!showLayerRing" class="radial-sector-group">
+      <!-- Item 1 (Top - 0 deg): Start/Append Measure -->
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 0deg;"
+        :title="measurePrimaryLabel"
+        @click="handleAction(measureActive ? 'add-point' : 'start-measure')"
       >
-        <span class="menu-icon">↩️</span>
-        <span class="menu-label">撤销测距点</span>
-      </li>
-      <li
-        class="menu-item"
-        :class="{ disabled: !hasPoints }"
-        @click="hasPoints && handleAction('clear-measure')"
-      >
-        <span class="menu-icon">🗑️</span>
-        <span class="menu-label">清空测距</span>
-      </li>
+        <span class="radial-btn-icon">📏</span>
+        <span class="radial-btn-label">{{ measureActive ? "添加点" : "开始测距" }}</span>
+      </button>
 
-      <div class="menu-divider sub-divider"></div>
-
-      <!-- Section: Tactical Tools -->
-      <div class="menu-section-header">战术工具</div>
-      <li 
-        v-if="canEditCapturePoints" 
-        class="menu-item" 
-        :class="{ disabled: capturePointCommandPending }"
+      <!-- Item 2 (45 deg): Point Edit -->
+      <button
+        v-if="canEditCapturePoints"
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': capturePointEditMode, 'is-disabled': capturePointCommandPending }"
+        style="--angle: 45deg;"
+        title="开启/退出点位编辑模式"
         @click="!capturePointCommandPending && handleAction('toggle-capture-point-edit')"
       >
-        <span class="menu-icon">⌖</span>
-        <span class="menu-label">
-          <span>{{ capturePointEditMode ? "退出改点模式" : "开启改点模式" }}</span>
-          <span class="status-dot" :class="{ active: capturePointEditMode }"></span>
-        </span>
-      </li>
-      <li class="menu-item" @click="handleAction('calculate-hotspot')">
-        <span class="menu-icon">◎</span>
-        <span class="menu-label">
-          <span>{{ hasCombatHotspot ? "更新交战热点" : "计算交战热点" }}</span>
-          <span class="status-dot" :class="{ active: hasCombatHotspot }"></span>
-        </span>
-      </li>
-      <li
-        v-if="hasCombatHotspot"
-        class="menu-item"
-        @click="handleAction('clear-hotspot')"
+        <span class="radial-btn-icon">⌖</span>
+        <span class="radial-btn-label">改点模式</span>
+        <span class="active-dot" :class="{ active: capturePointEditMode }"></span>
+      </button>
+
+      <!-- Item 3 (90 deg): Combat Hotspot -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': hasCombatHotspot }"
+        style="--angle: 90deg;"
+        title="计算/更新交战密集热点"
+        @click="handleAction('calculate-hotspot')"
       >
-        <span class="menu-icon">×</span>
-        <span class="menu-label">清除交战热点</span>
-      </li>
+        <span class="radial-btn-icon">◎</span>
+        <span class="radial-btn-label">交战热点</span>
+        <span class="active-dot" :class="{ active: hasCombatHotspot }"></span>
+      </button>
 
-      <div class="menu-divider sub-divider"></div>
+      <!-- Item 4 (135 deg): Tickets Settings -->
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 135deg;"
+        title="打开阵营票数配置"
+        @click="handleAction('open-ticket-editor')"
+      >
+        <span class="radial-btn-icon">⚙️</span>
+        <span class="radial-btn-label">设置票数</span>
+      </button>
 
-      <!-- Section: Layers -->
-      <div class="menu-section-header">图层显示</div>
-      <li class="menu-item" @click="handleAction('toggle-layer-alive')">
-        <span class="menu-icon">👥</span>
-        <span class="menu-label">
-          <span>仅显示存活玩家</span>
-          <span class="status-checkbox" :class="{ checked: filterAliveOnly }"></span>
-        </span>
-      </li>
-      <li class="menu-item" @click="handleAction('toggle-layer-names')">
-        <span class="menu-icon">🏷️</span>
-        <span class="menu-label">
-          <span>显示玩家姓名</span>
-          <span class="status-checkbox" :class="{ checked: showPlayerNames }"></span>
-        </span>
-      </li>
-      <li class="menu-item" @click="handleAction('toggle-layer-coords')">
-        <span class="menu-icon">📍</span>
-        <span class="menu-label">
-          <span>显示玩家坐标</span>
-          <span class="status-checkbox" :class="{ checked: showPlayerCoords }"></span>
-        </span>
-      </li>
-      <li class="menu-item" @click="handleAction('toggle-layer-fobs')">
-        <span class="menu-icon">⛺</span>
-        <span class="menu-label">
-          <span>显示 FOB 范围</span>
-          <span class="status-checkbox" :class="{ checked: showFobs }"></span>
-        </span>
-      </li>
-      <li class="menu-item" @click="handleAction('toggle-layer-zones')">
-        <span class="menu-icon">🏳️</span>
-        <span class="menu-label">
-          <span>显示点位旗帜</span>
-          <span class="status-checkbox" :class="{ checked: showCaptureZones }"></span>
-        </span>
-      </li>
-      <li class="menu-item" @click="handleAction('toggle-layer-grid')">
-        <span class="menu-icon">🌐</span>
-        <span class="menu-label">
-          <span>网格背景</span>
-          <span class="status-checkbox" :class="{ checked: showGrid }"></span>
-        </span>
-      </li>
+      <!-- Item 5 (180 deg): Layers Submenu Ring Trigger -->
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 180deg;"
+        title="展开地图图层开关"
+        @click="showLayerRing = true"
+      >
+        <span class="radial-btn-icon">🛡️</span>
+        <span class="radial-btn-label">图层控制</span>
+        <span class="sub-indicator">›</span>
+      </button>
 
-      <div class="menu-divider sub-divider"></div>
+      <!-- Item 6 (225 deg): Clear Measure -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-disabled': !hasPoints }"
+        style="--angle: 225deg;"
+        title="清空测距"
+        @click="hasPoints && handleAction('clear-measure')"
+      >
+        <span class="radial-btn-icon">🗑️</span>
+        <span class="radial-btn-label">清空测距</span>
+      </button>
 
-      <!-- Section: Utils -->
-      <li class="menu-item" @click="handleAction('copy-coords')">
-        <span class="menu-icon">📋</span>
-        <span class="menu-label">复制坐标</span>
-      </li>
-      <li class="menu-item" @click="handleAction('focus-here')">
-        <span class="menu-icon">👁️</span>
-        <span class="menu-label">聚焦此处</span>
-      </li>
-    </ul>
+      <!-- Item 7 (270 deg): Focus Map -->
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 270deg;"
+        title="地图视角聚焦于此"
+        @click="handleAction('focus-here')"
+      >
+        <span class="radial-btn-icon">👁️</span>
+        <span class="radial-btn-label">聚焦此处</span>
+      </button>
+
+      <!-- Item 8 (315 deg): Copy Coordinates -->
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 315deg;"
+        title="复制世界坐标"
+        @click="handleAction('copy-coords')"
+      >
+        <span class="radial-btn-icon">📋</span>
+        <span class="radial-btn-label">复制坐标</span>
+      </button>
+    </div>
+
+    <!-- Sub Radial Ring: Layers Control Submenu -->
+    <div v-else class="radial-sector-group layer-subring">
+      <button
+        type="button"
+        class="radial-btn back-btn"
+        style="--angle: 0deg;"
+        title="返回主菜单"
+        @click="showLayerRing = false"
+      >
+        <span class="radial-btn-icon">↩</span>
+        <span class="radial-btn-label">返回主轮盘</span>
+      </button>
+
+      <!-- Layer 1: Alive Players Only -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': filterAliveOnly }"
+        style="--angle: 60deg;"
+        @click="handleAction('toggle-layer-alive')"
+      >
+        <span class="radial-btn-icon">👥</span>
+        <span class="radial-btn-label">仅存活玩家</span>
+        <span class="check-box" :class="{ checked: filterAliveOnly }"></span>
+      </button>
+
+      <!-- Layer 2: Player Names -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': showPlayerNames }"
+        style="--angle: 120deg;"
+        @click="handleAction('toggle-layer-names')"
+      >
+        <span class="radial-btn-icon">🏷️</span>
+        <span class="radial-btn-label">玩家姓名</span>
+        <span class="check-box" :class="{ checked: showPlayerNames }"></span>
+      </button>
+
+      <!-- Layer 3: Player Coordinates -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': showPlayerCoords }"
+        style="--angle: 180deg;"
+        @click="handleAction('toggle-layer-coords')"
+      >
+        <span class="radial-btn-icon">📍</span>
+        <span class="radial-btn-label">玩家坐标</span>
+        <span class="check-box" :class="{ checked: showPlayerCoords }"></span>
+      </button>
+
+      <!-- Layer 4: FOB Range -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': showFobs }"
+        style="--angle: 240deg;"
+        @click="handleAction('toggle-layer-fobs')"
+      >
+        <span class="radial-btn-icon">⛺</span>
+        <span class="radial-btn-label">FOB 范围</span>
+        <span class="check-box" :class="{ checked: showFobs }"></span>
+      </button>
+
+      <!-- Layer 5: Capture Zones -->
+      <button
+        type="button"
+        class="radial-btn"
+        :class="{ 'is-active': showCaptureZones }"
+        style="--angle: 300deg;"
+        @click="handleAction('toggle-layer-zones')"
+      >
+        <span class="radial-btn-icon">🏳️</span>
+        <span class="radial-btn-label">点位旗帜</span>
+        <span class="check-box" :class="{ checked: showCaptureZones }"></span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -176,6 +246,7 @@ const emit = defineEmits<{
   (e: "clear-measure"): void;
   (e: "copy-coords"): void;
   (e: "focus-here"): void;
+  (e: "open-ticket-editor"): void;
 
   // Context Menu Actions
   (e: "toggle-capture-point-edit"): void;
@@ -185,6 +256,7 @@ const emit = defineEmits<{
 }>();
 
 const menuRef = ref<HTMLElement | null>(null);
+const showLayerRing = ref(false);
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
 
@@ -196,39 +268,40 @@ const menuStyle = computed(() => {
 });
 
 const measurePrimaryLabel = computed(() => props.measureActive ? "重新从此处测距" : "从此处开始测距");
-const measureAppendLabel = computed(() => props.measureActive ? `继续添加测距点 (${props.measureCount})` : "添加测距点");
 
 onMounted(() => {
   if (menuRef.value) {
-    const rect = menuRef.value.getBoundingClientRect();
     const parentRect = menuRef.value.parentElement?.getBoundingClientRect() || {
       width: window.innerWidth,
       height: window.innerHeight,
     };
 
+    // The wheel has a radius of 140px (diameter 280px).
+    // Ensure the wheel stays within viewport bounds.
+    const radius = 140;
     let left = props.x;
     let top = props.y;
 
-    if (left + rect.width > parentRect.width) {
-      left = parentRect.width - rect.width - 8;
-    }
-    if (top + rect.height > parentRect.height) {
-      top = parentRect.height - rect.height - 8;
-    }
+    if (left - radius < 10) left = radius + 10;
+    if (left + radius > parentRect.width - 10) left = parentRect.width - radius - 10;
+    if (top - radius < 10) top = radius + 10;
+    if (top + radius > parentRect.height - 10) top = parentRect.height - radius - 10;
 
-    offsetLeft.value = Math.max(8, left);
-    offsetTop.value = Math.max(8, top);
+    offsetLeft.value = left;
+    offsetTop.value = top;
   }
 });
 
 function handleAction(
   event:
+    | "close"
     | "start-measure"
     | "add-point"
     | "undo-point"
     | "clear-measure"
     | "copy-coords"
     | "focus-here"
+    | "open-ticket-editor"
     | "toggle-capture-point-edit"
     | "calculate-hotspot"
     | "clear-hotspot"
@@ -245,6 +318,7 @@ function handleAction(
   else if (event === "clear-measure") emit("clear-measure");
   else if (event === "copy-coords") emit("copy-coords");
   else if (event === "focus-here") emit("focus-here");
+  else if (event === "open-ticket-editor") emit("open-ticket-editor");
   else if (event === "toggle-capture-point-edit") emit("toggle-capture-point-edit");
   else if (event === "calculate-hotspot") emit("calculate-hotspot");
   else if (event === "clear-hotspot") emit("clear-hotspot");
@@ -254,204 +328,208 @@ function handleAction(
   else if (event === "toggle-layer-fobs") emit("toggle-layer", "fobs");
   else if (event === "toggle-layer-zones") emit("toggle-layer", "zones");
   else if (event === "toggle-layer-grid") emit("toggle-layer", "grid");
-  emit("close");
+
+  if (event !== "toggle-layer-alive" && event !== "toggle-layer-names" && event !== "toggle-layer-coords" && event !== "toggle-layer-fobs" && event !== "toggle-layer-zones" && event !== "toggle-layer-grid") {
+    emit("close");
+  }
 }
 </script>
 
 <style scoped>
-.map-floating-panel {
-  background: rgba(8, 12, 24, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 229, 255, 0.25);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.85), 0 0 20px rgba(0, 229, 255, 0.15);
-  border-radius: 6px;
-}
-
-.map-context-menu {
+/* Radial Context Menu Root */
+.radial-context-menu {
   position: absolute;
-  width: 230px;
+  width: 280px;
+  height: 280px;
+  transform: translate(-50%, -50%);
   z-index: 1000;
-  padding: 8px 0;
-  max-height: 480px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 229, 255, 0.3) transparent;
-  animation: contextMenuAppear 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   user-select: none;
+  animation: radialPopIn 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.map-context-menu::-webkit-scrollbar {
-  width: 4px;
-}
-.map-context-menu::-webkit-scrollbar-thumb {
-  background: rgba(0, 229, 255, 0.3);
-  border-radius: 2px;
-}
-
-@keyframes contextMenuAppear {
+@keyframes radialPopIn {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(-6px);
+    transform: translate(-50%, -50%) scale(0.6) rotate(-15deg);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
   }
 }
 
-.menu-header {
-  padding: 8px 14px 6px;
-}
-
-.header-title {
-  font-size: 9px;
-  color: rgba(0, 229, 255, 0.6);
-  letter-spacing: 1px;
-  margin-bottom: 4px;
-}
-
-.coords-display {
-  font-size: 11px;
-  color: #cbd5e1;
-  display: flex;
-  align-items: center;
-}
-
-.measure-state {
-  margin-top: 4px;
-  font-size: 10px;
-  color: rgba(56, 189, 248, 0.9);
-  letter-spacing: 0.5px;
-}
-
-.coord-tag {
-  color: rgba(255, 255, 255, 0.4);
-  margin-right: 4px;
-}
-
-.coord-val {
-  color: #38bdf8;
-  font-weight: bold;
-}
-
-.spacer {
-  margin-left: 10px;
-}
-
-.menu-divider {
-  height: 1px;
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.25) 0%, rgba(0, 229, 255, 0.05) 100%);
-  margin: 6px 0;
-}
-
-.sub-divider {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.menu-section-header {
-  font-size: 9px;
-  color: rgba(148, 163, 184, 0.7);
-  letter-spacing: 0.8px;
-  padding: 6px 14px 2px;
-  text-transform: uppercase;
-}
-
-.menu-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.menu-item {
-  padding: 7px 14px;
-  font-size: 12px;
-  color: #e2e8f0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  transition: all 0.15s ease;
-  position: relative;
-}
-
-.menu-item:hover:not(.disabled) {
-  background: rgba(0, 229, 255, 0.12);
-  color: #ffffff;
-  padding-left: 17px;
-}
-
-.menu-item:hover:not(.disabled)::before {
-  content: '';
+/* Background Ring Grid & Glassmorphism */
+.radial-ring-background {
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: #00e5ff;
-  box-shadow: 0 0 8px #00e5ff;
+  inset: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(15, 23, 42, 0.85) 0%, rgba(8, 12, 24, 0.94) 70%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.85), inset 0 0 25px rgba(0, 229, 255, 0.15);
+  pointer-events: none;
 }
 
-.menu-item.disabled {
-  color: #64748b;
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
-.menu-icon {
-  font-size: 14px;
-  display: inline-flex;
+/* Center Core Hub */
+.radial-center-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 82px;
+  height: 82px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid #00e5ff;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.4), inset 0 0 10px rgba(0, 229, 255, 0.2);
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 16px;
-}
-
-.menu-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-/* Status Indicator Dot */
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  z-index: 10;
   transition: all 0.2s ease;
 }
 
-.status-dot.active {
+.radial-center-core:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+  background: #0f172a;
+  border-color: #38bdf8;
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.6);
+}
+
+.core-tag {
+  font-size: 8px;
+  color: rgba(0, 229, 255, 0.7);
+  letter-spacing: 1px;
+}
+
+.core-coords {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.core-sub {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
+}
+
+/* Sector Action Buttons */
+.radial-sector-group {
+  position: absolute;
+  inset: 0;
+}
+
+.radial-btn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin-left: -29px;
+  margin-top: -29px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #cbd5e1;
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: rotate(var(--angle)) translateY(-98px) rotate(calc(-1 * var(--angle)));
+}
+
+.radial-btn:hover:not(.is-disabled) {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: #00e5ff;
+  color: #ffffff;
+  box-shadow: 0 0 18px rgba(0, 229, 255, 0.6);
+  transform: rotate(var(--angle)) translateY(-106px) rotate(calc(-1 * var(--angle))) scale(1.15);
+  z-index: 5;
+}
+
+.radial-btn.is-active {
+  background: rgba(0, 229, 255, 0.25);
+  border-color: #00e5ff;
+  color: #ffffff;
+}
+
+.radial-btn.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.radial-btn-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.radial-btn-label {
+  font-size: 8px;
+  font-weight: 700;
+  margin-top: 2px;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+}
+
+.active-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.active-dot.active {
   background: #10b981;
-  border-color: #34d399;
   box-shadow: 0 0 6px #10b981;
 }
 
-/* Checkbox State style */
-.status-checkbox {
-  width: 12px;
-  height: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-  position: relative;
-  transition: all 0.2s ease;
-}
-
-.status-checkbox.checked {
-  background: rgba(0, 229, 255, 0.25);
-  border-color: #00e5ff;
-}
-
-.status-checkbox.checked::after {
-  content: '✓';
+.sub-indicator {
   position: absolute;
-  font-size: 9px;
+  bottom: 2px;
+  font-size: 10px;
   color: #00e5ff;
   font-weight: bold;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+}
+
+.check-box {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.check-box.checked {
+  background: #00e5ff;
+  border-color: #00e5ff;
+  box-shadow: 0 0 6px #00e5ff;
+}
+
+.back-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.back-btn:hover {
+  background: rgba(239, 68, 68, 0.3) !important;
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.6) !important;
 }
 </style>

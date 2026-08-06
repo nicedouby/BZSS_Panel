@@ -177,6 +177,10 @@ function openEditor() {
   errorMsg.value = "";
 }
 
+defineExpose({
+  openEditor,
+});
+
 function closeEditor() {
   editorOpen.value = false;
 }
