@@ -1,5 +1,6 @@
 import { inject, provide, type Ref } from "vue";
 import "../styles/tactical-capture-point-drag.css";
+import "../styles/tactical-vehicle-colors.css";
 import { ensureTacticalCapturePointDragController } from "./tacticalCapturePointDrag";
 
 export interface TacticalMapViewportState {
