@@ -141,7 +141,7 @@
           >
             <span v-if="capturePointEditMode" class="capture-point-index">P{{ zone.pointIndex }}</span>
             <span
-              class="zone-flag-group capture-zone-flag"
+              class="capture-zone-flag"
               :class="[
                 `team-${zone.captureTeamId ?? zone.teamId ?? 0}`,
                 { 'is-capturing': zone.isCapturing },

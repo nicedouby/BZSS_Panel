@@ -170,9 +170,17 @@
  * instead of the point marker.
  */
 .capture-zone-marker {
+  position: absolute;
   width: 58px;
   height: 58px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
   transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   pointer-events: auto;
   cursor: pointer;
   touch-action: none;
@@ -185,37 +193,18 @@
 .map-viewport.is-capture-point-editing .explosion-layer {
   pointer-events: none !important;
 }
-.capture-zone-marker .capture-zone-flag {
-  /*
-   * The marker button is a 58px hit area centered on the map coordinate.
-   * Keep the flag's own center on that same coordinate.
-   */
-  left: 29px;
-  top: 29px;
-  margin-left: -17px;
-  margin-top: -11px;
-  transition: transform 120ms ease-out, filter 120ms ease-out;
-}
+
 .map-viewport.is-capture-point-editing .capture-zone-marker { cursor: grab; }
-.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag,
-.map-viewport.is-capture-point-editing .capture-zone-marker:active .capture-zone-flag,
-.map-viewport.is-capture-point-editing .capture-zone-marker.is-point-dragging .capture-zone-flag {
-  /* Hover and selection/drag feedback scales around flag center; it must not move the point. */
-  transform: scale(var(--capture-marker-scale, 1)) scale(1.1);
-  filter: drop-shadow(0 0 9px rgba(250, 204, 21, .95)) brightness(1.16);
-}
 .capture-zone-marker.is-point-dragging { z-index: 20; cursor: grabbing; }
-.capture-zone-marker.is-command-pending .zone-flag-group {
-  animation: capture-point-command-pulse .75s ease-in-out infinite alternate;
-}
+
 .capture-point-index {
   position: absolute;
-  left: 29px;
-  top: -2px;
-  min-width: 20px;
-  padding: 2px 5px;
+  top: -6px;
+  left: 50%;
   transform: translateX(-50%) scale(var(--capture-marker-scale, 1));
   transform-origin: 50% 100%;
+  min-width: 20px;
+  padding: 2px 5px;
   border: 1px solid rgba(250, 204, 21, .85);
   border-radius: 999px;
   background: rgba(15, 23, 42, .94);
@@ -224,6 +213,7 @@
   font: 800 8px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center;
   pointer-events: none;
+  z-index: 5;
 }
 @keyframes capture-point-command-pulse {
   from { opacity: .55; }
@@ -236,7 +226,34 @@
   will-change: transform; filter: drop-shadow(0 2px 3px rgba(0,0,0,.72));
 }
 .main-zone-flag { transform: scale(var(--main-base-scale, 1)); }
-.capture-zone-flag { transform: scale(var(--capture-marker-scale, 1)); }
+
+.capture-zone-flag {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 34px;
+  transform: scale(var(--capture-marker-scale, 1));
+  transform-origin: 50% 50%;
+  transition: transform 120ms ease-out, filter 120ms ease-out;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.72));
+  will-change: transform;
+}
+
+.capture-zone-marker:hover .capture-zone-flag {
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, .6)) brightness(1.1);
+}
+
+.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker:active .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-point-dragging .capture-zone-flag {
+  transform: scale(calc(var(--capture-marker-scale, 1) * 1.12));
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, .95)) brightness(1.18);
+}
+
+.capture-zone-marker.is-command-pending .capture-zone-flag {
+  animation: capture-point-command-pulse .75s ease-in-out infinite alternate;
+}
 .zone-flag-visual { position: relative; display: block; width: 34px; height: 22px; overflow: hidden; }
 .zone-flag-image,
 .zone-flag-placeholder,
@@ -270,7 +287,6 @@
   text-align: center; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,.95),0 0 3px rgba(0,0,0,.85);
   white-space: nowrap; transform: translateX(-50%);
 }
-.capture-zone-marker:hover .zone-flag-group { filter: drop-shadow(0 2px 4px rgba(255,255,255,.35)) brightness(1.08); }
 
 /* Ownership colors and active-capture feedback. Team 1 is blue; Team 2 is red. */
 .fob-radius-group.team-1 .fob-radius-construction {
