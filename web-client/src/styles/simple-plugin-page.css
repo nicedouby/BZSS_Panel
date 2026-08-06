@@ -1,0 +1,637 @@
+/*
+ * Simple plugin page preset
+ *
+ * Legacy plugin pages can opt in through route meta: pagePreset: "simple-plugin".
+ * New pages should prefer components/plugins/SimplePluginPageShell.vue together
+ * with PageCard, StatGrid, AppButton, AlertBanner and StatusBadge.
+ */
+
+.content-shell.content-shell--simple-plugin {
+  --simple-plugin-max-width: 1480px;
+  --simple-plugin-radius: 16px;
+  --simple-plugin-gap: 14px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--color-brand-primary) 7%, transparent), transparent 30%),
+    linear-gradient(180deg, rgba(255,255,255,.01), transparent 16%);
+}
+
+.content-shell.content-shell--simple-plugin > * {
+  min-height: auto;
+  height: auto;
+}
+
+/* Legacy page shell ------------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .page {
+  box-sizing: border-box;
+  width: min(100%, var(--simple-plugin-max-width));
+  min-height: 100%;
+  margin-inline: auto;
+  padding: clamp(18px, 2vw, 28px);
+  color: var(--color-text-primary);
+  background: transparent;
+}
+
+.content-shell.content-shell--simple-plugin .page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 0 0 18px;
+  padding: 0 2px 4px;
+}
+
+.content-shell.content-shell--simple-plugin .page-header > div:first-child {
+  min-width: 0;
+}
+
+.content-shell.content-shell--simple-plugin .eyebrow {
+  margin: 0 0 8px;
+  color: var(--color-status-info);
+  opacity: 1;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.content-shell.content-shell--simple-plugin .page h1 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(24px, 2.15vw, 31px);
+  line-height: 1.14;
+  letter-spacing: -.025em;
+}
+
+.content-shell.content-shell--simple-plugin .page h2 {
+  color: var(--color-text-primary);
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.content-shell.content-shell--simple-plugin .page h3 {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: .015em;
+}
+
+.content-shell.content-shell--simple-plugin .page-header p,
+.content-shell.content-shell--simple-plugin .panel-head p,
+.content-shell.content-shell--simple-plugin .control-card p,
+.content-shell.content-shell--simple-plugin .cache-note p {
+  margin: 7px 0 0;
+  max-width: 82ch;
+  color: var(--color-text-secondary);
+  opacity: 1;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.content-shell.content-shell--simple-plugin .header-actions,
+.content-shell.content-shell--simple-plugin .filters {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.content-shell.content-shell--simple-plugin .updated {
+  color: var(--color-text-muted);
+  opacity: 1;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Feedback --------------------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .banner,
+.content-shell.content-shell--simple-plugin .error-banner,
+.content-shell.content-shell--simple-plugin .notice-banner {
+  margin: 0 0 var(--simple-plugin-gap);
+  padding: 11px 13px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  font-size: 13px;
+}
+
+.content-shell.content-shell--simple-plugin .banner.error,
+.content-shell.content-shell--simple-plugin .error-banner {
+  color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 64%, white 36%);
+  border-color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 30%, var(--color-border-default));
+  background: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 9%, var(--color-bg-card));
+}
+
+.content-shell.content-shell--simple-plugin .banner.notice,
+.content-shell.content-shell--simple-plugin .notice-banner {
+  color: color-mix(in srgb, var(--color-status-success, var(--color-status-online)) 65%, white 35%);
+  border-color: color-mix(in srgb, var(--color-status-success, var(--color-status-online)) 26%, var(--color-border-default));
+  background: color-mix(in srgb, var(--color-status-success, var(--color-status-online)) 8%, var(--color-bg-card));
+}
+
+/* Buttons / controls ----------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .button,
+.content-shell.content-shell--simple-plugin .power-button,
+.content-shell.content-shell--simple-plugin .trigger {
+  min-height: 34px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  background:
+    var(--theme-panel-highlight),
+    color-mix(in srgb, var(--color-bg-elevated) 88%, transparent);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  transition: border-color .15s ease, background-color .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+
+.content-shell.content-shell--simple-plugin .button,
+.content-shell.content-shell--simple-plugin .power-button {
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.content-shell.content-shell--simple-plugin .button:hover:not(:disabled),
+.content-shell.content-shell--simple-plugin .power-button:hover:not(:disabled),
+.content-shell.content-shell--simple-plugin .trigger:hover:not(:disabled) {
+  border-color: var(--color-border-highlight);
+  background: var(--color-bg-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.content-shell.content-shell--simple-plugin .button:disabled,
+.content-shell.content-shell--simple-plugin .power-button:disabled,
+.content-shell.content-shell--simple-plugin .trigger:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.content-shell.content-shell--simple-plugin .button.primary,
+.content-shell.content-shell--simple-plugin .power-button.primary {
+  color: color-mix(in srgb, var(--color-brand-primary) 72%, white 28%);
+  border-color: color-mix(in srgb, var(--color-brand-primary) 48%, transparent);
+  background: color-mix(in srgb, var(--color-brand-primary) 18%, var(--color-bg-card));
+}
+
+.content-shell.content-shell--simple-plugin .power-button.danger {
+  color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 56%, white 44%);
+  border-color: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 42%, transparent);
+  background: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 13%, var(--color-bg-card));
+}
+
+.content-shell.content-shell--simple-plugin input,
+.content-shell.content-shell--simple-plugin select,
+.content-shell.content-shell--simple-plugin textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 9px;
+  outline: none;
+  background: color-mix(in srgb, var(--color-bg-input, var(--color-bg-elevated)) 88%, transparent);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.content-shell.content-shell--simple-plugin textarea {
+  min-height: 86px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.content-shell.content-shell--simple-plugin input:focus,
+.content-shell.content-shell--simple-plugin select:focus,
+.content-shell.content-shell--simple-plugin textarea:focus {
+  border-color: color-mix(in srgb, var(--color-brand-primary) 58%, var(--color-border-default));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-primary) 12%, transparent);
+}
+
+/* Cards / layout --------------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .panel,
+.content-shell.content-shell--simple-plugin .metric,
+.content-shell.content-shell--simple-plugin .control-card {
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--simple-plugin-radius);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,calc(var(--panel-surface-alpha) + .014)), rgba(255,255,255,.004)),
+    var(--color-bg-card);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+}
+
+.content-shell.content-shell--simple-plugin .panel {
+  margin: 0;
+  padding: 17px 18px;
+  overflow: hidden;
+}
+
+.content-shell.content-shell--simple-plugin .panel + .panel {
+  margin-top: var(--simple-plugin-gap);
+}
+
+.content-shell.content-shell--simple-plugin .panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 15px;
+}
+
+.content-shell.content-shell--simple-plugin .panel-head h2 {
+  margin: 0;
+}
+
+.content-shell.content-shell--simple-plugin .metrics,
+.content-shell.content-shell--simple-plugin .hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 11px;
+  margin: 0 0 var(--simple-plugin-gap);
+}
+
+.content-shell.content-shell--simple-plugin .hero-grid {
+  grid-template-columns: minmax(340px, 2fr) repeat(3, minmax(150px, 1fr));
+}
+
+.content-shell.content-shell--simple-plugin .metric {
+  min-width: 0;
+  min-height: 104px;
+  padding: 15px 16px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.content-shell.content-shell--simple-plugin .metric span,
+.content-shell.content-shell--simple-plugin .control-card .label {
+  color: var(--color-text-muted);
+  opacity: 1;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+.content-shell.content-shell--simple-plugin .metric strong {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(23px, 2vw, 29px);
+  line-height: 1.05;
+}
+
+.content-shell.content-shell--simple-plugin .metric small {
+  margin: 0;
+  color: var(--color-text-muted);
+  opacity: 1;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.content-shell.content-shell--simple-plugin .control-card {
+  position: relative;
+  min-width: 0;
+  padding: 17px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.content-shell.content-shell--simple-plugin .control-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--color-status-success, var(--color-status-online));
+  opacity: .85;
+}
+
+.content-shell.content-shell--simple-plugin .control-card.disabled::before {
+  background: var(--color-text-muted);
+}
+
+.content-shell.content-shell--simple-plugin .control-card.disabled {
+  opacity: .82;
+}
+
+.content-shell.content-shell--simple-plugin .control-card strong {
+  display: block;
+  margin: 6px 0 0;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.content-shell.content-shell--simple-plugin .grid.two {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, .82fr);
+  gap: var(--simple-plugin-gap);
+  margin: 0 0 var(--simple-plugin-gap);
+}
+
+/* Form / operational blocks -------------------------------------------- */
+.content-shell.content-shell--simple-plugin .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+  margin-top: 0;
+}
+
+.content-shell.content-shell--simple-plugin .form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-text-secondary);
+  opacity: 1;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.content-shell.content-shell--simple-plugin .form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.content-shell.content-shell--simple-plugin .toggle-row {
+  min-height: 40px;
+  padding: 8px 10px;
+  flex-direction: row !important;
+  align-items: center;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-bg-elevated) 62%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .toggle-row input {
+  width: auto;
+  min-height: 0;
+  accent-color: var(--color-brand-primary);
+}
+
+.content-shell.content-shell--simple-plugin .trigger-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 0;
+}
+
+.content-shell.content-shell--simple-plugin .trigger {
+  min-height: 86px;
+  padding: 13px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.content-shell.content-shell--simple-plugin .trigger strong,
+.content-shell.content-shell--simple-plugin .trigger span {
+  display: block;
+}
+
+.content-shell.content-shell--simple-plugin .trigger strong {
+  font-size: 13px;
+}
+
+.content-shell.content-shell--simple-plugin .trigger span {
+  margin-top: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.content-shell.content-shell--simple-plugin .trigger.squad {
+  border-color: color-mix(in srgb, var(--color-status-success, var(--color-status-online)) 28%, var(--color-border-default));
+}
+
+.content-shell.content-shell--simple-plugin .trigger.leader {
+  border-color: color-mix(in srgb, var(--color-status-info) 28%, var(--color-border-default));
+}
+
+.content-shell.content-shell--simple-plugin .cache-note {
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-status-success, var(--color-status-online)) 22%, var(--color-border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-status-success, var(--color-status-online)) 6%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .cache-note strong {
+  font-size: 12px;
+}
+
+/* Preview / key-value rows --------------------------------------------- */
+.content-shell.content-shell--simple-plugin .preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 0;
+}
+
+.content-shell.content-shell--simple-plugin .preview-grid article,
+.content-shell.content-shell--simple-plugin .preview-block {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-bg-elevated) 54%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .preview-block {
+  margin: 0 0 10px;
+}
+
+.content-shell.content-shell--simple-plugin .preview-block > span {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--color-text-muted);
+  opacity: 1;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.content-shell.content-shell--simple-plugin pre {
+  margin: 0;
+  padding: 11px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-bg-page) 58%, transparent);
+  color: var(--color-text-primary);
+  font: 12px/1.58 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.content-shell.content-shell--simple-plugin pre.wire {
+  color: color-mix(in srgb, var(--color-status-warning) 72%, white 28%);
+}
+
+.content-shell.content-shell--simple-plugin .status-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.content-shell.content-shell--simple-plugin .status-list div {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-bg-elevated) 48%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .status-list dt {
+  color: var(--color-text-muted);
+  opacity: 1;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.content-shell.content-shell--simple-plugin .status-list dd {
+  margin: 4px 0 0;
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+/* Tables ---------------------------------------------------------------- */
+.content-shell.content-shell--simple-plugin .table-wrap {
+  margin-top: 0;
+  overflow: auto;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 11px;
+  scrollbar-gutter: stable;
+}
+
+.content-shell.content-shell--simple-plugin table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--color-text-primary);
+  font-size: 12px;
+}
+
+.content-shell.content-shell--simple-plugin th,
+.content-shell.content-shell--simple-plugin td {
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.content-shell.content-shell--simple-plugin th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .035em;
+  white-space: nowrap;
+}
+
+.content-shell.content-shell--simple-plugin tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.content-shell.content-shell--simple-plugin tbody tr:hover td {
+  background: color-mix(in srgb, var(--color-brand-primary) 4%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin tr.conflict td {
+  background: color-mix(in srgb, var(--color-status-danger, var(--color-status-error)) 7%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .leader-pill,
+.content-shell.content-shell--simple-plugin .member-pill,
+.content-shell.content-shell--simple-plugin .fire-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 21px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.content-shell.content-shell--simple-plugin .leader-pill {
+  color: color-mix(in srgb, var(--color-status-warning) 72%, white 28%);
+  border-color: color-mix(in srgb, var(--color-status-warning) 24%, transparent);
+  background: color-mix(in srgb, var(--color-status-warning) 10%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .member-pill {
+  color: color-mix(in srgb, var(--color-status-info) 70%, white 30%);
+  border-color: color-mix(in srgb, var(--color-status-info) 22%, transparent);
+  background: color-mix(in srgb, var(--color-status-info) 9%, transparent);
+}
+
+.content-shell.content-shell--simple-plugin .empty {
+  padding: 26px 16px;
+  color: var(--color-text-muted);
+  opacity: 1;
+  text-align: center;
+}
+
+.content-shell.content-shell--simple-plugin .ok { color: var(--color-status-success, var(--color-status-online)); }
+.content-shell.content-shell--simple-plugin .bad { color: var(--color-status-danger, var(--color-status-error)); }
+.content-shell.content-shell--simple-plugin .warn { color: var(--color-status-warning); }
+.content-shell.content-shell--simple-plugin .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+@media (max-width: 1080px) {
+  .content-shell.content-shell--simple-plugin .hero-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .content-shell.content-shell--simple-plugin .control-card {
+    grid-column: 1 / -1;
+  }
+
+  .content-shell.content-shell--simple-plugin .grid.two,
+  .content-shell.content-shell--simple-plugin .preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .content-shell.content-shell--simple-plugin .page {
+    padding: 14px 12px calc(18px + var(--safe-bottom));
+  }
+
+  .content-shell.content-shell--simple-plugin .page-header,
+  .content-shell.content-shell--simple-plugin .panel-head,
+  .content-shell.content-shell--simple-plugin .control-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .content-shell.content-shell--simple-plugin .header-actions,
+  .content-shell.content-shell--simple-plugin .filters {
+    justify-content: flex-start;
+  }
+
+  .content-shell.content-shell--simple-plugin .hero-grid,
+  .content-shell.content-shell--simple-plugin .metrics,
+  .content-shell.content-shell--simple-plugin .form-grid,
+  .content-shell.content-shell--simple-plugin .trigger-grid,
+  .content-shell.content-shell--simple-plugin .status-list {
+    grid-template-columns: 1fr;
+  }
+
+  .content-shell.content-shell--simple-plugin .form-grid .wide {
+    grid-column: auto;
+  }
+
+  .content-shell.content-shell--simple-plugin .button,
+  .content-shell.content-shell--simple-plugin .power-button {
+    min-height: 38px;
+  }
+}
