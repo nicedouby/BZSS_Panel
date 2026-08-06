@@ -1,0 +1,17 @@
+/*
+ * Keep runtime vehicle icon tint identical to PlayerMarker's tactical palette.
+ * TacticalMapPage already resolves friendly/enemy perspective before binding
+ * flood-color, so these presentation-property overrides preserve perspective
+ * while using the exact same icon colors as players.
+ */
+.vehicle-marker .vehicle-marker__icon feFlood[flood-color="#7de6ff"] {
+  flood-color: #3b82f6 !important;
+}
+
+.vehicle-marker .vehicle-marker__icon feFlood[flood-color="#ff97a3"] {
+  flood-color: #ef4444 !important;
+}
+
+.vehicle-marker .vehicle-marker__icon feFlood[flood-color="#cbd5e1"] {
+  flood-color: #cbd5e1 !important;
+}
