@@ -1,0 +1,34 @@
+/*
+ * Capture-point editing keeps the real interaction target at its original
+ * coordinate while a pointer-events:none preview follows the cursor. The hit
+ * area is also zoom-compensated so it does not balloon with the map transform.
+ */
+.map-viewport.is-capture-point-editing .capture-zone-marker {
+  width: calc(58px * var(--capture-marker-scale, 1));
+  height: calc(58px * var(--capture-marker-scale, 1));
+}
+
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-point-index {
+  opacity: 0.38;
+}
+
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview {
+  pointer-events: none !important;
+  cursor: grabbing;
+  z-index: 43;
+}
+
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview .capture-zone-flag {
+  opacity: 1;
+  filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.95)) brightness(1.18);
+}
+
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview.is-command-pending .capture-zone-flag {
+  animation: capture-point-runtime-pending 0.7s ease-in-out infinite alternate;
+}
+
+@keyframes capture-point-runtime-pending {
+  from { opacity: 0.58; }
+  to { opacity: 1; }
+}
