@@ -9,21 +9,18 @@
     <!-- Radial Outer Ring Glow -->
     <div class="radial-ring-background"></div>
 
-    <!-- Center Core Info Hub -->
+    <!-- Center Core Hub: Click Center to Exit / Close -->
     <div
       class="radial-center-core font-mono"
-      :class="{ 'is-hovered': hoverIndex === -1 }"
-      @click="handleAction('close')"
+      title="点击关闭轮盘"
+      @click.stop="handleAction('close')"
     >
       <div class="core-tag">COORDS</div>
       <div class="core-coords">
         <span class="gx">X: {{ Math.round(gameX) }}</span>
         <span class="gy">Y: {{ Math.round(gameY) }}</span>
       </div>
-      <div v-if="measureActive" class="core-sub text-cyan">
-        {{ measureCount === 0 ? "测距开启" : `${measureCount} 点` }}
-      </div>
-      <div v-else class="core-sub">点击/松开关闭</div>
+      <div class="core-sub-exit">点击退出 ✕</div>
     </div>
 
     <!-- Main Radial Action Buttons (8 Sectors) -->
@@ -32,11 +29,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-hovered': hoverIndex === 0 }"
         style="--angle: 0deg;"
         :title="measurePrimaryLabel"
-        @pointerdown.stop
-        @click="handleAction(measureActive ? 'add-point' : 'start-measure')"
+        @click.stop="handleAction(measureActive ? 'add-point' : 'start-measure')"
       >
         <span class="radial-btn-icon">📏</span>
         <span class="radial-btn-label">{{ measureActive ? "添加点" : "开始测距" }}</span>
@@ -47,11 +42,10 @@
         v-if="canEditCapturePoints"
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': capturePointEditMode, 'is-disabled': capturePointCommandPending, 'is-hovered': hoverIndex === 1 }"
+        :class="{ 'is-active': capturePointEditMode, 'is-disabled': capturePointCommandPending }"
         style="--angle: 45deg;"
         title="开启/退出点位编辑模式"
-        @pointerdown.stop
-        @click="!capturePointCommandPending && handleAction('toggle-capture-point-edit')"
+        @click.stop="!capturePointCommandPending && handleAction('toggle-capture-point-edit')"
       >
         <span class="radial-btn-icon">⌖</span>
         <span class="radial-btn-label">改点模式</span>
@@ -62,11 +56,10 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': hasCombatHotspot, 'is-hovered': hoverIndex === 2 }"
+        :class="{ 'is-active': hasCombatHotspot }"
         style="--angle: 90deg;"
         title="计算/更新交战集中热点"
-        @pointerdown.stop
-        @click="handleAction('calculate-hotspot')"
+        @click.stop="handleAction('calculate-hotspot')"
       >
         <span class="radial-btn-icon">◎</span>
         <span class="radial-btn-label">交战热点</span>
@@ -77,11 +70,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-hovered': hoverIndex === 3 }"
         style="--angle: 135deg;"
         title="地图视角聚焦于此"
-        @pointerdown.stop
-        @click="handleAction('focus-here')"
+        @click.stop="handleAction('focus-here')"
       >
         <span class="radial-btn-icon">👁️</span>
         <span class="radial-btn-label">聚焦此处</span>
@@ -91,11 +82,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-hovered': hoverIndex === 4 }"
         style="--angle: 180deg;"
         title="展开地图图层显示开关"
-        @pointerdown.stop
-        @click="showLayerRing = true"
+        @click.stop="showLayerRing = true"
       >
         <span class="radial-btn-icon">🛡️</span>
         <span class="radial-btn-label">图层控制</span>
@@ -106,11 +95,10 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-disabled': !hasPoints, 'is-hovered': hoverIndex === 5 }"
+        :class="{ 'is-disabled': !hasPoints }"
         style="--angle: 225deg;"
         title="清空所有测距点"
-        @pointerdown.stop
-        @click="hasPoints && handleAction('clear-measure')"
+        @click.stop="hasPoints && handleAction('clear-measure')"
       >
         <span class="radial-btn-icon">🗑️</span>
         <span class="radial-btn-label">清空测距</span>
@@ -120,11 +108,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-hovered': hoverIndex === 6 }"
         style="--angle: 270deg;"
         title="复制世界坐标"
-        @pointerdown.stop
-        @click="handleAction('copy-coords')"
+        @click.stop="handleAction('copy-coords')"
       >
         <span class="radial-btn-icon">📋</span>
         <span class="radial-btn-label">复制坐标</span>
@@ -134,27 +120,23 @@
       <button
         type="button"
         class="radial-btn close-btn"
-        :class="{ 'is-hovered': hoverIndex === 7 }"
         style="--angle: 315deg;"
         title="关闭轮盘"
-        @pointerdown.stop
-        @click="handleAction('close')"
+        @click.stop="handleAction('close')"
       >
         <span class="radial-btn-icon">✕</span>
-        <span class="radial-btn-label">关闭菜单</span>
+        <span class="radial-btn-label">退出轮盘</span>
       </button>
     </div>
 
-    <!-- Sub Radial Ring: Layers Control Submenu (6 sectors: 0, 60, 120, 180, 240, 300) -->
+    <!-- Sub Radial Ring: Layers Control Submenu (6 sectors) -->
     <div v-else class="radial-sector-group layer-subring">
       <button
         type="button"
         class="radial-btn back-btn"
-        :class="{ 'is-hovered': hoverIndex === 0 }"
         style="--angle: 0deg;"
         title="返回主轮盘"
-        @pointerdown.stop
-        @click="showLayerRing = false"
+        @click.stop="showLayerRing = false"
       >
         <span class="radial-btn-icon">↩</span>
         <span class="radial-btn-label">返回主盘</span>
@@ -164,10 +146,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': filterAliveOnly, 'is-hovered': hoverIndex === 1 }"
+        :class="{ 'is-active': filterAliveOnly }"
         style="--angle: 60deg;"
-        @pointerdown.stop
-        @click="handleAction('toggle-layer-alive')"
+        @click.stop="handleAction('toggle-layer-alive')"
       >
         <span class="radial-btn-icon">👥</span>
         <span class="radial-btn-label">仅存活玩家</span>
@@ -178,10 +159,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': showPlayerNames, 'is-hovered': hoverIndex === 2 }"
+        :class="{ 'is-active': showPlayerNames }"
         style="--angle: 120deg;"
-        @pointerdown.stop
-        @click="handleAction('toggle-layer-names')"
+        @click.stop="handleAction('toggle-layer-names')"
       >
         <span class="radial-btn-icon">🏷️</span>
         <span class="radial-btn-label">玩家姓名</span>
@@ -192,10 +172,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': showPlayerCoords, 'is-hovered': hoverIndex === 3 }"
+        :class="{ 'is-active': showPlayerCoords }"
         style="--angle: 180deg;"
-        @pointerdown.stop
-        @click="handleAction('toggle-layer-coords')"
+        @click.stop="handleAction('toggle-layer-coords')"
       >
         <span class="radial-btn-icon">📍</span>
         <span class="radial-btn-label">玩家坐标</span>
@@ -206,10 +185,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': showFobs, 'is-hovered': hoverIndex === 4 }"
+        :class="{ 'is-active': showFobs }"
         style="--angle: 240deg;"
-        @pointerdown.stop
-        @click="handleAction('toggle-layer-fobs')"
+        @click.stop="handleAction('toggle-layer-fobs')"
       >
         <span class="radial-btn-icon">⛺</span>
         <span class="radial-btn-label">FOB 范围</span>
@@ -220,10 +198,9 @@
       <button
         type="button"
         class="radial-btn"
-        :class="{ 'is-active': showCaptureZones, 'is-hovered': hoverIndex === 5 }"
+        :class="{ 'is-active': showCaptureZones }"
         style="--angle: 300deg;"
-        @pointerdown.stop
-        @click="handleAction('toggle-layer-zones')"
+        @click.stop="handleAction('toggle-layer-zones')"
       >
         <span class="radial-btn-icon">🏳️</span>
         <span class="radial-btn-label">点位旗帜</span>
@@ -280,11 +257,9 @@ const emit = defineEmits<{
 
 const menuRef = ref<HTMLElement | null>(null);
 const showLayerRing = ref(false);
-const hoverIndex = ref<number | null>(null);
 
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
-let dragMoved = false;
 
 const menuStyle = computed(() => {
   return {
@@ -295,87 +270,8 @@ const menuStyle = computed(() => {
 
 const measurePrimaryLabel = computed(() => props.measureActive ? "重新从此处测距" : "从此处开始测距");
 
-// Main Ring Action Map (8 sectors)
-const mainActions: Array<string | null> = [
-  "measure",               // 0 deg (Top)
-  "toggle-capture-edit",   // 45 deg (Top-Right)
-  "calculate-hotspot",     // 90 deg (Right)
-  "focus-here",            // 135 deg (Bottom-Right)
-  "show-layer-ring",       // 180 deg (Bottom)
-  "clear-measure",         // 225 deg (Bottom-Left)
-  "copy-coords",           // 270 deg (Left)
-  "close",                 // 315 deg (Top-Left)
-];
-
-// Layer Subring Action Map (6 sectors)
-const subActions: Array<string | null> = [
-  "back-main",            // 0 deg
-  "toggle-layer-alive",   // 60 deg
-  "toggle-layer-names",   // 120 deg
-  "toggle-layer-coords",  // 180 deg
-  "toggle-layer-fobs",    // 240 deg
-  "toggle-layer-zones",   // 300 deg
-];
-
-function onWindowPointerMove(event: PointerEvent) {
-  const dx = event.clientX - offsetLeft.value;
-  const dy = event.clientY - offsetTop.value;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-
-  if (distance > 20) {
-    dragMoved = true;
-  }
-
-  if (distance <= 30) {
-    hoverIndex.value = -1; // Hovering center core
-    return;
-  }
-
-  let angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-  if (angle < 0) angle += 360;
-
-  if (!showLayerRing.value) {
-    // 8 sectors (45 deg each)
-    const idx = Math.floor((angle + 22.5) / 45) % 8;
-    hoverIndex.value = idx;
-  } else {
-    // 6 sectors (60 deg each)
-    const idx = Math.floor((angle + 30) / 60) % 6;
-    hoverIndex.value = idx;
-  }
-}
-
-function onWindowPointerUp(event: PointerEvent) {
-  // If user dragged to a sector and released mouse button
-  const dx = event.clientX - offsetLeft.value;
-  const dy = event.clientY - offsetTop.value;
-  const distance = Math.sqrt(dx * dx + dy * dy);
-
-  if (dragMoved && distance > 30 && hoverIndex.value !== null && hoverIndex.value >= 0) {
-    if (!showLayerRing.value) {
-      const act = mainActions[hoverIndex.value];
-      if (act === "measure") handleAction(props.measureActive ? "add-point" : "start-measure");
-      else if (act === "toggle-capture-edit") handleAction("toggle-capture-point-edit");
-      else if (act === "calculate-hotspot") handleAction("calculate-hotspot");
-      else if (act === "show-layer-ring") {
-        showLayerRing.value = true;
-        return;
-      }
-      else if (act === "clear-measure") handleAction("clear-measure");
-      else if (act === "focus-here") handleAction("focus-here");
-      else if (act === "copy-coords") handleAction("copy-coords");
-      else if (act === "close") handleAction("close");
-    } else {
-      const act = subActions[hoverIndex.value];
-      if (act === "back-main") {
-        showLayerRing.value = false;
-        return;
-      } else if (act) {
-        handleAction(act as any);
-      }
-    }
-  } else if (dragMoved && distance <= 30) {
-    // Released in center core -> close
+function onDocumentKeyDown(event: KeyboardEvent) {
+  if (event.key === "Escape") {
     emit("close");
   }
 }
@@ -400,13 +296,11 @@ onMounted(() => {
     offsetTop.value = top;
   }
 
-  window.addEventListener("pointermove", onWindowPointerMove);
-  window.addEventListener("pointerup", onWindowPointerUp);
+  window.addEventListener("keydown", onDocumentKeyDown);
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("pointermove", onWindowPointerMove);
-  window.removeEventListener("pointerup", onWindowPointerUp);
+  window.removeEventListener("keydown", onDocumentKeyDown);
 });
 
 function handleAction(
@@ -484,7 +378,7 @@ function handleAction(
   pointer-events: none;
 }
 
-/* Center Core Hub */
+/* Center Core Hub: Hover to Glow, Click to Exit */
 .radial-center-core {
   position: absolute;
   left: 50%;
@@ -505,12 +399,11 @@ function handleAction(
   transition: all 0.18s ease;
 }
 
-.radial-center-core.is-hovered,
 .radial-center-core:hover {
-  transform: translate(-50%, -50%) scale(1.06);
-  background: #0f172a;
-  border-color: #38bdf8;
-  box-shadow: 0 0 22px rgba(56, 189, 248, 0.6);
+  transform: translate(-50%, -50%) scale(1.08);
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.6);
 }
 
 .core-tag {
@@ -529,9 +422,10 @@ function handleAction(
   line-height: 1.2;
 }
 
-.core-sub {
+.core-sub-exit {
   font-size: 8px;
-  color: rgba(255, 255, 255, 0.4);
+  color: #f87171;
+  font-weight: 700;
   margin-top: 2px;
 }
 
@@ -563,7 +457,6 @@ function handleAction(
   transform: rotate(var(--angle)) translateY(-98px) rotate(calc(-1 * var(--angle)));
 }
 
-.radial-btn.is-hovered,
 .radial-btn:hover:not(.is-disabled) {
   background: rgba(0, 229, 255, 0.25);
   border-color: #00e5ff;
@@ -643,9 +536,7 @@ function handleAction(
   color: #f87171;
 }
 
-.back-btn.is-hovered,
 .back-btn:hover,
-.close-btn.is-hovered,
 .close-btn:hover {
   background: rgba(239, 68, 68, 0.3) !important;
   border-color: #ef4444 !important;

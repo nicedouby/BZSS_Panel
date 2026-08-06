@@ -598,18 +598,29 @@
           <strong>{{ serverMapName || detectedMapName || "正在识别地图" }}</strong>
           <span>{{ matchPhase || statusText || "实时战场态势" }} · 地图 {{ activeMapSizeText }}</span>
         </div>
-        <div class="tactical-command-bar__status">
-          <span class="tactical-live-status"><i></i>{{ tacticalMapViewerCount === null ? "同步查看状态" : `${tacticalMapViewerCount} 人查看` }}</span>
-          <span class="tactical-recording-status" :class="{ 'is-recording': tacticalRecording.recording, 'is-disabled': !tacticalRecording.recordingEnabled }"><i></i>{{ tacticalRecordingLabel }}</span>
-          <button
-            type="button"
-            class="tactical-recording-action"
-            :disabled="tacticalRecording.pending || tacticalRecording.known === false"
-            :title="tacticalRecording.recordingEnabled ? '停止本局战术回放录制' : '开始本局战术回放录制'"
-            @click="toggleTacticalRecording"
-          >{{ tacticalRecording.pending ? "处理中…" : tacticalRecording.recordingEnabled ? "停止录制" : "开始录制" }}</button>
-        </div>
       </header>
+
+      <!-- Compact Recording & Viewers Pill (Top-Right Corner) -->
+      <aside class="tactical-recording-pill font-mono">
+        <span class="pill-viewer" title="当前实时同步查看人数">
+          <i>👁</i> {{ tacticalMapViewerCount === null ? "同步中" : `${tacticalMapViewerCount}人` }}
+        </span>
+        <span
+          class="pill-status"
+          :class="{ 'is-recording': tacticalRecording.recording, 'is-disabled': !tacticalRecording.recordingEnabled }"
+        >
+          <i class="rec-dot"></i> {{ tacticalRecordingLabel }}
+        </span>
+        <button
+          type="button"
+          class="pill-rec-btn"
+          :disabled="tacticalRecording.pending || tacticalRecording.known === false"
+          :title="tacticalRecording.recordingEnabled ? '停止本局战术回放录制' : '开始本局战术回放录制'"
+          @click="toggleTacticalRecording"
+        >
+          {{ tacticalRecording.pending ? "..." : tacticalRecording.recordingEnabled ? "停止" : "录制" }}
+        </button>
+      </aside>
 
       <div
         v-if="capturePointEditMode || capturePointFeedback"
@@ -4238,45 +4249,96 @@ onBeforeUnmount(deactivateMapPage);
 }
 
 
-/* The command layer is deliberately small and grouped.  Map data keeps the
-   visual priority; controls only expand when the operator asks for them. */
+/* Compact Top-Left Command Identity Bar */
 .tactical-command-bar {
   position: absolute;
   z-index: 60;
   top: 14px;
   left: 14px;
-  right: 14px;
-  display: grid;
-  grid-template-columns: minmax(190px, 1fr) auto minmax(260px, 1fr);
+  display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 54px;
-  padding: 9px 12px 9px 16px;
-  border: 1px solid rgba(148, 163, 184, .28);
-  border-radius: 12px;
-  background: linear-gradient(90deg, rgba(4, 13, 27, .93), rgba(8, 23, 40, .84));
-  box-shadow: 0 12px 32px rgba(0, 0, 0, .32);
-  backdrop-filter: blur(14px);
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid rgba(148, 163, 184, .25);
+  border-radius: 8px;
+  background: rgba(8, 15, 30, 0.88);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  max-width: 320px;
 }
 .tactical-command-bar__identity { display: grid; min-width: 0; gap: 1px; }
-.tactical-command-bar__identity strong { overflow: hidden; color: #f1f7fb; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
-.tactical-command-bar__identity span:last-child { overflow: hidden; color: #91aabd; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.tactical-command-bar__eyebrow { color: #48d6aa; font-size: 9px; font-weight: 800; letter-spacing: .14em; }
-.tactical-command-bar__tickets { display: flex; align-items: center; gap: 8px; padding: 0 14px; border-inline: 1px solid rgba(148, 163, 184, .17); }
-.tactical-ticket { display: grid; gap: 2px; min-width: 58px; text-align: center; }
-.tactical-ticket b { color: #91aabd; font-size: 9px; letter-spacing: .08em; }
-.tactical-ticket strong { color: var(--perspective-primary, #f8fafc); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 18px; line-height: 1; }
-.tactical-ticket__vs { color: #60768a; font-size: 10px; font-weight: 800; }
-.tactical-command-bar__status { display: flex; justify-content: flex-end; align-items: center; gap: 9px; min-width: 0; color: #b9cad6; font-size: 11px; }
-.tactical-live-status, .tactical-recording-status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.tactical-live-status i, .tactical-recording-status i { width: 7px; height: 7px; border-radius: 50%; background: #64748b; }
-.tactical-live-status i { background: #45d9ac; box-shadow: 0 0 10px rgba(69, 217, 172, .85); }
-.tactical-recording-status.is-recording { color: #fee2e2; }
-.tactical-recording-status.is-recording i { background: #f87171; box-shadow: 0 0 10px rgba(248, 113, 113, .88); }
-.tactical-recording-status.is-disabled { color: #718096; }
-.tactical-recording-action { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(111, 227, 178, .48); border-radius: 7px; background: rgba(20, 83, 67, .42); color: #9bf4cf; font-size: 11px; cursor: pointer; }
-.tactical-recording-action:hover:not(:disabled) { background: #48d6aa; color: #06251e; }
-.tactical-recording-action:disabled { cursor: wait; opacity: .55; }
+.tactical-command-bar__identity strong { overflow: hidden; color: #f1f7fb; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.tactical-command-bar__identity span:last-child { overflow: hidden; color: #91aabd; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.tactical-command-bar__eyebrow { color: #48d6aa; font-size: 8px; font-weight: 800; letter-spacing: .14em; }
+
+/* Compact Top-Right Floating Recording & Status Pill */
+.tactical-recording-pill {
+  position: absolute;
+  z-index: 60;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 12px;
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.88);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #cbd5e1;
+  font-size: 11px;
+}
+.pill-viewer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+}
+.pill-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.pill-status .rec-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #64748b;
+}
+.pill-status.is-recording {
+  color: #f87171;
+}
+.pill-status.is-recording .rec-dot {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: recPulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes recPulse {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+.pill-rec-btn {
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.4);
+  background: rgba(0, 229, 255, 0.15);
+  color: #00e5ff;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pill-rec-btn:hover:not(:disabled) {
+  background: #00e5ff;
+  color: #090d16;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
 
 .map-coordinate-readout { border: 1px solid rgba(148, 163, 184, .28); border-radius: 10px; background: rgba(4, 14, 27, .9); box-shadow: 0 10px 28px rgba(0, 0, 0, .28); backdrop-filter: blur(12px); }
 .capture-point-edit-status {
