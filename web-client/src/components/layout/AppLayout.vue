@@ -70,6 +70,7 @@ const contentShellClass = computed(() => {
   const contentPadding = route.meta.contentPadding === "none" || route.meta.contentPadding === "default"
     ? route.meta.contentPadding
     : legacyFullBleed ? "none" : "default";
+  const pagePreset = String(route.meta.pagePreset ?? "").trim();
 
   return {
     "is-mobile": isMobile.value,
@@ -79,6 +80,7 @@ const contentShellClass = computed(() => {
     "content-shell--padded": contentPadding === "default",
     "content-shell--flush": contentPadding === "none",
     "content-shell--mobile": isMobile.value,
+    "content-shell--simple-plugin": pagePreset === "simple-plugin",
     "full-bleed": legacyFullBleed,
   };
 });

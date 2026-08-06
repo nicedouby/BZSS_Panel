@@ -116,8 +116,8 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
       id: "module.dynamicPressureZone",
       name: "Dynamic Pressure Zone",
       kind: "module",
-      version: "0.1.0",
-      description: "Calculates reusable Hard, Soft and Combat pressure zones for AAS and RAAS layers.",
+      version: "0.2.0",
+      description: "Calculates map-size adaptive Hard, Soft and Combat pressure zones for AAS and RAAS layers.",
     },
     apiName: "dynamicPressureZone",
     api: {
@@ -193,11 +193,12 @@ function buildLiveInput(snapshot, profile, baseConfig) {
     mode: firstText(profile?.mode, snapshot?.server?.mode, snapshot?.match?.mode, snapshot?.server?.layer),
     mapKey,
     mapBounds: profile?.mapBounds ?? mapConfig?.bounds ?? null,
+    mapSize: mapConfig?.widthMeters && mapConfig?.heightMeters
+      ? { widthMeters: mapConfig.widthMeters, heightMeters: mapConfig.heightMeters }
+      : null,
     mains: profile?.mains ?? normalizeRuntimeMains(assets.mainZones),
     objectiveChain: objectives,
     objectiveState,
-    // Base policy is global. Layer profiles describe geometry only; legacy
-    // profile.config fields must not silently shadow the settings page.
     config: baseConfig,
   };
 }

@@ -43,5 +43,8 @@
   },
   "devDependencies": {
     "sharp": "^0.35.2"
+  },
+  "allowScripts": {
+    "sqlite3@5.1.7": true
   }
 }

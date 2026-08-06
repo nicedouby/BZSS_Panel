@@ -109,6 +109,7 @@ export class PluginManager {
         description: manifest.description ?? "",
         category: manifest.category ?? "Plugin",
         configSchema: manifest.configSchema ?? [],
+        config: manifest.config ?? {},
         manifest,
       };
     } catch (error) {

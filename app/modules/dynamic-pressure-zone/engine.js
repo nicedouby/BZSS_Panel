@@ -23,118 +23,217 @@ export function calculatePressureZones(input = {}) {
   const config = mergePressureZoneConfig(DEFAULT_PRESSURE_ZONE_CONFIG, input.config);
   const coordinateScaleMeters = resolveCoordinateScaleMeters(bounds, config.coordinateScaleMeters);
   const worldUnitsPerMeter = 1 / coordinateScaleMeters;
-  const widthMeters = (bounds.maxX - bounds.minX) * coordinateScaleMeters;
-  const heightMeters = (bounds.maxY - bounds.minY) * coordinateScaleMeters;
-  const diagonalMeters = Math.hypot(widthMeters, heightMeters);
-  const mapScale = clamp(
-    diagonalMeters / positive(config.referenceDiagonalMeters, 5600),
-    positive(config.minMapScale, 0.75),
-    positive(config.maxMapScale, 1.30),
-  );
+  const map = resolveMapMetrics(input, bounds, coordinateScaleMeters, worldUnitsPerMeter, config);
 
   const fronts = resolveCombatPair(chain, input.objectiveState);
   const team1Main = mains.find((main) => main.teamId === 1);
   const team2Main = mains.find((main) => main.teamId === 2);
   if (!team1Main || !team2Main) return inactiveState("missing-team-main", { mode });
 
+  const averageObjectiveSpacing = resolveAverageObjectiveSpacing(fronts.chain, coordinateScaleMeters);
+  const warnings = [];
+
   const team1Base = calculateBaseZone({
     teamId: 1,
     main: team1Main,
     chain: fronts.chain,
     front: fronts.team1Front,
-    diagonalMeters,
     coordinateScaleMeters,
+    mapScale: map.scaleFactor,
+    averageObjectiveSpacing,
     config,
+    warnings,
   });
   const team2Base = calculateBaseZone({
     teamId: 2,
     main: team2Main,
     chain: fronts.chain,
     front: fronts.team2Front,
-    diagonalMeters,
     coordinateScaleMeters,
+    mapScale: map.scaleFactor,
+    averageObjectiveSpacing,
     config,
+    warnings,
   });
 
   const zones = [
     buildCircleZone(team1Base, "soft"),
     buildCircleZone(team2Base, "soft"),
   ];
+
   let combat = null;
   if (fronts.pair) {
     combat = calculateCombatZone({
       pair: fronts.pair,
       coordinateScaleMeters,
       worldUnitsPerMeter,
-      mapScale,
+      rawMapScale: map.rawScaleFactor,
       config,
     });
     zones.push(combat.zone);
+  } else {
+    warnings.push("NO_ACTIVE_FRONT");
   }
+
   zones.push(buildCircleZone(team1Base, "hard"), buildCircleZone(team2Base, "hard"));
 
   return {
     active: true,
     mode,
     generatedAt: new Date().toISOString(),
-    map: {
-      bounds,
-      widthMeters,
-      heightMeters,
-      diagonalMeters,
-      scaleFactor: mapScale,
-      coordinateScaleMeters,
-      worldUnitsPerMeter,
-    },
+    map,
     combat: combat?.state ?? null,
     bases: { team1: team1Base, team2: team2Base },
     zones,
     diagnostics: {
+      mapSizeSource: map.sizeSource,
+      effectiveMapSizeMeters: map.effectiveSizeMeters,
+      rawMapScale: map.rawScaleFactor,
+      effectiveMapScale: map.scaleFactor,
+      averageObjectiveSpacingMeters: averageObjectiveSpacing,
       combatPairResolved: Boolean(fronts.pair),
       combatPairAdjacent: fronts.adjacent,
       team1FrontObjectiveId: fronts.team1Front?.id ?? null,
       team2FrontObjectiveId: fronts.team2Front?.id ?? null,
       ownership: fronts.chain.map((objective) => ({ id: objective.id, teamId: objective.ownerTeamId })),
-      warnings: fronts.pair ? [] : ["No adjacent Team 1 / Team 2 combat pair is currently available."],
+      warnings,
       config,
     },
   };
 }
 
-function calculateBaseZone({ teamId, main, chain, front, diagonalMeters, coordinateScaleMeters, config }) {
+function resolveMapMetrics(input, bounds, coordinateScaleMeters, worldUnitsPerMeter, config) {
+  const boundsWidthMeters = (bounds.maxX - bounds.minX) * coordinateScaleMeters;
+  const boundsHeightMeters = (bounds.maxY - bounds.minY) * coordinateScaleMeters;
+  const explicitWidth = positiveOrNull(input?.mapSize?.widthMeters ?? input?.mapWidthMeters);
+  const explicitHeight = positiveOrNull(input?.mapSize?.heightMeters ?? input?.mapHeightMeters);
+  const widthMeters = explicitWidth ?? boundsWidthMeters;
+  const heightMeters = explicitHeight ?? boundsHeightMeters;
+  const effectiveSizeMeters = Math.sqrt(widthMeters * heightMeters);
+  const diagonalMeters = Math.hypot(widthMeters, heightMeters);
+  const referenceMapSizeMeters = positive(config.referenceMapSizeMeters, 4000);
+  const rawScaleFactor = Math.sqrt(effectiveSizeMeters / referenceMapSizeMeters);
+  const influencedScale = 1 + ((rawScaleFactor - 1) * clamp(nonNegative(config.mapScaleInfluence, 0.65), 0, 1));
+  const scaleFactor = clamp(
+    influencedScale,
+    positive(config.minMapScale, 0.55),
+    positive(config.maxMapScale, 1.55),
+  );
+
+  return {
+    bounds,
+    widthMeters,
+    heightMeters,
+    effectiveSizeMeters,
+    diagonalMeters,
+    referenceMapSizeMeters,
+    rawScaleFactor,
+    scaleFactor,
+    sizeSource: explicitWidth && explicitHeight ? "input-map-size" : "bounds",
+    coordinateScaleMeters,
+    worldUnitsPerMeter,
+  };
+}
+
+function calculateBaseZone({
+  teamId,
+  main,
+  chain,
+  front,
+  coordinateScaleMeters,
+  mapScale,
+  averageObjectiveSpacing,
+  config,
+  warnings,
+}) {
   const distances = chain.map((objective) => ({
     objectiveId: objective.id,
     objectiveName: objective.name,
     distanceMeters: distance(main, objective) * coordinateScaleMeters,
   }));
   const nearest = distances.reduce((best, item) => !best || item.distanceMeters < best.distanceMeters ? item : best, null);
-  const currentFrontDistance = front ? distance(main, front) * coordinateScaleMeters : nearest?.distanceMeters ?? 0;
+  const firstIndex = teamId === 1 ? 0 : chain.length - 1;
+  const secondIndex = teamId === 1 ? 1 : chain.length - 2;
+  const firstObjective = chain[firstIndex] ?? null;
+  const secondObjective = chain[secondIndex] ?? null;
+  const firstObjectiveDistance = firstObjective ? distance(main, firstObjective) * coordinateScaleMeters : null;
+  const firstObjectiveSpacing = firstObjective && secondObjective
+    ? distance(firstObjective, secondObjective) * coordinateScaleMeters
+    : null;
+  const currentFrontDistance = front ? distance(main, front) * coordinateScaleMeters : firstObjectiveDistance ?? nearest?.distanceMeters ?? 0;
 
-  const baseRadiusMultiplier = positive(config.baseRadiusMultiplier, 1.15);
-  const hardMapContribution = diagonalMeters * nonNegative(config.hard.mapFactor, 0.075);
-  const hardObjectiveContribution = (nearest?.distanceMeters ?? 0) * nonNegative(config.hard.nearestObjectiveFactor, 0.35);
-  const hardRaw = (hardMapContribution + hardObjectiveContribution) * baseRadiusMultiplier;
-  const hardMinRadius = nonNegative(config.hard.minRadiusMeters, 350);
-  const hardMaxRadius = nonNegative(config.hard.maxRadiusMeters, 1000);
-  const hardClamped = clamp(hardRaw, hardMinRadius, hardMaxRadius);
-  const hardFrontCap = Math.max(
+  const hardBaseRadius = positive(config.hard.baseRadiusMeters, 650);
+  const hardScaledRadius = hardBaseRadius * mapScale;
+  const hardMinRadius = nonNegative(config.hard.minRadiusMeters, 300);
+  const hardMaxRadius = Math.max(hardMinRadius, nonNegative(config.hard.maxRadiusMeters, 1100));
+  const emergencyMinimumRadius = Math.min(
     hardMinRadius,
-    currentFrontDistance - nonNegative(config.hard.frontSafetyMarginMeters, 250),
+    nonNegative(config.hard.emergencyMinimumRadiusMeters, 150),
   );
-  const hardRadius = Math.min(hardClamped, hardFrontCap);
+  const maxBaseToFirstObjectiveRatio = clamp(
+    positive(config.hard.maxBaseToFirstObjectiveRatio, 0.62),
+    0.05,
+    0.98,
+  );
 
-  const softFloor = hardRadius + nonNegative(config.soft.minExtraOverHardMeters, 200);
-  const softMapContribution = diagonalMeters * nonNegative(config.soft.mapFactor, 0.14);
-  const softObjectiveContribution = (nearest?.distanceMeters ?? 0) * nonNegative(config.soft.nearestObjectiveFactor, 0.70);
-  const softRaw = (softMapContribution + softObjectiveContribution) * baseRadiusMultiplier;
-  const softMaxRadius = nonNegative(config.soft.maxRadiusMeters, 2200);
-  const softClamped = clamp(softRaw, softFloor, Math.max(softFloor, softMaxRadius));
-  const softFrontCap = Math.max(softFloor, currentFrontDistance - nonNegative(config.soft.frontSafetyMarginMeters, 100));
-  const softRadius = Math.min(softClamped, softFrontCap);
+  let hardRadius = clamp(hardScaledRadius, hardMinRadius, hardMaxRadius);
+  let hardLimit = hardRadius === hardMaxRadius && hardScaledRadius > hardMaxRadius
+    ? "maximum-radius"
+    : hardRadius === hardMinRadius && hardScaledRadius < hardMinRadius
+      ? "minimum-radius"
+      : "map-scale";
+
+  const hardObjectiveLimit = firstObjectiveDistance != null
+    ? firstObjectiveDistance * maxBaseToFirstObjectiveRatio
+    : null;
+
+  if (hardObjectiveLimit != null && hardObjectiveLimit < hardRadius) {
+    hardRadius = Math.max(emergencyMinimumRadius, hardObjectiveLimit);
+    hardLimit = "objective-distance";
+    if (hardObjectiveLimit < emergencyMinimumRadius) {
+      warnings.push(`TEAM_${teamId}_FIRST_OBJECTIVE_INSIDE_EMERGENCY_MINIMUM`);
+    }
+  }
+  hardRadius = Math.min(hardRadius, hardMaxRadius);
+
+  const resolvedSpacing = positiveOrNull(firstObjectiveSpacing) ?? positiveOrNull(averageObjectiveSpacing);
+  const softSpacingRatio = nonNegative(config.soft.objectiveSpacingRatio, 0.20);
+  const fallbackExtension = nonNegative(config.soft.fallbackExtensionMeters, 200);
+  const softExtensionRaw = resolvedSpacing != null
+    ? resolvedSpacing * softSpacingRatio
+    : fallbackExtension;
+  const softExtension = clamp(
+    softExtensionRaw,
+    nonNegative(config.soft.minExtensionMeters, 100),
+    Math.max(
+      nonNegative(config.soft.minExtensionMeters, 100),
+      nonNegative(config.soft.maxExtensionMeters, 400),
+    ),
+  );
+  const softCandidate = hardRadius + softExtension;
+  const objectiveSafetyMargin = nonNegative(config.soft.objectiveSafetyMarginMeters, 150);
+  const softObjectiveCap = firstObjectiveDistance != null
+    ? Math.max(hardRadius, firstObjectiveDistance - objectiveSafetyMargin)
+    : Number.POSITIVE_INFINITY;
+  const softRadius = Math.min(softCandidate, softObjectiveCap);
+  const softLimit = softRadius < softCandidate
+    ? "objective-safety-margin"
+    : resolvedSpacing != null
+      ? "objective-spacing"
+      : "fallback-extension";
+
+  if (firstObjectiveDistance != null && firstObjectiveDistance <= hardRadius) {
+    warnings.push(`TEAM_${teamId}_FIRST_OBJECTIVE_OVERLAPS_HARD_ZONE`);
+  }
 
   return {
     teamId,
     main: { x: main.x, y: main.y },
+    firstObjective: firstObjective ? { id: firstObjective.id, name: firstObjective.name, x: firstObjective.x, y: firstObjective.y } : null,
+    secondObjective: secondObjective ? { id: secondObjective.id, name: secondObjective.name, x: secondObjective.x, y: secondObjective.y } : null,
+    firstObjectiveId: firstObjective?.id ?? null,
+    firstObjectiveDistance,
+    firstObjectiveSpacing,
     nearestObjectiveId: nearest?.objectiveId ?? null,
     nearestObjectiveDistance: nearest?.distanceMeters ?? null,
     objectiveDistances: distances,
@@ -144,34 +243,51 @@ function calculateBaseZone({ teamId, main, chain, front, diagonalMeters, coordin
     softRadius,
     hardRadiusWorld: hardRadius / coordinateScaleMeters,
     softRadiusWorld: softRadius / coordinateScaleMeters,
+    limitingFactor: hardLimit,
     formula: {
-      baseRadiusMultiplier,
-      hardMapContribution,
-      hardObjectiveContribution,
-      hardRaw,
-      hardClamped,
-      hardFrontCap,
-      hardLimit: resolveLimit(hardRadius, hardRaw, hardClamped, hardFrontCap),
-      softMapContribution,
-      softObjectiveContribution,
-      softRaw,
-      softClamped,
-      softFrontCap,
-      softLimit: resolveLimit(softRadius, softRaw, softClamped, softFrontCap),
+      mapScale,
+      hardBaseRadius,
+      hardScaledRadius,
+      hardMinRadius,
+      hardMaxRadius,
+      emergencyMinimumRadius,
+      maxBaseToFirstObjectiveRatio,
+      hardObjectiveLimit,
+      hardLimit,
+      resolvedSpacing,
+      softSpacingRatio,
+      fallbackExtension,
+      softExtensionRaw,
+      softExtension,
+      objectiveSafetyMargin,
+      softObjectiveCap: Number.isFinite(softObjectiveCap) ? softObjectiveCap : null,
+      softLimit,
     },
   };
 }
 
-function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, mapScale, config }) {
+function resolveAverageObjectiveSpacing(chain, coordinateScaleMeters) {
+  if (!Array.isArray(chain) || chain.length < 2) return null;
+  const spacings = [];
+  for (let index = 0; index < chain.length - 1; index += 1) {
+    const meters = distance(chain[index], chain[index + 1]) * coordinateScaleMeters;
+    if (Number.isFinite(meters) && meters > 0) spacings.push(meters);
+  }
+  if (!spacings.length) return null;
+  return spacings.reduce((sum, value) => sum + value, 0) / spacings.length;
+}
+
+function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, rawMapScale, config }) {
   const pointA = { x: pair.pointA.x, y: pair.pointA.y };
   const pointB = { x: pair.pointB.x, y: pair.pointB.y };
   const gapMeters = distance(pointA, pointB) * coordinateScaleMeters;
-  const baseRadius = gapMeters * positive(config.combat.gapFactor, 0.60);
-  const combatRadius = clamp(
-    baseRadius * mapScale,
-    positive(config.combat.minRadiusMeters, 450),
-    positive(config.combat.maxRadiusMeters, 1600),
-  );
+  const baseRadius = gapMeters * nonNegative(config.combat.gapFactor, 0.30);
+  const mapInfluence = clamp(nonNegative(config.combat.mapScaleInfluence, 0.20), 0, 1);
+  const mapModifier = 1 + ((rawMapScale - 1) * mapInfluence);
+  const scaledRadius = baseRadius * mapModifier;
+  const minRadiusMeters = nonNegative(config.combat.minRadiusMeters, 250);
+  const maxRadiusMeters = Math.max(minRadiusMeters, nonNegative(config.combat.maxRadiusMeters, 900));
+  const combatRadius = clamp(scaledRadius, minRadiusMeters, maxRadiusMeters);
   const longitudinalRadius = combatRadius;
   const lateralRadius = combatRadius * positive(config.combat.lateralFactor, 1.20);
   const longitudinalWorld = longitudinalRadius * worldUnitsPerMeter;
@@ -192,7 +308,6 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
     longitudinalRadiusMeters: longitudinalRadius,
     lateralRadiusMeters: lateralRadius,
     polygon,
-    excludeZoneIds: ["team1-hard", "team2-hard"],
   };
   return {
     zone: {
@@ -209,11 +324,18 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
       pointB,
       gapMeters,
       baseRadius,
-      mapModifier: mapScale,
+      rawMapScale,
+      mapInfluence,
+      mapModifier,
+      scaledRadius,
+      limitingFactor: combatRadius <= minRadiusMeters && scaledRadius < minRadiusMeters
+        ? "minimum-radius"
+        : combatRadius >= maxRadiusMeters && scaledRadius > maxRadiusMeters
+          ? "maximum-radius"
+          : "front-gap",
       longitudinalRadius,
       lateralRadius,
       polygon,
-      hardExclusionZoneIds: geometry.excludeZoneIds,
     },
   };
 }
@@ -261,14 +383,12 @@ function positive(value, fallback) {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
 }
 
+function positiveOrNull(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
 function nonNegative(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric >= 0 ? numeric : fallback;
-}
-
-function resolveLimit(radius, raw, clamped, frontCap) {
-  if (radius === frontCap && frontCap < clamped) return "front-safety-cap";
-  if (clamped < raw) return "maximum-radius";
-  if (clamped > raw) return "minimum-radius";
-  return "formula";
 }

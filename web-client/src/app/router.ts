@@ -65,8 +65,22 @@ export const router = createRouter({
       meta: {
         title: "开局时长提醒",
         refreshPolicy: "polling",
-        layoutMode: "workspace",
+        layoutMode: "document",
         contentPadding: "none",
+        pagePreset: "simple-plugin",
+        superAdminOnly: true,
+      },
+    },
+    {
+      path: "/plugins/steam-playtime-publicity-reminder",
+      name: "steam-playtime-publicity-reminder",
+      component: () => import("../pages/SteamPlaytimePublicityReminderPage.vue"),
+      meta: {
+        title: "督促时长公开",
+        refreshPolicy: "polling",
+        layoutMode: "document",
+        contentPadding: "none",
+        pagePreset: "simple-plugin",
         superAdminOnly: true,
       },
     },
