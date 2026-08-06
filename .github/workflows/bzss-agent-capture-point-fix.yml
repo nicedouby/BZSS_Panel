@@ -1,17 +1,15 @@
 name: Apply capture point drag fix
 
 on:
-  push:
-    branches: [NewTest]
-    paths:
-      - .github/workflows/bzss-agent-capture-point-fix.yml
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.issue.title == 'BZSS Agent Capture Point Fix Trigger'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
