@@ -8,9 +8,30 @@
   height: calc(58px * var(--capture-marker-scale, 1));
 }
 
+/*
+ * Hard interaction rule:
+ * hovering, pressing, focusing, or merely acquiring pointer capture must never
+ * move or resize the real capture-point flag. The flag stays pixel-stable at
+ * its map coordinate until pointer movement passes the drag threshold and the
+ * separate preview is created.
+ */
+.map-viewport.is-capture-point-editing .capture-zone-marker .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker:hover .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker:active .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker:focus .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker:focus-visible .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-point-dragging .capture-zone-flag,
+.map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-zone-flag {
+  transform: scale(var(--capture-marker-scale, 1)) !important;
+  transform-origin: 50% 50% !important;
+  transition: filter 120ms ease-out !important;
+}
+
+/* Pointer-down alone is not a drag. Keep the source fully unchanged while the
+ * pointer is still inside the movement threshold. */
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-zone-flag,
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-source .capture-point-index {
-  opacity: 0.38;
+  opacity: 1 !important;
 }
 
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview {
@@ -19,8 +40,11 @@
   z-index: 43;
 }
 
+/* Only the independent preview may visually indicate that an actual drag has
+ * started. It never participates in hit testing. */
 .map-viewport.is-capture-point-editing .capture-zone-marker.is-runtime-capture-drag-preview .capture-zone-flag {
   opacity: 1;
+  transform: scale(var(--capture-marker-scale, 1)) !important;
   filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.95)) brightness(1.18);
 }
 
