@@ -192,6 +192,8 @@
    */
   left: 29px;
   top: 29px;
+  margin-left: -17px;
+  margin-top: -11px;
   transition: transform 120ms ease-out, filter 120ms ease-out;
 }
 .map-viewport.is-capture-point-editing .capture-zone-marker { cursor: grab; }
