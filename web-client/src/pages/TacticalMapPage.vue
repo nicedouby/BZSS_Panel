@@ -568,6 +568,16 @@
         :has-points="measurePoints.length > 0"
         :measure-active="measureMode"
         :measure-count="measurePoints.length"
+        :filter-alive-only="filterAliveOnly"
+        :show-player-names="showPlayerNames"
+        :show-player-coords="showPlayerCoords"
+        :show-fobs="showFobs"
+        :show-capture-zones="showCaptureZones"
+        :show-grid="showGrid"
+        :can-edit-capture-points="canEditCapturePoints"
+        :capture-point-edit-mode="capturePointEditMode"
+        :capture-point-command-pending="capturePointCommandPending"
+        :has-combat-hotspot="combatHotspot != null"
         @close="mapCommandMenu = null"
         @start-measure="onStartMeasure(mapCommandMenu)"
         @add-point="onAddPoint(mapCommandMenu)"
@@ -575,6 +585,10 @@
         @clear-measure="onClearMeasure"
         @copy-coords="onCopyCoords(mapCommandMenu)"
         @focus-here="onFocusHere(mapCommandMenu)"
+        @toggle-capture-point-edit="toggleCapturePointEditMode"
+        @calculate-hotspot="calculateCombatHotspot"
+        @clear-hotspot="clearCombatHotspot"
+        @toggle-layer="onToggleLayer"
       />
 
       <header class="tactical-command-bar">
@@ -582,11 +596,6 @@
           <span class="tactical-command-bar__eyebrow">TACTICAL OPERATIONS</span>
           <strong>{{ serverMapName || detectedMapName || "正在识别地图" }}</strong>
           <span>{{ matchPhase || statusText || "实时战场态势" }} · 地图 {{ activeMapSizeText }}</span>
-        </div>
-        <div class="tactical-command-bar__tickets" aria-label="双方票数">
-          <span class="tactical-ticket tactical-ticket--team1" :style="getPerspectiveStyle(1)"><b>TEAM 1</b><strong>{{ tickets.team1 }}</strong></span>
-          <span class="tactical-ticket__vs">VS</span>
-          <span class="tactical-ticket tactical-ticket--team2" :style="getPerspectiveStyle(2)"><b>TEAM 2</b><strong>{{ tickets.team2 }}</strong></span>
         </div>
         <div class="tactical-command-bar__status">
           <span class="tactical-live-status"><i></i>{{ tacticalMapViewerCount === null ? "同步查看状态" : `${tacticalMapViewerCount} 人查看` }}</span>
@@ -601,27 +610,11 @@
         </div>
       </header>
 
-      <TacticalMapToolbar
-        v-model:show-grid="showGrid"
-        v-model:show-capture-zones="showCaptureZones"
-        v-model:show-fobs="showFobs"
-        v-model:show-player-names="showPlayerNames"
-        v-model:show-player-coords="showPlayerCoords"
-        v-model:filter-alive-only="filterAliveOnly"
-        :can-edit-capture-points="canEditCapturePoints"
-        :capture-point-edit-mode="capturePointEditMode"
-        :capture-point-command-pending="capturePointCommandPending"
-        :measure-mode="measureMode"
-        :has-measure-points="measurePoints.length > 0"
-        :has-combat-hotspot="combatHotspot != null"
-        @zoom-in="zoomIn"
-        @zoom-out="zoomOut"
-        @reset-view="resetView"
-        @toggle-capture-point-edit="toggleCapturePointEditMode"
-        @toggle-measure="toggleMeasureMode"
-        @clear-measure="clearMeasurePoints"
-        @calculate-hotspot="calculateCombatHotspot"
-        @clear-hotspot="clearCombatHotspot"
+      <ScoreCircleDashboard
+        :tickets="tickets"
+        :can-edit="canEditTickets"
+        :server-id="currentServerId"
+        @tickets-updated="serverStore.markStale"
       />
 
       <div
@@ -790,7 +783,7 @@ import {
   type TacticalMapConfig,
 } from "../shared/tactical-map-data";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
-import TacticalMapToolbar from "../components/tactical-map/TacticalMapToolbar.vue";
+import ScoreCircleDashboard from "../components/tactical-map/ScoreCircleDashboard.vue";
 import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
 import TacticalMapSidebar from "../components/tactical-map/TacticalMapSidebar.vue";
@@ -1181,6 +1174,9 @@ const canManagePressureSettings = computed(() => Boolean(
 ));
 const canEditCapturePoints = computed(() => Boolean(
   authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
+));
+const canEditTickets = computed(() => Boolean(
+  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("rcon.settickets")
 ));
 
 const snapshot = computed(() => {
@@ -3206,6 +3202,15 @@ function toggleCapturePointEditMode() {
   } else {
     setCapturePointFeedback("info", "改点模式：按住点位旗帜拖拽，松开后提交", 60_000);
   }
+}
+
+function onToggleLayer(layer: "alive" | "names" | "coords" | "fobs" | "zones" | "grid") {
+  if (layer === "alive") filterAliveOnly.value = !filterAliveOnly.value;
+  else if (layer === "names") showPlayerNames.value = !showPlayerNames.value;
+  else if (layer === "coords") showPlayerCoords.value = !showPlayerCoords.value;
+  else if (layer === "fobs") showFobs.value = !showFobs.value;
+  else if (layer === "zones") showCaptureZones.value = !showCaptureZones.value;
+  else if (layer === "grid") showGrid.value = !showGrid.value;
 }
 
 onBeforeUnmount(() => {
