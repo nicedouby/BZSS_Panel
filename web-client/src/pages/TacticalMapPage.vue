@@ -31,6 +31,7 @@
           @mousemove="onMapMousemove"
           @click="onMapClick"
           @contextmenu.prevent="handleMapRightClick"
+          @pointerdown.right.prevent="handleMapRightClick"
         >
         <!-- Tiled Map Renderer (replaces single <img> for memory-efficient progressive loading) -->
         <div class="tiled-map-wrapper">
@@ -2226,11 +2227,13 @@ function setMeasurePoint(menu: { mapX: number; mapY: number; gameX: number; game
 }
 
 function onStartMeasure(menu: any) {
+  measureMode.value = true;
   setMeasurePoint(menu, true);
   logCombatEvent(`开始测距。起点: [X:${Math.round(menu.gameX)}, Y:${Math.round(menu.gameY)}]`, "system");
 }
 
 function onAddPoint(menu: any) {
+  measureMode.value = true;
   setMeasurePoint(menu, false);
   logCombatEvent(`添加测距点: [X:${Math.round(menu.gameX)}, Y:${Math.round(menu.gameY)}]`, "system");
 }
