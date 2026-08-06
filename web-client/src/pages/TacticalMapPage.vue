@@ -3054,7 +3054,10 @@ function updateCapturePointDrag(clientX: number, clientY: number) {
   };
 }
 
-function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
+function startCapturePointDrag(_zone: CaptureZoneMarker, _event: PointerEvent) {
+  // Dragging is temporarily disabled
+  return;
+  /*
   if (!capturePointEditMode.value || capturePointCommandPending.value || event.button !== 0) return;
   if (!mapRef.value) return;
   const gameX = Number(zone.gameX);
@@ -3111,6 +3114,7 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
   window.addEventListener("pointerup", finishCapturePointDrag, true);
   window.addEventListener("pointercancel", cancelCapturePointDrag, true);
   window.addEventListener("blur", cancelCapturePointDrag);
+  */
 }
 
 function onCapturePointDrag(event: PointerEvent) {
