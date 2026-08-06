@@ -36,7 +36,8 @@ import AppPage from "../common/AppPage.vue";
 import PageHeader from "../common/PageHeader.vue";
 import AlertBanner from "../ui/AlertBanner.vue";
 import AppButton from "../ui/AppButton.vue";
-import StatusBadge, { type StatusTone } from "../ui/StatusBadge.vue";
+import StatusBadge from "../ui/StatusBadge.vue";
+import type { StatusTone } from "../ui/StatusBadge.vue";
 
 withDefaults(defineProps<{
   title: string;
