@@ -1,4 +1,6 @@
 import { inject, provide, type Ref } from "vue";
+import "../styles/tactical-capture-point-drag.css";
+import { ensureTacticalCapturePointDragController } from "./tacticalCapturePointDrag";
 
 export interface TacticalMapViewportState {
   zoom: Ref<number>;
@@ -9,6 +11,7 @@ export interface TacticalMapViewportState {
 const tacticalMapViewportKey = Symbol("tacticalMapViewport");
 
 export function provideTacticalMapViewport(state: TacticalMapViewportState) {
+  ensureTacticalCapturePointDragController();
   provide(tacticalMapViewportKey, state);
 }
 
