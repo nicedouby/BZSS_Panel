@@ -170,20 +170,14 @@ export class BzssCoreCommandService {
       return invalid("InvalidDragCapturePointParameter", "DragCapturePoint requires point name, X, and Y.");
     }
 
-    const pointIdentity = match[1].trim();
+    const pointName = match[1].trim();
     const xText = match[2].trim();
     const yText = match[3].trim();
-    if (!pointIdentity || /[\u0000-\u001f\u007f]/.test(pointIdentity)) {
+    if (!pointName || /[\u0000-\u001f\u007f]/.test(pointName)) {
       return invalid("InvalidDragCapturePointName", "DragCapturePoint point name must be a non-empty single-line name.");
     }
-
-    // Keep the previous positive-integer form as a compatibility input for
-    // older scripts. New tactical-map clients send the capture-point name.
-    if (/^\d+$/.test(pointIdentity)) {
-      const pointIndex = Number(pointIdentity);
-      if (!Number.isSafeInteger(pointIndex) || pointIndex < 1) {
-        return invalid("InvalidDragCapturePointIndex", "Legacy DragCapturePoint point index must be a positive integer.");
-      }
+    if (/^\d+$/.test(pointName)) {
+      return invalid("InvalidDragCapturePointName", "DragCapturePoint no longer accepts a numeric point index; use the capture-point name.");
     }
 
     if (!xText || !yText || !Number.isFinite(Number(xText)) || !Number.isFinite(Number(yText))) {
