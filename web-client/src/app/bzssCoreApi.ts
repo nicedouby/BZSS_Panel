@@ -311,7 +311,30 @@ export async function executeBzssCoreCommand(input: {
   batch?: string[];
   raw?: boolean;
 }) {
-  return apiPost<BzssCoreExecuteResult>("/api/bzss-core/execute", input, {}, { timeoutMs: 20_000 });
+  let payload = input;
+  const directive = String(input?.directive ?? "").trim();
+  const parameter = String(input?.parameter ?? "").trim();
+  const command = String(input?.command ?? "").trim();
+
+  // Historical player-detail builds used Cheer:#<ListPlayersID> as a kill
+  // command. Rewrite that signature before it ever reaches the HTTP API.
+  if (directive === "Cheer" && /^#\d+$/.test(parameter)) {
+    payload = {
+      ...input,
+      directive: "Kill",
+      parameter: parameter.slice(1),
+    };
+  } else {
+    const legacyCommand = command.match(/^Cheer:#(\d+)$/);
+    if (legacyCommand) {
+      payload = {
+        ...input,
+        command: `Kill:${legacyCommand[1]}`,
+      };
+    }
+  }
+
+  return apiPost<BzssCoreExecuteResult>("/api/bzss-core/execute", payload, {}, { timeoutMs: 20_000 });
 }
 
 export async function fetchBzssCorePlayerInfo(input: { name?: string }) {
