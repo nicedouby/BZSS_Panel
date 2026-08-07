@@ -163,15 +163,30 @@ export class BzssCoreCommandService {
   }
 
   validateDragCapturePointParameter(parameter) {
-    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
-    if (parts.length !== 3) {
-      return invalid("InvalidDragCapturePointParameter", "DragCapturePoint requires point index, X, and Y.");
+    const text = String(parameter ?? "").trim();
+    // Match from the right so capture-point names may contain spaces and even commas.
+    const match = text.match(/^(.+),([^,]+),([^,]+)$/);
+    if (!match) {
+      return invalid("InvalidDragCapturePointParameter", "DragCapturePoint requires point name, X, and Y.");
     }
-    const pointIndex = Number(parts[0]);
-    if (!/^\d+$/.test(parts[0]) || !Number.isSafeInteger(pointIndex) || pointIndex < 1) {
-      return invalid("InvalidDragCapturePointIndex", "DragCapturePoint point index must be a positive integer.");
+
+    const pointIdentity = match[1].trim();
+    const xText = match[2].trim();
+    const yText = match[3].trim();
+    if (!pointIdentity || /[\u0000-\u001f\u007f]/.test(pointIdentity)) {
+      return invalid("InvalidDragCapturePointName", "DragCapturePoint point name must be a non-empty single-line name.");
     }
-    if (!parts[1] || !parts[2] || !Number.isFinite(Number(parts[1])) || !Number.isFinite(Number(parts[2]))) {
+
+    // Keep the previous positive-integer form as a compatibility input for
+    // older scripts. New tactical-map clients send the capture-point name.
+    if (/^\d+$/.test(pointIdentity)) {
+      const pointIndex = Number(pointIdentity);
+      if (!Number.isSafeInteger(pointIndex) || pointIndex < 1) {
+        return invalid("InvalidDragCapturePointIndex", "Legacy DragCapturePoint point index must be a positive integer.");
+      }
+    }
+
+    if (!xText || !yText || !Number.isFinite(Number(xText)) || !Number.isFinite(Number(yText))) {
       return invalid("InvalidDragCapturePointCoordinates", "DragCapturePoint X and Y must be finite numbers.");
     }
     return { ok: true };
