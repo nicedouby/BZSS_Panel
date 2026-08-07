@@ -1,4 +1,5 @@
 import { inject, provide, type Ref } from "vue";
+import "../styles/tactical-capture-point-drag.css";
 
 export interface TacticalMapViewportState {
   zoom: Ref<number>;
