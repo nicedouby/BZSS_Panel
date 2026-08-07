@@ -89,17 +89,30 @@ function candidatePosition(candidate: any) {
 
 function collectPlayerCandidates() {
   const output: any[] = [];
-  const seen = new Set<any>();
+  const seenObjects = new Set<any>();
+  const seenIdentity = new Set<string>();
+
   const push = (candidate: any) => {
-    if (!candidate || typeof candidate !== "object" || seen.has(candidate)) return;
-    seen.add(candidate);
+    if (!candidate || typeof candidate !== "object" || seenObjects.has(candidate)) return;
+    seenObjects.add(candidate);
+
+    const id = candidateListPlayersId(candidate);
+    const name = normalizePlayerName(candidateName(candidate));
+    const identityKey = id ? `id:${id}` : name ? `name:${name}` : "";
+    if (identityKey && seenIdentity.has(identityKey)) return;
+    if (identityKey) seenIdentity.add(identityKey);
     output.push(candidate);
   };
 
   try {
     const tacticalStateStore = useTacticalStateStore();
-    const tacticalPlayers = Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : [];
-    tacticalPlayers.forEach(push);
+    const sources = [
+      tacticalStateStore.players,
+      (tacticalStateStore.snapshot as any)?.players,
+    ];
+    for (const source of sources) {
+      if (Array.isArray(source)) source.forEach(push);
+    }
   } catch {
     // Shared selection is auxiliary. It must never break the map's native click path.
   }
@@ -111,6 +124,7 @@ function collectPlayerCandidates() {
       snapshot?.matchState?.players?.list,
       snapshot?.players,
       snapshot?.match?.players?.list,
+      snapshot?.webStatus?.players,
     ];
     for (const source of sources) {
       if (Array.isArray(source)) source.forEach(push);
@@ -124,49 +138,86 @@ function collectPlayerCandidates() {
 
 function getMarkerPlayerName(marker: HTMLElement) {
   return String(
-    marker.querySelector<HTMLElement>(".player-name-tag")?.textContent
-    ?? marker.getAttribute("data-player-name")
+    marker.getAttribute("data-player-name")
+    ?? marker.querySelector<HTMLElement>(".player-name-tag")?.textContent
     ?? "",
   ).trim();
+}
+
+function getPlayerInfoPanelName(scope: ParentNode) {
+  return String(
+    scope.querySelector<HTMLElement>(".player-info-panel .player-name")?.textContent
+    ?? "",
+  ).trim();
+}
+
+function selectPlayerByLabel(label: string) {
+  const normalized = normalizePlayerName(label);
+  if (!normalized) return false;
+
+  const matches = collectPlayerCandidates().filter(
+    (candidate) => normalizePlayerName(candidateName(candidate)) === normalized,
+  );
+
+  const ids = [...new Set(matches.map(candidateListPlayersId).filter((id): id is string => Boolean(id)))];
+  // Duplicate names are legal. Never guess between multiple live ListPlayers IDs.
+  const listPlayersId = ids.length === 1 ? ids[0] : null;
+  const preferred = matches.find((candidate) => candidateListPlayersId(candidate) === listPlayersId)
+    ?? matches[0]
+    ?? null;
+  const position = candidatePosition(preferred);
+
+  setTacticalMapCurrentSelection({
+    type: "player",
+    key: String(
+      preferred?.identity?.key
+      ?? (listPlayersId ? `player:${listPlayersId}` : `name:${normalized}`),
+    ),
+    label: candidateName(preferred) || label,
+    listPlayersId,
+    teamId: candidateTeamId(preferred),
+    gameX: position?.x ?? null,
+    gameY: position?.y ?? null,
+    selectedAt: Date.now(),
+  });
+  return true;
 }
 
 function selectPlayerMarker(marker: HTMLElement) {
   try {
     const label = getMarkerPlayerName(marker);
-    const normalized = normalizePlayerName(label);
-    if (!normalized) {
-      clearTacticalMapCurrentSelection();
-      return;
-    }
+    if (label && selectPlayerByLabel(label)) return true;
 
-    const matches = collectPlayerCandidates().filter(
-      (candidate) => normalizePlayerName(candidateName(candidate)) === normalized,
-    );
-
-    const ids = [...new Set(matches.map(candidateListPlayersId).filter((id): id is string => Boolean(id)))];
-    // Duplicate names are allowed in Squad. If they resolve to different ListPlayers IDs,
-    // do not guess: keep the player selected but disable Kill.
-    const listPlayersId = ids.length === 1 ? ids[0] : null;
-    const preferred = matches.find((candidate) => candidateListPlayersId(candidate) === listPlayersId)
-      ?? matches[0]
-      ?? null;
-    const position = candidatePosition(preferred);
-
-    setTacticalMapCurrentSelection({
-      type: "player",
-      key: String(
-        preferred?.identity?.key
-        ?? (listPlayersId ? `player:${listPlayersId}` : `name:${normalized}`),
-      ),
-      label: candidateName(preferred) || label,
-      listPlayersId,
-      teamId: candidateTeamId(preferred),
-      gameX: position?.x ?? null,
-      gameY: position?.y ?? null,
-      selectedAt: Date.now(),
-    });
+    // Player names may be hidden. A left-click still opens PlayerInfoPanel, whose
+    // header always contains the selected player's name.
+    const viewport = marker.closest<HTMLElement>(".map-viewport");
+    const panelLabel = viewport ? getPlayerInfoPanelName(viewport) : "";
+    return panelLabel ? selectPlayerByLabel(panelLabel) : false;
   } catch {
     // Never let contextual-selection bookkeeping interfere with the real player click.
+    return false;
+  }
+}
+
+function selectVisualCurrentPlayer(map: HTMLElement) {
+  try {
+    const viewport = map.closest<HTMLElement>(".map-viewport") ?? map.parentElement;
+
+    // The player info panel is the strongest visual signal because it is created
+    // by TacticalMapPage only for its selectedPlayerKey.
+    if (viewport) {
+      const panelLabel = getPlayerInfoPanelName(viewport);
+      if (panelLabel && selectPlayerByLabel(panelLabel)) return true;
+    }
+
+    // Fallback for selection paths that focus a marker without opening the info panel.
+    // A focused squad can mark several players, so accept only one focused marker.
+    const focusedMarkers = [...map.querySelectorAll<HTMLElement>(".player-marker.mode-tactical.is-focused")];
+    if (focusedMarkers.length === 1 && selectPlayerMarker(focusedMarkers[0])) return true;
+
+    return false;
+  } catch {
+    return false;
   }
 }
 
@@ -205,7 +256,7 @@ export function ensureTacticalMapSelectionController() {
     const playerMarker = target.closest<HTMLElement>(".player-marker.mode-tactical");
     if (playerMarker) {
       // Capture-phase observation only. Do not prevent/stop the event: TacticalMapPage
-      // must remain the authority for selectedPlayerKey and player info panels.
+      // remains the authority for selectedPlayerKey and the player info panel.
       selectPlayerMarker(playerMarker);
       return;
     }
@@ -222,13 +273,39 @@ export function ensureTacticalMapSelectionController() {
     clearTacticalMapCurrentSelection();
   }, true);
 
+  // TacticalMapPage opens the generic wheel on right-button pointerdown, before
+  // the browser emits contextmenu. Synchronize the visual selection here so the
+  // first render of MapContextMenu already receives the player context.
+  document.addEventListener("pointerdown", (event) => {
+    if (!(event instanceof PointerEvent) || event.button !== 2 || !(event.target instanceof Element)) return;
+    const target = event.target;
+    const playerMarker = target.closest<HTMLElement>(".player-marker.mode-tactical");
+    if (playerMarker) {
+      selectPlayerMarker(playerMarker);
+      return;
+    }
+
+    const map = target.closest<HTMLElement>(".map-transform-container");
+    if (!map) return;
+    selectVisualCurrentPlayer(map);
+  }, true);
+
   document.addEventListener("contextmenu", (event) => {
     if (!(event instanceof MouseEvent) || !(event.target instanceof Element)) return;
-    const playerMarker = event.target.closest<HTMLElement>(".player-marker.mode-tactical");
-    if (!playerMarker) return;
-    selectPlayerMarker(playerMarker);
-    // Tactical mode uses the same generic radial wheel for map and player context.
-    redirectPlayerContextMenu(event, playerMarker);
+    const target = event.target;
+    const playerMarker = target.closest<HTMLElement>(".player-marker.mode-tactical");
+    if (playerMarker) {
+      selectPlayerMarker(playerMarker);
+      // Tactical mode uses the same generic radial wheel for map and player context.
+      redirectPlayerContextMenu(event, playerMarker);
+      return;
+    }
+
+    const map = target.closest<HTMLElement>(".map-transform-container");
+    if (!map) return;
+    // Reconcile once more at contextmenu time in case the pointerdown path was
+    // skipped by the browser/webview.
+    selectVisualCurrentPlayer(map);
   }, true);
 }
 
