@@ -52,6 +52,21 @@
         </span>
       </li>
       <li
+        class="menu-item danger-action"
+        :class="{ disabled: !canManage || !rconPlayerId || killPending }"
+        @click="handleAction('kill')"
+      >
+        <span class="menu-icon">☠</span>
+        <span class="menu-label">
+          {{ killPending ? "正在击杀..." : "立即击杀 (Kill)" }}
+          <span v-if="killError" class="badge error-badge">{{ killError }}</span>
+          <span v-else-if="!rconPlayer" class="badge">未关联对局</span>
+          <span v-else-if="!rconPlayerId" class="badge">无 ListPlayers ID</span>
+          <span v-else-if="!canManage" class="badge">无权限</span>
+          <span v-else class="badge">ID {{ rconPlayerId }}</span>
+        </span>
+      </li>
+      <li
         class="menu-item"
         :class="{ disabled: !canManage || !rconPlayer }"
         @click="handleAction('kick')"
@@ -82,6 +97,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
 import type { BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
+import { killPlayer } from "../../app/squadManagementApi";
 
 const props = defineProps<{
   player: BzssCoreTrackedPlayerInfo;
@@ -108,6 +124,8 @@ const emit = defineEmits<{
 const menuRef = ref<HTMLElement | null>(null);
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
+const killPending = ref(false);
+const killError = ref("");
 
 const menuStyle = computed(() => {
   return {
@@ -124,6 +142,11 @@ const displayPlayerName = computed(() => {
     || "Unknown Player",
   ).trim() || "Unknown Player";
 });
+
+const rconPlayerId = computed(() => normalizeListPlayersId(
+  props.rconPlayer?.playerId
+  ?? props.rconPlayer?.playerID,
+));
 
 onMounted(() => {
   if (menuRef.value) {
@@ -148,15 +171,70 @@ onMounted(() => {
   }
 });
 
-function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-measure" | "warn" | "kick" | "force-team") {
+function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-measure" | "warn" | "kill" | "kick" | "force-team") {
   if (event === "open-profile") emit("open-profile");
   else if (event === "focus") emit("focus");
   else if (event === "copy-coords") emit("copy-coords");
   else if (event === "start-measure") emit("start-measure");
   else if (event === "warn" && props.canManage && props.rconPlayer) emit("warn");
+  else if (event === "kill") {
+    if (props.canManage && props.rconPlayer && rconPlayerId.value && !killPending.value) {
+      void executeKill();
+    }
+    return;
+  }
   else if (event === "kick" && props.canManage && props.rconPlayer) emit("kick");
   else if (event === "force-team" && props.canManage && props.rconPlayer) emit("force-team");
   emit("close");
+}
+
+async function executeKill() {
+  const targetPlayerId = rconPlayerId.value;
+  if (!targetPlayerId || killPending.value) return;
+
+  killPending.value = true;
+  killError.value = "";
+
+  try {
+    const result = await killPlayer({
+      targetPlayerId,
+      targetName: String(props.rconPlayer?.name ?? displayPlayerName.value).trim(),
+      targetSteamId: String(props.rconPlayer?.steamId ?? props.rconPlayer?.steamID ?? "").trim() || undefined,
+      targetEosId: String(props.rconPlayer?.eosId ?? props.rconPlayer?.eosID ?? "").trim() || undefined,
+      reason: "tactical_map_player_command",
+      source: "web.tacticalMap.playerActionMenu",
+      system: false,
+    });
+
+    if (!result?.success) {
+      killError.value = formatKillError(result);
+      return;
+    }
+
+    emit("close");
+  } catch (error) {
+    killError.value = error instanceof Error ? error.message : "Kill 请求失败";
+  } finally {
+    killPending.value = false;
+  }
+}
+
+function normalizeListPlayersId(value: unknown): string {
+  const text = String(value ?? "").trim();
+  return /^\d+$/.test(text) ? text : "";
+}
+
+function formatKillError(result: any): string {
+  const raw = String(
+    result?.message
+    ?? result?.error
+    ?? result?.skipReason
+    ?? "Kill 失败",
+  ).trim();
+  if (raw === "MissingListPlayersPlayerId" || raw === "missing_list_players_player_id") {
+    return "无 ListPlayers ID";
+  }
+  return raw || "Kill 失败";
 }
 
 const linkConfidenceText = computed(() => {
@@ -269,6 +347,20 @@ const linkConfidenceText = computed(() => {
   box-shadow: 0 0 8px #00e5ff;
 }
 
+.menu-item.danger-action {
+  color: #fecaca;
+}
+
+.menu-item.danger-action:hover:not(.disabled) {
+  background: rgba(239, 68, 68, 0.16);
+  color: #ffffff;
+}
+
+.menu-item.danger-action:hover:not(.disabled)::before {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
 .menu-item.disabled {
   color: #64748b;
   cursor: not-allowed;
@@ -300,6 +392,16 @@ const linkConfidenceText = computed(() => {
   margin-left: 4px;
 }
 
+.error-badge {
+  max-width: 92px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(127, 29, 29, 0.28);
+}
+
 .menu-item.disabled .badge {
   background: rgba(255, 255, 255, 0.03);
   border-color: rgba(255, 255, 255, 0.05);
@@ -319,6 +421,15 @@ const linkConfidenceText = computed(() => {
   background: rgba(55, 200, 255, 0.12);
 }
 
+.tone-friendly .menu-item.danger-action:hover:not(.disabled)::before {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.tone-friendly .menu-item.danger-action:hover:not(.disabled) {
+  background: rgba(239, 68, 68, 0.16);
+}
+
 .tone-friendly .header-title {
   color: rgba(55, 200, 255, 0.7);
 }
@@ -334,6 +445,15 @@ const linkConfidenceText = computed(() => {
 
 .tone-enemy .menu-item:hover:not(.disabled) {
   background: rgba(255, 91, 110, 0.12);
+}
+
+.tone-enemy .menu-item.danger-action:hover:not(.disabled)::before {
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+.tone-enemy .menu-item.danger-action:hover:not(.disabled) {
+  background: rgba(239, 68, 68, 0.16);
 }
 
 .tone-enemy .header-title {
