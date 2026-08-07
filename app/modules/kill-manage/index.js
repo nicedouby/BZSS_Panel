@@ -33,21 +33,37 @@ export function createKillManageModule({ core, modules, config, logger }) {
   };
 
   async function killPlayer(input = {}) {
+    const serverId = String(input.serverId ?? "").trim();
     const targetName = String(input.targetName ?? "").trim();
     const targetSteamId = String(input.targetSteamId ?? "").trim();
+    const targetEosId = String(input.targetEosId ?? "").trim();
     const reason = String(input.reason ?? "").trim();
     const operatorId = String(input.operatorId ?? "").trim();
     const operatorName = String(input.operatorName ?? "").trim();
     const source = String(input.source ?? "module.killManage").trim() || "module.killManage";
     const createdAt = Date.now();
 
-    const command = buildKillCommand(targetName, targetSteamId);
+    const resolvedTarget = resolveListPlayersTarget({
+      serverId,
+      targetPlayerId: input.targetPlayerId ?? input.playerId,
+      targetName,
+      targetSteamId,
+      targetEosId,
+    });
+    const targetPlayerId = resolvedTarget?.playerID ?? "";
+    const targetResolution = resolvedTarget?.resolution ?? "";
+    const command = buildKillCommand(targetPlayerId);
+
     if (!enabled) {
       return storeAndReturn({
         success: false,
         command,
+        serverId,
+        targetPlayerId,
+        targetResolution,
         targetName,
         targetSteamId,
+        targetEosId,
         reason,
         operatorId,
         operatorName,
@@ -59,20 +75,24 @@ export function createKillManageModule({ core, modules, config, logger }) {
       });
     }
 
-    if (!targetName && !targetSteamId) {
+    if (!targetPlayerId) {
       return storeAndReturn({
         success: false,
         command,
+        serverId,
+        targetPlayerId,
+        targetResolution,
         targetName,
         targetSteamId,
+        targetEosId,
         reason,
         operatorId,
         operatorName,
         source,
-        error: "MissingTarget",
+        error: "MissingListPlayersPlayerId",
         createdAt,
         skipped: true,
-        skipReason: "missing_target",
+        skipReason: "missing_list_players_player_id",
       });
     }
 
@@ -89,8 +109,12 @@ export function createKillManageModule({ core, modules, config, logger }) {
       return storeAndReturn({
         success: Boolean(result?.success),
         command,
+        serverId,
+        targetPlayerId,
+        targetResolution,
         targetName,
         targetSteamId,
+        targetEosId,
         reason,
         operatorId,
         operatorName,
@@ -102,8 +126,12 @@ export function createKillManageModule({ core, modules, config, logger }) {
       return storeAndReturn({
         success: false,
         command,
+        serverId,
+        targetPlayerId,
+        targetResolution,
         targetName,
         targetSteamId,
+        targetEosId,
         reason,
         operatorId,
         operatorName,
@@ -112,6 +140,65 @@ export function createKillManageModule({ core, modules, config, logger }) {
         createdAt,
       });
     }
+  }
+
+  function resolveListPlayersTarget({
+    serverId = "",
+    targetPlayerId = null,
+    targetName = "",
+    targetSteamId = "",
+    targetEosId = "",
+  } = {}) {
+    const explicitPlayerID = normalizePlayerID(targetPlayerId);
+    if (explicitPlayerID) {
+      return {
+        playerID: explicitPlayerID,
+        resolution: "explicit_list_players_id",
+      };
+    }
+
+    const playerState = modules?.playerState;
+    if (!playerState) return null;
+
+    const identity = {
+      name: targetName,
+      steamID: targetSteamId,
+      eosID: targetEosId,
+    };
+
+    if (serverId && typeof playerState.findPlayer === "function") {
+      const player = playerState.findPlayer(serverId, identity);
+      const playerID = normalizePlayerID(player?.playerID);
+      if (playerID) {
+        return {
+          playerID,
+          resolution: "player_state_list_players_snapshot",
+        };
+      }
+    }
+
+    if (typeof playerState.getState !== "function" || typeof playerState.findPlayer !== "function") {
+      return null;
+    }
+
+    const state = playerState.getState();
+    const byServer = state?.byServer && typeof state.byServer === "object"
+      ? state.byServer
+      : {};
+    const candidates = [];
+
+    for (const candidateServerId of Object.keys(byServer)) {
+      const player = playerState.findPlayer(candidateServerId, identity);
+      const playerID = normalizePlayerID(player?.playerID);
+      if (!playerID) continue;
+      candidates.push({
+        playerID,
+        resolution: "player_state_list_players_snapshot",
+      });
+    }
+
+    if (candidates.length === 1) return candidates[0];
+    return null;
   }
 
   function storeAndReturn(record) {
@@ -124,9 +211,9 @@ export function createKillManageModule({ core, modules, config, logger }) {
       id: "module.killManage",
       name: "RCON 强制击杀",
       kind: "module",
-      version: "1.0.0",
+      version: "1.1.0",
       hidden: true,
-      description: "管理端强制击杀入口，仅封装 AdminKill 兼容命令与执行记录，不参与战斗事件解析。",
+      description: "管理端强制击杀入口。AdminKill 只使用 ListPlayers 返回的玩家 ID；Steam/EOS/名字仅用于定位当前玩家。",
     },
     apiName: "killManage",
     api,
@@ -173,8 +260,12 @@ class KillManageMemoryStore {
       skipReason: String(record?.skipReason ?? ""),
       error: String(record?.error ?? ""),
       command: String(record?.command ?? ""),
+      serverId: String(record?.serverId ?? ""),
+      targetPlayerId: String(record?.targetPlayerId ?? ""),
+      targetResolution: String(record?.targetResolution ?? ""),
       targetName: String(record?.targetName ?? ""),
       targetSteamId: String(record?.targetSteamId ?? ""),
+      targetEosId: String(record?.targetEosId ?? ""),
       reason: String(record?.reason ?? ""),
       operatorId: String(record?.operatorId ?? ""),
       operatorName: String(record?.operatorName ?? ""),
@@ -206,13 +297,15 @@ class KillManageMemoryStore {
   }
 }
 
-function buildKillCommand(targetName, targetSteamId) {
-  const target = targetName || targetSteamId || "";
-  return `AdminKill "${escapeCommandText(target)}"`;
+function normalizePlayerID(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return "";
+  return text;
 }
 
-function escapeCommandText(value) {
-  return String(value ?? "").replace(/"/g, "'").trim();
+function buildKillCommand(targetPlayerId) {
+  const target = normalizePlayerID(targetPlayerId);
+  return target ? `AdminKill ${target}` : "";
 }
 
 function cloneJsonSafe(value) {
