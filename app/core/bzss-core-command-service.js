@@ -53,7 +53,7 @@ export class BzssCoreCommandService {
       return { ok: false, error: "MissingModifyScriptPath", message: "ModifySaveGame.py path is not configured.", source };
     }
     if (!saveGamePath) {
-      return { ok: false, error: "MissingRemoteSaveGamePath", message: "Remote save game path is not configured.", source };
+      return { ok: false, error: "MissingRemoteSaveGamePath", message: "Remote SaveGame path is not configured.", source };
     }
     if (!command.ok) return { ...command, source };
 
@@ -170,14 +170,20 @@ export class BzssCoreCommandService {
       return invalid("InvalidDragCapturePointParameter", "DragCapturePoint requires point name, X, and Y.");
     }
 
-    const pointName = match[1].trim();
+    const pointIdentity = match[1].trim();
     const xText = match[2].trim();
     const yText = match[3].trim();
-    if (!pointName || /[\u0000-\u001f\u007f]/.test(pointName)) {
+    if (!pointIdentity || /[\u0000-\u001f\u007f]/.test(pointIdentity)) {
       return invalid("InvalidDragCapturePointName", "DragCapturePoint point name must be a non-empty single-line name.");
     }
-    if (/^\d+$/.test(pointName)) {
-      return invalid("InvalidDragCapturePointName", "DragCapturePoint no longer accepts a numeric point index; use the capture-point name.");
+
+    // New clients send the capture-point name. Positive integers remain valid
+    // only as a legacy compatibility input so older callers/tests do not break.
+    if (/^\d+$/.test(pointIdentity)) {
+      const pointIndex = Number(pointIdentity);
+      if (!Number.isSafeInteger(pointIndex) || pointIndex < 1) {
+        return invalid("InvalidDragCapturePointIndex", "Legacy DragCapturePoint point index must be a positive integer.");
+      }
     }
 
     if (!xText || !yText || !Number.isFinite(Number(xText)) || !Number.isFinite(Number(yText))) {
