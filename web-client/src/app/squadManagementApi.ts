@@ -285,7 +285,7 @@ export function warnPlayer(payload: {
   return apiPost<any>("/api/admin-warns/warn", payload);
 }
 
-export function killPlayer(payload: {
+export async function killPlayer(payload: {
   serverId?: string;
   targetPlayerId?: string | number | null;
   playerId?: string | number | null;
@@ -298,7 +298,27 @@ export function killPlayer(payload: {
   source?: string;
   system?: boolean;
 }) {
-  return apiPost<any>("/api/kill-manage/kill", payload);
+  const targetPlayerId = String(payload.targetPlayerId ?? payload.playerId ?? "").trim();
+  if (!/^\d+$/.test(targetPlayerId)) {
+    return {
+      ok: false,
+      success: false,
+      error: "MissingListPlayersPlayerId",
+      message: "Kill requires the numeric player ID returned by ListPlayers.",
+      targetPlayerId,
+    };
+  }
+
+  const result = await apiPost<any>("/api/bzss-core/execute", {
+    directive: "Kill",
+    parameter: targetPlayerId,
+  }, {}, { timeoutMs: 20_000 });
+
+  return {
+    ...result,
+    success: Boolean(result?.ok),
+    targetPlayerId,
+  };
 }
 
 export function broadcastMessage(payload: {
