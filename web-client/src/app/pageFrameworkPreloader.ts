@@ -96,14 +96,20 @@ export function stopPageFrameworkPreload() {
 }
 
 export function preloadPageFrameworkByPath(path: string, user: AuthUser | null) {
-  // This function is called because the user explicitly intends to navigate.
-  // Performance/data-saver gates belong to idle background warming only;
-  // applying them here makes cold-route navigation look like a dead click.
   if (!user || typeof window === "undefined" || document.hidden) {
     return Promise.resolve();
   }
 
   const normalizedPath = normalizePath(path);
+
+  // Heavy map/replay/analytics pages must stay genuinely lazy. Sidebar hover,
+  // focus and pointer-down can fire for several adjacent navigation items in a
+  // few milliseconds; eagerly importing those chunks concurrently defeats
+  // route-level code splitting and can lock the browser main thread while Vue,
+  // SVG and map code are parsed/evaluated. The router will load the selected
+  // heavy page exactly once when navigation actually occurs.
+  if (isHeavyPage(normalizedPath)) return Promise.resolve();
+
   const page = getPageDefinitionByPath(normalizedPath);
   if (page && canUserAccessPage(page, user)) {
     return loadPageDefinition(page);
@@ -186,6 +192,8 @@ function isHeavyPage(path: string) {
   const normalized = normalizePath(path).toLowerCase();
   return [
     "tactical-map",
+    "tactical-replay",
+    "pressure-zone",
     "player-database",
     "combat-log",
     "battle-log",
