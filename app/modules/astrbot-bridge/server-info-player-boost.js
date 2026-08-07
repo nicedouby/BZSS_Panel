@@ -21,15 +21,12 @@ export async function applyServerInfoSnapshotPlayerBoost({ result, serverInfo } 
 
   try {
     const sharp = await loadSharp();
-    const overlay = Buffer.from(
-      renderPlayerCountOverlay({
-        displayedPlayers,
-        maxPlayers,
-      }),
-      "utf8",
-    );
+    const overlays = renderPlayerCountOverlays({
+      displayedPlayers,
+      maxPlayers,
+    });
     const png = await sharp(result.png)
-      .composite([{ input: overlay, left: 0, top: 0 }])
+      .composite(overlays)
       .png()
       .toBuffer();
 
@@ -65,25 +62,46 @@ export async function applyServerInfoSnapshotPlayerBoost({ result, serverInfo } 
   }
 }
 
-function renderPlayerCountOverlay({ displayedPlayers, maxPlayers }) {
+function renderPlayerCountOverlays({ displayedPlayers, maxPlayers }) {
   const playersText = String(displayedPlayers);
   const capacityText = maxPlayers > 0 ? `${displayedPlayers}/${maxPlayers}` : playersText;
 
-  return `
-  <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
-    <style><![CDATA[
-      .snapshot-value {
-        font-family: 'Cascadia Mono','Consolas',monospace;
-        font-size: 23px;
-        font-weight: 900;
-        fill: #ffffff;
-      }
-    ]]></style>
-    <rect x="940" y="94" width="116" height="30" rx="2" fill="#07111f"/>
-    <rect x="1104" y="94" width="120" height="30" rx="2" fill="#07111f"/>
-    <text x="944" y="115" class="snapshot-value">${playersText}</text>
-    <text x="1108" y="115" class="snapshot-value">${capacityText}</text>
-  </svg>`;
+  return [
+    {
+      input: renderValuePatch(playersText, 116),
+      left: 940,
+      top: 94,
+    },
+    {
+      input: renderValuePatch(capacityText, 120),
+      left: 1104,
+      top: 94,
+    },
+  ];
+}
+
+function renderValuePatch(value, width) {
+  return Buffer.from(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="30" viewBox="0 0 ${width} 30">
+    <rect width="${width}" height="30" rx="2" fill="#07111f"/>
+    <text
+      x="4"
+      y="21"
+      font-family="Cascadia Mono,Consolas,monospace"
+      font-size="23"
+      font-weight="900"
+      fill="#ffffff"
+    >${escapeXml(value)}</text>
+  </svg>`, "utf8");
+}
+
+function escapeXml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function randomIntegerInclusive(min, max) {
