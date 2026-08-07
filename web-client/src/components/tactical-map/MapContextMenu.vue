@@ -2,6 +2,7 @@
   <div
     ref="menuRef"
     class="radial-context-menu"
+    :class="{ 'has-selected-player': Boolean(selectedPlayer), 'has-kill-error': Boolean(killError) }"
     :style="menuStyle"
     @click.stop
     @pointerdown.stop
@@ -24,12 +25,24 @@
       @keydown.enter.prevent.stop="handleAction('close')"
       @keydown.space.prevent.stop="handleAction('close')"
     >
-      <div class="core-tag">COORDS</div>
-      <div class="core-coords">
-        <span class="gx">X: {{ Math.round(gameX) }}</span>
-        <span class="gy">Y: {{ Math.round(gameY) }}</span>
-      </div>
-      <div class="core-sub-exit">点击退出 ✕</div>
+      <template v-if="selectedPlayer">
+        <div class="core-tag">CURRENT SELECTED</div>
+        <div class="core-selected-name" :title="selectedPlayer.label">{{ selectedPlayer.label }}</div>
+        <div class="core-selected-id">
+          {{ selectedListPlayersId ? `ID ${selectedListPlayersId}` : "NO LISTPLAYERS ID" }}
+        </div>
+        <div v-if="killPending" class="core-kill-status">KILLING...</div>
+        <div v-else-if="killError" class="core-kill-status is-error" :title="killError">{{ compactKillError }}</div>
+        <div v-else class="core-sub-exit">点击退出 ✕</div>
+      </template>
+      <template v-else>
+        <div class="core-tag">COORDS</div>
+        <div class="core-coords">
+          <span class="gx">X: {{ Math.round(gameX) }}</span>
+          <span class="gy">Y: {{ Math.round(gameY) }}</span>
+        </div>
+        <div class="core-sub-exit">点击退出 ✕</div>
+      </template>
     </div>
 
     <!-- Main Radial Action Buttons (8 Sectors) -->
@@ -125,8 +138,21 @@
         <span class="radial-btn-label">复制坐标</span>
       </button>
 
-      <!-- 315 deg: Close Wheel -->
+      <!-- 315 deg: Current-selection action. Player selection replaces redundant close button with Kill. -->
       <button
+        v-if="selectedPlayer"
+        type="button"
+        class="radial-btn kill-btn"
+        :class="{ 'is-disabled': !canKillSelectedPlayer || killPending }"
+        style="--angle: 315deg;"
+        :title="killButtonTitle"
+        @click.stop="canKillSelectedPlayer && !killPending && handleAction('kill-selected')"
+      >
+        <span class="radial-btn-icon">☠</span>
+        <span class="radial-btn-label">{{ killPending ? "执行中" : "KILL" }}</span>
+      </button>
+      <button
+        v-else
         type="button"
         class="radial-btn close-btn"
         style="--angle: 315deg;"
@@ -221,6 +247,12 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
+import { useAuthStore } from "../../stores/auth.store";
+import {
+  type TacticalMapCurrentSelection,
+  useTacticalMapCurrentSelection,
+} from "../../composables/tacticalMapSelection";
 
 const props = defineProps<{
   x: number;
@@ -232,6 +264,10 @@ const props = defineProps<{
   hasPoints: boolean;
   measureActive: boolean;
   measureCount: number;
+
+  // Current selected tactical object. TacticalMapPage can pass this explicitly;
+  // the shared selection state remains the compatibility/default source.
+  currentSelected?: TacticalMapCurrentSelection;
 
   // Layer Visibility
   filterAliveOnly: boolean;
@@ -264,14 +300,49 @@ const emit = defineEmits<{
   (e: "toggle-layer", payload: "alive" | "names" | "coords" | "fobs" | "zones" | "grid"): void;
 }>();
 
+const authStore = useAuthStore();
+const sharedSelection = useTacticalMapCurrentSelection();
 const menuRef = ref<HTMLElement | null>(null);
 const showLayerRing = ref(false);
+const killPending = ref(false);
+const killError = ref("");
 
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
 
 const MENU_RADIUS = 140;
 const MENU_EDGE_GAP = 10;
+
+const effectiveCurrentSelected = computed<TacticalMapCurrentSelection>(() => (
+  props.currentSelected !== undefined
+    ? props.currentSelected
+    : sharedSelection.currentSelected.value
+));
+const selectedPlayer = computed(() => (
+  effectiveCurrentSelected.value?.type === "player" ? effectiveCurrentSelected.value : null
+));
+const selectedListPlayersId = computed(() => {
+  const text = String(selectedPlayer.value?.listPlayersId ?? "").trim();
+  return /^\d+$/.test(text) ? text : "";
+});
+const hasBzssCorePermission = computed(() => Boolean(
+  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
+));
+const canKillSelectedPlayer = computed(() => Boolean(
+  selectedPlayer.value && selectedListPlayersId.value && hasBzssCorePermission.value,
+));
+const killButtonTitle = computed(() => {
+  if (!selectedPlayer.value) return "当前未选中玩家";
+  if (!selectedListPlayersId.value) return `${selectedPlayer.value.label} 没有 ListPlayers ID，禁止执行 Kill`;
+  if (!hasBzssCorePermission.value) return "缺少 bzss_core.use 权限";
+  if (killPending.value) return `正在执行 Kill:${selectedListPlayersId.value}`;
+  return `Kill:${selectedListPlayersId.value} · ${selectedPlayer.value.label}`;
+});
+const compactKillError = computed(() => {
+  const text = String(killError.value ?? "").trim();
+  if (!text) return "KILL FAILED";
+  return text.length > 18 ? `${text.slice(0, 15)}...` : text;
+});
 
 const menuStyle = computed(() => {
   return {
@@ -322,9 +393,14 @@ watch(
     // A second right-click reuses this component instance. Reset the wheel and
     // recalculate its clamped screen position instead of leaving it at the old point.
     showLayerRing.value = false;
+    killError.value = "";
     nextTick(syncMenuPosition);
   },
 );
+
+watch(effectiveCurrentSelected, () => {
+  killError.value = "";
+});
 
 onMounted(() => {
   nextTick(syncMenuPosition);
@@ -337,6 +413,29 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", onViewportResize);
 });
 
+async function executeSelectedPlayerKill() {
+  const target = selectedPlayer.value;
+  const playerId = selectedListPlayersId.value;
+  if (!target || !playerId || !hasBzssCorePermission.value || killPending.value) return;
+
+  killPending.value = true;
+  killError.value = "";
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "Kill",
+      parameter: playerId,
+    });
+    if (!result?.ok) {
+      throw new Error(String(result?.message ?? `Kill:${playerId} 执行失败`));
+    }
+    emit("close");
+  } catch (error) {
+    killError.value = error instanceof Error ? error.message : String(error ?? "Kill 执行失败");
+  } finally {
+    killPending.value = false;
+  }
+}
+
 function handleAction(
   event:
     | "close"
@@ -346,6 +445,7 @@ function handleAction(
     | "clear-measure"
     | "copy-coords"
     | "focus-here"
+    | "kill-selected"
     | "toggle-capture-point-edit"
     | "calculate-hotspot"
     | "clear-hotspot"
@@ -358,6 +458,10 @@ function handleAction(
 ) {
   let keepOpen = false;
 
+  if (event === "kill-selected") {
+    void executeSelectedPlayerKill();
+    return;
+  }
   if (event === "start-measure") emit("start-measure");
   else if (event === "add-point") emit("add-point");
   else if (event === "undo-point") emit("undo-point");
@@ -428,13 +532,21 @@ function handleAction(
   pointer-events: none;
 }
 
+.radial-context-menu.has-selected-player .radial-ring-background {
+  border-color: rgba(248, 113, 113, 0.42);
+}
+
+.radial-context-menu.has-kill-error .radial-ring-background {
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.85), inset 0 0 28px rgba(239, 68, 68, 0.22);
+}
+
 /* Center Core Hub: Hover to Glow, Click to Exit */
 .radial-center-core {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 82px;
-  height: 82px;
+  width: 92px;
+  height: 92px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: rgba(15, 23, 42, 0.95);
@@ -448,6 +560,8 @@ function handleAction(
   z-index: 10;
   transition: all 0.18s ease;
   outline: none;
+  padding: 6px;
+  box-sizing: border-box;
 }
 
 .radial-center-core:hover,
@@ -459,9 +573,9 @@ function handleAction(
 }
 
 .core-tag {
-  font-size: 8px;
+  font-size: 7px;
   color: rgba(0, 229, 255, 0.7);
-  letter-spacing: 1px;
+  letter-spacing: 0.7px;
 }
 
 .core-coords {
@@ -472,6 +586,46 @@ function handleAction(
   font-weight: 800;
   color: #f8fafc;
   line-height: 1.2;
+}
+
+.core-selected-name {
+  width: 76px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #f8fafc;
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-selected-id {
+  width: 78px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 7px;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-kill-status {
+  width: 76px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #fbbf24;
+  font-size: 7px;
+  font-weight: 800;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-kill-status.is-error {
+  color: #fb7185;
 }
 
 .core-sub-exit {
@@ -516,6 +670,19 @@ function handleAction(
   box-shadow: 0 0 20px rgba(0, 229, 255, 0.7);
   transform: rotate(var(--angle)) translateY(-106px) rotate(calc(-1 * var(--angle))) scale(1.18);
   z-index: 5;
+}
+
+.radial-btn.kill-btn {
+  background: rgba(69, 10, 10, 0.9);
+  border-color: rgba(248, 113, 113, 0.58);
+  color: #fecaca;
+}
+
+.radial-btn.kill-btn:hover:not(.is-disabled) {
+  background: rgba(127, 29, 29, 0.94);
+  border-color: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.78);
 }
 
 .radial-btn.is-active {
