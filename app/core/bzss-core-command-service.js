@@ -131,6 +131,9 @@ export class BzssCoreCommandService {
         const validation = this.validateKillParameter(match[2]);
         if (!validation.ok) return validation;
       }
+      if (match?.[1] === "Cheer" && /^#\d+$/.test(String(match[2] ?? "").trim())) {
+        return this.normalizeDirective("Kill", String(match[2]).trim().slice(1));
+      }
       return { ok: true, directive: "Raw", parameter: rawCommand, command: rawCommand, raw: true };
     }
 
@@ -143,8 +146,17 @@ export class BzssCoreCommandService {
   }
 
   normalizeDirective(directive, parameter) {
-    const normalizedDirective = String(directive ?? "").trim();
-    const text = String(parameter ?? "").trim();
+    let normalizedDirective = String(directive ?? "").trim();
+    let text = String(parameter ?? "").trim();
+
+    // Historical player-detail builds used Cheer:#<ListPlayersID> as the kill
+    // command. Preserve legitimate Cheer values, but never let that legacy kill
+    // signature reach ModifySaveGame.py as Cheer again.
+    if (normalizedDirective === "Cheer" && /^#\d+$/.test(text)) {
+      normalizedDirective = "Kill";
+      text = text.slice(1);
+    }
+
     if (!ALLOWED_DIRECTIVES.has(normalizedDirective)) {
       return invalid("UnsupportedBzssCoreDirective", `Supported directives: ${[...ALLOWED_DIRECTIVES].join(", ")}.`);
     }
