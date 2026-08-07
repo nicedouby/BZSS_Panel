@@ -47,7 +47,13 @@ export function buildCapsulePolygon(a, b, longitudinalRadius, lateralRadius, arc
   const uy = gap > 0 ? dy / gap : 0;
   const vx = -uy;
   const vy = ux;
-  const count = Math.max(6, Math.floor(Number(arcSegments) || 18));
+
+  // Keep polygon generation bounded even when a legacy config or direct module
+  // config bypasses base-config-store validation. An unbounded arc segment count
+  // can produce a huge JSON response and then lock the browser while SVG points
+  // are created on both the tactical map and the pressure-zone simulator.
+  const requestedSegments = Math.floor(Number(arcSegments) || 18);
+  const count = Math.min(128, Math.max(6, requestedSegments));
   const points = [];
 
   const pushLocal = (origin, along, across) => {
