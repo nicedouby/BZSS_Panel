@@ -14,6 +14,7 @@ const ALLOWED_DIRECTIVES = new Set([
   "AdminTrack",
   "RemoveAdminTrack",
   "DragCapturePoint",
+  "Kill",
 ]);
 
 /**
@@ -126,6 +127,10 @@ export class BzssCoreCommandService {
         const validation = this.validateDragCapturePointParameter(match[2]);
         if (!validation.ok) return validation;
       }
+      if (match?.[1] === "Kill") {
+        const validation = this.validateKillParameter(match[2]);
+        if (!validation.ok) return validation;
+      }
       return { ok: true, directive: "Raw", parameter: rawCommand, command: rawCommand, raw: true };
     }
 
@@ -159,7 +164,23 @@ export class BzssCoreCommandService {
       const validation = this.validateDragCapturePointParameter(text);
       if (!validation.ok) return validation;
     }
+    if (normalizedDirective === "Kill") {
+      const validation = this.validateKillParameter(text);
+      if (!validation.ok) return validation;
+    }
     return { ok: true, directive: normalizedDirective, parameter: text, command: `${normalizedDirective}:${text}` };
+  }
+
+  validateKillParameter(parameter) {
+    const text = String(parameter ?? "").trim();
+    if (!/^\d+$/.test(text)) {
+      return invalid("InvalidKillPlayerId", "Kill requires the numeric player ID returned by ListPlayers.");
+    }
+    const playerId = Number(text);
+    if (!Number.isSafeInteger(playerId) || playerId < 0) {
+      return invalid("InvalidKillPlayerId", "Kill player ID must be a non-negative safe integer.");
+    }
+    return { ok: true };
   }
 
   validateDragCapturePointParameter(parameter) {
