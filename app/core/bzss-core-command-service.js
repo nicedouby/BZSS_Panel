@@ -53,7 +53,7 @@ export class BzssCoreCommandService {
       return { ok: false, error: "MissingModifyScriptPath", message: "ModifySaveGame.py path is not configured.", source };
     }
     if (!saveGamePath) {
-      return { ok: false, error: "MissingRemoteSaveGamePath", message: "Remote SaveGame path is not configured.", source };
+      return { ok: false, error: "MissingRemoteSaveGamePath", message: "Remote save game path is not configured.", source };
     }
     if (!command.ok) return { ...command, source };
 
