@@ -1,12 +1,18 @@
 // -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
+import { cpSync, existsSync, symlinkSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(MODULE_DIR, "..", "..", "..");
 let sharpLoaderPromise = null;
+
+prepareMapSceneAssetsForSnapshotRenderer();
 
 export async function applyServerInfoSnapshotPlayerBoost({ result, serverInfo } = {}) {
   if (!result?.ok || !Buffer.isBuffer(result?.png) || result.png.length === 0) return result;
@@ -59,6 +65,39 @@ export async function applyServerInfoSnapshotPlayerBoost({ result, serverInfo } 
   } catch {
     // Snapshot delivery must not fail if the display-only overlay cannot be rendered.
     return result;
+  }
+}
+
+function prepareMapSceneAssetsForSnapshotRenderer() {
+  const cwdMapScene = path.resolve(process.cwd(), "MapScene");
+  if (existsSync(cwdMapScene)) return;
+
+  const candidates = [
+    path.join(PROJECT_ROOT, "MapScene"),
+    path.join(PROJECT_ROOT, "web-client", "dist", "MapScene"),
+  ];
+  const sourceMapScene = candidates.find((candidate) => existsSync(candidate));
+  if (!sourceMapScene) return;
+  if (path.resolve(sourceMapScene) === path.resolve(cwdMapScene)) return;
+
+  try {
+    symlinkSync(sourceMapScene, cwdMapScene, "junction");
+    return;
+  } catch {
+    // Junction creation can be denied by the service account. Fall back to a
+    // local copy so the legacy match-snapshot process.cwd()/MapScene lookup
+    // still resolves to the real loading-screen assets.
+  }
+
+  try {
+    cpSync(sourceMapScene, cwdMapScene, {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
+  } catch {
+    // Keep snapshot generation available. The match-snapshot renderer will use
+    // its own solid-color fallback if neither source can be materialized.
   }
 }
 
