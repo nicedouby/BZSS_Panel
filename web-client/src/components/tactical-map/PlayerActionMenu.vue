@@ -198,8 +198,8 @@ const killButtonTitle = computed(() => {
   if (!props.rconPlayer) return "未关联到当前 ListPlayers 玩家";
   if (!rconPlayerId.value) return "当前玩家没有 ListPlayers ID，禁止执行 Kill";
   if (!props.canManage) return "当前账号没有管理权限";
-  if (killPending.value) return "正在执行 AdminKill";
-  return `单击立即击杀 ${displayPlayerName.value} · AdminKill ${rconPlayerId.value}`;
+  if (killPending.value) return "正在执行 Kill:X";
+  return `单击立即击杀 ${displayPlayerName.value} · Kill:${rconPlayerId.value}`;
 });
 
 const linkConfidenceText = computed(() => {
