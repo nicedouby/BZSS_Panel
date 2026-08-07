@@ -14,9 +14,9 @@
     ]"
     :style="markerStyle"
     type="button"
-    @click="$emit('click', $event)"
+    @click="handleClick"
     @dblclick="$emit('dblclick', $event)"
-    @contextmenu.prevent.stop="$emit('contextmenu', $event)"
+    @contextmenu.prevent.stop="handleContextMenu"
     @mouseenter="$emit('mouseenter', $event)"
     @mouseleave="$emit('mouseleave', $event)"
   >
@@ -86,7 +86,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watchEffect } from "vue";
+import { computed, onMounted, watchEffect } from "vue";
+import { useServerStore } from "../../stores/server.store";
+import { useTacticalStateStore } from "../../stores/tactical-state.store";
+import {
+  ensureTacticalMapSelectionController,
+  setTacticalMapCurrentSelection,
+} from "../../composables/tacticalMapSelection";
 
 const props = withDefaults(
   defineProps<{
@@ -136,7 +142,7 @@ const props = withDefaults(
   }
 );
 
-defineEmits<{
+const emit = defineEmits<{
   (e: "click", event: MouseEvent): void;
   (e: "dblclick", event: MouseEvent): void;
   (e: "contextmenu", event: MouseEvent): void;
@@ -144,9 +150,182 @@ defineEmits<{
   (e: "mouseleave", event: MouseEvent): void;
 }>();
 
+const tacticalStateStore = useTacticalStateStore();
+const serverStore = useServerStore();
+
+onMounted(() => {
+  ensureTacticalMapSelectionController();
+});
+
 const isDead = computed(() => props.health !== null && props.health <= 0);
 const hasVehicle = computed(() => props.vehicleType && props.vehicleType !== "None");
 const hasCoords = computed(() => props.gameX !== null && props.gameY !== null);
+
+function normalizePlayerName(value: unknown) {
+  return String(value ?? "").trim().toLocaleLowerCase();
+}
+
+function numericListPlayersId(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const numeric = Number(text);
+  return Number.isSafeInteger(numeric) && numeric >= 0 ? String(numeric) : null;
+}
+
+function getCandidateName(candidate: any) {
+  return String(
+    candidate?.identity?.name
+    ?? candidate?.raw?.rcon?.name
+    ?? candidate?.name
+    ?? candidate?.playerName
+    ?? "",
+  ).trim();
+}
+
+function getCandidateRconId(candidate: any): string | null {
+  // tactical-state identity is built from ListPlayers/RCON.  Never fall back
+  // to BZSS-Core runtime playerIndex/playerId here because Kill:X requires the
+  // transient ListPlayers player ID.
+  return numericListPlayersId(
+    candidate?.raw?.rcon?.playerID
+    ?? candidate?.raw?.rcon?.playerId
+    ?? candidate?.identity?.playerID
+    ?? candidate?.identity?.playerId
+    ?? candidate?.playerID,
+  );
+}
+
+function getCandidatePosition(candidate: any) {
+  const position = candidate?.telemetry?.position ?? candidate?.position ?? null;
+  const x = Number(position?.x);
+  const y = Number(position?.y);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : null;
+}
+
+function collectSelectionCandidates() {
+  const output: any[] = [];
+  const seen = new Set<any>();
+  const push = (candidate: any) => {
+    if (!candidate || typeof candidate !== "object" || seen.has(candidate)) return;
+    seen.add(candidate);
+    output.push(candidate);
+  };
+
+  for (const candidate of Array.isArray(tacticalStateStore.players) ? tacticalStateStore.players : []) push(candidate);
+
+  const serverSources = [
+    (serverStore.snapshot as any)?.matchState?.players?.list,
+    (serverStore.snapshot as any)?.players,
+    (serverStore.snapshot as any)?.match?.players?.list,
+  ];
+  for (const source of serverSources) {
+    if (Array.isArray(source)) source.forEach(push);
+  }
+
+  return output;
+}
+
+function resolveCurrentPlayerSelection() {
+  const wantedName = normalizePlayerName(props.playerName);
+  if (!wantedName) return null;
+
+  const candidates = collectSelectionCandidates().filter(
+    (candidate) => normalizePlayerName(getCandidateName(candidate)) === wantedName,
+  );
+  if (!candidates.length) return null;
+
+  const targetX = Number(props.gameX);
+  const targetY = Number(props.gameY);
+  let selected = candidates[0];
+  if (candidates.length > 1 && Number.isFinite(targetX) && Number.isFinite(targetY)) {
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const candidate of candidates) {
+      const position = getCandidatePosition(candidate);
+      if (!position) continue;
+      const dx = position.x - targetX;
+      const dy = position.y - targetY;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        selected = candidate;
+      }
+    }
+  }
+
+  const listPlayersId = getCandidateRconId(selected);
+  const key = String(selected?.identity?.key ?? (listPlayersId ? `player:${listPlayersId}` : `name:${wantedName}`));
+  return {
+    type: "player" as const,
+    key,
+    label: getCandidateName(selected) || props.playerName,
+    listPlayersId,
+    teamId: Number.isFinite(Number(props.teamId)) ? Number(props.teamId) : null,
+    gameX: Number.isFinite(targetX) ? targetX : null,
+    gameY: Number.isFinite(targetY) ? targetY : null,
+    selectedAt: Date.now(),
+  };
+}
+
+function selectCurrentPlayer() {
+  const selection = resolveCurrentPlayerSelection();
+  if (selection) {
+    setTacticalMapCurrentSelection(selection);
+    return;
+  }
+
+  // Keep the selected object visible to the wheel even if RCON linking is not
+  // available yet.  Kill remains disabled until a numeric ListPlayers ID exists.
+  setTacticalMapCurrentSelection({
+    type: "player",
+    key: `name:${normalizePlayerName(props.playerName)}`,
+    label: props.playerName,
+    listPlayersId: null,
+    teamId: Number.isFinite(Number(props.teamId)) ? Number(props.teamId) : null,
+    gameX: Number.isFinite(Number(props.gameX)) ? Number(props.gameX) : null,
+    gameY: Number.isFinite(Number(props.gameY)) ? Number(props.gameY) : null,
+    selectedAt: Date.now(),
+  });
+}
+
+function handleClick(event: MouseEvent) {
+  if (props.mode === "tactical") selectCurrentPlayer();
+  emit("click", event);
+}
+
+function handleContextMenu(event: MouseEvent) {
+  if (props.mode !== "tactical") {
+    emit("contextmenu", event);
+    return;
+  }
+
+  selectCurrentPlayer();
+
+  // Tactical mode uses the single generic map radial wheel.  Dispatch the
+  // context-menu event onto the map container instead of invoking the legacy
+  // player-specific PlayerActionMenu.
+  const currentTarget = event.currentTarget instanceof Element ? event.currentTarget : null;
+  const map = currentTarget?.closest<HTMLElement>(".map-transform-container");
+  if (!map) {
+    emit("contextmenu", event);
+    return;
+  }
+
+  map.dispatchEvent(new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+    button: 2,
+    buttons: 2,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    screenX: event.screenX,
+    screenY: event.screenY,
+    ctrlKey: event.ctrlKey,
+    shiftKey: event.shiftKey,
+    altKey: event.altKey,
+    metaKey: event.metaKey,
+  }));
+}
 
 // Perspective colors palette definitions based on tone
 const palette = computed(() => {
