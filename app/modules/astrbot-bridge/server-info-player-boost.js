@@ -1,7 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
-import { cpSync, existsSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, rmSync } from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,7 @@ const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(MODULE_DIR, "..", "..", "..");
 let sharpLoaderPromise = null;
 
-prepareMapSceneAssetsForSnapshotRenderer();
+cleanupLegacyMapSceneJunctions();
 
 export async function applyServerInfoSnapshotPlayerBoost({ result, serverInfo } = {}) {
   if (!result?.ok || !Buffer.isBuffer(result?.png) || result.png.length === 0) return result;
@@ -68,36 +68,32 @@ export async function applyServerInfoSnapshotPlayerBoost({ result, serverInfo } 
   }
 }
 
-function prepareMapSceneAssetsForSnapshotRenderer() {
-  const cwdMapScene = path.resolve(process.cwd(), "MapScene");
-  if (existsSync(cwdMapScene)) return;
+function cleanupLegacyMapSceneJunctions() {
+  const projectMapScene = path.resolve(PROJECT_ROOT, "MapScene");
+  const distMapScene = path.resolve(PROJECT_ROOT, "web-client", "dist", "MapScene");
+  const candidates = new Set([
+    path.resolve(process.cwd(), "MapScene"),
+    path.resolve(PROJECT_ROOT, "web-client", "MapScene"),
+  ]);
 
-  const candidates = [
-    path.join(PROJECT_ROOT, "MapScene"),
-    path.join(PROJECT_ROOT, "web-client", "dist", "MapScene"),
-  ];
-  const sourceMapScene = candidates.find((candidate) => existsSync(candidate));
-  if (!sourceMapScene) return;
-  if (path.resolve(sourceMapScene) === path.resolve(cwdMapScene)) return;
+  const allowedTargets = [projectMapScene, distMapScene]
+    .filter((candidate) => existsSync(candidate))
+    .map((candidate) => {
+      try { return path.resolve(realpathSync(candidate)); } catch { return ""; }
+    })
+    .filter(Boolean);
 
-  try {
-    symlinkSync(sourceMapScene, cwdMapScene, "junction");
-    return;
-  } catch {
-    // Junction creation can be denied by the service account. Fall back to a
-    // local copy so the legacy match-snapshot process.cwd()/MapScene lookup
-    // still resolves to the real loading-screen assets.
-  }
-
-  try {
-    cpSync(sourceMapScene, cwdMapScene, {
-      recursive: true,
-      force: false,
-      errorOnExist: false,
-    });
-  } catch {
-    // Keep snapshot generation available. The match-snapshot renderer will use
-    // its own solid-color fallback if neither source can be materialized.
+  for (const candidate of candidates) {
+    if (candidate === projectMapScene) continue;
+    try {
+      const info = lstatSync(candidate);
+      if (!info.isSymbolicLink()) continue;
+      const target = path.resolve(realpathSync(candidate));
+      if (!allowedTargets.includes(target)) continue;
+      rmSync(candidate, { force: true });
+    } catch {
+      // Cleanup is best-effort and must never affect panel startup.
+    }
   }
 }
 
