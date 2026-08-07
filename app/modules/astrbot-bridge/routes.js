@@ -1,5 +1,7 @@
 // -*- coding: utf-8 -*-
 
+import { applyServerInfoSnapshotPlayerBoost } from "./server-info-player-boost.js";
+
 function getRequestIp(req) {
   const remoteAddress = String(req?.socket?.remoteAddress ?? "").trim();
   const forwardedFor = req?.headers?.["x-forwarded-for"];
@@ -114,6 +116,23 @@ function createValidationError(code, message) {
   error.code = code;
   error.statusCode = 400;
   return error;
+}
+
+async function boostServerInfoSnapshotForDisplay(bridge, result) {
+  if (!result?.ok || !Buffer.isBuffer(result?.png) || result.png.length === 0) return result;
+
+  try {
+    const serverInfoResult = await bridge.query?.({
+      kind: "serverInfo",
+      includePlayers: false,
+    });
+    return await applyServerInfoSnapshotPlayerBoost({
+      result,
+      serverInfo: serverInfoResult?.data?.serverInfo ?? null,
+    });
+  } catch {
+    return result;
+  }
 }
 
 export async function handleAstrbotBridgeRoutes({
@@ -256,9 +275,10 @@ export async function handleAstrbotBridgeRoutes({
 
   if (url.pathname === "/api/astrbot/server-info/snapshot" && req.method === "GET") {
     bridgeLogger?.info?.(`[AstrBotBridge] server-info-snapshot-request ip=${getRequestIp(req)}`);
-    const result = await bridge.queryServerInfoSnapshot?.({
+    let result = await bridge.queryServerInfoSnapshot?.({
       includePlayers: url.searchParams.get("includePlayers") === "1" || url.searchParams.get("players") === "1",
     });
+    result = await boostServerInfoSnapshotForDisplay(bridge, result);
     if (!result?.ok || !Buffer.isBuffer(result?.png) || !result.png.length) {
       const statusCode = Number(result?.statusCode ?? 500);
       bridgeLogger?.error?.(
@@ -308,9 +328,10 @@ export async function handleAstrbotBridgeRoutes({
   }
 
   if (url.pathname === "/api/astrbot/server-image" && req.method === "GET") {
-    const result = await bridge.queryServerInfoSnapshot?.({
+    let result = await bridge.queryServerInfoSnapshot?.({
       includePlayers: true,
     });
+    result = await boostServerInfoSnapshotForDisplay(bridge, result);
     return writeAstrbotImageResponse(res, json, result, "server-info.png");
   }
 
