@@ -286,8 +286,12 @@ export function warnPlayer(payload: {
 }
 
 export function killPlayer(payload: {
+  serverId?: string;
+  targetPlayerId?: string | number | null;
+  playerId?: string | number | null;
   targetName?: string;
   targetSteamId?: string;
+  targetEosId?: string;
   reason?: string;
   operatorId?: string;
   operatorName?: string;
