@@ -50,6 +50,78 @@ describe("tactical-state store", () => {
     hooks.streamMock.mockClear();
   });
 
+  it("uses the SSE initial snapshot for bootstrap instead of duplicating it with REST", async () => {
+    hooks.fetchMock.mockResolvedValueOnce(snapshot(99, [player("rest", 99)]));
+    const store = useTacticalStateStore();
+
+    const bootstrap = store.fetchSnapshot();
+    store.startStream();
+    await bootstrap;
+    await flushPromises();
+
+    expect(hooks.fetchMock).not.toHaveBeenCalled();
+
+    const live = player("stream", 1);
+    hooks.onMessage?.({ ...snapshot(1, [live]), type: "tactical-state.snapshot" });
+    await flushPromises();
+
+    expect(store.players).toHaveLength(1);
+    expect(store.players[0]).toBe(live);
+    store.stopStream();
+  });
+
+  it("drops duplicate and older full snapshots before rebuilding reactive state", async () => {
+    const store = useTacticalStateStore();
+    store.startStream();
+
+    const firstPlayer = player("p1", 1);
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.snapshot",
+      snapshot: {
+        meta: { serverId: "server-a", revision: 10, generatedAt: "2026-08-08T12:00:10.000Z" },
+        server: { serverId: "server-a" },
+        teams: [],
+        assets: {},
+        diagnostics: {},
+        players: [firstPlayer],
+      },
+    });
+    await flushPromises();
+    const retained = store.players[0];
+
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.snapshot",
+      snapshot: {
+        meta: { serverId: "server-a", revision: 10, generatedAt: "2026-08-08T12:00:10.000Z" },
+        server: { serverId: "server-a" },
+        teams: [],
+        assets: {},
+        diagnostics: {},
+        players: [player("duplicate", 2)],
+      },
+    });
+    hooks.onMessage?.({
+      ok: true,
+      type: "tactical-state.snapshot",
+      snapshot: {
+        meta: { serverId: "server-a", revision: 9, generatedAt: "2026-08-08T12:00:09.000Z" },
+        server: { serverId: "server-a" },
+        teams: [],
+        assets: {},
+        diagnostics: {},
+        players: [player("older", 3)],
+      },
+    });
+    await flushPromises();
+
+    expect(store.players).toHaveLength(1);
+    expect(store.players[0]).toBe(retained);
+    expect(store.players[0].identity.key).toBe("p1");
+    store.stopStream();
+  });
+
   it("preserves unchanged player references and applies remove/upsert in stable order", async () => {
     const store = useTacticalStateStore();
     store.startStream();
