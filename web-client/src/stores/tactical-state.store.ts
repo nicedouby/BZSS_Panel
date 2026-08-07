@@ -8,6 +8,8 @@ import {
 } from "../app/tacticalStateApi";
 import { useServerStore } from "./server.store";
 
+const STREAM_BOOTSTRAP_FALLBACK_MS = 1_500;
+
 export const useTacticalStateStore = defineStore("tacticalState", () => {
   const serverStore = useServerStore();
   const snapshot = shallowRef<any | null>(null);
@@ -22,6 +24,9 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   const playersByKey = new Map<string, any>();
   let playerOrder: string[] = [];
   let closeStream: (() => void) | null = null;
+  let streamBootstrapping = false;
+  let streamFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  let snapshotFetchPromise: Promise<void> | null = null;
   let resyncPromise: Promise<void> | null = null;
 
   function playerKey(player: any) {
@@ -61,7 +66,54 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     serverStore.applyLiveMapIdentity(resolveLiveMapIdentity(source));
   }
 
+  function snapshotMeta(source: any) {
+    const revision = Number(source?.meta?.revision ?? 0);
+    const generatedAtText = String(source?.meta?.generatedAt ?? "").trim();
+    const generatedAtMs = generatedAtText ? Date.parse(generatedAtText) : Number.NaN;
+    return {
+      serverId: String(source?.meta?.serverId ?? source?.server?.serverId ?? "").trim(),
+      revision: Number.isFinite(revision) && revision > 0 ? revision : 0,
+      generatedAtText,
+      generatedAtMs,
+    };
+  }
+
+  function shouldIgnoreFullSnapshot(nextSnapshot: any) {
+    if (!snapshot.value || !nextSnapshot) return false;
+
+    const incoming = snapshotMeta(nextSnapshot);
+    const current = snapshotMeta(snapshot.value);
+    if (incoming.serverId && current.serverId && incoming.serverId !== current.serverId) return false;
+
+    // The REST bootstrap and the SSE connection can return the exact same full
+    // tactical snapshot. Applying both causes every map computed/marker layer to
+    // rebuild twice during navigation. Drop exact duplicates before touching any
+    // reactive state.
+    if (
+      incoming.revision > 0
+      && incoming.revision === current.revision
+      && incoming.generatedAtText
+      && incoming.generatedAtText === current.generatedAtText
+    ) {
+      return true;
+    }
+
+    // Network scheduling can also let an older REST response arrive after a
+    // newer SSE snapshot. Prefer generatedAt over revision because the backend
+    // revision counter can reset when the panel process restarts.
+    if (Number.isFinite(incoming.generatedAtMs) && Number.isFinite(current.generatedAtMs)) {
+      if (incoming.generatedAtMs < current.generatedAtMs) return true;
+      if (incoming.generatedAtMs === current.generatedAtMs && incoming.revision > 0 && current.revision > 0) {
+        return incoming.revision <= current.revision;
+      }
+    }
+
+    return false;
+  }
+
   function applyFullSnapshot(nextSnapshot: any) {
+    if (shouldIgnoreFullSnapshot(nextSnapshot)) return false;
+
     playersByKey.clear();
     playerOrder = [];
     for (const candidate of Array.isArray(nextSnapshot?.players) ? nextSnapshot.players : []) {
@@ -78,6 +130,7 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
     diagnostics.value = nextSnapshot?.diagnostics ?? {};
     snapshot.value = nextSnapshot ? { ...nextSnapshot, players: nextPlayers } : null;
     syncLiveMapIdentity(snapshot.value);
+    return true;
   }
 
   function applyDelta(delta: TacticalStateDelta | undefined, revision?: number | null, generatedAt?: string) {
@@ -144,39 +197,87 @@ export const useTacticalStateStore = defineStore("tacticalState", () => {
   async function requestResync() {
     if (resyncPromise) return resyncPromise;
     resyncPromise = (async () => {
-      await fetchSnapshot();
+      await fetchSnapshot({ force: true });
     })().finally(() => {
       resyncPromise = null;
     });
     return resyncPromise;
   }
 
-  async function fetchSnapshot() {
-    loading.value = true; error.value = "";
-    try {
-      const response = await fetchTacticalStateSnapshot();
-      if (!response.ok) error.value = "Failed to load tactical snapshot.";
-      await applySnapshotResponse(response);
-    } catch (err: any) {
-      error.value = err?.message ?? "Failed to load tactical snapshot.";
-    } finally { loading.value = false; }
+  async function fetchSnapshot(options: { force?: boolean } = {}) {
+    if (snapshotFetchPromise) return snapshotFetchPromise;
+
+    const force = options.force === true;
+    snapshotFetchPromise = (async () => {
+      loading.value = true;
+      error.value = "";
+
+      // TacticalMapPage currently calls fetchSnapshot() immediately before
+      // startStream(). Yield one microtask so startStream can claim bootstrap.
+      // The SSE endpoint sends an initial full snapshot itself, so issuing the
+      // REST request as well only doubles JSON parsing and reactive full renders.
+      await Promise.resolve();
+      if (!force && streamBootstrapping) return;
+
+      try {
+        const response = await fetchTacticalStateSnapshot();
+        if (!response.ok) error.value = "Failed to load tactical snapshot.";
+        await applySnapshotResponse(response);
+      } catch (err: any) {
+        error.value = err?.message ?? "Failed to load tactical snapshot.";
+      } finally {
+        loading.value = false;
+      }
+    })().finally(() => {
+      loading.value = false;
+      snapshotFetchPromise = null;
+    });
+
+    return snapshotFetchPromise;
+  }
+
+  function clearStreamFallbackTimer() {
+    if (streamFallbackTimer !== null) {
+      clearTimeout(streamFallbackTimer);
+      streamFallbackTimer = null;
+    }
   }
 
   function startStream() {
     if (closeStream) return;
     streamActive.value = true;
+    streamBootstrapping = true;
+    clearStreamFallbackTimer();
+
     closeStream = streamTacticalStateSnapshot((response) => {
+      streamBootstrapping = false;
+      clearStreamFallbackTimer();
       void applySnapshotResponse(response);
       error.value = response?.ok === false ? "Failed to load tactical snapshot." : "";
       loading.value = false;
     }, (err, source) => {
       if (source.readyState === EventSource.CLOSED) streamActive.value = false;
       if (err?.message) error.value = err.message;
+
+      // If EventSource cannot deliver its initial full snapshot, fall back to
+      // the compact REST endpoint. The forced fetch is deduplicated and any
+      // later SSE full snapshot is protected against stale/duplicate apply.
+      if (streamBootstrapping) void fetchSnapshot({ force: true });
     });
+
+    streamFallbackTimer = setTimeout(() => {
+      streamFallbackTimer = null;
+      if (!closeStream || !streamBootstrapping) return;
+      void fetchSnapshot({ force: true });
+    }, STREAM_BOOTSTRAP_FALLBACK_MS);
   }
 
   function stopStream() {
-    closeStream?.(); closeStream = null; streamActive.value = false;
+    streamBootstrapping = false;
+    clearStreamFallbackTimer();
+    closeStream?.();
+    closeStream = null;
+    streamActive.value = false;
   }
 
   return { snapshot, players, server, teams, assets, diagnostics, loading, error,
