@@ -1,101 +1,138 @@
 <template>
   <div
     ref="menuRef"
-    class="player-action-menu map-floating-panel"
-    :class="`tone-${tone}`"
+    class="player-action-radial map-floating-panel"
+    :class="[`tone-${tone}`, { 'has-error': Boolean(killError) }]"
     :style="menuStyle"
     @click.stop
+    @pointerdown.stop
+    @pointerup.stop
+    @pointercancel.stop
+    @dblclick.stop
+    @wheel.stop
     @contextmenu.prevent.stop
   >
-    <div class="menu-header font-mono">
-      <div class="header-title">PLAYER COMMANDS</div>
-      <div class="player-label">{{ displayPlayerName }}</div>
-      <div v-if="linkConfidence" class="player-link-meta" :title="linkReason">关联 {{ linkConfidenceText }}</div>
+    <div class="radial-ring-background"></div>
+
+    <div
+      class="radial-center-core font-mono"
+      role="button"
+      tabindex="0"
+      title="点击关闭玩家命令盘"
+      @click.stop="emit('close')"
+      @keydown.enter.prevent.stop="emit('close')"
+      @keydown.space.prevent.stop="emit('close')"
+    >
+      <div class="core-tag">PLAYER</div>
+      <div class="core-player-name" :title="displayPlayerName">{{ displayPlayerName }}</div>
+      <div class="core-player-id">{{ rconPlayerId ? `ID ${rconPlayerId}` : "NO RCON ID" }}</div>
+      <div v-if="killPending" class="core-status">KILLING...</div>
+      <div v-else-if="killError" class="core-status core-status-error" :title="killError">{{ killError }}</div>
+      <div v-else class="core-sub-exit">点击退出 ✕</div>
     </div>
 
-    <div class="menu-divider"></div>
+    <div class="radial-sector-group">
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 0deg;"
+        title="聚焦到玩家"
+        @click.stop="handleAction('focus')"
+      >
+        <span class="radial-btn-icon">👁</span>
+        <span class="radial-btn-label">聚焦</span>
+      </button>
 
-    <ul class="menu-list">
-      <li class="menu-item" @click="handleAction('open-profile')">
-        <span class="menu-icon">👤</span>
-        <span class="menu-label">打开个人资料</span>
-      </li>
-      <li class="menu-item" @click="handleAction('focus')">
-        <span class="menu-icon">👁️</span>
-        <span class="menu-label">聚焦到玩家</span>
-      </li>
-      <li class="menu-item" @click="handleAction('copy-coords')">
-        <span class="menu-icon">📋</span>
-        <span class="menu-label">复制坐标</span>
-      </li>
-      <li class="menu-item" @click="handleAction('start-measure')">
-        <span class="menu-icon">📏</span>
-        <span class="menu-label">从这里开始测距</span>
-      </li>
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 45deg;"
+        title="打开玩家资料"
+        @click.stop="handleAction('open-profile')"
+      >
+        <span class="radial-btn-icon">👤</span>
+        <span class="radial-btn-label">资料</span>
+      </button>
 
-      <div class="menu-divider sub-divider"></div>
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 90deg;"
+        title="复制玩家坐标"
+        @click.stop="handleAction('copy-coords')"
+      >
+        <span class="radial-btn-icon">📋</span>
+        <span class="radial-btn-label">坐标</span>
+      </button>
 
-      <li class="menu-item disabled">
-        <span class="menu-icon">⚙️</span>
-        <span class="menu-label">查看 Core 信息 <span class="badge">Coming Soon</span></span>
-      </li>
-      <li
-        class="menu-item"
-        :class="{ disabled: !canManage || !rconPlayer }"
-        @click="handleAction('warn')"
+      <button
+        type="button"
+        class="radial-btn"
+        style="--angle: 135deg;"
+        title="从该玩家位置开始测距"
+        @click.stop="handleAction('start-measure')"
       >
-        <span class="menu-icon">⚠️</span>
-        <span class="menu-label">
-          警告玩家 (Warn)
-          <span v-if="!rconPlayer" class="badge">未关联对局</span>
-          <span v-else-if="!canManage" class="badge">无权限</span>
-        </span>
-      </li>
-      <li
-        class="menu-item danger-action"
-        :class="{ disabled: !canManage || !rconPlayerId || killPending }"
-        @click="handleAction('kill')"
+        <span class="radial-btn-icon">📏</span>
+        <span class="radial-btn-label">测距</span>
+      </button>
+
+      <button
+        type="button"
+        class="radial-btn admin-action"
+        :class="{ 'is-disabled': !canUseAdminAction }"
+        style="--angle: 180deg;"
+        :title="adminDisabledReason || '警告玩家'"
+        @click.stop="handleAction('warn')"
       >
-        <span class="menu-icon">☠</span>
-        <span class="menu-label">
-          {{ killPending ? "正在击杀..." : "立即击杀 (Kill)" }}
-          <span v-if="killError" class="badge error-badge">{{ killError }}</span>
-          <span v-else-if="!rconPlayer" class="badge">未关联对局</span>
-          <span v-else-if="!rconPlayerId" class="badge">无 ListPlayers ID</span>
-          <span v-else-if="!canManage" class="badge">无权限</span>
-          <span v-else class="badge">ID {{ rconPlayerId }}</span>
-        </span>
-      </li>
-      <li
-        class="menu-item"
-        :class="{ disabled: !canManage || !rconPlayer }"
-        @click="handleAction('kick')"
+        <span class="radial-btn-icon">⚠</span>
+        <span class="radial-btn-label">警告</span>
+      </button>
+
+      <button
+        type="button"
+        class="radial-btn danger-action"
+        :class="{ 'is-disabled': !canKill || killPending }"
+        style="--angle: 225deg;"
+        :title="killButtonTitle"
+        @click.stop="handleAction('kill')"
       >
-        <span class="menu-icon">❌</span>
-        <span class="menu-label">
-          踢出玩家 (Kick)
-          <span v-if="!rconPlayer" class="badge">未关联对局</span>
-          <span v-else-if="!canManage" class="badge">无权限</span>
-        </span>
-      </li>
-      <li
-        class="menu-item"
-        :class="{ disabled: !canManage || !rconPlayer }"
-        @click="handleAction('force-team')"
+        <span class="radial-btn-icon">☠</span>
+        <span class="radial-btn-label">{{ killPending ? "执行中" : "击杀" }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="radial-btn admin-action"
+        :class="{ 'is-disabled': !canUseAdminAction }"
+        style="--angle: 270deg;"
+        :title="adminDisabledReason || '踢出玩家'"
+        @click.stop="handleAction('kick')"
       >
-        <span class="menu-icon">🔁</span>
-        <span class="menu-label">
-          强制换队
-          <span v-if="!rconPlayer" class="badge">未关联对局</span>
-          <span v-else-if="!canManage" class="badge">无权限</span>
-        </span>
-      </li>
-    </ul>
+        <span class="radial-btn-icon">✕</span>
+        <span class="radial-btn-label">踢出</span>
+      </button>
+
+      <button
+        type="button"
+        class="radial-btn admin-action"
+        :class="{ 'is-disabled': !canUseAdminAction }"
+        style="--angle: 315deg;"
+        :title="adminDisabledReason || '强制换队'"
+        @click.stop="handleAction('force-team')"
+      >
+        <span class="radial-btn-icon">↔</span>
+        <span class="radial-btn-label">换队</span>
+      </button>
+    </div>
+
+    <div v-if="linkConfidence" class="radial-link-meta font-mono" :title="linkReason">
+      {{ linkConfidenceText }}
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
 import { killPlayer } from "../../app/squadManagementApi";
 
@@ -127,18 +164,20 @@ const offsetTop = ref(props.y);
 const killPending = ref(false);
 const killError = ref("");
 
-const menuStyle = computed(() => {
-  return {
-    left: `${offsetLeft.value}px`,
-    top: `${offsetTop.value}px`,
-  };
-});
+const MENU_RADIUS = 140;
+const MENU_EDGE_GAP = 10;
+
+const menuStyle = computed(() => ({
+  left: `${offsetLeft.value}px`,
+  top: `${offsetTop.value}px`,
+}));
 
 const displayPlayerName = computed(() => {
   return String(
     props.player?.playerName
     || (props.player as any)?.identity?.name
     || (props.player as any)?.name
+    || props.rconPlayer?.name
     || "Unknown Player",
   ).trim() || "Unknown Player";
 });
@@ -148,43 +187,91 @@ const rconPlayerId = computed(() => normalizeListPlayersId(
   ?? props.rconPlayer?.playerID,
 ));
 
+const canUseAdminAction = computed(() => Boolean(props.canManage && props.rconPlayer));
+const canKill = computed(() => Boolean(canUseAdminAction.value && rconPlayerId.value));
+const adminDisabledReason = computed(() => {
+  if (!props.rconPlayer) return "未关联到当前 ListPlayers 玩家";
+  if (!props.canManage) return "当前账号没有管理权限";
+  return "";
+});
+const killButtonTitle = computed(() => {
+  if (!props.rconPlayer) return "未关联到当前 ListPlayers 玩家";
+  if (!rconPlayerId.value) return "当前玩家没有 ListPlayers ID，禁止执行 Kill";
+  if (!props.canManage) return "当前账号没有管理权限";
+  if (killPending.value) return "正在执行 AdminKill";
+  return `单击立即击杀 ${displayPlayerName.value} · AdminKill ${rconPlayerId.value}`;
+});
+
+const linkConfidenceText = computed(() => {
+  const confidence = props.linkConfidence ?? "none";
+  if (confidence === "exact") return "LINK EXACT";
+  if (confidence === "strong") return "LINK STRONG";
+  if (confidence === "weak") return "LINK WEAK";
+  return "UNLINKED";
+});
+
+function clampMenuAxis(value: number, availableSize: number) {
+  const minimum = MENU_RADIUS + MENU_EDGE_GAP;
+  const maximum = availableSize - MENU_RADIUS - MENU_EDGE_GAP;
+  if (maximum < minimum) return Math.max(0, availableSize / 2);
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function syncMenuPosition() {
+  const menu = menuRef.value;
+  if (!menu) return;
+  const parentRect = menu.parentElement?.getBoundingClientRect();
+  const width = parentRect?.width || window.innerWidth;
+  const height = parentRect?.height || window.innerHeight;
+  offsetLeft.value = clampMenuAxis(props.x, width);
+  offsetTop.value = clampMenuAxis(props.y, height);
+}
+
+function onDocumentKeyDown(event: KeyboardEvent) {
+  if (event.key === "Escape") emit("close");
+}
+
+function onViewportResize() {
+  syncMenuPosition();
+}
+
+watch(
+  () => [props.x, props.y, props.player] as const,
+  () => {
+    killError.value = "";
+    nextTick(syncMenuPosition);
+  },
+);
+
 onMounted(() => {
-  if (menuRef.value) {
-    const rect = menuRef.value.getBoundingClientRect();
-    const parentRect = menuRef.value.parentElement?.getBoundingClientRect() || {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    };
+  nextTick(syncMenuPosition);
+  window.addEventListener("keydown", onDocumentKeyDown);
+  window.addEventListener("resize", onViewportResize);
+});
 
-    let left = props.x;
-    let top = props.y;
-
-    if (left + rect.width > parentRect.width) {
-      left = parentRect.width - rect.width - 8;
-    }
-    if (top + rect.height > parentRect.height) {
-      top = parentRect.height - rect.height - 8;
-    }
-
-    offsetLeft.value = Math.max(8, left);
-    offsetTop.value = Math.max(8, top);
-  }
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onDocumentKeyDown);
+  window.removeEventListener("resize", onViewportResize);
 });
 
 function handleAction(event: "open-profile" | "focus" | "copy-coords" | "start-measure" | "warn" | "kill" | "kick" | "force-team") {
+  if (event === "kill") {
+    if (canKill.value && !killPending.value) void executeKill();
+    return;
+  }
+
+  if (event === "warn" || event === "kick" || event === "force-team") {
+    if (!canUseAdminAction.value) return;
+  }
+
   if (event === "open-profile") emit("open-profile");
   else if (event === "focus") emit("focus");
   else if (event === "copy-coords") emit("copy-coords");
   else if (event === "start-measure") emit("start-measure");
-  else if (event === "warn" && props.canManage && props.rconPlayer) emit("warn");
-  else if (event === "kill") {
-    if (props.canManage && props.rconPlayer && rconPlayerId.value && !killPending.value) {
-      void executeKill();
-    }
-    return;
-  }
-  else if (event === "kick" && props.canManage && props.rconPlayer) emit("kick");
-  else if (event === "force-team" && props.canManage && props.rconPlayer) emit("force-team");
+  else if (event === "warn") emit("warn");
+  else if (event === "kick") emit("kick");
+  else if (event === "force-team") emit("force-team");
+
   emit("close");
 }
 
@@ -201,7 +288,7 @@ async function executeKill() {
       targetName: String(props.rconPlayer?.name ?? displayPlayerName.value).trim(),
       targetSteamId: String(props.rconPlayer?.steamId ?? props.rconPlayer?.steamID ?? "").trim() || undefined,
       targetEosId: String(props.rconPlayer?.eosId ?? props.rconPlayer?.eosID ?? "").trim() || undefined,
-      reason: "tactical_map_player_command",
+      reason: "tactical_map_radial_kill",
       source: "web.tacticalMap.playerActionMenu",
       system: false,
     });
@@ -213,7 +300,7 @@ async function executeKill() {
 
     emit("close");
   } catch (error) {
-    killError.value = error instanceof Error ? error.message : "Kill 请求失败";
+    killError.value = compactError(error instanceof Error ? error.message : "Kill 请求失败");
   } finally {
     killPending.value = false;
   }
@@ -224,239 +311,220 @@ function normalizeListPlayersId(value: unknown): string {
   return /^\d+$/.test(text) ? text : "";
 }
 
+function compactError(value: string) {
+  const text = String(value ?? "").trim();
+  if (!text) return "KILL FAILED";
+  if (text === "MissingListPlayersPlayerId" || text === "missing_list_players_player_id") return "NO PLAYER ID";
+  return text.length > 18 ? `${text.slice(0, 15)}...` : text;
+}
+
 function formatKillError(result: any): string {
-  const raw = String(
+  return compactError(String(
     result?.message
     ?? result?.error
     ?? result?.skipReason
-    ?? "Kill 失败",
-  ).trim();
-  if (raw === "MissingListPlayersPlayerId" || raw === "missing_list_players_player_id") {
-    return "无 ListPlayers ID";
-  }
-  return raw || "Kill 失败";
+    ?? "Kill failed",
+  ));
 }
-
-const linkConfidenceText = computed(() => {
-  const confidence = props.linkConfidence ?? "none";
-  if (confidence === "exact") return "Exact";
-  if (confidence === "strong") return "Strong";
-  if (confidence === "weak") return "Weak";
-  return "Unlinked";
-});
 </script>
 
 <style scoped>
-.map-floating-panel {
-  background: rgba(8, 12, 24, 0.88);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 229, 255, 0.25);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7), 0 0 15px rgba(0, 229, 255, 0.1);
-  border-radius: 4px;
-}
-
-.player-action-menu {
+.player-action-radial {
   position: absolute;
-  width: 220px;
-  z-index: 1000;
-  padding: 6px 0;
-  animation: actionMenuAppear 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 280px;
+  height: 280px;
+  transform: translate(-50%, -50%);
+  z-index: 1100;
   user-select: none;
+  touch-action: none;
+  animation: radialPopIn 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-@keyframes actionMenuAppear {
+@keyframes radialPopIn {
   from {
     opacity: 0;
-    transform: scale(0.96) translateY(-4px);
+    transform: translate(-50%, -50%) scale(0.62) rotate(-12deg);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
   }
 }
 
-.menu-header {
-  padding: 8px 12px 6px;
-}
-
-.header-title {
-  font-size: 9px;
-  color: rgba(0, 229, 255, 0.6);
-  letter-spacing: 1px;
-  margin-bottom: 4px;
-}
-
-.player-label {
-  font-size: 13px;
-  color: #ffffff;
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.player-link-meta {
-  margin-top: 4px;
-  font-size: 10px;
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.menu-divider {
-  height: 1px;
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.2) 0%, rgba(0, 229, 255, 0.05) 100%);
-  margin: 6px 0;
-}
-
-.sub-divider {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.menu-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.menu-item {
-  padding: 8px 14px;
-  font-size: 12px;
-  color: #e2e8f0;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.15s ease;
-  position: relative;
-}
-
-.menu-item:hover:not(.disabled) {
-  background: rgba(0, 229, 255, 0.12);
-  color: #ffffff;
-  padding-left: 17px;
-}
-
-.menu-item:hover:not(.disabled)::before {
-  content: '';
+.radial-ring-background {
   position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: #00e5ff;
-  box-shadow: 0 0 8px #00e5ff;
+  inset: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(15, 23, 42, 0.88) 0%, rgba(8, 12, 24, 0.96) 70%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.85), inset 0 0 25px rgba(0, 229, 255, 0.12);
+  pointer-events: none;
 }
 
-.menu-item.danger-action {
-  color: #fecaca;
+.tone-friendly .radial-ring-background {
+  border-color: rgba(55, 200, 255, 0.42);
 }
 
-.menu-item.danger-action:hover:not(.disabled) {
-  background: rgba(239, 68, 68, 0.16);
-  color: #ffffff;
+.tone-enemy .radial-ring-background {
+  border-color: rgba(255, 91, 110, 0.42);
 }
 
-.menu-item.danger-action:hover:not(.disabled)::before {
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
+.player-action-radial.has-error .radial-ring-background {
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.85), inset 0 0 28px rgba(239, 68, 68, 0.22);
 }
 
-.menu-item.disabled {
-  color: #64748b;
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
-.menu-icon {
-  font-size: 14px;
-  display: inline-flex;
+.radial-center-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92px;
+  height: 92px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.97);
+  border: 1.5px solid #00e5ff;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.38), inset 0 0 10px rgba(0, 229, 255, 0.18);
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 16px;
+  cursor: pointer;
+  z-index: 10;
+  outline: none;
+  padding: 7px;
+  transition: all 0.18s ease;
 }
 
-.menu-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
+.radial-center-core:hover,
+.radial-center-core:focus-visible {
+  transform: translate(-50%, -50%) scale(1.06);
+  background: rgba(239, 68, 68, 0.18);
+  border-color: #ef4444;
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.5);
 }
 
-.badge {
+.core-tag {
   font-size: 8px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #94a3b8;
-  margin-left: 4px;
+  color: rgba(0, 229, 255, 0.72);
+  letter-spacing: 1px;
 }
 
-.error-badge {
-  max-width: 92px;
+.core-player-name {
+  width: 76px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #f8fafc;
+  margin-top: 2px;
+}
+
+.core-player-id {
+  margin-top: 2px;
+  font-size: 8px;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+.core-sub-exit,
+.core-status {
+  margin-top: 3px;
+  font-size: 7px;
+  font-weight: 800;
+  color: #f87171;
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-status:not(.core-status-error) {
+  color: #fbbf24;
+}
+
+.core-status-error {
+  color: #fb7185;
+}
+
+.radial-sector-group {
+  position: absolute;
+  inset: 0;
+}
+
+.radial-btn {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  margin-left: -29px;
+  margin-top: -29px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #cbd5e1;
+  transition: all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: rotate(var(--angle)) translateY(-98px) rotate(calc(-1 * var(--angle)));
+}
+
+.radial-btn:hover:not(.is-disabled) {
+  background: rgba(0, 229, 255, 0.25);
+  border-color: #00e5ff;
+  color: #ffffff;
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.65);
+  transform: rotate(var(--angle)) translateY(-106px) rotate(calc(-1 * var(--angle))) scale(1.16);
+  z-index: 5;
+}
+
+.radial-btn.danger-action {
   color: #fecaca;
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(127, 29, 29, 0.28);
+  border-color: rgba(239, 68, 68, 0.38);
 }
 
-.menu-item.disabled .badge {
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.05);
+.radial-btn.danger-action:hover:not(.is-disabled) {
+  background: rgba(127, 29, 29, 0.88);
+  border-color: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.78);
 }
 
-/* Tone styling overrides */
-.tone-friendly {
-  border-color: rgba(55, 200, 255, 0.35);
+.radial-btn.is-disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  filter: grayscale(0.85);
 }
 
-.tone-friendly .menu-item:hover:not(.disabled)::before {
-  background: #37c8ff;
-  box-shadow: 0 0 8px #37c8ff;
+.radial-btn-icon {
+  font-size: 16px;
+  line-height: 1;
 }
 
-.tone-friendly .menu-item:hover:not(.disabled) {
-  background: rgba(55, 200, 255, 0.12);
+.radial-btn-label {
+  margin-top: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.tone-friendly .menu-item.danger-action:hover:not(.disabled)::before {
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
-}
-
-.tone-friendly .menu-item.danger-action:hover:not(.disabled) {
-  background: rgba(239, 68, 68, 0.16);
-}
-
-.tone-friendly .header-title {
-  color: rgba(55, 200, 255, 0.7);
-}
-
-.tone-enemy {
-  border-color: rgba(255, 91, 110, 0.35);
-}
-
-.tone-enemy .menu-item:hover:not(.disabled)::before {
-  background: #ff5b6e;
-  box-shadow: 0 0 8px #ff5b6e;
-}
-
-.tone-enemy .menu-item:hover:not(.disabled) {
-  background: rgba(255, 91, 110, 0.12);
-}
-
-.tone-enemy .menu-item.danger-action:hover:not(.disabled)::before {
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
-}
-
-.tone-enemy .menu-item.danger-action:hover:not(.disabled) {
-  background: rgba(239, 68, 68, 0.16);
-}
-
-.tone-enemy .header-title {
-  color: rgba(255, 91, 110, 0.7);
+.radial-link-meta {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  transform: translateX(-50%);
+  font-size: 8px;
+  letter-spacing: 0.8px;
+  color: rgba(148, 163, 184, 0.75);
+  pointer-events: none;
 }
 </style>
