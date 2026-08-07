@@ -19,7 +19,7 @@ type AxisPair = {
 
 type DragSession = {
   pointerId: number;
-  pointIndex: number;
+  pointName: string;
   marker: HTMLButtonElement;
   layer: HTMLElement;
   viewport: HTMLElement;
@@ -57,14 +57,8 @@ function parsePercent(value: string | null | undefined) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function parsePointIndex(marker: Element) {
-  const label = marker.querySelector(".capture-point-index")?.textContent ?? "";
-  const labelMatch = label.match(/P\s*(\d+)/i);
-  if (labelMatch) return Number(labelMatch[1]);
-
-  const title = marker.getAttribute("title") ?? "";
-  const titleMatch = title.match(/点位\s*(\d+)/);
-  return titleMatch ? Number(titleMatch[1]) : null;
+function parsePointName(marker: Element) {
+  return marker.querySelector(".zone-flag-name")?.textContent?.trim() ?? "";
 }
 
 function parseMarkerGamePosition(marker: Element) {
@@ -203,7 +197,7 @@ function updateDrag(session: DragSession, clientX: number, clientY: number) {
   const preview = createPreview(session);
   preview.style.left = `${session.mapX}%`;
   preview.style.top = `${session.mapY}%`;
-  setFeedback(session, `正在移动点位 ${session.pointIndex} · X ${Math.round(session.gameX)} Y ${Math.round(session.gameY)}`);
+  setFeedback(session, `正在移动点位 ${session.pointName} · X ${Math.round(session.gameX)} Y ${Math.round(session.gameY)}`);
 }
 
 function releasePointer(session: DragSession) {
@@ -233,9 +227,9 @@ function cancelActiveDrag() {
   cleanupSession(session);
 }
 
-function findLiveMarker(layer: HTMLElement, pointIndex: number) {
+function findLiveMarker(layer: HTMLElement, pointName: string) {
   return Array.from(layer.querySelectorAll<HTMLButtonElement>(".capture-zone-marker:not([data-capture-drag-preview])"))
-    .find((marker) => parsePointIndex(marker) === pointIndex) ?? null;
+    .find((marker) => parsePointName(marker) === pointName) ?? null;
 }
 
 function waitForCommittedMarker(session: DragSession, timeoutMs = 4500) {
@@ -243,7 +237,7 @@ function waitForCommittedMarker(session: DragSession, timeoutMs = 4500) {
     const startedAt = performance.now();
     const check = () => {
       ensurePreviewAttached(session);
-      const marker = findLiveMarker(session.layer, session.pointIndex);
+      const marker = findLiveMarker(session.layer, session.pointName);
       const mapX = marker ? parsePercent(marker.style.left) : null;
       const mapY = marker ? parsePercent(marker.style.top) : null;
       if (
@@ -277,7 +271,7 @@ async function finishActiveDrag(event: PointerEvent) {
 
   if (!session.moved) {
     cleanupSession(session);
-    setFeedback(session, `点位 ${session.pointIndex} 未移动，未发送命令`);
+    setFeedback(session, `点位 ${session.pointName} 未移动，未发送命令`);
     return;
   }
 
@@ -285,18 +279,18 @@ async function finishActiveDrag(event: PointerEvent) {
   const gameY = Math.round(session.gameY);
   commandPending = true;
   session.preview?.classList.add("is-command-pending");
-  setFeedback(session, `正在提交 DragCapturePoint:${session.pointIndex},${gameX},${gameY}`);
+  setFeedback(session, `正在提交 DragCapturePoint:${session.pointName},${gameX},${gameY}`);
 
   try {
     const result = await executeBzssCoreCommand({
       directive: "DragCapturePoint",
-      parameter: `${session.pointIndex},${gameX},${gameY}`,
+      parameter: `${session.pointName},${gameX},${gameY}`,
     });
     if (!result?.ok) {
       throw new Error(String((result as { message?: unknown } | null)?.message ?? "BZSS Core 拒绝了改点命令"));
     }
 
-    setFeedback(session, `点位 ${session.pointIndex} 已移动到 X ${gameX}, Y ${gameY}`);
+    setFeedback(session, `点位 ${session.pointName} 已移动到 X ${gameX}, Y ${gameY}`);
     await waitForCommittedMarker(session);
   } catch (error) {
     setFeedback(session, error instanceof Error ? error.message : "改点命令发送失败");
@@ -317,11 +311,11 @@ function startDrag(event: PointerEvent) {
 
   const layer = marker.closest<HTMLElement>(".capture-zone-layer");
   const mapElement = marker.closest<HTMLElement>(".map-transform-container");
-  const pointIndex = parsePointIndex(marker);
+  const pointName = parsePointName(marker);
   const startMapX = parsePercent(marker.style.left);
   const startMapY = parsePercent(marker.style.top);
   const markerGamePosition = parseMarkerGamePosition(marker);
-  if (!layer || !mapElement || !pointIndex || startMapX == null || startMapY == null || !markerGamePosition) return;
+  if (!layer || !mapElement || !pointName || startMapX == null || startMapY == null || !markerGamePosition) return;
 
   const mapRect = mapElement.getBoundingClientRect();
   if (!(mapRect.width > 0) || !(mapRect.height > 0)) return;
@@ -331,7 +325,7 @@ function startDrag(event: PointerEvent) {
   const feedbackElement = viewport.querySelector<HTMLElement>(".capture-point-edit-status");
   const session: DragSession = {
     pointerId: event.pointerId,
-    pointIndex,
+    pointName,
     marker,
     layer,
     viewport,
@@ -359,7 +353,7 @@ function startDrag(event: PointerEvent) {
   } catch {
     // Global capture listeners below are sufficient in embedded webviews.
   }
-  setFeedback(session, `正在移动点位 ${pointIndex}`);
+  setFeedback(session, `正在移动点位 ${pointName}`);
 }
 
 function moveDrag(event: PointerEvent) {
