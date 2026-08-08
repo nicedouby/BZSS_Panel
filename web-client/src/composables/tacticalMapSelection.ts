@@ -658,7 +658,7 @@ export function ensureTacticalMapSelectionController() {
       return;
     }
 
-    const map = target.closest<HTMLElement>(".map-transform-container");
+    const map = target.closest<HTMLElement>(`${TACTICAL_MAP_VIEWPORT_SELECTOR} .map-transform-container`);
     if (!map) return;
     selectVisualCurrentPlayer(map);
   }, true);
