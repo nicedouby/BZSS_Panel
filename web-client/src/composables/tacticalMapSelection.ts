@@ -30,6 +30,7 @@ let killModeFeedbackTimer: number | null = null;
 const killPendingPlayerIds = new Set<string>();
 const killLastFireAt = new Map<string, number>();
 
+const TACTICAL_MAP_VIEWPORT_SELECTOR = ".tactical-map-viewport";
 const KILL_MODE_STYLE_ID = "bzss-tactical-kill-mode-style";
 const KILL_MODE_BUTTON_CLASS = "bzss-tactical-kill-mode-toggle";
 const KILL_MODE_STATUS_CLASS = "bzss-tactical-kill-mode-status";
@@ -531,7 +532,7 @@ function syncKillModeUi() {
   if (typeof document === "undefined") return;
   ensureKillModeStyles();
 
-  const viewports = [...document.querySelectorAll<HTMLElement>(".map-viewport")];
+  const viewports = [...document.querySelectorAll<HTMLElement>(TACTICAL_MAP_VIEWPORT_SELECTOR)];
   for (const viewport of viewports) {
     const button = viewport.querySelector<HTMLButtonElement>(`.${KILL_MODE_BUTTON_CLASS}`)
       ?? createKillModeButton(viewport);
@@ -570,7 +571,7 @@ function ensureKillModeUiController() {
       [...record.addedNodes].some((node) => {
         if (node.nodeType !== Node.ELEMENT_NODE) return false;
         const element = node as Element;
-        return element.matches(".map-viewport") || Boolean(element.querySelector(".map-viewport"));
+        return element.matches(TACTICAL_MAP_VIEWPORT_SELECTOR) || Boolean(element.querySelector(TACTICAL_MAP_VIEWPORT_SELECTOR));
       })
     ));
     if (viewportAdded) syncKillModeUi();
@@ -617,7 +618,7 @@ export function ensureTacticalMapSelectionController() {
       return;
     }
 
-    if (!target.closest(".map-transform-container")) return;
+    if (!target.closest(`${TACTICAL_MAP_VIEWPORT_SELECTOR} .map-transform-container`)) return;
     if (
       target.closest(".radial-context-menu")
       || target.closest(".map-floating-panel")
@@ -640,7 +641,7 @@ export function ensureTacticalMapSelectionController() {
       return;
     }
 
-    const map = target.closest<HTMLElement>(".map-transform-container");
+    const map = target.closest<HTMLElement>(`${TACTICAL_MAP_VIEWPORT_SELECTOR} .map-transform-container`);
     if (!map) return;
     selectVisualCurrentPlayer(map);
   }, true);
