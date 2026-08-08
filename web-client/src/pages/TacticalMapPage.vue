@@ -3,7 +3,7 @@
       <!-- Main Map Viewport -->
       <div
       ref="containerRef"
-      class="map-viewport"
+      class="map-viewport tactical-map-viewport"
       :class="{ 'has-explosion-shake': isShaking, 'is-dragging': isDragging, 'is-loading': isInitialMapLoading, 'is-capture-point-editing': capturePointEditMode }"
       @pointerdown="startDrag"
       @wheel.prevent="onWheel"
