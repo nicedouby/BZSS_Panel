@@ -561,7 +561,20 @@ function ensureKillModeUiController() {
   if (typeof document === "undefined") return;
   syncKillModeUi();
   if (killModeUiObserver || typeof MutationObserver === "undefined") return;
-  killModeUiObserver = new MutationObserver(() => syncKillModeUi());
+  // Only react when a tactical map viewport is mounted. Observing every
+  // subtree mutation here is unsafe because syncKillModeUi() itself updates
+  // text nodes, classes, and attributes, which would recursively retrigger the
+  // observer and lock the browser main thread after a map click.
+  killModeUiObserver = new MutationObserver((records) => {
+    const viewportAdded = records.some((record) => (
+      [...record.addedNodes].some((node) => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return false;
+        const element = node as Element;
+        return element.matches(".map-viewport") || Boolean(element.querySelector(".map-viewport"));
+      })
+    ));
+    if (viewportAdded) syncKillModeUi();
+  });
   killModeUiObserver.observe(document.documentElement, { childList: true, subtree: true });
 }
 
