@@ -128,24 +128,28 @@
   height: 0;
 }
 
-.grid-label {
+.squad-grid-label {
   position: absolute;
-  font-size: 9px;
-  color: rgba(56, 189, 248, 0.6);
-  font-family: monospace;
-  background: rgba(15, 23, 42, 0.6);
-  padding: 1px 3px;
-  border-radius: 3px;
+  z-index: 1;
+  min-width: 18px;
+  padding: 2px 5px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 4px;
+  background: rgba(2, 8, 23, 0.76);
+  color: rgba(186, 230, 253, 0.92);
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
 }
 
-.grid-line.vertical .grid-label {
-  bottom: 4px;
+.squad-grid-label--column {
+  top: 5px;
   transform: translateX(-50%);
 }
 
-.grid-line.horizontal .grid-label {
-  left: 4px;
+.squad-grid-label--row {
+  left: 5px;
   transform: translateY(-50%);
 }
 

@@ -61,24 +61,30 @@
 
         <!-- Tactical Coordinates Grid Lines -->
         <div v-if="showGrid" class="map-grid-overlay">
-          <!-- Vertical grid lines (game X coordinates) -->
           <div
             v-for="line in verticalGridLines"
-            :key="'v-' + line.percent"
+            :key="'v-' + line"
             class="grid-line vertical"
-            :style="{ left: `${line.percent}%` }"
-          >
-            <span class="grid-label">{{ line.label }}</span>
-          </div>
-          <!-- Horizontal grid lines (game Y coordinates) -->
+            :style="{ left: `${line}%` }"
+          ></div>
           <div
             v-for="line in horizontalGridLines"
-            :key="'h-' + line.percent"
+            :key="'h-' + line"
             class="grid-line horizontal"
-            :style="{ top: `${line.percent}%` }"
-          >
-            <span class="grid-label">{{ line.label }}</span>
-          </div>
+            :style="{ top: `${line}%` }"
+          ></div>
+          <span
+            v-for="cell in squadGridColumns"
+            :key="'column-' + cell.index"
+            class="squad-grid-label squad-grid-label--column"
+            :style="{ left: `${cell.centerPercent}%` }"
+          >{{ cell.label }}</span>
+          <span
+            v-for="cell in squadGridRows"
+            :key="'row-' + cell.index"
+            class="squad-grid-label squad-grid-label--row"
+            :style="{ top: `${cell.centerPercent}%` }"
+          >{{ cell.label }}</span>
         </div>
 
 
@@ -564,6 +570,7 @@
         :y="mapCommandMenu.y"
         :game-x="mapCommandMenu.gameX"
         :game-y="mapCommandMenu.gameY"
+        :squad-coordinate="formatMapPercentSquadCoordinate(mapCommandMenu.mapX, mapCommandMenu.mapY)"
         :map-x="mapCommandMenu.mapX"
         :map-y="mapCommandMenu.mapY"
         :has-points="measurePoints.length > 0"
@@ -630,8 +637,14 @@
       >
         {{ capturePointFeedback?.text ?? "改点模式：按住点位旗帜拖拽，松开后提交" }}
       </div>
-      <div class="map-coordinate-readout font-mono" aria-live="polite">
-        <span>坐标</span><b>X {{ hoverCoords ? Math.round(hoverCoords.gameX) : '-' }}</b><b>Y {{ hoverCoords ? Math.round(hoverCoords.gameY) : '-' }}</b>
+      <div
+        class="map-coordinate-readout font-mono"
+        aria-live="polite"
+        title="主格 - 九宫格 - 子九宫格（电脑小键盘方向）"
+      >
+        <span>Squad 坐标</span>
+        <b class="map-coordinate-readout__squad">{{ hoverSquadCoordinate?.label ?? '-' }}</b>
+        <small>X {{ hoverCoords ? Math.round(hoverCoords.gameX) : '-' }} · Y {{ hoverCoords ? Math.round(hoverCoords.gameY) : '-' }}</small>
       </div>
     </div>
     <TacticalMapSidebar
@@ -802,6 +815,11 @@ import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
 import { getChineseNameByFaction, getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
 import { apiDelete, apiGet, apiPost } from "../app/apiClient";
 import { fetchDynamicPressureZoneState, type PressureZoneState } from "../app/dynamicPressureZoneApi";
+import {
+  buildSquadMajorGridCells,
+  buildSquadMajorGridLines,
+  formatSquadGridCoordinate,
+} from "../utils/squad-grid-coordinates";
 
 const props = withDefaults(defineProps<{
   snapshot: BzssCorePlayerInfoResponse | null;
@@ -2262,11 +2280,34 @@ function onClearMeasure() {
   logCombatEvent("清空测距点", "system");
 }
 
-async function onCopyCoords(coords: { gameX: number; gameY: number }) {
-  const text = `${Math.round(coords.gameX)}, ${Math.round(coords.gameY)}`;
+function formatMapPercentSquadCoordinate(mapX: number, mapY: number) {
+  return formatSquadGridCoordinate(
+    mapX / 100,
+    mapY / 100,
+    activeMapDimensionsMeters.value.width,
+    activeMapDimensionsMeters.value.height,
+  )?.label ?? "";
+}
+
+function formatGameSquadCoordinate(gameX: number, gameY: number) {
+  const bounds = activeMapConfig.value.bounds;
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+  if (!(width > 0) || !(height > 0)) return "";
+  return formatSquadGridCoordinate(
+    (gameX - bounds.minX) / width,
+    (gameY - bounds.minY) / height,
+    activeMapDimensionsMeters.value.width,
+    activeMapDimensionsMeters.value.height,
+  )?.label ?? "";
+}
+
+async function onCopyCoords(coords: { mapX: number; mapY: number; gameX: number; gameY: number }) {
+  const text = formatMapPercentSquadCoordinate(coords.mapX, coords.mapY)
+    || `${Math.round(coords.gameX)}, ${Math.round(coords.gameY)}`;
   try {
     await navigator.clipboard.writeText(text);
-    logCombatEvent(`已复制地图坐标: ${text}`, "system");
+    logCombatEvent(`已复制 Squad 地图坐标: ${text}`, "system");
   } catch (err) {
     console.error("Failed to copy coordinates:", err);
   }
@@ -2288,10 +2329,13 @@ function onFocusPlayer(player: TacticalLinkedPlayer) {
 async function onCopyPlayerCoords(player: TacticalLinkedPlayer) {
   const pos = getPlayerPosition(player);
   if (!pos) return;
-  const text = `${Math.round(pos.x ?? 0)}, ${Math.round(pos.y ?? 0)}`;
+  const gameX = Number(pos.x ?? 0);
+  const gameY = Number(pos.y ?? 0);
+  const text = formatGameSquadCoordinate(gameX, gameY)
+    || `${Math.round(gameX)}, ${Math.round(gameY)}`;
   try {
     await navigator.clipboard.writeText(text);
-    logCombatEvent(`已复制玩家 ${player.playerName} 的坐标: ${text}`, "system");
+    logCombatEvent(`已复制玩家 ${player.playerName} 的 Squad 坐标: ${text}`, "system");
   } catch (err) {
     console.error("Failed to copy player coords:", err);
   }
@@ -2344,30 +2388,11 @@ const perspectiveSummaryText = computed(() => {
   return "当前视角: 自动识别失败，回退 TEAM 1";
 });
 
-// Grid lines calculation
-const verticalGridLines = computed(() => {
-  const steps = [0, 25, 50, 75, 100];
-  const bounds = activeMapConfig.value.bounds;
-  return steps.map((pct) => {
-    const val = bounds.minX + (bounds.maxX - bounds.minX) * (pct / 100);
-    return {
-      percent: pct,
-      label: `X:${Math.round(val)}`,
-    };
-  });
-});
-
-const horizontalGridLines = computed(() => {
-  const steps = [0, 25, 50, 75, 100];
-  const bounds = activeMapConfig.value.bounds;
-  return steps.map((pct) => {
-    const val = bounds.minY + (bounds.maxY - bounds.minY) * (pct / 100);
-    return {
-      percent: pct,
-      label: `Y:${Math.round(val)}`,
-    };
-  });
-});
+// Squad's radio grid: 300 m alphanumeric cells, followed by keypad and sub-keypad.
+const squadGridColumns = computed(() => buildSquadMajorGridCells(activeMapDimensionsMeters.value.width, "column"));
+const squadGridRows = computed(() => buildSquadMajorGridCells(activeMapDimensionsMeters.value.height, "row"));
+const verticalGridLines = computed(() => buildSquadMajorGridLines(activeMapDimensionsMeters.value.width));
+const horizontalGridLines = computed(() => buildSquadMajorGridLines(activeMapDimensionsMeters.value.height));
 
 // Tickets computed
 const tickets = computed(() => {
@@ -2974,18 +2999,34 @@ const bzssCoreAliveCount = computed(() => {
 });
 
 // Track Mouse Movement for game coordinates HUD
-const hoverCoords = ref<{ x: number; y: number; gameX: number; gameY: number } | null>(null);
+const hoverCoords = ref<{
+  x: number;
+  y: number;
+  gameX: number;
+  gameY: number;
+  normalizedX: number;
+  normalizedY: number;
+} | null>(null);
+
+const hoverSquadCoordinate = computed(() => {
+  if (!hoverCoords.value) return null;
+  return formatSquadGridCoordinate(
+    hoverCoords.value.normalizedX,
+    hoverCoords.value.normalizedY,
+    activeMapDimensionsMeters.value.width,
+    activeMapDimensionsMeters.value.height,
+  );
+});
 
 function handleMouseMove(event: MouseEvent) {
   if (isDragging.value) return;
   if (!mapRef.value) return;
   const rect = mapRef.value.getBoundingClientRect();
+  if (!(rect.width > 0) || !(rect.height > 0)) return;
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  const world = camera.screenToWorld(x, y);
-  const mapSize = 1000;
-  const pctX = world.x / mapSize;
-  const pctY = world.y / mapSize;
+  const pctX = Math.min(1, Math.max(0, x / rect.width));
+  const pctY = Math.min(1, Math.max(0, y / rect.height));
   
   const bounds = activeMapConfig.value.bounds;
   const gameX = bounds.minX + pctX * (bounds.maxX - bounds.minX);
@@ -2996,6 +3037,8 @@ function handleMouseMove(event: MouseEvent) {
     y: y + 15,
     gameX,
     gameY,
+    normalizedX: pctX,
+    normalizedY: pctY,
   };
 }
 
@@ -3063,6 +3106,8 @@ function updateCapturePointDrag(clientX: number, clientY: number) {
     y: 0,
     gameX: position.gameX,
     gameY: position.gameY,
+    normalizedX: position.mapX / 100,
+    normalizedY: position.mapY / 100,
   };
 }
 
@@ -4359,9 +4404,11 @@ onBeforeUnmount(deactivateMapPage);
 }
 .capture-point-edit-status.is-ok { border-color: rgba(74, 222, 128, .58); color: #86efac; }
 .capture-point-edit-status.is-error { border-color: rgba(248, 113, 113, .68); color: #fca5a5; }
-.map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
+.map-coordinate-readout { position: absolute; z-index: 60; right: 16px; bottom: 16px; display: grid; grid-template-columns: auto auto; align-items: center; gap: 2px 10px; padding: 9px 11px; color: #91aabd; font-size: 11px; }
 .map-coordinate-readout span { color: #60768a; font-size: 9px; letter-spacing: .1em; text-transform: uppercase; }
 .map-coordinate-readout b { color: #dcebf3; font-weight: 650; }
+.map-coordinate-readout__squad { color: #7dd3fc !important; font-size: 14px; letter-spacing: .035em; }
+.map-coordinate-readout small { grid-column: 1 / -1; color: #71869a; font-size: 9px; text-align: right; }
 .pressure-settings-modal {
   position: fixed;
   z-index: 1200;
