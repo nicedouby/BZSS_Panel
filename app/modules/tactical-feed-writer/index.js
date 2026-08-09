@@ -44,7 +44,7 @@ const FIELD = Object.freeze({
 });
 
 const DEFAULTS = Object.freeze({
-  enabled: true,
+  enabled: false,
   rootDir: "data/replay-spool",
   serverId: "",
   playerSampleMs: 333,
@@ -104,6 +104,14 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     if (!state.session) return;
     if (isMatchEnded(snapshot)) {
       await endSession("match-ended", now);
+      if (state.recordingEnabled) {
+        state.recordingEnabled = false;
+        core.eventBus?.emitModuleEvent?.("module.tacticalFeedWriter", "recordingChanged", {
+          enabled: false,
+          reason: "match-ended",
+          time: new Date(now).toISOString(),
+        });
+      }
       return;
     }
 
