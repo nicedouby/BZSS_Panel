@@ -54,6 +54,17 @@
 
       <div class="topbar-actions">
         <span v-if="runtimeError" class="metric error optional">{{ runtimeError }}</span>
+        <button
+          v-if="canControlTacticalReplayRecording"
+          type="button"
+          class="metric metric-button tactical-recording-control"
+          :class="{ active: tacticalReplayRecordingEnabled }"
+          :disabled="tacticalReplayRecordingLoading || tacticalReplayRecordingSaving"
+          :title="tacticalReplayRecordingTitle"
+          @click="toggleTacticalReplayRecording"
+        >
+          {{ tacticalReplayRecordingLabel }}
+        </button>
         <BzssCoreMenu />
         <div class="topbar-health" aria-label="RCON and log status">
           <span class="health-chip" :class="rconHealthTone">R</span>
@@ -91,7 +102,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { apiPost, ApiError } from "../../app/apiClient";
+import { apiGet, apiPost, ApiError } from "../../app/apiClient";
 import { useAuthStore } from "../../stores/auth.store";
 import { useServerStore } from "../../stores/server.store";
 import { usePlayerStore } from "../../stores/player.store";
@@ -127,6 +138,9 @@ const warmupLoaded = ref(false);
 const warmupLoading = ref(false);
 const warmupSaving = ref(false);
 const logClockSaving = ref(false);
+const tacticalReplayRecordingLoading = ref(false);
+const tacticalReplayRecordingSaving = ref(false);
+const tacticalReplayRecordingEnabled = ref(false);
 const mobileStatusOpen = ref(false);
 
 const webStatus = computed(() => server.snapshot.webStatus ?? server.snapshot ?? {});
@@ -183,6 +197,18 @@ const logClockLabel = computed(() => {
   return formatDuration(logClockSeconds.value);
 });
 const canEditLogClock = computed(() => auth.user?.isSuperAdmin === true);
+const canControlTacticalReplayRecording = computed(() => auth.user?.isSuperAdmin === true);
+const tacticalReplayRecordingLabel = computed(() => {
+  if (tacticalReplayRecordingLoading.value) return "录像状态…";
+  return tacticalReplayRecordingEnabled.value ? "结束录像" : "开始录像";
+});
+const tacticalReplayRecordingTitle = computed(() => {
+  if (tacticalReplayRecordingLoading.value) return "正在读取战术回放录制状态。";
+  if (tacticalReplayRecordingSaving.value) return "正在更新战术回放录制状态。";
+  return tacticalReplayRecordingEnabled.value
+    ? "停止当前战术回放录制；对局结束时也会自动停止。"
+    : "开始录制当前战术地图回放。";
+});
 const logClockTitle = computed(() => {
   if (!canEditLogClock.value) return t("topbar.logClockReadonly", "Only super admins can edit the log clock.");
   if (logClockSaving.value) return t("topbar.logClockSaving", "Saving log clock...");
@@ -302,6 +328,7 @@ const sysNetOutLabel = computed(() => fmtSysRate(sysStatus.value?.system?.perfor
 
 onMounted(() => {
   void loadWarmupState();
+  if (canControlTacticalReplayRecording.value) void loadTacticalReplayRecordingState();
 });
 
 function briefRuntimeError(value: string) {
@@ -359,6 +386,60 @@ async function editLogClock() {
     });
   } finally {
     logClockSaving.value = false;
+  }
+}
+
+async function loadTacticalReplayRecordingState() {
+  if (!canControlTacticalReplayRecording.value) return;
+  tacticalReplayRecordingLoading.value = true;
+  try {
+    const status = await apiGet<{ recordingEnabled?: boolean }>("/api/tactical-feed-writer/status");
+    if (typeof status.recordingEnabled === "boolean") {
+      tacticalReplayRecordingEnabled.value = status.recordingEnabled;
+    }
+  } catch (error) {
+    ui.pushToast({
+      title: "战术回放",
+      message: error instanceof ApiError ? error.message : "无法读取录制状态。",
+      tone: "error",
+    });
+  } finally {
+    tacticalReplayRecordingLoading.value = false;
+  }
+}
+
+async function toggleTacticalReplayRecording() {
+  if (!canControlTacticalReplayRecording.value || tacticalReplayRecordingLoading.value || tacticalReplayRecordingSaving.value) return;
+
+  const enabled = !tacticalReplayRecordingEnabled.value;
+  const confirmed = await ui.openConfirm({
+    title: enabled ? "开始战术回放录像" : "结束战术回放录像",
+    message: enabled
+      ? "确认开始录制当前对局的战术地图回放？"
+      : "确认停止并保存当前战术地图回放？",
+    confirmText: enabled ? "开始录像" : "结束录像",
+    cancelText: "取消",
+    tone: enabled ? "warn" : "idle",
+  });
+  if (!confirmed) return;
+
+  tacticalReplayRecordingSaving.value = true;
+  try {
+    const result = await apiPost<{ recordingEnabled?: boolean }>("/api/tactical-feed-writer/recording", { enabled });
+    tacticalReplayRecordingEnabled.value = result.recordingEnabled === true;
+    ui.pushToast({
+      title: "战术回放",
+      message: tacticalReplayRecordingEnabled.value ? "已开始录制。" : "已停止录制。",
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "战术回放",
+      message: error instanceof ApiError ? error.message : "更新录制状态失败。",
+      tone: "error",
+    });
+  } finally {
+    tacticalReplayRecordingSaving.value = false;
   }
 }
 
@@ -750,6 +831,18 @@ function toggleSidebar() {
 .metric-button:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+.tactical-recording-control {
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(248, 113, 113, 0.1);
+  color: #fecaca;
+}
+
+.tactical-recording-control.active {
+  border-color: rgba(248, 113, 113, 0.7);
+  background: rgba(248, 113, 113, 0.2);
+  color: #fff1f2;
 }
 
 .metric.primary {
