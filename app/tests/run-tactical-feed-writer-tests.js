@@ -6,17 +6,18 @@ import { createTacticalFeedWriterModule, TacticalReplayRecord } from "../modules
 import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player/index.js";
 
 function createEventBus() { return { emitModuleEvent() {} }; }
-function snapshot({ x = 100, y = 200, health = 100, map = "Jensens Range" } = {}) { return { server: { serverId: "test", map, layer: "Jensens Range AAS", mode: "AAS" }, match: { state: "Playing" }, teams: [], players: [{ identity: { key: "steam:1", name: "Alpha", steamID: "76561198000000001", playerID: 1 }, presence: { state: "online" }, match: { teamId: 1, squadId: 2, isLeader: true, role: "Rifleman" }, telemetry: { position: { x, y, z: 3 }, yaw: 90, health, fireTeamIndex: 0 }, combat: { kills: 0, wounds: 0, deaths: 0 }, network: { gamePing: 42 }, vehicle: {} }], assets: { captureZones: [{ name: "A", position: { x: 10, y: 20, z: 0 } }], fobs: [], mainZones: [], vehicles: [] } }; }
+function snapshot({ x = 100, y = 200, health = 100, map = "Jensens Range", state = "Playing" } = {}) { return { server: { serverId: "test", map, layer: "Jensens Range AAS", mode: "AAS" }, match: { state }, teams: [], players: [{ identity: { key: "steam:1", name: "Alpha", steamID: "76561198000000001", playerID: 1 }, presence: { state: "online" }, match: { teamId: 1, squadId: 2, isLeader: true, role: "Rifleman" }, telemetry: { position: { x, y, z: 3 }, yaw: 90, health, fireTeamIndex: 0 }, combat: { kills: 0, wounds: 0, deaths: 0 }, network: { gamePing: 42 }, vehicle: {} }], assets: { captureZones: [{ name: "A", position: { x: 10, y: 20, z: 0 } }], fobs: [], mainZones: [], vehicles: [] } }; }
 
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "tactical-feed-"));
   let onSnapshot = null;
-  const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe(listener) { onSnapshot = listener; return () => { onSnapshot = null; }; } } }, config: { get() { return { rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
+  const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe(listener) { onSnapshot = listener; return () => { onSnapshot = null; }; } } }, config: { get() { return { enabled: true, rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
   await feed.start();
   await new Promise((resolve) => setTimeout(resolve, 75));
   onSnapshot?.(snapshot({ x: 800, y: 900 }));
   await new Promise((resolve) => setTimeout(resolve, 75));
-  await feed.api.setRecordingEnabled(false);
+  onSnapshot?.(snapshot({ x: 800, y: 900, state: "Ended" }));
+  await new Promise((resolve) => setTimeout(resolve, 75));
   assert.equal(feed.api.getDiagnostics().recordingEnabled, false);
   assert.equal(feed.api.getDiagnostics().recording, false);
   assert.equal(feed.api.getDiagnostics().lastFinalization?.directoryRenamed, true);
