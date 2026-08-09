@@ -38,8 +38,11 @@
       <template v-else>
         <div class="core-tag">COORDS</div>
         <div class="core-coords">
-          <span class="gx">X: {{ Math.round(gameX) }}</span>
-          <span class="gy">Y: {{ Math.round(gameY) }}</span>
+          <span v-if="squadCoordinate" class="squad-coordinate">{{ squadCoordinate }}</span>
+          <template v-else>
+            <span class="gx">X: {{ Math.round(gameX) }}</span>
+            <span class="gy">Y: {{ Math.round(gameY) }}</span>
+          </template>
         </div>
         <div class="core-sub-exit">点击退出 ✕</div>
       </template>
@@ -131,7 +134,7 @@
         type="button"
         class="radial-btn"
         style="--angle: 270deg;"
-        title="复制世界坐标"
+        title="复制 Squad 主格、九宫格和子九宫格坐标"
         @click.stop="handleAction('copy-coords')"
       >
         <span class="radial-btn-icon">📋</span>
@@ -259,6 +262,7 @@ const props = defineProps<{
   y: number;
   gameX: number;
   gameY: number;
+  squadCoordinate?: string;
   mapX: number;
   mapY: number;
   hasPoints: boolean;
@@ -586,6 +590,12 @@ function handleAction(
   font-weight: 800;
   color: #f8fafc;
   line-height: 1.2;
+}
+
+.squad-coordinate {
+  color: #7dd3fc;
+  font-size: 11px;
+  letter-spacing: 0.03em;
 }
 
 .core-selected-name {
