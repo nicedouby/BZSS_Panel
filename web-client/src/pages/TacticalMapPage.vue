@@ -293,8 +293,7 @@
             :game-y="getPlayerPosition(player)?.y"
             :scale="dynamicMarkerScale"
             :tone="getPerspectiveTone(player.teamId)"
-            @click.stop.prevent="handlePlayerSingleClick(player, $event)"
-            @dblclick.stop.prevent="handlePlayerDoubleClick(player, $event)"
+            @pointerdown="handlePlayerPointerDown(player, $event)"
             @contextmenu.prevent.stop="handlePlayerRightClick(player, $event)"
             @mouseenter="hoveredPlayer = player"
             @mouseleave="hoveredPlayer = null"
@@ -1747,6 +1746,10 @@ const mapCommandMenu = ref<{
 } | null>(null);
 const activeTool = ref<"none" | "measure" | "future">("none");
 const singleClickTimer = ref<any>(null);
+const pendingPlayerMarkerClick = {
+  key: "",
+  at: 0,
+};
 
 const measureMode = computed({
   get: () => activeTool.value === "measure",
@@ -2293,6 +2296,50 @@ async function executeKillModeTarget(player: TacticalLinkedPlayer) {
   } finally {
     killModePendingPlayerKey.value = "";
   }
+}
+
+function handlePlayerPointerDown(player: TacticalLinkedPlayer, event: PointerEvent) {
+  // Player markers own their pointer gesture.  Do not let the viewport's pan
+  // handler capture this press before we can distinguish a click from a double-click.
+  if (event.button !== 0) return;
+  event.stopPropagation();
+
+  if (killModeEnabled.value) {
+    killModePendingPlayerKey.value = "";
+    void executeKillModeTarget(player);
+    return;
+  }
+
+  const key = getPlayerKey(player);
+  const now = performance.now();
+  const isDoubleClick = (
+    key.length > 0
+    && pendingPlayerMarkerClick.key === key
+    && now - pendingPlayerMarkerClick.at <= 320
+  );
+
+  if (singleClickTimer.value) {
+    clearTimeout(singleClickTimer.value);
+    singleClickTimer.value = null;
+  }
+
+  if (isDoubleClick) {
+    pendingPlayerMarkerClick.key = "";
+    pendingPlayerMarkerClick.at = 0;
+    handlePlayerDoubleClick(player, event);
+    return;
+  }
+
+  pendingPlayerMarkerClick.key = key;
+  pendingPlayerMarkerClick.at = now;
+  // Wait briefly so double-click is deterministic even when the browser's
+  // native click/dblclick sequence is disrupted by map transforms.
+  singleClickTimer.value = window.setTimeout(() => {
+    singleClickTimer.value = null;
+    pendingPlayerMarkerClick.key = "";
+    pendingPlayerMarkerClick.at = 0;
+    handlePlayerSingleClick(player, event);
+  }, 220);
 }
 
 function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
