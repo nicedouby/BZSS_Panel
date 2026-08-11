@@ -238,12 +238,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
-import { useAuthStore } from "../../stores/auth.store";
-import {
-  type TacticalMapCurrentSelection,
-  useTacticalMapCurrentSelection,
-} from "../../composables/tacticalMapSelection";
 
 const props = defineProps<{
   x: number;
@@ -256,10 +250,6 @@ const props = defineProps<{
   hasPoints: boolean;
   measureActive: boolean;
   measureCount: number;
-
-  // Current selected tactical object. TacticalMapPage can pass this explicitly;
-  // the shared selection state remains the compatibility/default source.
-  currentSelected?: TacticalMapCurrentSelection;
 
   // Layer Visibility
   filterAliveOnly: boolean;
@@ -295,49 +285,14 @@ const emit = defineEmits<{
   (e: "toggle-kill-mode"): void;
 }>();
 
-const authStore = useAuthStore();
-const sharedSelection = useTacticalMapCurrentSelection();
 const menuRef = ref<HTMLElement | null>(null);
 const showLayerRing = ref(false);
-const killPending = ref(false);
-const killError = ref("");
 
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
 
 const MENU_RADIUS = 140;
 const MENU_EDGE_GAP = 10;
-
-const effectiveCurrentSelected = computed<TacticalMapCurrentSelection>(() => (
-  props.currentSelected !== undefined
-    ? props.currentSelected
-    : sharedSelection.currentSelected.value
-));
-const selectedPlayer = computed(() => (
-  effectiveCurrentSelected.value?.type === "player" ? effectiveCurrentSelected.value : null
-));
-const selectedListPlayersId = computed(() => {
-  const text = String(selectedPlayer.value?.listPlayersId ?? "").trim();
-  return /^\d+$/.test(text) ? text : "";
-});
-const hasBzssCorePermission = computed(() => Boolean(
-  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
-));
-const canKillSelectedPlayer = computed(() => Boolean(
-  selectedPlayer.value && selectedListPlayersId.value && hasBzssCorePermission.value,
-));
-const killButtonTitle = computed(() => {
-  if (!selectedPlayer.value) return "当前未选中玩家";
-  if (!selectedListPlayersId.value) return `${selectedPlayer.value.label} 没有 ListPlayers ID，禁止执行 Kill`;
-  if (!hasBzssCorePermission.value) return "缺少 bzss_core.use 权限";
-  if (killPending.value) return `正在执行 Kill:${selectedListPlayersId.value}`;
-  return `Kill:${selectedListPlayersId.value} · ${selectedPlayer.value.label}`;
-});
-const compactKillError = computed(() => {
-  const text = String(killError.value ?? "").trim();
-  if (!text) return "KILL FAILED";
-  return text.length > 18 ? `${text.slice(0, 15)}...` : text;
-});
 
 const menuStyle = computed(() => {
   return {
@@ -393,9 +348,6 @@ watch(
   },
 );
 
-watch(effectiveCurrentSelected, () => {
-  killError.value = "";
-});
 
 onMounted(() => {
   nextTick(syncMenuPosition);
@@ -408,29 +360,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", onViewportResize);
 });
 
-async function executeSelectedPlayerKill() {
-  const target = selectedPlayer.value;
-  const playerId = selectedListPlayersId.value;
-  if (!target || !playerId || !hasBzssCorePermission.value || killPending.value) return;
-
-  killPending.value = true;
-  killError.value = "";
-  try {
-    const result = await executeBzssCoreCommand({
-      directive: "Kill",
-      parameter: playerId,
-    });
-    if (!result?.ok) {
-      throw new Error(String(result?.message ?? `Kill:${playerId} 执行失败`));
-    }
-    emit("close");
-  } catch (error) {
-    killError.value = error instanceof Error ? error.message : String(error ?? "Kill 执行失败");
-  } finally {
-    killPending.value = false;
-  }
-}
-
 function handleAction(
   event:
     | "close"
@@ -440,7 +369,6 @@ function handleAction(
     | "clear-measure"
     | "copy-coords"
     | "focus-here"
-    | "kill-selected"
     | "toggle-capture-point-edit"
     | "calculate-hotspot"
     | "clear-hotspot"
@@ -453,10 +381,6 @@ function handleAction(
 ) {
   let keepOpen = false;
 
-  if (event === "kill-selected") {
-    void executeSelectedPlayerKill();
-    return;
-  }
   if (event === "start-measure") emit("start-measure");
   else if (event === "add-point") emit("add-point");
   else if (event === "undo-point") emit("undo-point");
