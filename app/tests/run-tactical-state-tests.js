@@ -229,6 +229,18 @@ async function main() {
   assert.equal(initialStream.envelope.type, "tactical-state.snapshot");
   assert.equal(initialStream.envelope.snapshot.meta.revision, snapshot.meta.revision);
 
+  const beforeNetworkRefresh = await tacticalModule.api.getStreamSnapshot();
+  eventBus.emitModuleEvent("module.networkStats", "statsUpdated", {
+    updatedAt: "2026-07-01T10:00:01.000Z",
+    steamIDs: ["76561198000000001"],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  const afterNetworkRefresh = await tacticalModule.api.getStreamSnapshot();
+  assert.ok(
+    afterNetworkRefresh.envelope.snapshot.meta.revision > beforeNetworkRefresh.envelope.snapshot.meta.revision,
+    "network stats updates should rebuild the tactical snapshot",
+  );
+
   const received = [];
   const unsubscribeA = tacticalModule.api.subscribeStream((message) => received.push(message.serialized));
   const unsubscribeB = tacticalModule.api.subscribeStream((message) => received.push(message.serialized));
