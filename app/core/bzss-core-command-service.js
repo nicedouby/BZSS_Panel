@@ -210,13 +210,13 @@ export class BzssCoreCommandService {
       return invalid("InvalidDragCapturePointName", "DragCapturePoint point name must be a non-empty single-line name.");
     }
 
-    // New clients send the capture-point name. Positive integers remain valid
-    // only as a legacy compatibility input so older callers/tests do not break.
+    // DragCapturePoint is name-addressed. Never silently accept a runtime
+    // array index because BZSS-Core would move the wrong point or ignore it.
     if (/^\d+$/.test(pointIdentity)) {
-      const pointIndex = Number(pointIdentity);
-      if (!Number.isSafeInteger(pointIndex) || pointIndex < 1) {
-        return invalid("InvalidDragCapturePointIndex", "Legacy DragCapturePoint point index must be a positive integer.");
-      }
+      return invalid(
+        "InvalidDragCapturePointName",
+        "DragCapturePoint requires the complete point name; numeric point indexes are not accepted.",
+      );
     }
 
     if (!xText || !yText || !Number.isFinite(Number(xText)) || !Number.isFinite(Number(yText))) {

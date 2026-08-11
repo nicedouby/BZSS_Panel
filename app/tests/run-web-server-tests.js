@@ -182,25 +182,25 @@ async function testDragCapturePointValidation() {
   const server = createServer();
 
   assert.equal(
-    server.normalizeBzssCoreDirective("DragCapturePoint", "1,150,25").command,
-    "DragCapturePoint:1,150,25",
+    server.normalizeBzssCoreDirective("DragCapturePoint", "04-SouthSuburbs,150,25").command,
+    "DragCapturePoint:04-SouthSuburbs,150,25",
   );
   assert.equal(
-    server.normalizeBzssCoreDirective("DragCapturePoint", "12,-150.5,25.25").command,
-    "DragCapturePoint:12,-150.5,25.25",
+    server.normalizeBzssCoreDirective("DragCapturePoint", "Castleview Apartments,-150.5,25.25").command,
+    "DragCapturePoint:Castleview Apartments,-150.5,25.25",
   );
 
-  const invalidIndex = server.normalizeBzssCoreDirective("DragCapturePoint", "0,150,25");
+  const invalidIndex = server.normalizeBzssCoreDirective("DragCapturePoint", "4,150,25");
   assert.equal(invalidIndex.ok, false);
-  assert.equal(invalidIndex.error, "InvalidDragCapturePointIndex");
+  assert.equal(invalidIndex.error, "InvalidDragCapturePointName");
 
-  const invalidCoordinates = server.normalizeBzssCoreDirective("DragCapturePoint", "1,NaN,25");
+  const invalidCoordinates = server.normalizeBzssCoreDirective("DragCapturePoint", "04-SouthSuburbs,NaN,25");
   assert.equal(invalidCoordinates.ok, false);
   assert.equal(invalidCoordinates.error, "InvalidDragCapturePointCoordinates");
 
   const invalidRaw = server.normalizeBzssCoreCommand({
     raw: true,
-    command: "DragCapturePoint:1,Infinity,25",
+    command: "DragCapturePoint:04-SouthSuburbs,Infinity,25",
   });
   assert.equal(invalidRaw.ok, false);
   assert.equal(invalidRaw.error, "InvalidDragCapturePointCoordinates");

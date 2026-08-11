@@ -58,7 +58,13 @@ function parsePercent(value: string | null | undefined) {
 }
 
 function parsePointName(marker: Element) {
-  return marker.querySelector(".zone-flag-name")?.textContent?.trim() ?? "";
+  const explicitName = marker instanceof HTMLElement
+    ? marker.dataset.capturePointName?.trim() ?? ""
+    : "";
+  if (explicitName && !/^\d+$/.test(explicitName)) return explicitName;
+
+  const visibleName = marker.querySelector(".zone-flag-name")?.textContent?.trim() ?? "";
+  return visibleName && !/^\d+$/.test(visibleName) ? visibleName : "";
 }
 
 function parseMarkerGamePosition(marker: Element) {
