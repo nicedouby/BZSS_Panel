@@ -73,6 +73,28 @@ class TailReaderReliabilityTests(unittest.TestCase):
         self.assertEqual([record["line"] for record in records], ["new-first", "new-second"])
         self.assertEqual(records[0]["offset"], 0)
 
+    def test_replaced_file_drains_unread_old_tail_before_reopening(self) -> None:
+        self.log_path.write_text("old-first\n", encoding="utf-8")
+        reader = self.make_reader()
+        self.assertEqual([record["line"] for record in reader.read_new_lines()], ["old-first"])
+
+        with self.log_path.open("a", encoding="utf-8") as handle:
+            handle.write("old-critical-squad-created\n")
+        replacement = self.root / "replacement.log"
+        replacement.write_text("new-first\n", encoding="utf-8")
+        replacement.replace(self.log_path)
+
+        drained = reader.read_new_lines()
+        self.assertEqual([record["line"] for record in drained], ["old-critical-squad-created"])
+        self.assertEqual(drained[0]["fileId"], reader.file_id)
+
+        # Reopening is deferred until after the caller has processed and
+        # checkpointed the drained records against the old file identity.
+        self.assertEqual(reader.read_new_lines(), [])
+        new_records = self.read_until_idle(reader)
+        self.assertEqual([record["line"] for record in new_records], ["new-first"])
+        self.assertEqual(reader.consume_rotate_reason(), "file_replaced")
+
     def test_stale_checkpoint_is_capped_to_recovery_window(self) -> None:
         lines = [f"line-{index}-" + (str(index) * 1000) for index in range(8)]
         self.log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
