@@ -1115,19 +1115,29 @@ watch(
   { immediate: true }
 );
 
+function arePlayerCombatStatsEqual(left: unknown, right: unknown) {
+  if (left === right) return true;
+  if (left == null || right == null) return left == null && right == null;
+  try {
+    return JSON.stringify(toRaw(left)) === JSON.stringify(toRaw(right));
+  } catch {
+    return false;
+  }
+}
+
 watch(
-  () => [
-    tacticalPlayers.value,
-    tacticalStateSnapshot.value?.meta?.revision,
-    players.updatedAt,
-    squads.updatedAt,
-    activePlayerWindow.value?.detail.playerId,
-    activePlayerWindow.value?.detail.steamId,
-    activePlayerWindow.value?.detail.steam64,
-    activePlayerWindow.value?.detail.eosId,
-    activePlayerWindow.value?.detail.controller,
-    activePlayerWindow.value?.detail.name,
-  ] as const,
+  [
+    tacticalPlayers,
+    () => tacticalStateSnapshot.value?.meta?.revision,
+    () => players.updatedAt,
+    () => squads.updatedAt,
+    () => activePlayerWindow.value?.detail.playerId,
+    () => activePlayerWindow.value?.detail.steamId,
+    () => activePlayerWindow.value?.detail.steam64,
+    () => activePlayerWindow.value?.detail.eosId,
+    () => activePlayerWindow.value?.detail.controller,
+    () => activePlayerWindow.value?.detail.name,
+  ],
   () => {
     const windowState = activePlayerWindow.value;
     if (!windowState) return;
@@ -1158,7 +1168,7 @@ watch(
       || currentDetail.ping !== livePlayer.ping
       || currentDetail.packetLoss !== livePlayer.packetLoss
       || currentDetail.bzssCorePing !== livePlayer.bzssCorePing
-      || currentDetail.combatStats !== livePlayer.combatStats
+      || !arePlayerCombatStatsEqual(currentDetail.combatStats, livePlayer.combatStats)
     ));
 
     if (
@@ -1199,14 +1209,14 @@ watch(
 );
 
 watch(
-  () => [
-    currentServerId.value,
-    activePlayerWindow.value?.detail.playerId,
-    activePlayerWindow.value?.detail.steamId,
-    activePlayerWindow.value?.detail.steam64,
-    activePlayerWindow.value?.detail.eosId,
-    activePlayerWindow.value?.detail.controller,
-    activePlayerWindow.value?.detail.name,
+  [
+    currentServerId,
+    () => activePlayerWindow.value?.detail.playerId,
+    () => activePlayerWindow.value?.detail.steamId,
+    () => activePlayerWindow.value?.detail.steam64,
+    () => activePlayerWindow.value?.detail.eosId,
+    () => activePlayerWindow.value?.detail.controller,
+    () => activePlayerWindow.value?.detail.name,
   ],
   () => {
     if (!active.value) return;
