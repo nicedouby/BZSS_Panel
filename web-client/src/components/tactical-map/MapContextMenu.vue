@@ -141,29 +141,17 @@
         <span class="radial-btn-label">复制坐标</span>
       </button>
 
-      <!-- 315 deg: Current-selection action. Player selection replaces redundant close button with Kill. -->
+      <!-- 315 deg: Kill mode. TacticalMapPage owns target selection. -->
       <button
-        v-if="selectedPlayer"
         type="button"
         class="radial-btn kill-btn"
-        :class="{ 'is-disabled': !canKillSelectedPlayer || killPending }"
+        :class="{ 'is-active': killModeActive, 'is-disabled': !canUseKillMode }"
         style="--angle: 315deg;"
-        :title="killButtonTitle"
-        @click.stop="canKillSelectedPlayer && !killPending && handleAction('kill-selected')"
+        :title="killModeActive ? '退出击杀模式' : (canUseKillMode ? '开启击杀模式：随后单击玩家执行 Kill:X' : '缺少 bzss_core.use 权限')"
+        @click.stop="canUseKillMode && emit('toggle-kill-mode')"
       >
         <span class="radial-btn-icon">☠</span>
-        <span class="radial-btn-label">{{ killPending ? "执行中" : "KILL" }}</span>
-      </button>
-      <button
-        v-else
-        type="button"
-        class="radial-btn close-btn"
-        style="--angle: 315deg;"
-        title="关闭轮盘"
-        @click.stop="handleAction('close')"
-      >
-        <span class="radial-btn-icon">✕</span>
-        <span class="radial-btn-label">退出轮盘</span>
+        <span class="radial-btn-label">{{ killModeActive ? '退出击杀' : '击杀模式' }}</span>
       </button>
     </div>
 
@@ -286,6 +274,8 @@ const props = defineProps<{
   capturePointEditMode: boolean;
   capturePointCommandPending: boolean;
   hasCombatHotspot: boolean;
+  killModeActive: boolean;
+  canUseKillMode: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -302,6 +292,7 @@ const emit = defineEmits<{
   (e: "calculate-hotspot"): void;
   (e: "clear-hotspot"): void;
   (e: "toggle-layer", payload: "alive" | "names" | "coords" | "fobs" | "zones" | "grid"): void;
+  (e: "toggle-kill-mode"): void;
 }>();
 
 const authStore = useAuthStore();
