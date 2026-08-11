@@ -142,7 +142,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, computed, nextTick, watch } from "vue";
 import { t } from "../../i18n";
 import type { BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
 import { resolveRoleIcon } from "../../utils/role-icons";
@@ -338,8 +338,9 @@ const gamePosition = computed(() => {
 const gameX = computed(() => gamePosition.value.x ?? 0);
 const gameY = computed(() => gamePosition.value.y ?? 0);
 
-onMounted(() => {
-  if (panelRef.value) {
+function syncPanelPosition() {
+  void nextTick(() => {
+    if (!panelRef.value) return;
     const rect = panelRef.value.getBoundingClientRect();
     const parentRect = panelRef.value.parentElement?.getBoundingClientRect() || {
       width: window.innerWidth,
@@ -347,7 +348,7 @@ onMounted(() => {
     };
 
     let left = props.x;
-    let top = props.y - 12; // offset upward slightly from target clicked marker
+    let top = props.y - 12;
 
     if (left + rect.width > parentRect.width) {
       left = parentRect.width - rect.width - 12;
@@ -358,8 +359,11 @@ onMounted(() => {
 
     offsetLeft.value = Math.max(12, left);
     offsetTop.value = Math.max(12, top);
-  }
-});
+  });
+}
+
+onMounted(syncPanelPosition);
+watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
 </script>
 
 <style scoped>
