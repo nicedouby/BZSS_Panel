@@ -347,7 +347,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     }
 
     if (!nextState || typeof nextState !== "object") return;
-    const normalized = canonicalize(nextState);
+    const normalized = compactPressureZoneState(nextState);
     if (sameValue(state.pressureZoneState, normalized)) return;
     state.pressureZoneState = normalized;
     await append(RECORD.PRESSURE_ZONE_DELTA, now, { state: normalized });
@@ -470,6 +470,32 @@ function normalizeStats(value = {}) { return ["kills", "wounds", "deaths", "team
 function normalizePosition(value) { if (!value || typeof value !== "object") return null; const x = integerOrNull(value.x); const y = integerOrNull(value.y); const z = integerOrNull(value.z); return x == null || y == null || z == null ? null : [x, y, z]; }
 function normalizeYaw(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(((n % 360) + 360) % 360) : null; }
 function normalizeAsset(value) { return canonicalize(value); }
+function compactPressureZoneState(value = {}) {
+  const hotspot = value?.hotspot;
+  return canonicalize({
+    a: value?.active === true,
+    r: safeText(value?.reason),
+    k: safeText(value?.mapKey),
+    h: hotspot?.center ? [
+      hotspot.center.x,
+      hotspot.center.y,
+      hotspot.radiusMeters,
+      hotspot.playerCount,
+      hotspot.radiusWorld,
+      hotspot.linearMapScale,
+    ] : null,
+    z: (Array.isArray(value?.zones) ? value.zones : []).map((zone) => [
+      safeText(zone?.id),
+      safeText(zone?.type),
+      integerOrNull(zone?.teamId),
+      integerOrNull(zone?.priority),
+      safeText(zone?.geometry?.type),
+      zone?.geometry?.center ? [zone.geometry.center.x, zone.geometry.center.y] : null,
+      zone?.geometry?.radius ?? null,
+      (Array.isArray(zone?.geometry?.polygon) ? zone.geometry.polygon : []).map((point) => [point?.x, point?.y]),
+    ]),
+  });
+}
 function diffPlayer(before, next, settings) { if (!before) return { mask: FIELD.POSITION | FIELD.YAW | FIELD.HEALTH | FIELD.PRESENCE | FIELD.TEAM | FIELD.SQUAD | FIELD.FIRETEAM | FIELD.ROLE | FIELD.VEHICLE | FIELD.LEADER, values: playerValues(next, FIELD.POSITION | FIELD.YAW | FIELD.HEALTH | FIELD.PRESENCE | FIELD.TEAM | FIELD.SQUAD | FIELD.FIRETEAM | FIELD.ROLE | FIELD.VEHICLE | FIELD.LEADER) }; let mask = 0; if (distanceExceeded(before.position, next.position, settings.positionThresholdCm)) mask |= FIELD.POSITION; if (angleDelta(before.yaw, next.yaw) >= settings.yawThresholdDegrees) mask |= FIELD.YAW; if (before.health !== next.health) mask |= FIELD.HEALTH; if (before.presence !== next.presence) mask |= FIELD.PRESENCE; if (before.team !== next.team) mask |= FIELD.TEAM; if (before.squad !== next.squad) mask |= FIELD.SQUAD; if (before.fireTeam !== next.fireTeam) mask |= FIELD.FIRETEAM; if (before.role !== next.role) mask |= FIELD.ROLE; if (before.vehicle !== next.vehicle) mask |= FIELD.VEHICLE; if (before.leader !== next.leader) mask |= FIELD.LEADER; return { mask, values: playerValues(next, mask) }; }
 function playerValues(value, mask) { const out = []; if (mask & FIELD.POSITION) out.push(value.position); if (mask & FIELD.YAW) out.push(value.yaw); if (mask & FIELD.HEALTH) out.push(value.health); if (mask & FIELD.PRESENCE) out.push(value.presence); if (mask & FIELD.TEAM) out.push(value.team); if (mask & FIELD.SQUAD) out.push(value.squad); if (mask & FIELD.FIRETEAM) out.push(value.fireTeam); if (mask & FIELD.ROLE) out.push(value.role); if (mask & FIELD.VEHICLE) out.push(value.vehicle); if (mask & FIELD.LEADER) out.push(value.leader); return out; }
 function distanceExceeded(a, b, threshold) { if (!a || !b) return !sameValue(a, b); const dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2]; return dx * dx + dy * dy + dz * dz >= threshold * threshold; }
