@@ -1197,6 +1197,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         ["module.matchState", "updated"],
         ["module.playerState", "playersSnapshotUpdated"],
         ["module.bzssCoreMonitor", "stateBroadcast"],
+        ["module.networkStats", "statsUpdated"],
       ];
 
       for (const [moduleId, eventName] of watch) {
