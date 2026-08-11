@@ -287,6 +287,13 @@ const emit = defineEmits<{
 
 const menuRef = ref<HTMLElement | null>(null);
 const showLayerRing = ref(false);
+// The contextual wheel no longer discovers a player through DOM events. Target
+// selection is handled directly by TacticalMapPage when kill mode is active.
+const selectedPlayer = computed<{ label: string } | null>(() => null);
+const selectedListPlayersId = computed(() => "");
+const killPending = ref(false);
+const killError = ref("");
+const compactKillError = computed(() => "");
 
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
