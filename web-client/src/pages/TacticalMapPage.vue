@@ -550,6 +550,16 @@
         @close="playerInfoPanel = null; selectedPlayerKey = ''"
       />
 
+      <FloatingPlayerWindow
+        :open="activePlayerWindow !== null"
+        :player="activePlayerWindow?.detail ?? null"
+        :server-id="currentServerId"
+        :anchor-x="activePlayerWindow?.anchorX ?? null"
+        :anchor-y="activePlayerWindow?.anchorY ?? null"
+        :notice="activePlayerWindow?.notice ?? ''"
+        @close="activePlayerWindow = null"
+      />
+
       <PlayerActionMenu
         v-if="playerActionMenu"
         :player="playerActionMenu.player"
@@ -822,6 +832,7 @@ import PressureZoneSettingsPage from "./PressureZoneSettingsPage.vue";
 import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
 import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
+import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
@@ -1714,6 +1725,12 @@ const playerInfoPanel = ref<{
   player: TacticalLinkedPlayer;
   x: number;
   y: number;
+} | null>(null);
+const activePlayerWindow = ref<{
+  detail: PlayerDetailViewModel;
+  anchorX: number;
+  anchorY: number;
+  notice: string;
 } | null>(null);
 const playerActionMenu = ref<{
   player: TacticalLinkedPlayer;
@@ -3622,19 +3639,16 @@ function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
   }
 
   if (isStandaloneMapRoute.value) {
-    if (containerRef.value) {
-      const rect = containerRef.value.getBoundingClientRect();
-      const eventX = event?.clientX ?? rect.left + rect.width / 2;
-      const eventY = event?.clientY ?? rect.top + rect.height / 2;
-      playerInfoPanel.value = {
-        player,
-        x: Math.max(8, Math.min(rect.width - 268, eventX - rect.left)),
-        y: Math.max(8, Math.min(rect.height - 220, eventY - rect.top)),
-      };
-      selectedPlayerKey.value = getPlayerKey(player);
-      playerActionMenu.value = null;
-      mapCommandMenu.value = null;
-    }
+    activePlayerWindow.value = {
+      detail: detail as PlayerDetailViewModel,
+      anchorX: event?.clientX ?? Math.floor(window.innerWidth / 2),
+      anchorY: event?.clientY ?? Math.floor(window.innerHeight / 2),
+      notice: "",
+    };
+    selectedPlayerKey.value = getPlayerKey(player);
+    playerInfoPanel.value = null;
+    playerActionMenu.value = null;
+    mapCommandMenu.value = null;
     return;
   }
 
