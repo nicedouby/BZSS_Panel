@@ -406,7 +406,6 @@ function handleViewModeChange(mode: "list" | "map") {
 }
 
 const tacticalStateStore = useTacticalStateStore();
-const tacticalStateSnapshot = computed(() => tacticalStateStore.snapshot);
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
 const refreshingSquads = ref(false);
@@ -461,21 +460,9 @@ const tacticalPlayers = computed(() => {
 });
 const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
 
-// The full tactical-state stream carries high-frequency position data.  It is
-// owned by TacticalMapPage; the list page only opens it temporarily for the
-// currently inspected player's BZSS-Core detail.
-watch(
-  () => Boolean(activePlayerWindow.value) && active.value && !pageHidden.value,
-  (shouldStream) => {
-    if (!shouldStream) {
-      tacticalStateStore.stopStream();
-      return;
-    }
-    void tacticalStateStore.fetchSnapshot();
-    tacticalStateStore.startStream();
-  },
-  { immediate: true },
-);
+// Player details use the compact 2-second player summary above. Do not start
+// the full tactical-map stream here: position deltas would rebuild this entire
+// page and repeatedly replace the open player detail object.
 let battlePlayerRefreshToken = 0;
 let battleStatsRefreshIdleHandle: number | null = null;
 
@@ -1128,7 +1115,6 @@ function arePlayerCombatStatsEqual(left: unknown, right: unknown) {
 watch(
   [
     tacticalPlayers,
-    () => tacticalStateSnapshot.value?.meta?.revision,
     () => players.updatedAt,
     () => squads.updatedAt,
     () => activePlayerWindow.value?.detail.playerId,
@@ -1148,13 +1134,8 @@ watch(
       currentDetail,
       tacticalPlayerLookup.value,
     );
-    const snapshotVal = tacticalStateSnapshot.value;
-    const nextStatus = String(
-      snapshotVal?.meta?.revision
-      ?? snapshotVal?.meta?.generatedAt
-      ?? "",
-    );
-    const nextCompletedAt = snapshotVal?.meta?.generatedAt ?? null;
+    const nextStatus = currentDetail.bzssCoreStatus ?? "";
+    const nextCompletedAt = currentDetail.bzssCoreLastCompletedAt ?? null;
     const nextPlayerInfo = matched ?? null;
     const currentPlayerInfo = currentDetail.bzssCorePlayerInfo
       ? toRaw(currentDetail.bzssCorePlayerInfo)
