@@ -1209,14 +1209,14 @@ watch(
 );
 
 watch(
-  () => [
-    currentServerId.value,
-    activePlayerWindow.value?.detail.playerId,
-    activePlayerWindow.value?.detail.steamId,
-    activePlayerWindow.value?.detail.steam64,
-    activePlayerWindow.value?.detail.eosId,
-    activePlayerWindow.value?.detail.controller,
-    activePlayerWindow.value?.detail.name,
+  [
+    currentServerId,
+    () => activePlayerWindow.value?.detail.playerId,
+    () => activePlayerWindow.value?.detail.steamId,
+    () => activePlayerWindow.value?.detail.steam64,
+    () => activePlayerWindow.value?.detail.eosId,
+    () => activePlayerWindow.value?.detail.controller,
+    () => activePlayerWindow.value?.detail.name,
   ],
   () => {
     if (!active.value) return;
