@@ -501,66 +501,15 @@ describe("MatchStatusPage", () => {
     const panel = document.body.querySelector(".player-detail-floating");
     expect(panel).toBeTruthy();
     expect(panel?.textContent).toContain("Alice");
-    expect(panel?.textContent).toContain("本局在服时长");
-    expect(panel?.textContent).toContain("1.0h");
-    expect(panel?.textContent).toContain("进服 2 次");
+    expect(panel?.textContent).toContain("本服务器游玩时长");
+    expect(panel?.textContent).toContain("暖服时长");
     expect(panel?.textContent).toContain("k0");
     expect(panel?.textContent).toContain("d0");
     expect(panel?.getAttribute("style") || "").toContain("width: 476px");
 
     expect((wrapper.vm as any).activePlayerWindow?.detail?.raw?.squadlessSeconds).toBe(95);
 
-    const tacticalStream = FakeEventSource.instances[FakeEventSource.instances.length - 1];
-    expect(tacticalStream).toBeTruthy();
-    const tacticalPlayer = {
-      identity: {
-        key: "steam:76561198000000001",
-        playerID: 1,
-        steamID: "76561198000000001",
-        eosID: "EOS-1",
-        name: "Alice",
-      },
-      match: { teamId: 1, squadId: null, role: "Rifleman" },
-      telemetry: { hasTelemetry: true, hasPosition: true, position: { x: 1, y: 1, z: 0 } },
-      freshness: { generatedAt: "2026-05-12T00:00:01.000Z" },
-    };
-    tacticalStream.emit({
-      ok: true,
-      type: "tactical-state.snapshot",
-      snapshot: {
-        meta: { revision: 1, generatedAt: "2026-05-12T00:00:01.000Z" },
-        players: [tacticalPlayer],
-        server: {},
-        teams: [],
-        assets: {},
-        diagnostics: {},
-      },
-    });
-    await flushPromises();
-
-    for (let revision = 2; revision <= 21; revision += 1) {
-      tacticalStream.emit({
-        ok: true,
-        type: "tactical-state.delta",
-        revision,
-        generatedAt: `2026-05-12T00:00:${String(revision).padStart(2, "0")}.000Z`,
-        delta: {
-          meta: { revision },
-          players: {
-            upsert: [{
-              ...tacticalPlayer,
-              telemetry: {
-                ...tacticalPlayer.telemetry,
-                position: { x: revision, y: revision, z: 0 },
-              },
-            }],
-            remove: [],
-          },
-        },
-      });
-    }
-    await flushPromises();
-    await flushPromises();
+    expect(FakeEventSource.instances).toHaveLength(0);
 
     expect(document.body.querySelectorAll(".player-detail-floating")).toHaveLength(1);
     expect(document.body.querySelector(".player-detail-floating")?.textContent).toContain("Alice");

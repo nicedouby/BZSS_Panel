@@ -903,7 +903,7 @@ const playtimeOverrideText = computed(() => {
 
 // Watch state changes
 watch(
-  () => [props.open, playerDatabaseSearchKey.value],
+  [() => props.open, playerDatabaseSearchKey],
   () => {
     if (!props.open) {
       loadToken.value += 1;
