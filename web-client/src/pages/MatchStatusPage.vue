@@ -1149,9 +1149,21 @@ watch(
     const currentPlayerInfo = currentDetail.bzssCorePlayerInfo
       ? toRaw(currentDetail.bzssCorePlayerInfo)
       : null;
+    const liveStateChanged = Boolean(livePlayer && (
+      currentDetail.teamId !== livePlayer.teamId
+      || currentDetail.squadId !== livePlayer.squadId
+      || currentDetail.role !== livePlayer.role
+      || currentDetail.isLeader !== livePlayer.isLeader
+      || currentDetail.isOnline !== livePlayer.isOnline
+      || currentDetail.ping !== livePlayer.ping
+      || currentDetail.packetLoss !== livePlayer.packetLoss
+      || currentDetail.bzssCorePing !== livePlayer.bzssCorePing
+      || currentDetail.combatStats !== livePlayer.combatStats
+    ));
 
     if (
-      currentDetail.bzssCoreStatus === nextStatus
+      !liveStateChanged
+      && currentDetail.bzssCoreStatus === nextStatus
       && currentDetail.bzssCoreLastCompletedAt === nextCompletedAt
       && currentPlayerInfo === nextPlayerInfo
     ) {
