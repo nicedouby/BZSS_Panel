@@ -4600,3 +4600,101 @@ onBeforeUnmount(deactivateMapPage);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85), 0 0 30px rgba(45, 212, 191, 0.18);
   backdrop-filter: blur(16px);
   display: flex;
+  flex-direction: column;
+}
+
+.modal-drag-header {
+  padding: 10px 14px;
+  background: rgba(13, 148, 136, 0.25);
+  border-bottom: 1px solid rgba(94, 234, 212, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: move;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.drag-title-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #99f6e4;
+  font-size: 12px;
+}
+
+.drag-grip-dots {
+  font-weight: 900;
+  color: #2dd4bf;
+  letter-spacing: -2px;
+}
+
+.drag-title {
+  font-weight: 700;
+}
+
+.drag-tip {
+  font-size: 10px;
+  color: rgba(148, 163, 184, 0.7);
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-reset-pos-btn {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.modal-reset-pos-btn:hover {
+  background: rgba(13, 148, 136, 0.3);
+  border-color: rgba(45, 212, 191, 0.5);
+  color: #5eead4;
+}
+
+.modal-close-icon {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.modal-close-icon:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.modal-body-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+@media (max-width: 1050px) {
+  .tactical-command-bar { grid-template-columns: minmax(0, 1fr) auto; }
+  .tactical-command-bar__tickets { order: 3; grid-column: 1 / -1; justify-self: center; padding: 5px 0 0; border-top: 1px solid rgba(148, 163, 184, .17); border-inline: 0; }
+}
+@media (max-width: 700px) {
+  .tactical-command-bar { top: 8px; left: 8px; right: 8px; gap: 8px; padding: 8px 10px; }
+  .tactical-command-bar__status { gap: 6px; }
+  .tactical-live-status, .tactical-recording-status { font-size: 0; }
+  .tactical-command-bar__identity strong { font-size: 13px; }
+  .tactical-command-bar__identity span:last-child { display: none; }
+  .map-coordinate-readout { right: 8px; bottom: 8px; }
+  .pressure-settings-modal { padding: 0; }
+  .pressure-settings-modal__panel { width: 100%; height: 100%; border: 0; border-radius: 0; }
+}
+</style>
