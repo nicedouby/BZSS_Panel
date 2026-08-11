@@ -4177,6 +4177,13 @@ function deactivateMapPage() {
     clearTimeout(singleClickTimer.value);
     singleClickTimer.value = null;
   }
+  killModeEnabled.value = false;
+  killModePendingPlayerKey.value = "";
+  if (killModeFeedbackTimer !== null) {
+    window.clearTimeout(killModeFeedbackTimer);
+    killModeFeedbackTimer = null;
+  }
+  killModeFeedback.value = null;
 
   tilesEnabled.value = false;
   tilesReady.value = false;
