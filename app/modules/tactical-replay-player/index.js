@@ -22,6 +22,7 @@ const RECORD = Object.freeze({
   PLAYER_NETWORK_DELTA: 0x14,
   ZONE_DELTA: 0x20,
   MAIN_ZONE_DELTA: 0x21,
+  PRESSURE_ZONE_DELTA: 0x22,
   FOB_CREATE: 0x30,
   FOB_DELTA: 0x31,
   FOB_REMOVE: 0x32,
@@ -394,6 +395,7 @@ function createReplayState(session) {
     pings: new Map(),
     zones: new Map(),
     mainZones: new Map(),
+    pressureZoneState: null,
     fobs: new Map(),
     vehicles: new Map(),
     invalidRecords: 0,
@@ -452,6 +454,11 @@ function applyRecord(replay, type, payload) {
       return;
     case RECORD.MAIN_ZONE_DELTA:
       applyAssetUpsert(replay.mainZones, payload?.upsert);
+      return;
+    case RECORD.PRESSURE_ZONE_DELTA:
+      replay.pressureZoneState = payload?.state && typeof payload.state === "object"
+        ? payload.state
+        : null;
       return;
     case RECORD.FOB_CREATE:
     case RECORD.FOB_DELTA:
@@ -568,6 +575,7 @@ function serializeReplayState(replay, session, atMs) {
       fobs: mapAssets(replay.fobs),
       vehicles: mapAssets(replay.vehicles),
     },
+    pressureZoneState: replay.pressureZoneState,
     session: {
       id: session.id,
       status: session.status,
