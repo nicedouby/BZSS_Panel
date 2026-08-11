@@ -302,7 +302,7 @@
         </div>
 
         <!-- BZSS-Core Vehicle Runtime Layer -->
-        <div class="vehicle-markers-layer" :style="{ pointerEvents: measureMode || isDragging || capturePointEditMode ? 'none' : 'auto' }">
+        <div class="vehicle-markers-layer" :class="{ 'is-interaction-disabled': measureMode || isDragging || capturePointEditMode }">
           <div
             v-for="vehicle in vehicleMarkers"
             :key="vehicle.id"
@@ -4365,6 +4365,15 @@ onBeforeUnmount(deactivateMapPage);
   position: absolute;
   inset: 0;
   z-index: 18;
+  /* The layer spans the whole map and sits above players. Its transparent
+     area must not intercept player pointer gestures. Actual vehicle hit
+     targets opt back in below. */
+  pointer-events: none;
+}
+
+.vehicle-markers-layer.is-interaction-disabled .vehicle-marker__hitbox,
+.vehicle-markers-layer.is-interaction-disabled .vehicle-marker__frame {
+  pointer-events: none;
 }
 
 .vehicle-marker {
