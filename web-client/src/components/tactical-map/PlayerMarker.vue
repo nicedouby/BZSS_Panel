@@ -14,8 +14,7 @@
     ]"
     :style="markerStyle"
     type="button"
-    @click="$emit('click', $event)"
-    @dblclick="$emit('dblclick', $event)"
+    @pointerdown.stop="$emit('pointerdown', $event)"
     @contextmenu.prevent.stop="$emit('contextmenu', $event)"
     @mouseenter="$emit('mouseenter', $event)"
     @mouseleave="$emit('mouseleave', $event)"
@@ -137,8 +136,7 @@ const props = withDefaults(
 );
 
 defineEmits<{
-  (e: "click", event: MouseEvent): void;
-  (e: "dblclick", event: MouseEvent): void;
+  (e: "pointerdown", event: PointerEvent): void;
   (e: "contextmenu", event: MouseEvent): void;
   (e: "mouseenter", event: MouseEvent): void;
   (e: "mouseleave", event: MouseEvent): void;
