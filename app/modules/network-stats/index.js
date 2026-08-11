@@ -199,6 +199,17 @@ export function createNetworkStatsModule({ core, modules, config, logger }) {
       });
 
       await Promise.all(workers);
+      const updatedAt = new Date().toISOString();
+      core.eventBus?.emitModuleEvent?.("module.networkStats", "statsUpdated", {
+        eventId: `module.networkStats:statsUpdated:${Date.now()}`,
+        eventName: "module.networkStats.statsUpdated",
+        layer: "module",
+        source: "module.networkStats",
+        time: updatedAt,
+        updatedAt,
+        steamIDs: targets.map((target) => target.steamID),
+        playerCount: targets.length,
+      });
       moduleLogger.debug(`Finished ping round for ${targets.length} players.`);
     } catch (err) {
       moduleLogger.error(`Error in ping round: ${err.message}`, {
