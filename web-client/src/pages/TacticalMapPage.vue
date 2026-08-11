@@ -135,6 +135,7 @@
               'is-command-pending': capturePointCommandPending && capturePointOverrides.has(zone.id),
             }"
             type="button"
+            :data-capture-point-name="zone.commandName || ''"
             :style="{
               left: `${zone.mapX}%`,
               top: `${zone.mapY}%`,
@@ -886,6 +887,7 @@ interface CaptureZoneMarker {
   type: "captureZone";
   id: string;
   name: string;
+  commandName: string | null;
   pointIndex: number;
   teamId: number | null;
   mapX: number;
@@ -2678,23 +2680,40 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
   const staticCaptureZones = Array.isArray(staticAssets.value?.captureZones) ? staticAssets.value.captureZones : [];
   const markers: CaptureZoneMarker[] = [];
   for (const [zoneIndex, zone] of zones.entries()) {
-    const name = String(zone.name ?? "").trim();
-    if (!name) continue;
+    const runtimeName = String(zone.name ?? "").trim();
+    if (!runtimeName) continue;
+    const numericRuntimeIndex = /^\d+$/.test(runtimeName) ? Number(runtimeName) : null;
+    const pointIndex = Number.isSafeInteger(numericRuntimeIndex) && numericRuntimeIndex! > 0
+      ? numericRuntimeIndex!
+      : zoneIndex + 1;
+    const explicitFullName = [
+      zone.fullName,
+      zone.capturePointName,
+      zone.pointName,
+      zone.displayName,
+      runtimeName,
+    ]
+      .map((value) => String(value ?? "").trim())
+      .find((value) => value && !/^\d+$/.test(value)) ?? "";
+    const staticZone = staticCaptureZones.find(
+      (entry) => String(entry.name ?? "").trim() === runtimeName,
+    ) ?? staticCaptureZones[pointIndex - 1] ?? null;
+    const commandName = explicitFullName || String(staticZone?.name ?? "").trim() || null;
+    const name = commandName || runtimeName;
     const pos = zone?.position;
     let x = Number(pos?.x);
     let y = Number(pos?.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      const fallback = staticCaptureZones.find((entry) => String(entry.name ?? "").trim() === name);
-      x = Number(fallback?.x);
-      y = Number(fallback?.y);
+      x = Number(staticZone?.x);
+      y = Number(staticZone?.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        const cached = lastKnownZonePositions.value.get(name);
+        const cached = lastKnownZonePositions.value.get(runtimeName);
         x = Number(cached?.x);
         y = Number(cached?.y);
       }
     }
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    lastKnownZonePositions.value.set(name, { x, y });
+    lastKnownZonePositions.value.set(runtimeName, { x, y });
     const rawTeamId = Number(zone.teamId ?? zone.ownerTeamId ?? zone.captureDirection);
     const teamId = Number.isFinite(rawTeamId) && (rawTeamId === 1 || rawTeamId === 2) ? rawTeamId : null;
     const rawCapturePercent = Number(zone.capturePercent);
@@ -2720,9 +2739,10 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     const faction = resolveMainZoneFaction(teamId);
     markers.push({
       type: "captureZone",
-      id: `capture-zone-${name}`,
+      id: `capture-zone-${runtimeName}`,
       name,
-      pointIndex: zoneIndex + 1,
+      commandName,
+      pointIndex,
       teamId,
       mapX: project(x, bounds.minX, bounds.maxX),
       mapY: project(y, bounds.minY, bounds.maxY),
@@ -3274,6 +3294,11 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
   if (!capturePointEditMode.value || capturePointCommandPending.value || event.button !== 0) return;
   if (!mapRef.value) return;
 
+  if (!zone.commandName) {
+    setCapturePointFeedback("error", `点位 ${zone.pointIndex} 缺少完整名称，已阻止发送编号命令`);
+    return;
+  }
+
   const gameX = Number(zone.gameX);
   const gameY = Number(zone.gameY);
   if (!Number.isFinite(gameX) || !Number.isFinite(gameY)) {
@@ -3298,7 +3323,7 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
   capturePointDrag.value = {
     markerId: zone.id,
     pointIndex: zone.pointIndex,
-    pointName: zone.name,
+    pointName: zone.commandName!,
     pointerId: event.pointerId,
     startClientX: event.clientX,
     startClientY: event.clientY,
