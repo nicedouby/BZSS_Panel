@@ -228,16 +228,19 @@
               <div class="hud-ctx-item">
                 <span class="ctx-lbl">网络延迟</span>
                 <strong class="ctx-val" :class="pingStatusClass">
-                  {{ props.player.ping != null ? `${props.player.ping} ms` : "--" }}
-                  <small v-if="props.player.packetLoss != null && props.player.packetLoss > 0" class="packet-loss-sub">
-                    (丢包 {{ props.player.packetLoss }}%)
+                  {{ displayPing != null ? `${displayPing} ms` : "--" }}
+                  <small v-if="displayPacketLoss != null && displayPacketLoss > 0" class="packet-loss-sub">
+                    (丢包 {{ displayPacketLoss }}%)
                   </small>
                 </strong>
               </div>
               <div class="hud-ctx-item hud-ctx-item-wide">
-                <span class="ctx-lbl">本局在服时长</span>
-                <strong class="ctx-val">{{ matchOnlineText }}</strong>
-                <small v-if="matchOnlineSubText" class="ctx-sub">{{ matchOnlineSubText }}</small>
+                <span class="ctx-lbl">本服务器游玩时长</span>
+                <strong class="ctx-val">{{ serverPlaytimeText }}</strong>
+              </div>
+              <div class="hud-ctx-item hud-ctx-item-wide">
+                <span class="ctx-lbl">暖服时长</span>
+                <strong class="ctx-val">{{ warmupPlaytimeText }}</strong>
               </div>
             </div>
           </header>
@@ -709,9 +712,9 @@ const teamColorClass = computed(() => {
 });
 
 const pingStatusClass = computed(() => {
-  if (props.player?.ping == null) return "";
-  const ping = props.player.ping;
-  const loss = props.player.packetLoss ?? 0;
+  if (displayPing.value == null) return "";
+  const ping = displayPing.value;
+  const loss = displayPacketLoss.value ?? 0;
   if (ping > 120 || loss > 20) return "high";
   if (ping > 60 || loss > 5) return "medium";
   return "low";
@@ -830,8 +833,35 @@ const currentIp = computed(() => {
   return String(props.player?.ip ?? props.player?.resolvedIp ?? props.player?.lastIp ?? "").trim();
 });
 const displayIp = computed(() => currentIp.value);
-const matchOnlineText = computed(() => formatMatchOnlineText(props.player?.matchOnlineSeconds ?? null));
-const matchOnlineSubText = computed(() => formatMatchOnlineSubText(props.player));
+const displayPing = computed(() => firstFiniteNumber(
+  props.player?.ping,
+  props.player?.bzssCorePing,
+  props.player?.raw?.ping,
+  props.player?.raw?.playerScoreboard?.ping,
+  props.player?.raw?.bzssCorePlayerInfo?.playerScoreboard?.ping,
+));
+const displayPacketLoss = computed(() => firstFiniteNumber(
+  props.player?.packetLoss,
+  props.player?.raw?.packetLoss,
+));
+const serverPlaytimeSeconds = computed(() => firstFiniteNumber(
+  playerDatabaseSummary.value?.serverSeconds,
+  playerDatabaseRecord.value?.server_seconds,
+  props.player?.serverSeconds,
+  props.player?.server_seconds,
+  props.player?.raw?.serverSeconds,
+  props.player?.raw?.server_seconds,
+));
+const warmupPlaytimeSeconds = computed(() => firstFiniteNumber(
+  playerDatabaseSummary.value?.warmupSeconds,
+  playerDatabaseRecord.value?.warmup_seconds,
+  props.player?.warmupSeconds,
+  props.player?.warmup_seconds,
+  props.player?.raw?.warmupSeconds,
+  props.player?.raw?.warmup_seconds,
+));
+const serverPlaytimeText = computed(() => formatHours(serverPlaytimeSeconds.value));
+const warmupPlaytimeText = computed(() => formatHours(warmupPlaytimeSeconds.value));
 const ipSearchUrl = computed(() => buildIpSearchUrl(displayIp.value));
 const ipEmptyText = computed(() => "--");
 const ipSourceHint = computed(() => t("common.none"));
@@ -944,29 +974,13 @@ function formatHours(value: unknown) {
   return `${(seconds / 3600).toFixed(1)}h`;
 }
 
-function formatMatchOnlineText(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "--";
-  return formatHours(value);
-}
-
-function formatMatchOnlineSubText(player: PlayerDetailViewModel | null | undefined) {
-  if (!player) return "";
-  const parts: string[] = [];
-  if (player.matchJoinCount != null) parts.push(`进服 ${player.matchJoinCount} 次`);
-  if (player.matchFirstSeenAt) parts.push(`首次 ${formatDateTime(player.matchFirstSeenAt)}`);
-  if (player.matchLastSeenAt) parts.push(`最近 ${formatDateTime(player.matchLastSeenAt)}`);
-  return parts.join(" · ");
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+function firstFiniteNumber(...values: unknown[]) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const number = Number(value);
+    if (Number.isFinite(number) && number >= 0) return number;
+  }
+  return null;
 }
 
 function formatHoursInput(value: unknown) {
