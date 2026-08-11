@@ -25,6 +25,9 @@ const FIELD_RULES = {
   "combat.minRadiusMeters": [0, 20000],
   "combat.maxRadiusMeters": [0, 30000],
   "combat.polygonArcSegments": [6, 128],
+  "hotspot.referenceRadiusMeters": [50, 10000],
+  "hotspot.minRadiusMeters": [0, 10000],
+  "hotspot.maxRadiusMeters": [0, 20000],
 };
 
 export function createBaseConfigStore({ dataDir = "data/dynamic-pressure-zone", logger = null } = {}) {
@@ -86,6 +89,11 @@ export function normalizeBaseConfig(value = {}) {
       maxRadiusMeters: checked("combat.maxRadiusMeters", merged.combat.maxRadiusMeters),
       polygonArcSegments: Math.round(checked("combat.polygonArcSegments", merged.combat.polygonArcSegments)),
     },
+    hotspot: {
+      referenceRadiusMeters: checked("hotspot.referenceRadiusMeters", merged.hotspot.referenceRadiusMeters),
+      minRadiusMeters: checked("hotspot.minRadiusMeters", merged.hotspot.minRadiusMeters),
+      maxRadiusMeters: checked("hotspot.maxRadiusMeters", merged.hotspot.maxRadiusMeters),
+    },
   };
 
   if (normalized.minMapScale > normalized.maxMapScale) throw new Error("minMapScale cannot exceed maxMapScale.");
@@ -97,6 +105,7 @@ export function normalizeBaseConfig(value = {}) {
     throw new Error("soft.minExtensionMeters cannot exceed soft.maxExtensionMeters.");
   }
   if (normalized.combat.minRadiusMeters > normalized.combat.maxRadiusMeters) throw new Error("combat.minRadiusMeters cannot exceed combat.maxRadiusMeters.");
+  if (normalized.hotspot.minRadiusMeters > normalized.hotspot.maxRadiusMeters) throw new Error("hotspot.minRadiusMeters cannot exceed hotspot.maxRadiusMeters.");
   return normalized;
 }
 

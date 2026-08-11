@@ -29,6 +29,11 @@ export interface PressureZoneConfig {
     maxRadiusMeters: number;
     polygonArcSegments: number;
   };
+  hotspot: {
+    referenceRadiusMeters: number;
+    minRadiusMeters: number;
+    maxRadiusMeters: number;
+  };
 }
 
 export interface TacticalMapBoundsLike {
@@ -103,6 +108,15 @@ export interface PressureZoneState {
   profileSource?: string;
   map?: PressureZoneMapState | null;
   combat?: any;
+  hotspot?: {
+    center: { x: number; y: number };
+    radiusMeters: number;
+    radiusWorld: number;
+    playerCount: number;
+    positionSource: string;
+    sizeSource: string;
+    linearMapScale: number;
+  } | null;
   bases?: { team1?: PressureZoneBaseState; team2?: PressureZoneBaseState };
   zones: PressureZoneItem[];
   diagnostics?: any;

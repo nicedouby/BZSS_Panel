@@ -435,7 +435,7 @@
         </div>
 
         <!-- SVG Layer for Overlays (Distance Measuring & Hotspot Circle) -->
-        <svg v-if="measureMode || combatHotspot != null" class="map-measure-svg">
+        <svg v-if="measureMode || (combatHotspotVisible && combatHotspot != null)" class="map-measure-svg">
           <path
             v-if="measureMode && measurePoints.length >= 2"
             :d="measurePathD"
@@ -457,13 +457,13 @@
             class="measure-point"
           />
 
-          <!-- Combat Hotspot Overlay (1000m circle & center marker) -->
-          <g v-if="combatHotspot != null">
-            <!-- 1000m radius circle -->
-            <circle
+          <!-- Live combat hotspot overlay; its radius follows the active map size. -->
+          <g v-if="combatHotspotVisible && combatHotspot != null">
+            <ellipse
               :cx="combatHotspotMapPos.mapX * 10"
               :cy="combatHotspotMapPos.mapY * 10"
-              :r="combatHotspotRadiusSvg"
+              :rx="combatHotspotRadiusSvg.x"
+              :ry="combatHotspotRadiusSvg.y"
               fill="rgba(0, 229, 255, 0.04)"
               stroke="#00e5ff"
               stroke-width="2.5"
@@ -600,7 +600,7 @@
         :can-edit-capture-points="canEditCapturePoints"
         :capture-point-edit-mode="capturePointEditMode"
         :capture-point-command-pending="capturePointCommandPending"
-        :has-combat-hotspot="combatHotspot != null"
+        :has-combat-hotspot="combatHotspotVisible && combatHotspot != null"
         :kill-mode-active="killModeEnabled"
         :can-use-kill-mode="canUseKillMode"
         @close="closeMapCommandMenu"
@@ -1875,8 +1875,36 @@ watch(
   }
 );
 
-// Combat Hotspot State (Centroid of alive players)
-const combatHotspot = ref<{ gameX: number; gameY: number } | null>(null);
+// The hotspot is derived from each tactical snapshot, so it follows the alive
+// on-foot player population instead of freezing at the moment the button is used.
+const combatHotspotVisible = ref(false);
+const combatHotspot = computed<{ gameX: number; gameY: number; radiusMeters: number; playerCount: number } | null>(() => {
+  const alivePlayers = positionedPlayers.value.filter((player) => {
+    const hp = Number(player.soldierInfo?.health);
+    return Number.isFinite(hp) && hp > 0 && getPlayerPosition(player) != null;
+  });
+  if (!alivePlayers.length) return null;
+  let sumX = 0;
+  let sumY = 0;
+  for (const player of alivePlayers) {
+    const position = getPlayerPosition(player)!;
+    sumX += Number(position.x) || 0;
+    sumY += Number(position.y) || 0;
+  }
+  const width = activeMapDimensionsMeters.value.width;
+  const height = activeMapDimensionsMeters.value.height;
+  const effectiveSizeMeters = Math.sqrt(Math.max(1, width) * Math.max(1, height));
+  const serverRadius = Number(pressureZoneState.value?.hotspot?.radiusMeters);
+  const radiusMeters = Number.isFinite(serverRadius) && serverRadius > 0
+    ? serverRadius
+    : Math.min(1600, Math.max(450, effectiveSizeMeters * 0.25));
+  return {
+    gameX: sumX / alivePlayers.length,
+    gameY: sumY / alivePlayers.length,
+    radiusMeters,
+    playerCount: alivePlayers.length,
+  };
+});
 const combatHotspotMapPos = computed(() => {
   if (!combatHotspot.value) return { mapX: 0, mapY: 0 };
   const bounds = activeMapConfig.value.bounds;
@@ -1887,47 +1915,37 @@ const combatHotspotMapPos = computed(() => {
 });
 
 const combatHotspotRadiusSvg = computed(() => {
-  const bounds = activeMapConfig.value.bounds;
-  const mapGameWidth = bounds.maxX - bounds.minX;
-  if (mapGameWidth <= 0) return 0;
-  // 1000m in game coordinates is 100,000 units (1m = 100 units)
-  return (100000 / mapGameWidth) * 1000;
+  if (!combatHotspot.value) return { x: 0, y: 0 };
+  const widthMeters = activeMapDimensionsMeters.value.width;
+  const heightMeters = activeMapDimensionsMeters.value.height;
+  return {
+    x: widthMeters > 0 ? (combatHotspot.value.radiusMeters / widthMeters) * 1000 : 0,
+    y: heightMeters > 0 ? (combatHotspot.value.radiusMeters / heightMeters) * 1000 : 0,
+  };
 });
 
 
 function calculateCombatHotspot() {
-  const alivePlayers = positionedPlayers.value.filter(player => {
-    const hp = player.soldierInfo?.health;
-    return hp != null && hp > 0;
-  });
-  
-  if (alivePlayers.length === 0) {
+  if (!combatHotspot.value) {
     logCombatEvent("无法计算作战热点: 暂无存活玩家", "system");
     return;
   }
-  
-  let sumX = 0;
-  let sumY = 0;
-  alivePlayers.forEach(player => {
-    const pos = player.soldierInfo?.position;
-    if (pos) {
-      sumX += pos.x ?? 0;
-      sumY += pos.y ?? 0;
-    }
-  });
-  
-  combatHotspot.value = {
-    gameX: sumX / alivePlayers.length,
-    gameY: sumY / alivePlayers.length
-  };
-  
-  logCombatEvent(`计算得到新一轮作战热点中心 [X:${Math.round(combatHotspot.value.gameX)}, Y:${Math.round(combatHotspot.value.gameY)}] (1000m 半径)`, "system");
+  combatHotspotVisible.value = true;
+  logCombatEvent(`已开启实时作战热点 [${combatHotspot.value.playerCount} 人，${Math.round(combatHotspot.value.radiusMeters)}m 半径]`, "system");
 }
 
 function clearCombatHotspot() {
-  combatHotspot.value = null;
-  logCombatEvent("Cleared combat hotspot marker", "system");
+  combatHotspotVisible.value = false;
+  logCombatEvent("已隐藏实时作战热点", "system");
 }
+
+watch(
+  () => combatHotspot.value
+    ? `${Math.round(combatHotspot.value.gameX)}:${Math.round(combatHotspot.value.gameY)}:${combatHotspot.value.playerCount}`
+    : "",
+  () => schedulePressureZoneFetch(250),
+  { flush: "post" },
+);
 
 // Position and Rotation Spring-Damper State
 interface PlayerTarget {
@@ -2004,7 +2022,7 @@ watch(
     triggerRef(cachedPlayers);
     adaptedPlayerCache.clear();
     playerTargets.clear();
-    combatHotspot.value = null;
+    combatHotspotVisible.value = false;
     tilesReady.value = false;
   }
 );

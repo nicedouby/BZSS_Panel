@@ -89,13 +89,16 @@
         </section>
 
         <section class="parameter-card combat-card">
-          <header><span>04</span><div><h2>Combat Buffer</h2><p>当前双方相邻前线点距是主变量；地图尺寸只允许轻度修正。</p></div></header>
+          <header><span>04</span><div><h2>Combat Buffer 与实时热点</h2><p>缓冲区宽度参考前线点距，位置跟随存活步兵热点；热点尺寸按地图有效尺寸线性缩放。</p></div></header>
           <PressureZoneParameterControl v-model="config.combat.gapFactor" label="前线点距比例" description="当前相邻交战点距离用于缓冲区半径的比例。" :min="0" :max="1" :step="0.01" unit="×" />
           <PressureZoneParameterControl v-model="config.combat.mapScaleInfluence" label="地图尺寸影响" description="Combat 对地图尺度的敏感度，建议远低于 Hard。" :min="0" :max="1" :step="0.05" unit="×" />
           <PressureZoneParameterControl v-model="config.combat.lateralFactor" label="横向宽度比例" description="胶囊缓冲区横向宽度相对纵向半径的比例。" :min="0.1" :max="3" :step="0.05" unit="×" />
           <PressureZoneParameterControl v-model="config.combat.minRadiusMeters" label="最小缓冲半径" description="交战点很近时仍保留的最低机动空间。" :min="0" :max="3000" :step="25" unit="m" />
           <PressureZoneParameterControl v-model="config.combat.maxRadiusMeters" label="最大缓冲半径" description="交战点很远时防止缓冲区覆盖过多地图。" :min="0" :max="5000" :step="25" unit="m" />
           <PressureZoneParameterControl v-model="config.combat.polygonArcSegments" label="边缘精度" description="SVG 胶囊圆弧分段数。" :min="6" :max="64" :step="1" unit="段" />
+          <PressureZoneParameterControl v-model="config.hotspot.referenceRadiusMeters" label="热点基准半径" description="4km 基准地图上的热点显示半径。" :min="50" :max="10000" :step="25" unit="m" />
+          <PressureZoneParameterControl v-model="config.hotspot.minRadiusMeters" label="热点最小半径" description="小地图上热点尺寸的下限。" :min="0" :max="10000" :step="25" unit="m" />
+          <PressureZoneParameterControl v-model="config.hotspot.maxRadiusMeters" label="热点最大半径" description="大地图上热点尺寸的上限。" :min="0" :max="20000" :step="25" unit="m" />
         </section>
       </main>
 
@@ -168,6 +171,7 @@ const validationError = computed(() => {
     ["Hard 基础半径", value.hard.baseRadiusMeters, 50, 5000], ["Hard 最小半径", value.hard.minRadiusMeters, 0, 10000], ["Hard 最大半径", value.hard.maxRadiusMeters, 0, 20000], ["Hard 紧急最小半径", value.hard.emergencyMinimumRadiusMeters, 0, 5000], ["Main→P1 最大占比", value.hard.maxBaseToFirstObjectiveRatio, .05, .98],
     ["Soft 间距比例", value.soft.objectiveSpacingRatio, 0, 1], ["Soft 最小扩展", value.soft.minExtensionMeters, 0, 10000], ["Soft 最大扩展", value.soft.maxExtensionMeters, 0, 15000], ["Soft 回退扩展", value.soft.fallbackExtensionMeters, 0, 10000], ["Soft P1 安全余量", value.soft.objectiveSafetyMarginMeters, 0, 10000],
     ["Combat 前线比例", value.combat.gapFactor, 0, 2], ["Combat 地图影响", value.combat.mapScaleInfluence, 0, 1], ["Combat 横向比例", value.combat.lateralFactor, .1, 5], ["Combat 最小半径", value.combat.minRadiusMeters, 0, 20000], ["Combat 最大半径", value.combat.maxRadiusMeters, 0, 30000], ["Combat 边缘精度", value.combat.polygonArcSegments, 6, 128],
+    ["热点基准半径", value.hotspot.referenceRadiusMeters, 50, 10000], ["热点最小半径", value.hotspot.minRadiusMeters, 0, 10000], ["热点最大半径", value.hotspot.maxRadiusMeters, 0, 20000],
   ];
   const invalid = fields.find(([, numeric, min, max]) => !Number.isFinite(Number(numeric)) || Number(numeric) < min || Number(numeric) > max);
   if (invalid) return `${invalid[0]}必须在 ${invalid[2]}–${invalid[3]} 之间。`;
@@ -177,6 +181,7 @@ const validationError = computed(() => {
   if (value.hard.emergencyMinimumRadiusMeters > value.hard.minRadiusMeters) return "Hard 紧急最小半径不能大于正常最小半径。";
   if (value.soft.minExtensionMeters > value.soft.maxExtensionMeters) return "Soft 最小扩展不能大于最大扩展。";
   if (value.combat.minRadiusMeters > value.combat.maxRadiusMeters) return "Combat 最小半径不能大于最大半径。";
+  if (value.hotspot.minRadiusMeters > value.hotspot.maxRadiusMeters) return "热点最小半径不能大于最大半径。";
   return "";
 });
 const canSave = computed(() => dirty.value && !saving.value && !validationError.value);

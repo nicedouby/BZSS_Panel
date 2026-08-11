@@ -145,6 +145,28 @@ const farCombat = calculatePressureZones(baseInput({
 assert.equal(farCombat.combat.longitudinalRadius, 900);
 assert.equal(farCombat.combat.limitingFactor, "maximum-radius");
 
+const hotspotCentered = calculatePressureZones(baseInput({
+  hotspot: { x: 2500, y: 1500, playerCount: 24 },
+}));
+assert.deepEqual(hotspotCentered.hotspot.center, { x: 2500, y: 1500 });
+assert.equal(hotspotCentered.hotspot.radiusMeters, 1000);
+assert.equal(hotspotCentered.hotspot.playerCount, 24);
+assert.equal(hotspotCentered.combat.positionSource, "live-hotspot");
+assert.deepEqual(hotspotCentered.combat.center, { x: 2500, y: 1500 });
+assert.equal((hotspotCentered.combat.pointA.x + hotspotCentered.combat.pointB.x) / 2, 2500);
+assert.equal((hotspotCentered.combat.pointA.y + hotspotCentered.combat.pointB.y) / 2, 1500);
+
+const smallHotspot = calculatePressureZones(baseInput({
+  mapBounds: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+  hotspot: { x: 1000, y: 1000, playerCount: 8 },
+}));
+const largeHotspot = calculatePressureZones(baseInput({
+  mapBounds: { minX: 0, minY: 0, maxX: 8000, maxY: 8000 },
+  hotspot: { x: 4000, y: 4000, playerCount: 80 },
+}));
+assert.equal(smallHotspot.hotspot.radiusMeters, 500);
+assert.equal(largeHotspot.hotspot.radiusMeters, 1600);
+
 const overlap = calculatePressureZones(baseInput({
   objectiveChain: [
     { id: "p1", x: 350, y: 0 },
@@ -190,13 +212,18 @@ const normalized = normalizeBaseConfig({
 assert.equal(normalized.referenceMapSizeMeters, 5000);
 assert.equal(normalized.hard.maxBaseToFirstObjectiveRatio, 0.55);
 assert.equal(normalized.combat.gapFactor, 0.25);
+assert.equal(normalized.hotspot.referenceRadiusMeters, 1000);
 assert.throws(() => normalizeBaseConfig({ schemaVersion: 2, minMapScale: 2, maxMapScale: 1 }), /cannot exceed/);
 assert.throws(() => normalizeBaseConfig({ schemaVersion: 2, hard: { emergencyMinimumRadiusMeters: 500, minRadiusMeters: 300 } }), /cannot exceed/);
 
 const liveSnapshot = {
   server: { map: "Al Basrah", layer: "AlBasrah_RAAS_v1", mode: "RAAS" },
   match: {},
-  players: [],
+  players: [
+    { identity: { key: "p1" }, telemetry: { position: { x: -60000, y: -40000 }, health: 100, inactive: false, onVehicle: false } },
+    { identity: { key: "p2" }, telemetry: { position: { x: -20000, y: 0 }, health: 75, inactive: false, onVehicle: false } },
+    { identity: { key: "dead" }, telemetry: { position: { x: 60000, y: 60000 }, health: 0, inactive: false, onVehicle: false } },
+  ],
   assets: {
     mainZones: [
       { teamId: 1, position: { x: -130000, y: -130000 } },
@@ -230,6 +257,9 @@ module.api.subscribe(() => { publishCount += 1; });
 await module.init();
 await module.start();
 assert.equal(publishCount, 1);
+assert.deepEqual(module.api.getState().hotspot.center, { x: -40000, y: -20000 });
+assert.equal(module.api.getState().hotspot.playerCount, 2);
+assert.equal(module.api.getState().combat.positionSource, "live-hotspot");
 
 const defaultBaseConfig = module.api.getBaseConfig();
 assert.equal(defaultBaseConfig.config.schemaVersion, 2);

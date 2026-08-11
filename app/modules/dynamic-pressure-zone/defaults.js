@@ -36,6 +36,11 @@ export const DEFAULT_PRESSURE_ZONE_CONFIG = Object.freeze({
     maxRadiusMeters: 900,
     polygonArcSegments: 18,
   }),
+  hotspot: Object.freeze({
+    referenceRadiusMeters: 1000,
+    minRadiusMeters: 450,
+    maxRadiusMeters: 1600,
+  }),
 });
 
 export function mergePressureZoneConfig(...sources) {
@@ -44,15 +49,17 @@ export function mergePressureZoneConfig(...sources) {
     hard: { ...DEFAULT_PRESSURE_ZONE_CONFIG.hard },
     soft: { ...DEFAULT_PRESSURE_ZONE_CONFIG.soft },
     combat: { ...DEFAULT_PRESSURE_ZONE_CONFIG.combat },
+    hotspot: { ...DEFAULT_PRESSURE_ZONE_CONFIG.hotspot },
   };
   for (const rawSource of sources) {
     if (!rawSource || typeof rawSource !== "object") continue;
     const source = migrateLegacyPressureZoneConfig(rawSource);
-    const { hard, soft, combat, ...topLevel } = source;
+    const { hard, soft, combat, hotspot, ...topLevel } = source;
     Object.assign(result, topLevel);
     if (hard) Object.assign(result.hard, hard);
     if (soft) Object.assign(result.soft, soft);
     if (combat) Object.assign(result.combat, combat);
+    if (hotspot) Object.assign(result.hotspot, hotspot);
   }
   result.schemaVersion = 2;
   return result;

@@ -159,6 +159,7 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
 function buildRelevantSnapshotSignature(snapshot) {
   const captureZones = Array.isArray(snapshot?.assets?.captureZones) ? snapshot.assets.captureZones : [];
   const mainZones = Array.isArray(snapshot?.assets?.mainZones) ? snapshot.assets.mainZones : [];
+  const players = Array.isArray(snapshot?.players) ? snapshot.players : [];
   return JSON.stringify({
     layer: firstText(snapshot?.server?.layer, snapshot?.match?.layer, snapshot?.server?.map),
     mode: firstText(snapshot?.server?.mode, snapshot?.match?.mode),
@@ -172,6 +173,15 @@ function buildRelevantSnapshotSignature(snapshot) {
       zone?.teamId ?? zone?.teamID ?? null,
       zone?.position?.x ?? zone?.x ?? null,
       zone?.position?.y ?? zone?.y ?? null,
+    ]),
+    players: players.map((player) => [
+      player?.identity?.key ?? player?.identity?.playerID ?? player?.playerId ?? "",
+      player?.telemetry?.position?.x ?? player?.soldierInfo?.position?.x ?? player?.position?.x ?? null,
+      player?.telemetry?.position?.y ?? player?.soldierInfo?.position?.y ?? player?.position?.y ?? null,
+      player?.telemetry?.health ?? player?.soldierInfo?.health ?? null,
+      player?.telemetry?.inactive ?? player?.inactive ?? null,
+      player?.telemetry?.onVehicle ?? player?.vehicle?.onVehicle ?? null,
+      player?.presence?.state ?? "",
     ]),
   });
 }
@@ -199,7 +209,30 @@ function buildLiveInput(snapshot, profile, baseConfig) {
     mains: profile?.mains ?? normalizeRuntimeMains(assets.mainZones),
     objectiveChain: objectives,
     objectiveState,
+    hotspot: resolveLiveHotspot(snapshot?.players),
     config: baseConfig,
+  };
+}
+
+function resolveLiveHotspot(players) {
+  const positions = [];
+  for (const player of Array.isArray(players) ? players : []) {
+    const health = finite(player?.telemetry?.health ?? player?.soldierInfo?.health);
+    const inactive = player?.telemetry?.inactive === true
+      || player?.inactive === true
+      || String(player?.presence?.state ?? "").trim().toLowerCase() === "inactive";
+    const noWorldPawn = ["nopawn", "pendingdeployment"].includes(String(player?.presence?.state ?? player?.telemetry?.presenceHint ?? "").trim().toLowerCase());
+    const onVehicle = player?.telemetry?.onVehicle === true || player?.vehicle?.onVehicle === true;
+    if (!(health > 0) || inactive || noWorldPawn || onVehicle) continue;
+    const x = finite(player?.telemetry?.position?.x ?? player?.soldierInfo?.position?.x ?? player?.position?.x);
+    const y = finite(player?.telemetry?.position?.y ?? player?.soldierInfo?.position?.y ?? player?.position?.y);
+    if (x != null && y != null) positions.push({ x, y });
+  }
+  if (!positions.length) return null;
+  return {
+    x: positions.reduce((sum, position) => sum + position.x, 0) / positions.length,
+    y: positions.reduce((sum, position) => sum + position.y, 0) / positions.length,
+    playerCount: positions.length,
   };
 }
 

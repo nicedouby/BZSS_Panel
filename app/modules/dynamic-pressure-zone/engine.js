@@ -24,6 +24,7 @@ export function calculatePressureZones(input = {}) {
   const coordinateScaleMeters = resolveCoordinateScaleMeters(bounds, config.coordinateScaleMeters);
   const worldUnitsPerMeter = 1 / coordinateScaleMeters;
   const map = resolveMapMetrics(input, bounds, coordinateScaleMeters, worldUnitsPerMeter, config);
+  const hotspot = resolveHotspot(input.hotspot, map, config);
 
   const fronts = resolveCombatPair(chain, input.objectiveState);
   const team1Main = mains.find((main) => main.teamId === 1);
@@ -68,6 +69,7 @@ export function calculatePressureZones(input = {}) {
       coordinateScaleMeters,
       worldUnitsPerMeter,
       rawMapScale: map.rawScaleFactor,
+      hotspot,
       config,
     });
     zones.push(combat.zone);
@@ -83,6 +85,7 @@ export function calculatePressureZones(input = {}) {
     generatedAt: new Date().toISOString(),
     map,
     combat: combat?.state ?? null,
+    hotspot,
     bases: { team1: team1Base, team2: team2Base },
     zones,
     diagnostics: {
@@ -277,9 +280,17 @@ function resolveAverageObjectiveSpacing(chain, coordinateScaleMeters) {
   return spacings.reduce((sum, value) => sum + value, 0) / spacings.length;
 }
 
-function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, rawMapScale, config }) {
-  const pointA = { x: pair.pointA.x, y: pair.pointA.y };
-  const pointB = { x: pair.pointB.x, y: pair.pointB.y };
+function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, rawMapScale, hotspot, config }) {
+  const originalPointA = { x: pair.pointA.x, y: pair.pointA.y };
+  const originalPointB = { x: pair.pointB.x, y: pair.pointB.y };
+  const originalCenter = {
+    x: (originalPointA.x + originalPointB.x) / 2,
+    y: (originalPointA.y + originalPointB.y) / 2,
+  };
+  const center = hotspot?.center ?? originalCenter;
+  const offset = { x: center.x - originalCenter.x, y: center.y - originalCenter.y };
+  const pointA = { x: originalPointA.x + offset.x, y: originalPointA.y + offset.y };
+  const pointB = { x: originalPointB.x + offset.x, y: originalPointB.y + offset.y };
   const gapMeters = distance(pointA, pointB) * coordinateScaleMeters;
   const baseRadius = gapMeters * nonNegative(config.combat.gapFactor, 0.30);
   const mapInfluence = clamp(nonNegative(config.combat.mapScaleInfluence, 0.20), 0, 1);
@@ -322,6 +333,10 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
       team2ObjectiveId: pair.pointB.id,
       pointA,
       pointB,
+      originalPointA,
+      originalPointB,
+      center,
+      positionSource: hotspot ? "live-hotspot" : "front-pair",
       gapMeters,
       baseRadius,
       rawMapScale,
@@ -337,6 +352,27 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
       lateralRadius,
       polygon,
     },
+  };
+}
+
+function resolveHotspot(value, map, config) {
+  const x = Number(value?.x ?? value?.center?.x);
+  const y = Number(value?.y ?? value?.center?.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+  const referenceRadiusMeters = positive(config.hotspot?.referenceRadiusMeters, 1000);
+  const minRadiusMeters = nonNegative(config.hotspot?.minRadiusMeters, 450);
+  const maxRadiusMeters = Math.max(minRadiusMeters, nonNegative(config.hotspot?.maxRadiusMeters, 1600));
+  const linearMapScale = map.effectiveSizeMeters / positive(map.referenceMapSizeMeters, 4000);
+  const radiusMeters = clamp(referenceRadiusMeters * linearMapScale, minRadiusMeters, maxRadiusMeters);
+  return {
+    center: { x, y },
+    radiusMeters,
+    radiusWorld: radiusMeters * map.worldUnitsPerMeter,
+    playerCount: Math.max(0, Math.trunc(Number(value?.playerCount) || 0)),
+    positionSource: "alive-player-centroid",
+    sizeSource: "map-effective-size",
+    linearMapScale,
   };
 }
 
