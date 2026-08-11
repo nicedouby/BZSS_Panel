@@ -146,7 +146,9 @@ function resolveRuntimeSyncDelay() {
     policy: runtimeSyncState.refreshPolicy,
     playerCount: getCurrentPlayerCount(),
     hidden: false,
-    surface: "auxiliary",
+    // Realtime pages carry live roster/squad state, so the shared snapshot
+    // must use the primary cadence. Slower routes retain the auxiliary cadence.
+    surface: runtimeSyncState.refreshPolicy === "realtime" ? "primary" : "auxiliary",
   });
   const failureFactor = Math.pow(2, Math.min(runtimeSyncState.consecutiveFailures, 4));
   const jitterFactor = 1 + Math.random() * 0.2;
