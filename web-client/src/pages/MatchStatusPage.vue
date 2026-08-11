@@ -318,7 +318,7 @@ import { useAutoRefreshGate } from "../composables/useAutoRefreshGate";
 import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
-import { fetchTacticalStatePlayerHealth } from "../app/tacticalStateApi";
+import { fetchTacticalStatePlayers } from "../app/tacticalStateApi";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -407,8 +407,6 @@ function handleViewModeChange(mode: "list" | "map") {
 
 const tacticalStateStore = useTacticalStateStore();
 const tacticalStateSnapshot = computed(() => tacticalStateStore.snapshot);
-const tacticalPlayers = computed(() => tacticalStateStore.players);
-const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
 const refreshingPlaytime = ref(false);
 const refreshingPlayers = ref(false);
 const refreshingSquads = ref(false);
@@ -441,10 +439,10 @@ const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false
 const active = ref(true);
 const { canAutoRefresh } = useAutoRefreshGate(computed(() => active.value && !pageHidden.value));
 
-const playerHealthQuery = useQuery({
-  queryKey: computed(() => ["tactical-player-health", auth.authenticated]),
+const tacticalPlayerSummaryQuery = useQuery({
+  queryKey: computed(() => ["tactical-player-summary", auth.authenticated]),
   enabled: computed(() => active.value && !pageHidden.value && auth.authenticated),
-  queryFn: fetchTacticalStatePlayerHealth,
+  queryFn: fetchTacticalStatePlayers,
   staleTime: 1_000,
   refetchInterval: computed(() => (
     active.value && !pageHidden.value && auth.authenticated ? 2_000 : false
@@ -452,6 +450,16 @@ const playerHealthQuery = useQuery({
   refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
 });
+const tacticalPlayers = computed(() => {
+  const streamedPlayers = tacticalStateStore.players;
+  if (tacticalStateStore.streamActive && Array.isArray(streamedPlayers) && streamedPlayers.length > 0) {
+    return streamedPlayers;
+  }
+  const polledPlayers = tacticalPlayerSummaryQuery.data.value?.players;
+  if (Array.isArray(polledPlayers)) return polledPlayers;
+  return Array.isArray(streamedPlayers) ? streamedPlayers : [];
+});
+const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
 
 // The full tactical-state stream carries high-frequency position data.  It is
 // owned by TacticalMapPage; the list page only opens it temporarily for the
@@ -536,17 +544,15 @@ const remoteTelemetryQuery = useQuery({
 const remoteTelemetryState = computed(() => remoteTelemetryQuery.data.value?.remoteTelemetry ?? null);
 
 const healthLookup = computed<Record<string, number | null>>(() => {
-  const healthPlayers = playerHealthQuery.data.value?.players;
-  if (!Array.isArray(healthPlayers) || healthPlayers.length === 0) return {};
   const map: Record<string, number | null> = {};
-  for (const player of healthPlayers) {
-    const name = String(player?.name ?? "").trim();
+  for (const player of tacticalPlayers.value) {
+    const name = String(player?.identity?.name ?? player?.name ?? "").trim();
     if (!name) continue;
-    if (player?.health == null) {
-      map[name] = null;
-      continue;
-    }
-    const rawHealth = Number(player.health);
+    const rawHealth = Number(
+      player?.telemetry?.health
+      ?? player?.raw?.bzss?.soldierInfo?.health
+      ?? Number.NaN,
+    );
     if (!Number.isFinite(rawHealth)) {
       map[name] = null;
       continue;
@@ -731,7 +737,7 @@ const rawTeams = computed(() => {
 
   return match.teams.map((team) => {
     const ticketCount = team.teamID === 1 ? remoteTicketCounts.value.team1 : remoteTicketCounts.value.team2;
-    const adaptedTeam = adaptTeam(team, {}, squadLifecycleLookup.value, {}, ticketCount);
+    const adaptedTeam = adaptTeam(team, playtimes.value, squadLifecycleLookup.value, combatStatsLookup.value, ticketCount);
     const factionCode = getFactionFromTeamId(teamFactionIds[team.teamID]);
 
     return {
@@ -856,6 +862,8 @@ function attachTacticalStateInfoToPlayer(
   }
   return {
     ...player,
+    ping: matched.network?.icmpPing ?? player.ping ?? null,
+    packetLoss: matched.network?.packetLoss ?? player.packetLoss ?? null,
     bzssCorePing: matched.network?.gamePing ?? matched.playerScoreboard?.ping ?? matched.ping ?? player.bzssCorePing ?? null,
     bzssCoreFtIndex: matched.telemetry?.fireTeamIndex ?? (matched as any).fireTeamIndex ?? matched.ftIndex ?? player.bzssCoreFtIndex ?? null,
     bzssCoreFtPosition: matched.telemetry?.fireTeamPosition ?? (matched as any).fireTeamPosition ?? matched.ftPosition ?? player.bzssCoreFtPosition ?? null,
@@ -1111,6 +1119,8 @@ watch(
   () => [
     tacticalPlayers.value,
     tacticalStateSnapshot.value?.meta?.revision,
+    players.updatedAt,
+    squads.updatedAt,
     activePlayerWindow.value?.detail.playerId,
     activePlayerWindow.value?.detail.steamId,
     activePlayerWindow.value?.detail.steam64,
@@ -1123,6 +1133,7 @@ watch(
     if (!windowState) return;
 
     const currentDetail = windowState.detail;
+    const livePlayer = findPlayerById(currentDetail.playerId);
     const matched = resolveTacticalStatePlayerInfo(
       currentDetail,
       tacticalPlayerLookup.value,
@@ -1151,6 +1162,21 @@ watch(
       ...windowState,
       detail: {
         ...currentDetail,
+        ...(livePlayer ? {
+          teamId: livePlayer.teamId,
+          squadId: livePlayer.squadId,
+          role: livePlayer.role,
+          isLeader: livePlayer.isLeader,
+          isOnline: livePlayer.isOnline,
+          ping: livePlayer.ping,
+          packetLoss: livePlayer.packetLoss,
+          combatStats: livePlayer.combatStats,
+          statsLabel: livePlayer.statsLabel,
+          bzssCorePing: livePlayer.bzssCorePing,
+          bzssCoreFtIndex: livePlayer.bzssCoreFtIndex,
+          bzssCoreFtPosition: livePlayer.bzssCoreFtPosition,
+          raw: livePlayer.raw,
+        } : {}),
         bzssCoreStatus: nextStatus,
         bzssCoreLastCompletedAt: nextCompletedAt,
         bzssCorePlayerInfo: nextPlayerInfo,
