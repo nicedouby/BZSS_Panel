@@ -2220,8 +2220,20 @@ const canUseKillMode = computed(() => Boolean(
 ));
 
 function getKillListPlayersId(player: TacticalLinkedPlayer): string | null {
-  const rcon = getPlayerRconDetail(player) ?? (player as any)?.raw?.rcon ?? null;
-  const value = rcon?.playerId ?? rcon?.playerID ?? (player as any)?.identity?.playerID ?? (player as any)?.identity?.playerId;
+  // Tactical markers are already linked to the ListPlayers row. Prefer that
+  // stable, numeric identity instead of the adapted detail view-model.
+  const source = player as any;
+  const rcon = getPlayerRconDetail(player) ?? source?.raw?.rcon ?? source?.runtime ?? null;
+  const value = (
+    source?.playerId
+    ?? source?.playerIndex
+    ?? source?.identity?.playerID
+    ?? source?.identity?.playerId
+    ?? source?.raw?.rcon?.playerId
+    ?? source?.raw?.rcon?.playerID
+    ?? rcon?.playerId
+    ?? rcon?.playerID
+  );
   const text = String(value ?? "").trim();
   return /^\d+$/.test(text) ? text : null;
 }
@@ -3193,12 +3205,10 @@ function updateCapturePointDrag(clientX: number, clientY: number) {
   };
 }
 
-function startCapturePointDrag(_zone: CaptureZoneMarker, _event: PointerEvent) {
-  // Dragging is temporarily disabled
-  return;
-  /*
+function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
   if (!capturePointEditMode.value || capturePointCommandPending.value || event.button !== 0) return;
   if (!mapRef.value) return;
+
   const gameX = Number(zone.gameX);
   const gameY = Number(zone.gameY);
   if (!Number.isFinite(gameX) || !Number.isFinite(gameY)) {
@@ -3211,16 +3221,15 @@ function startCapturePointDrag(_zone: CaptureZoneMarker, _event: PointerEvent) {
     setCapturePointFeedback("error", "地图尚未完成布局，请稍后重试");
     return;
   }
+
   const bounds = activeMapConfig.value.bounds;
-  const captureTarget = event.currentTarget instanceof HTMLElement
-    ? event.currentTarget
-    : null;
+  const captureTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
   try {
     captureTarget?.setPointerCapture?.(event.pointerId);
   } catch {
-    // Window-level listeners below remain the fallback when pointer capture
-    // is unavailable (for example in an embedded webview).
+    // Window-level listeners below remain the fallback for embedded webviews.
   }
+
   capturePointDrag.value = {
     markerId: zone.id,
     pointIndex: zone.pointIndex,
@@ -3244,16 +3253,18 @@ function startCapturePointDrag(_zone: CaptureZoneMarker, _event: PointerEvent) {
     gameX,
     gameY,
   };
+
   playerInfoPanel.value = null;
   playerActionMenu.value = null;
   mapCommandMenu.value = null;
   setCapturePointFeedback("info", `正在移动点位 ${zone.pointIndex}`, 60_000);
 
+  // Capture-phase listeners continue to receive movement/up events even when the
+  // pointer leaves the small flag button during a map transform.
   window.addEventListener("pointermove", onCapturePointDrag, { capture: true, passive: false });
   window.addEventListener("pointerup", finishCapturePointDrag, true);
   window.addEventListener("pointercancel", cancelCapturePointDrag, true);
   window.addEventListener("blur", cancelCapturePointDrag);
-  */
 }
 
 function onCapturePointDrag(event: PointerEvent) {
