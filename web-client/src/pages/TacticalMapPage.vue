@@ -265,7 +265,11 @@
         </div>
 
         <!-- Player Markers Layer -->
-        <div class="player-markers-layer" :style="{ pointerEvents: measureMode || isDragging || capturePointEditMode ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }">
+        <div
+          class="player-markers-layer"
+          :class="{ 'is-kill-mode-active': killModeEnabled }"
+          :style="{ pointerEvents: measureMode || isDragging || capturePointEditMode ? 'none' : 'auto', outline: isDev ? '2px solid red' : 'none' }"
+        >
           <PlayerMarker
             v-for="player in displayedPlayers"
             :key="getPlayerKey(player)"
@@ -586,7 +590,10 @@
         :capture-point-edit-mode="capturePointEditMode"
         :capture-point-command-pending="capturePointCommandPending"
         :has-combat-hotspot="combatHotspot != null"
+        :kill-mode-active="killModeEnabled"
+        :can-use-kill-mode="canUseKillMode"
         @close="closeMapCommandMenu"
+        @toggle-kill-mode="toggleKillMode"
         @start-measure="onStartMeasure(mapCommandMenu)"
         @add-point="onAddPoint(mapCommandMenu)"
         @undo-point="onUndoPoint"
@@ -629,6 +636,13 @@
         </button>
       </aside>
 
+      <div
+        v-if="killModeFeedback"
+        class="capture-point-edit-status font-mono"
+        :class="'is-' + killModeFeedback.tone"
+      >
+        {{ killModeFeedback.text }}
+      </div>
       <div
         v-if="capturePointEditMode || capturePointFeedback"
         class="capture-point-edit-status font-mono"
@@ -1692,6 +1706,10 @@ const measurePoints = ref<MeasurePoint[]>([]);
 
 // Map Interaction States Layer
 const selectedPlayerKey = ref<string>("");
+const killModeEnabled = ref(false);
+const killModePendingPlayerKey = ref("");
+const killModeFeedback = ref<{ tone: "info" | "ok" | "error"; text: string } | null>(null);
+let killModeFeedbackTimer: number | null = null;
 const playerInfoPanel = ref<{
   player: TacticalLinkedPlayer;
   x: number;
@@ -2188,7 +2206,71 @@ function handleMapRightClick(e: MouseEvent) {
 }
 
 // Player Click / DblClick / RightClick Differentiators
+function setKillModeFeedback(tone: "info" | "ok" | "error", text: string, timeoutMs = 3000) {
+  killModeFeedback.value = { tone, text };
+  if (killModeFeedbackTimer !== null) window.clearTimeout(killModeFeedbackTimer);
+  killModeFeedbackTimer = window.setTimeout(() => {
+    killModeFeedback.value = null;
+    killModeFeedbackTimer = null;
+  }, timeoutMs);
+}
+
+const canUseKillMode = computed(() => Boolean(
+  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
+));
+
+function getKillListPlayersId(player: TacticalLinkedPlayer): string | null {
+  const rcon = getPlayerRconDetail(player) ?? (player as any)?.raw?.rcon ?? null;
+  const value = rcon?.playerId ?? rcon?.playerID ?? (player as any)?.identity?.playerID ?? (player as any)?.identity?.playerId;
+  const text = String(value ?? "").trim();
+  return /^\d+$/.test(text) ? text : null;
+}
+
+function toggleKillMode() {
+  if (!canUseKillMode.value) {
+    killModeEnabled.value = false;
+    setKillModeFeedback("error", "缺少 bzss_core.use 权限，无法开启击杀模式", 4200);
+    return;
+  }
+  killModeEnabled.value = !killModeEnabled.value;
+  setKillModeFeedback("info", killModeEnabled.value ? "击杀模式已开启：单击玩家立即执行 Kill:X · ESC 退出" : "击杀模式已关闭");
+}
+
+async function executeKillModeTarget(player: TacticalLinkedPlayer) {
+  const playerId = getKillListPlayersId(player);
+  const playerKey = getPlayerKey(player);
+  if (!playerId) {
+    setKillModeFeedback("error", `${getPlayerLabel(player)} 没有有效的 ListPlayers ID，未执行 Kill`, 4200);
+    return;
+  }
+  if (!canUseKillMode.value) {
+    killModeEnabled.value = false;
+    setKillModeFeedback("error", "缺少 bzss_core.use 权限，击杀模式已关闭", 4200);
+    return;
+  }
+  if (killModePendingPlayerKey.value) return;
+  killModePendingPlayerKey.value = playerKey;
+  selectedPlayerKey.value = playerKey;
+  playerInfoPanel.value = null;
+  playerActionMenu.value = null;
+  mapCommandMenu.value = null;
+  setKillModeFeedback("info", `正在执行 Kill:${playerId} · ${getPlayerLabel(player)}`, 0);
+  try {
+    const result = await executeBzssCoreCommand({ directive: "Kill", parameter: playerId });
+    if (!result?.ok) throw new Error(String(result?.message ?? `Kill:${playerId} 执行失败`));
+    setKillModeFeedback("ok", `已发送 Kill:${playerId} · ${getPlayerLabel(player)}`, 2400);
+  } catch (error) {
+    setKillModeFeedback("error", error instanceof Error ? error.message : `Kill:${playerId} 发送失败`, 5000);
+  } finally {
+    killModePendingPlayerKey.value = "";
+  }
+}
+
 function handlePlayerSingleClick(player: TacticalLinkedPlayer, event: MouseEvent) {
+  if (killModeEnabled.value) {
+    void executeKillModeTarget(player);
+    return;
+  }
   if (singleClickTimer.value) {
     clearTimeout(singleClickTimer.value);
     singleClickTimer.value = null;
@@ -3981,6 +4063,11 @@ function handleWindowKeyDown(e: KeyboardEvent) {
       pressureSettingsOpen.value = false;
       return;
     }
+    if (killModeEnabled.value) {
+      killModeEnabled.value = false;
+      setKillModeFeedback("info", "击杀模式已关闭");
+      return;
+    }
     playerInfoPanel.value = null;
     playerActionMenu.value = null;
     mapCommandMenu.value = null;
@@ -4090,6 +4177,13 @@ function deactivateMapPage() {
     clearTimeout(singleClickTimer.value);
     singleClickTimer.value = null;
   }
+  killModeEnabled.value = false;
+  killModePendingPlayerKey.value = "";
+  if (killModeFeedbackTimer !== null) {
+    window.clearTimeout(killModeFeedbackTimer);
+    killModeFeedbackTimer = null;
+  }
+  killModeFeedback.value = null;
 
   tilesEnabled.value = false;
   tilesReady.value = false;

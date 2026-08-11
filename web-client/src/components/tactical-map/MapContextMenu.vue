@@ -141,29 +141,17 @@
         <span class="radial-btn-label">复制坐标</span>
       </button>
 
-      <!-- 315 deg: Current-selection action. Player selection replaces redundant close button with Kill. -->
+      <!-- 315 deg: Kill mode. TacticalMapPage owns target selection. -->
       <button
-        v-if="selectedPlayer"
         type="button"
         class="radial-btn kill-btn"
-        :class="{ 'is-disabled': !canKillSelectedPlayer || killPending }"
+        :class="{ 'is-active': killModeActive, 'is-disabled': !canUseKillMode }"
         style="--angle: 315deg;"
-        :title="killButtonTitle"
-        @click.stop="canKillSelectedPlayer && !killPending && handleAction('kill-selected')"
+        :title="killModeActive ? '退出击杀模式' : (canUseKillMode ? '开启击杀模式：随后单击玩家执行 Kill:X' : '缺少 bzss_core.use 权限')"
+        @click.stop="canUseKillMode && emit('toggle-kill-mode')"
       >
         <span class="radial-btn-icon">☠</span>
-        <span class="radial-btn-label">{{ killPending ? "执行中" : "KILL" }}</span>
-      </button>
-      <button
-        v-else
-        type="button"
-        class="radial-btn close-btn"
-        style="--angle: 315deg;"
-        title="关闭轮盘"
-        @click.stop="handleAction('close')"
-      >
-        <span class="radial-btn-icon">✕</span>
-        <span class="radial-btn-label">退出轮盘</span>
+        <span class="radial-btn-label">{{ killModeActive ? '退出击杀' : '击杀模式' }}</span>
       </button>
     </div>
 
@@ -250,12 +238,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
-import { useAuthStore } from "../../stores/auth.store";
-import {
-  type TacticalMapCurrentSelection,
-  useTacticalMapCurrentSelection,
-} from "../../composables/tacticalMapSelection";
 
 const props = defineProps<{
   x: number;
@@ -268,10 +250,6 @@ const props = defineProps<{
   hasPoints: boolean;
   measureActive: boolean;
   measureCount: number;
-
-  // Current selected tactical object. TacticalMapPage can pass this explicitly;
-  // the shared selection state remains the compatibility/default source.
-  currentSelected?: TacticalMapCurrentSelection;
 
   // Layer Visibility
   filterAliveOnly: boolean;
@@ -286,6 +264,8 @@ const props = defineProps<{
   capturePointEditMode: boolean;
   capturePointCommandPending: boolean;
   hasCombatHotspot: boolean;
+  killModeActive?: boolean;
+  canUseKillMode?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -302,51 +282,24 @@ const emit = defineEmits<{
   (e: "calculate-hotspot"): void;
   (e: "clear-hotspot"): void;
   (e: "toggle-layer", payload: "alive" | "names" | "coords" | "fobs" | "zones" | "grid"): void;
+  (e: "toggle-kill-mode"): void;
 }>();
 
-const authStore = useAuthStore();
-const sharedSelection = useTacticalMapCurrentSelection();
 const menuRef = ref<HTMLElement | null>(null);
 const showLayerRing = ref(false);
+// The contextual wheel no longer discovers a player through DOM events. Target
+// selection is handled directly by TacticalMapPage when kill mode is active.
+const selectedPlayer = computed<{ label: string } | null>(() => null);
+const selectedListPlayersId = computed(() => "");
 const killPending = ref(false);
 const killError = ref("");
+const compactKillError = computed(() => "");
 
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
 
 const MENU_RADIUS = 140;
 const MENU_EDGE_GAP = 10;
-
-const effectiveCurrentSelected = computed<TacticalMapCurrentSelection>(() => (
-  props.currentSelected !== undefined
-    ? props.currentSelected
-    : sharedSelection.currentSelected.value
-));
-const selectedPlayer = computed(() => (
-  effectiveCurrentSelected.value?.type === "player" ? effectiveCurrentSelected.value : null
-));
-const selectedListPlayersId = computed(() => {
-  const text = String(selectedPlayer.value?.listPlayersId ?? "").trim();
-  return /^\d+$/.test(text) ? text : "";
-});
-const hasBzssCorePermission = computed(() => Boolean(
-  authStore.user?.isSuperAdmin || authStore.user?.permissions?.includes("bzss_core.use"),
-));
-const canKillSelectedPlayer = computed(() => Boolean(
-  selectedPlayer.value && selectedListPlayersId.value && hasBzssCorePermission.value,
-));
-const killButtonTitle = computed(() => {
-  if (!selectedPlayer.value) return "当前未选中玩家";
-  if (!selectedListPlayersId.value) return `${selectedPlayer.value.label} 没有 ListPlayers ID，禁止执行 Kill`;
-  if (!hasBzssCorePermission.value) return "缺少 bzss_core.use 权限";
-  if (killPending.value) return `正在执行 Kill:${selectedListPlayersId.value}`;
-  return `Kill:${selectedListPlayersId.value} · ${selectedPlayer.value.label}`;
-});
-const compactKillError = computed(() => {
-  const text = String(killError.value ?? "").trim();
-  if (!text) return "KILL FAILED";
-  return text.length > 18 ? `${text.slice(0, 15)}...` : text;
-});
 
 const menuStyle = computed(() => {
   return {
@@ -402,9 +355,6 @@ watch(
   },
 );
 
-watch(effectiveCurrentSelected, () => {
-  killError.value = "";
-});
 
 onMounted(() => {
   nextTick(syncMenuPosition);
@@ -417,29 +367,6 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", onViewportResize);
 });
 
-async function executeSelectedPlayerKill() {
-  const target = selectedPlayer.value;
-  const playerId = selectedListPlayersId.value;
-  if (!target || !playerId || !hasBzssCorePermission.value || killPending.value) return;
-
-  killPending.value = true;
-  killError.value = "";
-  try {
-    const result = await executeBzssCoreCommand({
-      directive: "Kill",
-      parameter: playerId,
-    });
-    if (!result?.ok) {
-      throw new Error(String(result?.message ?? `Kill:${playerId} 执行失败`));
-    }
-    emit("close");
-  } catch (error) {
-    killError.value = error instanceof Error ? error.message : String(error ?? "Kill 执行失败");
-  } finally {
-    killPending.value = false;
-  }
-}
-
 function handleAction(
   event:
     | "close"
@@ -449,7 +376,6 @@ function handleAction(
     | "clear-measure"
     | "copy-coords"
     | "focus-here"
-    | "kill-selected"
     | "toggle-capture-point-edit"
     | "calculate-hotspot"
     | "clear-hotspot"
@@ -462,10 +388,6 @@ function handleAction(
 ) {
   let keepOpen = false;
 
-  if (event === "kill-selected") {
-    void executeSelectedPlayerKill();
-    return;
-  }
   if (event === "start-measure") emit("start-measure");
   else if (event === "add-point") emit("add-point");
   else if (event === "undo-point") emit("undo-point");
