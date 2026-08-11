@@ -21,6 +21,7 @@ const RECORD = Object.freeze({
   PLAYER_NETWORK_DELTA: 0x14,
   ZONE_DELTA: 0x20,
   MAIN_ZONE_DELTA: 0x21,
+  PRESSURE_ZONE_DELTA: 0x22,
   FOB_CREATE: 0x30,
   FOB_DELTA: 0x31,
   FOB_REMOVE: 0x32,
@@ -118,6 +119,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     await rotateSegmentIfNeeded(now);
     if (now - state.lastPlayerSampleAt >= settings.playerSampleMs) {
       await writePlayerDelta(snapshot, now);
+      await writePressureZoneDelta(snapshot, now);
       state.lastPlayerSampleAt = now;
     }
     if (now - state.lastStatsSampleAt >= settings.statsSampleMs) {
@@ -329,6 +331,28 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     await writeFobs(snapshot?.assets?.fobs, now);
   }
 
+  async function writePressureZoneDelta(snapshot, now) {
+    const pressureZone = modules.dynamicPressureZone;
+    if (!pressureZone?.recalculate && !pressureZone?.getState) return;
+
+    let nextState = null;
+    try {
+      nextState = await pressureZone.recalculate?.(snapshot) ?? pressureZone.getState?.() ?? null;
+    } catch (error) {
+      moduleLogger?.warn?.("Tactical replay pressure-zone calculation failed.", {
+        operation: "tacticalFeedWriter.writePressureZoneDelta",
+        data: { message: error?.message ?? String(error) },
+      });
+      return;
+    }
+
+    if (!nextState || typeof nextState !== "object") return;
+    const normalized = canonicalize(nextState);
+    if (sameValue(state.pressureZoneState, normalized)) return;
+    state.pressureZoneState = normalized;
+    await append(RECORD.PRESSURE_ZONE_DELTA, now, { state: normalized });
+  }
+
   async function writeAssetCollection(type, values, cache, now, prefix, removeType = null) {
     const next = new Map();
     const upsert = [];
@@ -382,7 +406,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
 
   function resetSessionState() {
     state.session = null; state.segment = null; state.segmentHandle = null; state.sequence = 0; state.segmentIndex = 0; state.nextPlayerId = 1; state.playerIds.clear();
-    state.players.clear(); state.stats.clear(); state.pings.clear(); state.lastPingAt.clear(); state.pendingDictionaryUpdates.length = 0; state.fobs.clear(); state.zones.clear(); state.mainZones.clear(); state.vehicles.clear();
+    state.players.clear(); state.stats.clear(); state.pings.clear(); state.lastPingAt.clear(); state.pendingDictionaryUpdates.length = 0; state.fobs.clear(); state.zones.clear(); state.mainZones.clear(); state.vehicles.clear(); state.pressureZoneState = null;
   }
 
   return {
@@ -433,7 +457,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   };
 }
 
-function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "", lastFinalization: null }; }
+function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), pressureZoneState: null, lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "", lastFinalization: null }; }
 function readSettings(config) { const value = config?.get?.("modules.tacticalFeedWriter", {}) ?? {}; return { ...DEFAULTS, ...value, rootDir: value.rootDir ?? DEFAULTS.rootDir }; }
 function isMatchActive(snapshot) { return Boolean(safeText(snapshot?.server?.map) || safeText(snapshot?.server?.layer)) && !isMatchEnded(snapshot); }
 function isMatchEnded(snapshot) { const text = [snapshot?.match?.state, snapshot?.match?.phase, snapshot?.server?.state, snapshot?.server?.phase].map(safeText).join(" "); return /waitingpostmatch|postmatch|matchended|ended/i.test(text); }
