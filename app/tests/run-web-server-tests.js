@@ -200,7 +200,7 @@ async function testDragCapturePointValidation() {
 
   const invalidRaw = server.normalizeBzssCoreCommand({
     raw: true,
-    command: "DragCapturePoint:1,Infinity,25",
+    command: "DragCapturePoint:04-SouthSuburbs,Infinity,25",
   });
   assert.equal(invalidRaw.ok, false);
   assert.equal(invalidRaw.error, "InvalidDragCapturePointCoordinates");
