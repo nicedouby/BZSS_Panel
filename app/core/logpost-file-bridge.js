@@ -261,8 +261,22 @@ export class LogPostFileBridge {
     event.fileBridgeReplay = Boolean(replay);
     event.fileBridgeSourcePath = this.currentFilePath;
     event.transportSource = "file-bridge";
-    if (replay) this.metrics.replayedEvents += 1;
-    else this.metrics.acceptedEvents += 1;
+    if (replay) {
+      // Bootstrap replay restores durable state only. Never let an event that
+      // predates the current plugin process execute moderation actions.
+      event.sourceMode = "recovery";
+      event.canTriggerActions = false;
+      event.isReplay = true;
+      event.rawEvent = {
+        ...(event.rawEvent ?? rawEvent),
+        SourceMode: "recovery",
+        IsReplay: "true",
+        CanTriggerActions: "false",
+      };
+      this.metrics.replayedEvents += 1;
+    } else {
+      this.metrics.acceptedEvents += 1;
+    }
     if (event.eventName !== BZSS_CORE_PLAYER_CHUNK_EVENT_NAME) {
       const gapEvent = this.logPostMonitor?.inspectEvent?.(event) ?? null;
       if (gapEvent) {
