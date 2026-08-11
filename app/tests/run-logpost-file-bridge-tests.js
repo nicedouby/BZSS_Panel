@@ -114,6 +114,8 @@ async function main() {
   assert.equal(emitted.length, 1);
   assert.match(emitted[0].rawLog, /Pos:145,39,-129,-100/);
   assert.equal(emitted[0].fileBridgeReplay, true);
+  assert.equal(emitted[0].sourceMode, "recovery");
+  assert.equal(emitted[0].canTriggerActions, false);
 
   fs.appendFileSync(
     filePath,
@@ -204,6 +206,8 @@ async function testBridgeReadsAllEventsFile() {
   assert.equal(emitted[0].fileBridgeReplay, true);
   assert.equal(emitted[1].fileBridgeReplay, true);
   assert.equal(emitted[2].fileBridgeReplay, true);
+  assert.ok(emitted.every((event) => event.sourceMode === "recovery"));
+  assert.ok(emitted.every((event) => event.canTriggerActions === false));
   await bridge.stop();
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
@@ -254,6 +258,8 @@ async function testBridgeReadsDirectEventsDirectory() {
   assert.equal(webStatus.values.logPostFileBridge, "running");
   assert.equal(emitted.length, 1);
   assert.equal(emitted[0].fileBridgeReplay, true);
+  assert.equal(emitted[0].sourceMode, "recovery");
+  assert.equal(emitted[0].canTriggerActions, false);
   await bridge.stop();
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
