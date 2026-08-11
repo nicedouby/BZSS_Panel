@@ -1461,6 +1461,7 @@ const capturePointOverrides = ref(new Map<string, { mapX: number; mapY: number; 
 const capturePointDrag = ref<{
   markerId: string;
   pointIndex: number;
+  pointName: string;
   pointerId: number;
   startClientX: number;
   startClientY: number;
@@ -3297,6 +3298,7 @@ function startCapturePointDrag(zone: CaptureZoneMarker, event: PointerEvent) {
   capturePointDrag.value = {
     markerId: zone.id,
     pointIndex: zone.pointIndex,
+    pointName: zone.name,
     pointerId: event.pointerId,
     startClientX: event.clientX,
     startClientY: event.clientY,
@@ -3387,12 +3389,12 @@ async function finishCapturePointDrag(event: PointerEvent) {
   capturePointOverrides.value = overrides;
   capturePointDrag.value = null;
   capturePointCommandPending.value = true;
-  setCapturePointFeedback("info", `正在提交 DragCapturePoint:${drag.pointIndex},${gameX},${gameY}`, 60_000);
+  setCapturePointFeedback("info", `正在提交 DragCapturePoint:${drag.pointName},${gameX},${gameY}`, 60_000);
 
   try {
     const result = await executeBzssCoreCommand({
       directive: "DragCapturePoint",
-      parameter: `${drag.pointIndex},${gameX},${gameY}`,
+      parameter: `${drag.pointName},${gameX},${gameY}`,
     });
     if (!result?.ok) {
       throw new Error(String((result as any)?.message ?? "BZSS Core 拒绝了改点命令"));
