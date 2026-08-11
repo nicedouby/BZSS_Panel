@@ -2683,8 +2683,10 @@ const captureZoneMarkers = computed<CaptureZoneMarker[]>(() => {
     const runtimeName = String(zone.name ?? "").trim();
     if (!runtimeName) continue;
     const numericRuntimeIndex = /^\d+$/.test(runtimeName) ? Number(runtimeName) : null;
-    const pointIndex = Number.isSafeInteger(numericRuntimeIndex) && numericRuntimeIndex! > 0
-      ? numericRuntimeIndex!
+    const pointIndex = numericRuntimeIndex !== null
+      && Number.isSafeInteger(numericRuntimeIndex)
+      && numericRuntimeIndex > 0
+      ? numericRuntimeIndex
       : zoneIndex + 1;
     const explicitFullName = [
       zone.fullName,
