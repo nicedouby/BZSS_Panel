@@ -288,8 +288,11 @@ async function main() {
   });
   await rconManager.start();
   await udpReceiver.start();
-  await logPostFileBridge.start();
   await pluginManager.loadPlugins();
+  // FileBridge may replay recent durable events during start. Start it only
+  // after plugins have subscribed, otherwise recovery events such as squad
+  // creation are emitted before their consumers exist and are silently lost.
+  await logPostFileBridge.start();
   await reserveExchangeService.start();
   await webServer.start();
 
