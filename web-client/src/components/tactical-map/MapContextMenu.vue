@@ -264,8 +264,8 @@ const props = defineProps<{
   capturePointEditMode: boolean;
   capturePointCommandPending: boolean;
   hasCombatHotspot: boolean;
-  killModeActive: boolean;
-  canUseKillMode: boolean;
+  killModeActive?: boolean;
+  canUseKillMode?: boolean;
 }>();
 
 const emit = defineEmits<{
