@@ -307,7 +307,7 @@
             v-for="vehicle in vehicleMarkers"
             :key="vehicle.id"
             class="vehicle-marker"
-            :class="`team-${vehicle.teamId ?? 0}`"
+            :class="[`team-${vehicle.teamId ?? 0}`, { 'is-pinned': pinnedVehicleId === vehicle.id }]"
             :style="{
               left: `${vehicle.mapX}%`,
               top: `${vehicle.mapY}%`,
@@ -317,6 +317,7 @@
               '--vehicle-yaw': `${(vehicle.yaw ?? 0) + 90}deg`,
             }"
             :title="vehicle.tooltip"
+            @pointerdown.stop.prevent="togglePinnedVehicle(vehicle.id)"
           >
             <span class="vehicle-marker__hitbox" aria-hidden="true"></span>
             <span class="vehicle-marker__frame">
@@ -540,13 +541,13 @@
 
       <!-- New Map Interaction Floating Elements -->
       <PlayerInfoPanel
-        v-if="playerInfoPanel"
-        :player="playerInfoPanel.player"
-        :x="playerInfoPanel.x"
-        :y="playerInfoPanel.y"
-        :tone="getPerspectiveTone(playerInfoPanel.player.teamId)"
-        :speed-text="getPlayerSpeedText(playerInfoPanel.player)"
-        :rcon-detail="getPlayerRconDetail(playerInfoPanel.player)"
+        v-if="trackedPlayerInfoPanel"
+        :player="trackedPlayerInfoPanel.player"
+        :x="trackedPlayerInfoPanel.x"
+        :y="trackedPlayerInfoPanel.y"
+        :tone="getPerspectiveTone(trackedPlayerInfoPanel.player.teamId)"
+        :speed-text="getPlayerSpeedText(trackedPlayerInfoPanel.player)"
+        :rcon-detail="getPlayerRconDetail(trackedPlayerInfoPanel.player)"
         @close="playerInfoPanel = null; selectedPlayerKey = ''"
       />
 
@@ -1719,6 +1720,7 @@ const measurePoints = ref<MeasurePoint[]>([]);
 
 // Map Interaction States Layer
 const selectedPlayerKey = ref<string>("");
+const pinnedVehicleId = ref<string>("");
 const killModeEnabled = ref(false);
 const killModePendingPlayerKey = ref("");
 const killModeFeedback = ref<{ tone: "info" | "ok" | "error"; text: string } | null>(null);
@@ -1752,6 +1754,7 @@ const singleClickTimer = ref<any>(null);
 const pendingPlayerMarkerClick = {
   key: "",
   at: 0,
+  wasPlayerName: false,
 };
 
 const measureMode = computed({
@@ -2315,8 +2318,12 @@ function handlePlayerPointerDown(player: TacticalLinkedPlayer, event: PointerEve
 
   const key = getPlayerKey(player);
   const now = performance.now();
+  const target = event.target instanceof Element ? event.target : null;
+  const isPlayerName = Boolean(target?.closest(".player-name-tag"));
   const isDoubleClick = (
     key.length > 0
+    && isPlayerName
+    && pendingPlayerMarkerClick.wasPlayerName
     && pendingPlayerMarkerClick.key === key
     && now - pendingPlayerMarkerClick.at <= 320
   );
@@ -2329,18 +2336,21 @@ function handlePlayerPointerDown(player: TacticalLinkedPlayer, event: PointerEve
   if (isDoubleClick) {
     pendingPlayerMarkerClick.key = "";
     pendingPlayerMarkerClick.at = 0;
+    pendingPlayerMarkerClick.wasPlayerName = false;
     handlePlayerDoubleClick(player, event);
     return;
   }
 
   pendingPlayerMarkerClick.key = key;
   pendingPlayerMarkerClick.at = now;
+  pendingPlayerMarkerClick.wasPlayerName = isPlayerName;
   // Wait briefly so double-click is deterministic even when the browser's
   // native click/dblclick sequence is disrupted by map transforms.
   singleClickTimer.value = window.setTimeout(() => {
     singleClickTimer.value = null;
     pendingPlayerMarkerClick.key = "";
     pendingPlayerMarkerClick.at = 0;
+    pendingPlayerMarkerClick.wasPlayerName = false;
     handlePlayerSingleClick(player, event);
   }, 220);
 }
@@ -2379,6 +2389,12 @@ function handlePlayerDoubleClick(player: TacticalLinkedPlayer, event: MouseEvent
   mapCommandMenu.value = null;
 
   showPlayerDetails(player, event);
+}
+
+function togglePinnedVehicle(vehicleId: string) {
+  const id = String(vehicleId ?? "").trim();
+  if (!id) return;
+  pinnedVehicleId.value = pinnedVehicleId.value === id ? "" : id;
 }
 
 function handlePlayerRightClick(player: TacticalLinkedPlayer, event: MouseEvent) {
@@ -3052,6 +3068,27 @@ const hoveredMarker = computed(() => {
   return markers.value.find(
     (m) => getPlayerKey(m) === getPlayerKey(hoveredPlayer.value)
   ) || null;
+});
+
+const trackedPlayerInfoPanel = computed(() => {
+  const panel = playerInfoPanel.value;
+  if (!panel) return null;
+
+  const playerKey = getPlayerKey(panel.player);
+  const livePlayer = markers.value.find((player) => getPlayerKey(player) === playerKey) ?? panel.player;
+  const mapX = Number(livePlayer.mapX);
+  const mapY = Number(livePlayer.mapY);
+  if (!Number.isFinite(mapX) || !Number.isFinite(mapY)) {
+    return { ...panel, player: livePlayer };
+  }
+
+  const mapSize = 1000;
+  const screenPosition = camera.worldToScreen((mapX / 100) * mapSize, (mapY / 100) * mapSize);
+  return {
+    player: livePlayer,
+    x: screenPosition.x + 18,
+    y: screenPosition.y,
+  };
 });
 
 // Hover tooltip style with screen coordinate projection & boundary clamping
@@ -4386,7 +4423,8 @@ onBeforeUnmount(deactivateMapPage);
 
 .vehicle-marker.team-1 { --vehicle-accent: #7da2d6; }
 .vehicle-marker.team-2 { --vehicle-accent: #d68a8a; }
-.vehicle-marker:hover { z-index: 90; }
+.vehicle-marker:hover,
+.vehicle-marker.is-pinned { z-index: 90; }
 
 .vehicle-marker__hitbox {
   position: absolute;
@@ -4458,7 +4496,8 @@ onBeforeUnmount(deactivateMapPage);
   transition: opacity .12s ease, transform .12s ease;
 }
 
-.vehicle-marker:hover .vehicle-marker__tooltip {
+.vehicle-marker:hover .vehicle-marker__tooltip,
+.vehicle-marker.is-pinned .vehicle-marker__tooltip {
   opacity: 1;
   transform: scale(var(--vehicle-marker-scale, 1)) translateY(-50%) translateX(0);
 }
