@@ -40,6 +40,8 @@ class TailReader:
         self._last_missing_warn = 0.0
         self.file_id = ""
         self.last_rotate_reason = ""
+        self._pending_reopen_reason = ""
+        self._reopen_ready = False
         self.last_recovery_skipped_bytes = 0
         self.current_mode = "live"
         self.state: Dict[str, Any] = self.state_store.load() if self.state_store else {}
@@ -111,6 +113,18 @@ class TailReader:
         self.file = None
 
     def read_new_lines(self) -> List[Dict[str, Any]]:
+        # A replaced path can still have unread bytes in the old open handle.
+        # Reopen only on the call after those records have been returned, so
+        # their checkpoints are persisted with the old file identity.
+        if self._reopen_ready:
+            reason = self._pending_reopen_reason or "file_replaced"
+            self._pending_reopen_reason = ""
+            self._reopen_ready = False
+            self.close()
+            self.open()
+            self.last_rotate_reason = reason
+            return []
+
         if self.file is None:
             if not self.open():
                 return []
@@ -118,19 +132,38 @@ class TailReader:
         if self.file is None:
             return []
 
-        try:
-            current_stat = self.log_path.stat()
-            current_size = current_stat.st_size
-        except FileNotFoundError:
-            self.close()
-            return []
+        if self._pending_reopen_reason:
+            try:
+                current_size = os.fstat(self.file.fileno()).st_size
+            except OSError:
+                self._reopen_ready = True
+                return []
+            replaced = True
+        else:
+            try:
+                current_stat = self.log_path.stat()
+                current_size = current_stat.st_size
+            except FileNotFoundError:
+                self.close()
+                return []
 
-        current_file_id = self._make_file_id(current_stat)
-        replaced = bool(self.file_id and current_file_id != self.file_id)
+            current_file_id = self._make_file_id(current_stat)
+            replaced = bool(self.file_id and current_file_id != self.file_id)
         truncated = current_size < self.position
-        if self.reopen_on_truncate and (replaced or truncated):
+        if self.reopen_on_truncate and replaced:
+            if not self._pending_reopen_reason:
+                print("[INFO] Log file recreated. Draining unread bytes before reopening.")
+                self._pending_reopen_reason = "file_replaced"
+                try:
+                    current_size = os.fstat(self.file.fileno()).st_size
+                except OSError:
+                    current_size = self.position
+            if current_size <= self.position:
+                self._reopen_ready = True
+                return []
+        elif self.reopen_on_truncate and truncated:
             print("[INFO] Log file truncated or recreated. Reopening.")
-            self.last_rotate_reason = "file_replaced" if replaced else "truncated_or_rotated"
+            self.last_rotate_reason = "truncated_or_rotated"
             self.close()
             self.open()
             return []
@@ -194,6 +227,9 @@ class TailReader:
                 self._oversized_line_offset = self.partial_offset
                 self._discarding_oversized_line = True
                 self.partial = b""
+
+        if self._pending_reopen_reason and self.position >= current_size:
+            self._reopen_ready = True
 
         return records
 
