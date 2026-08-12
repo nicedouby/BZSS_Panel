@@ -134,6 +134,19 @@ function testParseLogLine() {
   assert.deepEqual(compactVehicleFrame.vehicles[0].occupantPlayerIds, [42, 17]);
   assert.equal(compactVehicleFrame.vehicles[0].occupied, true);
 
+  const bareVehicleChunk = parseBzssCoreLogLine(
+    "PIE: Error: {ID:-1,VT:IFVTracked,H:(1250/1250),,P:538,80,-134,-32,S:0,T:1,PS:,,,,}{ID:-1,VT:Jeep,H:(500/500),,P:-507,320,-132,-105,S:0,T:2,PS:,,,,}",
+  );
+  assert.equal(bareVehicleChunk.type, "vehicles");
+  assert.equal(bareVehicleChunk.partial, true);
+  assert.equal(bareVehicleChunk.vehicles.length, 2);
+  assert.equal(bareVehicleChunk.vehicles[0].vehicleType, "IFVTracked");
+  assert.equal(bareVehicleChunk.vehicles[0].healthPercent, 100);
+  assert.deepEqual(bareVehicleChunk.vehicles[0].position, { x: 53800, y: 8000, z: -13400 });
+  assert.equal(bareVehicleChunk.vehicles[0].yaw, -32);
+  assert.equal(bareVehicleChunk.vehicles[0].teamId, 1);
+  assert.deepEqual(bareVehicleChunk.vehicles[0].occupantPlayerIds, []);
+
   const vectorSpeedVehicleFrame = parseBzssCoreVehicleLine(
     "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:X=100.500 Y=-25.000 Z=8.125-90,S:X=300 Y=400 Z=0,T:1,PS:42,}}",
   );
@@ -420,6 +433,30 @@ function testMonitorState() {
   assert.equal(module.api.getState().vehicleCount, 1);
   assert.equal(module.api.ingestLogLine("PIE: VRI{}").ok, true);
   assert.equal(module.api.getVehicles().length, 0);
+
+  const firstVehicleChunk = "PIE: Error: "
+    + "{ID:-1,VT:IFV,H:(1250/1250),,P:10,10,0,0,S:0,T:1,PS:}"
+    + "{ID:-1,VT:IFV,H:(1250/1250),,P:100,100,0,90,S:0,T:1,PS:}";
+  const secondVehicleChunk = "PIE: Error: "
+    + "{ID:-1,VT:TruckLogistics,H:(750/750),,P:-50,-50,0,180,S:0,T:2,PS:}";
+  assert.equal(module.api.ingestLogLine(firstVehicleChunk).ok, true);
+  assert.equal(module.api.ingestLogLine(secondVehicleChunk).ok, true);
+  assert.equal(module.api.getVehicles().length, 3);
+  assert.equal(
+    module.api.getVehicles().filter((vehicle) => vehicle.vehicleType === "IFV").length,
+    2,
+  );
+
+  const movedFirstVehicleChunk = "PIE: Error: "
+    + "{ID:-1,VT:IFV,H:(1000/1250),,P:11,10,0,5,S:20,T:1,PS:}"
+    + "{ID:-1,VT:IFV,H:(1250/1250),,P:101,100,0,95,S:10,T:1,PS:}";
+  assert.equal(module.api.ingestLogLine(movedFirstVehicleChunk).ok, true);
+  assert.equal(module.api.getVehicles().length, 3);
+  const movedIfvs = module.api.getVehicles()
+    .filter((vehicle) => vehicle.vehicleType === "IFV")
+    .sort((left, right) => left.position.x - right.position.x);
+  assert.deepEqual(movedIfvs.map((vehicle) => vehicle.position.x), [1100, 10100]);
+  assert.equal(movedIfvs[0].healthPercent, 80);
 
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{7,100,200,300,45}").ok, true);
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{21,400,500,600,90}").ok, true);
