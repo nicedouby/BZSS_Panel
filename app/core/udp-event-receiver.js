@@ -3,6 +3,7 @@
 import dgram from "node:dgram";
 
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
+const BZSS_CORE_VEHICLE_CHUNK_EVENT_NAME = "On_BzssCoreVehicleChunk";
 const DIAGNOSTICS_PUBLISH_INTERVAL_MS = 250;
 
 /**
@@ -30,6 +31,7 @@ export class UdpEventReceiver {
       bytesReceived: 0,
       acceptedEvents: 0,
       bzssCoreChunks: 0,
+      bzssCoreVehicleChunks: 0,
       duplicateEventsDropped: 0,
       invalidJson: 0,
       oversizedMessages: 0,
@@ -156,6 +158,10 @@ export class UdpEventReceiver {
       this.eventBus.emitCoreEvent(event.eventName, event);
       this.publishDiagnostics();
       return;
+    }
+
+    if (rawEvent.Event === BZSS_CORE_VEHICLE_CHUNK_EVENT_NAME) {
+      this.metrics.bzssCoreVehicleChunks += 1;
     }
 
     const event = this.eventPipeline.processRawGameEvent(rawEvent);
