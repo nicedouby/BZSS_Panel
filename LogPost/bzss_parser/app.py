@@ -36,12 +36,12 @@ MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
 BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:", re.IGNORECASE)
 BZSS_CORE_SCOREBOARD_LINE_RE = re.compile(r"\bPlayerScoreboard\s*\{", re.IGNORECASE)
-BZSS_CORE_VEHICLE_FRAME_RE = re.compile(r"\\b(?:VRI|VehicleInfo)\\s*\\{", re.IGNORECASE)
+BZSS_CORE_VEHICLE_FRAME_RE = re.compile(r"\b(?:VRI|VehicleInfo)\s*\{", re.IGNORECASE)
 BZSS_CORE_VEHICLE_CHUNK_RE = re.compile(
-    r"\\{\\s*ID\\s*[:=]\\s*-?\\d+\\s*,\\s*VT\\s*[:=].*?"
-    r"[,;]\\s*H\\s*[:=].*?[,;]\\s*P\\s*[:=].*?"
-    r"[,;]\\s*S\\s*[:=].*?[,;]\\s*T\\s*[:=].*?"
-    r"[,;]\\s*PS\\s*[:=]",
+    r"\{\s*ID\s*[:=]\s*-?\d+\s*,\s*VT\s*[:=].*?"
+    r"[,;]\s*H\s*[:=].*?[,;]\s*P\s*[:=].*?"
+    r"[,;]\s*S\s*[:=].*?[,;]\s*T\s*[:=].*?"
+    r"[,;]\s*PS\s*[:=]",
     re.IGNORECASE,
 )
 
