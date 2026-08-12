@@ -405,6 +405,29 @@ class BzssLogParserApp:
                 ) + 1
                 self.stats["events_matched"] += 1
                 self.console.event(event)
+
+                # Keep the original raw-log channel as an unconditional
+                # compatibility mirror. The web console and older panel
+                # deployments subscribe to On_RawLogLine, while current
+                # monitors consume the dedicated vehicle event above.
+                raw_event = self.builder.build_raw_log_line(
+                    raw=line,
+                    source=self.raw_log_output_source,
+                    source_meta=source_meta,
+                )
+                if not self.transport_only:
+                    self.writer.write_event(raw_event)
+                    self.writer.write_outbox("pending", raw_event)
+                try:
+                    self.udp_sender.send(raw_event)
+                except Exception as e:
+                    if not self.transport_only:
+                        self.writer.write_outbox("send_failed", raw_event, str(e))
+                    self.console.warn(f"Vehicle raw-log mirror UDP send failed: {e}")
+                self.stats["rawlog_forwarded"] = int(
+                    self.stats.get("rawlog_forwarded", 0)
+                ) + 1
+                self.console.event(raw_event)
                 self.persist_checkpoint(
                     record,
                     source_mode,
