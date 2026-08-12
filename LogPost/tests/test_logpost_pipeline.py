@@ -504,9 +504,9 @@ class LogPostPipelineTests(unittest.TestCase):
             "fileId": "file-1",
         })
 
-        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_RawLogLine"])
+        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_BzssCoreVehicleChunk"])
         self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
-        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+        self.assertEqual(app.stats["vehicle_chunks_forwarded"], 1)
 
     def test_bzss_core_bare_vehicle_chunk_bypasses_raw_token_filter(self) -> None:
         app = self.make_app(raw_log_output={
@@ -529,9 +529,9 @@ class LogPostPipelineTests(unittest.TestCase):
             "fileId": "file-1",
         })
 
-        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_RawLogLine"])
+        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_BzssCoreVehicleChunk"])
         self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
-        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+        self.assertEqual(app.stats["vehicle_chunks_forwarded"], 1)
 
     def test_bzss_core_bare_vehicle_chunk_is_forwarded_when_raw_output_is_disabled_and_blacklisted(self) -> None:
         app = self.make_app(
@@ -557,9 +557,9 @@ class LogPostPipelineTests(unittest.TestCase):
             "fileId": "file-1",
         })
 
-        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_RawLogLine"])
+        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_BzssCoreVehicleChunk"])
         self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
-        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+        self.assertEqual(app.stats["vehicle_chunks_forwarded"], 1)
         self.assertEqual(app.stats["lines_blacklisted"], 0)
 
     def test_bzss_core_bare_vehicle_chunk_bypasses_saturated_raw_rate_limit(self) -> None:
@@ -593,10 +593,11 @@ class LogPostPipelineTests(unittest.TestCase):
 
         self.assertEqual(
             [event["Event"] for event in app.udp_sender.sent],
-            ["On_RawLogLine", "On_RawLogLine"],
+            ["On_RawLogLine", "On_BzssCoreVehicleChunk"],
         )
         self.assertEqual(app.udp_sender.sent[1]["Raw"], vehicle_line)
-        self.assertEqual(app.stats["rawlog_forwarded"], 2)
+        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+        self.assertEqual(app.stats["vehicle_chunks_forwarded"], 1)
 
 if __name__ == "__main__":
     unittest.main()
