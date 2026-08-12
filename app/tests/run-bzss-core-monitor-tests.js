@@ -147,6 +147,20 @@ function testParseLogLine() {
   assert.equal(bareVehicleChunk.vehicles[0].teamId, 1);
   assert.deepEqual(bareVehicleChunk.vehicles[0].occupantPlayerIds, []);
 
+  const reorderedPartialVehicleChunk = parseBzssCoreLogLine(
+    "PIE: Error: {VT:IFVTracked,ID:-1,P:538,80,-134,-32,T:1,H:(1250/1250)}",
+  );
+  assert.equal(reorderedPartialVehicleChunk.type, "vehicles");
+  assert.equal(reorderedPartialVehicleChunk.partial, true);
+  assert.equal(reorderedPartialVehicleChunk.vehicles.length, 1);
+  assert.equal(reorderedPartialVehicleChunk.vehicles[0].vehicleType, "IFVTracked");
+  assert.equal(reorderedPartialVehicleChunk.vehicles[0].healthPercent, 100);
+  assert.deepEqual(
+    reorderedPartialVehicleChunk.vehicles[0].position,
+    { x: 53800, y: 8000, z: -13400 },
+  );
+  assert.equal(reorderedPartialVehicleChunk.vehicles[0].teamId, 1);
+
   const vectorSpeedVehicleFrame = parseBzssCoreVehicleLine(
     "PIE: Warning: VRI{{ID:42,VT:JeepAntiTank,H:(600/800),P:X=100.500 Y=-25.000 Z=8.125-90,S:X=300 Y=400 Z=0,T:1,PS:42,}}",
   );
