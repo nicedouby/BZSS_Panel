@@ -36,7 +36,14 @@ MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
 BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:", re.IGNORECASE)
 BZSS_CORE_SCOREBOARD_LINE_RE = re.compile(r"\bPlayerScoreboard\s*\{", re.IGNORECASE)
-BZSS_CORE_VEHICLE_LINE_RE = re.compile(r"\b(?:VRI|VehicleInfo)\s*\{", re.IGNORECASE)
+BZSS_CORE_VEHICLE_FRAME_RE = re.compile(r"\\b(?:VRI|VehicleInfo)\\s*\\{", re.IGNORECASE)
+BZSS_CORE_VEHICLE_CHUNK_RE = re.compile(
+    r"\\{\\s*ID\\s*[:=]\\s*-?\\d+\\s*,\\s*VT\\s*[:=].*?"
+    r"[,;]\\s*H\\s*[:=].*?[,;]\\s*P\\s*[:=].*?"
+    r"[,;]\\s*S\\s*[:=].*?[,;]\\s*T\\s*[:=].*?"
+    r"[,;]\\s*PS\\s*[:=]",
+    re.IGNORECASE,
+)
 
 def is_bzss_core_runtime_line(line: str) -> bool:
     return bool(BZSS_CORE_RUNTIME_LINE_RE.search(str(line or "")))
@@ -46,7 +53,11 @@ def is_bzss_core_scoreboard_line(line: str) -> bool:
 
 
 def is_bzss_core_vehicle_line(line: str) -> bool:
-    return bool(BZSS_CORE_VEHICLE_LINE_RE.search(str(line or "")))
+    source = str(line or "")
+    return bool(
+        BZSS_CORE_VEHICLE_FRAME_RE.search(source)
+        or BZSS_CORE_VEHICLE_CHUNK_RE.search(source)
+    )
 
 
 class BzssLogParserApp:

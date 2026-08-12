@@ -508,5 +508,30 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
         self.assertEqual(app.stats["rawlog_forwarded"], 1)
 
+    def test_bzss_core_bare_vehicle_chunk_bypasses_raw_token_filter(self) -> None:
+        app = self.make_app(raw_log_output={
+            "enabled": True,
+            "source": "Squad.log",
+            "contains": ["CPZ:"],
+            "max_per_second": 20,
+        })
+        line = (
+            "PIE: Error: "
+            "{ID:-1,VT:IFVTracked,H:(1250/1250),,P:538,80,-134,-32,S:0,T:1,PS:,,,,}"
+            "{ID:-1,VT:Jeep,H:(500/500),,P:-507,320,-132,-105,S:0,T:2,PS:,,,,}"
+        )
+
+        app.process_line({
+            "line": line,
+            "offset": 0,
+            "next_offset": len(line) + 1,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        self.assertEqual([event["Event"] for event in app.udp_sender.sent], ["On_RawLogLine"])
+        self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
+        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+
 if __name__ == "__main__":
     unittest.main()
