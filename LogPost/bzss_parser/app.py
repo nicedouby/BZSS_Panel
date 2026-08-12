@@ -569,10 +569,16 @@ class BzssLogParserApp:
         # the panel state monitor. They bypass the generic sampled token list.
         # They are not part of the generic raw output token list because they
         # are emitted as PIE/Error lines, so keep them even when contains is set.
+        # Vehicle output is already emitted in bounded chunks (currently 8
+        # records per line). It is state-critical and every chunk belongs to a
+        # round-robin snapshot, so sharing the generic raw-log budget can starve
+        # the tactical map when player/runtime traffic consumes that budget.
+        if is_bzss_core_vehicle_line(line):
+            return True
+
         if (
             is_bzss_core_runtime_line(line)
             or is_bzss_core_scoreboard_line(line)
-            or is_bzss_core_vehicle_line(line)
         ):
             return self.raw_log_rate_limiter_allow()
 
