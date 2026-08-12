@@ -13,6 +13,8 @@ const COMPACT_RUNTIME_POSITION_SCALE = 100;
 const RAW_CAPTURE_RELATIVE_PATH = path.join("data", "bzss-core-monitor", "received-lines.jsonl");
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
 const BZSS_CORE_BROADCAST_INTERVAL_MS = 200;
+const VEHICLE_CHUNK_STALE_MS = 2_000;
+const VEHICLE_CHUNK_MATCH_MAX_DISTANCE_CM = 25_000;
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
   ["numKills", "Num kills"],
@@ -422,7 +424,9 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
           }
 
           if (parsed.type === "vehicles") {
-            draft.vehicles = parsed.vehicles;
+            draft.vehicles = parsed.partial
+              ? mergeVehicleChunk(draft.vehicles, parsed.vehicles, parsed.observedAt)
+              : parsed.vehicles;
             draft.vehicleFrameUpdatedAt = parsed.observedAt;
             recordObservedVehicleTypes(draft, parsed.vehicles, parsed.observedAt);
             continue;
@@ -1158,7 +1162,7 @@ function createEmptyVehicleDebugState() {
 
 function recordVehicleDebugCandidate(draft, rawLine, parsedSegments, observedAt = new Date().toISOString()) {
   const line = String(rawLine ?? "");
-  if (!/(?:\bVRI\b|VehicleInfo\s*\{)/i.test(line)) return;
+  if (!/(?:\bVRI\b|VehicleInfo\s*\{)/i.test(line) && !isBareVehicleChunkLine(line)) return;
 
   const debug = draft.vehicleDebug ??= createEmptyVehicleDebugState();
   debug.vriCandidateLines += 1;
@@ -2160,7 +2164,9 @@ export function parseBzssCorePlayerBlocks(text) {
 
 export function parseBzssCoreLogLine(line) {
   const text = String(line ?? "");
-  if (text.includes("VRI{") || text.includes("VehicleInfo{")) return parseBzssCoreVehicleLine(text);
+  if (text.includes("VRI{") || text.includes("VehicleInfo{") || isBareVehicleChunkLine(text)) {
+    return parseBzssCoreVehicleLine(text);
+  }
   if (text.includes("PRIFrame{")) return parsePriFrameRuntimeLine(text);
   if (text.includes("PRI{{")) return parsePriRuntimePlayerLine(text);
   if (/\{?\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:/i.test(text)) return parseCompactBzssRuntimeLine(text);
@@ -2205,17 +2211,31 @@ export function parseBzssCoreLogLine(line) {
 
 export function parseBzssCoreVehicleLine(line) {
   const text = String(line ?? "");
-  const frameName = text.includes("VRI{") ? "VRI" : "VehicleInfo";
-  const frame = extractLineBlock(text, frameName);
-  if (!frame) return null;
+  const snapshotFrameName = text.includes("VRI{")
+    ? "VRI"
+    : (text.includes("VehicleInfo{") ? "VehicleInfo" : "");
+  const partial = !snapshotFrameName;
+  let frameName = snapshotFrameName || "VehicleChunk";
+  let frameContent = "";
+
+  if (snapshotFrameName) {
+    const frame = extractLineBlock(text, snapshotFrameName);
+    if (!frame) return null;
+    frameContent = frame.content;
+  } else {
+    if (!isBareVehicleChunkLine(text)) return null;
+    const firstRecord = text.search(/\{\s*ID\s*[:=]\s*-?\d+\s*,\s*VT\s*[:=]/i);
+    if (firstRecord < 0) return null;
+    frameContent = text.slice(firstRecord);
+  }
 
   const observedAt = new Date().toISOString();
-  const nestedItems = extractBraceItems(frame.content);
-  // Some Blueprint versions append one vehicle directly after `VRI{`, while
-  // others append a list of `{...}` records. Support both wire formats.
+  const nestedItems = extractBraceItems(frameContent).filter(looksLikeVehicleRuntimeRecord);
+  // Framed snapshots may append one vehicle directly after VRI{...}; bare
+  // chunks always contain one or more top-level {...} records.
   const rawVehicles = nestedItems.length > 0
     ? nestedItems
-    : (looksLikeVehicleRuntimeRecord(frame.content) ? [frame.content] : []);
+    : (looksLikeVehicleRuntimeRecord(frameContent) ? [frameContent] : []);
   const vehicles = rawVehicles.map((raw, frameIndex) => {
     const driverPlayerId = toFiniteNumber(extractVehicleRuntimeField(raw, ["ID", "DriverID", "DriverPlayerID", "PlayerID"]));
     const type = extractVehicleRuntimeField(raw, ["VT", "VehicleType", "Type"]);
@@ -2257,6 +2277,7 @@ export function parseBzssCoreVehicleLine(line) {
     type: "vehicles",
     vehicles,
     observedAt,
+    partial,
     rawFields: [
       frameName,
       "ID", "DriverID",
@@ -2268,6 +2289,83 @@ export function parseBzssCoreVehicleLine(line) {
       "PS", "SeatPlayers", "SeatsPlayers",
     ],
   };
+}
+
+function isBareVehicleChunkLine(text) {
+  const source = String(text ?? "");
+  return /\{\s*ID\s*[:=]\s*-?\d+\s*,\s*VT\s*[:=]/i.test(source)
+    && /[,;]\s*H\s*[:=]/i.test(source)
+    && /[,;]\s*P\s*[:=]/i.test(source)
+    && /[,;]\s*S\s*[:=]/i.test(source)
+    && /[,;]\s*T\s*[:=]/i.test(source)
+    && /[,;]\s*PS\s*[:=]/i.test(source);
+}
+
+function mergeVehicleChunk(currentVehicles, incomingVehicles, observedAt) {
+  const observedAtMs = Date.parse(observedAt);
+  const active = (Array.isArray(currentVehicles) ? currentVehicles : []).filter((vehicle) => {
+    const seenAtMs = Date.parse(vehicle?.observedAt);
+    return !Number.isFinite(observedAtMs)
+      || !Number.isFinite(seenAtMs)
+      || observedAtMs - seenAtMs <= VEHICLE_CHUNK_STALE_MS;
+  });
+  const matchedIndexes = new Set();
+
+  for (const incoming of Array.isArray(incomingVehicles) ? incomingVehicles : []) {
+    let bestIndex = -1;
+    let bestDistanceSquared = Number.POSITIVE_INFINITY;
+    const incomingType = String(incoming?.vehicleType ?? "").trim().toLowerCase();
+    const incomingTeamId = toFiniteNumber(incoming?.teamId);
+    const incomingDriverId = toFiniteNumber(incoming?.driverPlayerId);
+
+    for (let index = 0; index < active.length; index += 1) {
+      if (matchedIndexes.has(index)) continue;
+      const candidate = active[index];
+      if (String(candidate?.vehicleType ?? "").trim().toLowerCase() !== incomingType) continue;
+      const candidateTeamId = toFiniteNumber(candidate?.teamId);
+      if (incomingTeamId != null && candidateTeamId != null && incomingTeamId !== candidateTeamId) continue;
+
+      const distanceSquared = vehicleDistanceSquared(candidate?.position, incoming?.position);
+      if (!Number.isFinite(distanceSquared)) continue;
+      const candidateDriverId = toFiniteNumber(candidate?.driverPlayerId);
+      const driverBonus = incomingDriverId != null && incomingDriverId === candidateDriverId
+        ? VEHICLE_CHUNK_MATCH_MAX_DISTANCE_CM ** 2
+        : 0;
+      const score = distanceSquared - driverBonus;
+      if (
+        distanceSquared <= VEHICLE_CHUNK_MATCH_MAX_DISTANCE_CM ** 2
+        && score < bestDistanceSquared
+      ) {
+        bestIndex = index;
+        bestDistanceSquared = score;
+      }
+    }
+
+    if (bestIndex >= 0) {
+      active[bestIndex] = {
+        ...active[bestIndex],
+        ...incoming,
+        frameIndex: active[bestIndex]?.frameIndex ?? incoming?.frameIndex ?? null,
+      };
+      matchedIndexes.add(bestIndex);
+    } else {
+      active.push(incoming);
+      matchedIndexes.add(active.length - 1);
+    }
+  }
+
+  return active;
+}
+
+function vehicleDistanceSquared(left, right) {
+  const leftX = toFiniteNumber(left?.x);
+  const leftY = toFiniteNumber(left?.y);
+  const rightX = toFiniteNumber(right?.x);
+  const rightY = toFiniteNumber(right?.y);
+  if ([leftX, leftY, rightX, rightY].some((value) => value == null)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return (leftX - rightX) ** 2 + (leftY - rightY) ** 2;
 }
 
 function looksLikeVehicleRuntimeRecord(text) {
