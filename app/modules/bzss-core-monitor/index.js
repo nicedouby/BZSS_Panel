@@ -13,7 +13,9 @@ const COMPACT_RUNTIME_POSITION_SCALE = 100;
 const RAW_CAPTURE_RELATIVE_PATH = path.join("data", "bzss-core-monitor", "received-lines.jsonl");
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
 const BZSS_CORE_BROADCAST_INTERVAL_MS = 200;
-const VEHICLE_CHUNK_STALE_MS = 2_000;
+// Keep partial round-robin chunks long enough for a complete vehicle pass,
+// including busy servers where LogPost/UDP delivery may be briefly delayed.
+const VEHICLE_CHUNK_STALE_MS = 10_000;
 const VEHICLE_CHUNK_MATCH_MAX_DISTANCE_CM = 25_000;
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
