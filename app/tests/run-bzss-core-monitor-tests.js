@@ -458,6 +458,17 @@ function testMonitorState() {
   assert.deepEqual(movedIfvs.map((vehicle) => vehicle.position.x), [1100, 10100]);
   assert.equal(movedIfvs[0].healthPercent, 80);
 
+  // A legacy empty VRI frame may still be emitted while the new chunk stream
+  // is active. It must not erase the partial round-robin snapshot.
+  assert.equal(module.api.ingestLogLine("PIE: VRI{}").ok, true);
+  assert.equal(module.api.getVehicles().length, 3);
+  assert.equal(
+    module.api.getState().diagnostics.some(
+      (entry) => entry.reason === "ignored_empty_legacy_frame_during_chunk_stream",
+    ),
+    true,
+  );
+
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{7,100,200,300,45}").ok, true);
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{21,400,500,600,90}").ok, true);
   assert.equal(module.api.ingestLogLine("PIE: PlayerBaseInfo{22,700,800,900,135}").ok, true);
