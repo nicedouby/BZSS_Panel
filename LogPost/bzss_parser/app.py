@@ -382,12 +382,29 @@ class BzssLogParserApp:
                 except Exception as e:
                     self.console.warn(f"Raw input write failed: {e}")
 
-            # Vehicle chunks are panel state, just like the dedicated player
-            # chunks above. Forward them before generic matchers and regardless
-            # of local raw-log sampling/filter settings. This keeps deployments
-            # with an older config.json compatible after updating LogPost.
+            # Vehicle chunks are state telemetry, not generic raw-log output.
+            # Give them a dedicated event channel so production delivery does
+            # not depend on raw-log filters, sampling, or consumer routing.
             if critical_vehicle_line:
-                self.forward_raw_log_line(line, source_meta, preserved_rule=early_preserved_rule)
+                event = self.builder.build_bzss_core_vehicle_chunk(
+                    raw=line,
+                    source=self.raw_log_output_source,
+                    source_meta=source_meta,
+                )
+                if not self.transport_only:
+                    self.writer.write_event(event)
+                    self.writer.write_outbox("pending", event)
+                try:
+                    self.udp_sender.send(event)
+                except Exception as e:
+                    if not self.transport_only:
+                        self.writer.write_outbox("send_failed", event, str(e))
+                    self.console.warn(f"Vehicle chunk UDP send failed: {e}")
+                self.stats["vehicle_chunks_forwarded"] = int(
+                    self.stats.get("vehicle_chunks_forwarded", 0)
+                ) + 1
+                self.stats["events_matched"] += 1
+                self.console.event(event)
                 self.persist_checkpoint(
                     record,
                     source_mode,
