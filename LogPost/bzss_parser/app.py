@@ -54,9 +54,18 @@ def is_bzss_core_scoreboard_line(line: str) -> bool:
 
 def is_bzss_core_vehicle_line(line: str) -> bool:
     source = str(line or "")
+    # Transport detection must stay deliberately broader than payload parsing.
+    # A vehicle telemetry line is state-critical: if a Blueprint adds, removes,
+    # or reorders optional fields, silently treating it as generic raw output
+    # makes the line disappear behind contains/rate-limit filters.
+    vehicle_candidate = bool(
+        re.search(r"\\{[^{}\\r\\n]*\\b(?:ID|DriverID|DriverPlayerID)\\s*[:=]", source, re.IGNORECASE)
+        and re.search(r"(?:^|[,;{\\s])(?:VT|VehicleType)\\s*[:=]", source, re.IGNORECASE)
+    )
     return bool(
         BZSS_CORE_VEHICLE_FRAME_RE.search(source)
         or BZSS_CORE_VEHICLE_CHUNK_RE.search(source)
+        or vehicle_candidate
     )
 
 
