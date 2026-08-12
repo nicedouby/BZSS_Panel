@@ -998,8 +998,17 @@ async function testChunkSubscriptionAndNoRawCapture() {
 
     await module.start();
     assert.equal(listeners.has("On_BzssCorePlayerChunk"), true);
+    assert.equal(listeners.has("On_BzssCoreVehicleChunk"), true);
     const handler = [...(listeners.get("On_BzssCorePlayerChunk") ?? [])][0];
+    const vehicleHandler = [...(listeners.get("On_BzssCoreVehicleChunk") ?? [])][0];
     assert.equal(typeof handler, "function");
+    assert.equal(typeof vehicleHandler, "function");
+
+    vehicleHandler({
+      rawLog: "PIE: Error: {ID:-1,VT:IFV,H:(1250/1250),,P:10,20,0,90,S:0,T:1,PS:}",
+    });
+    assert.equal(module.api.getVehicles().length, 1);
+    assert.equal(module.api.getVehicles()[0].vehicleType, "IFV");
 
     const capturePath = module.api.getRawCapturePath();
     assert.equal(fs.existsSync(capturePath), false);
