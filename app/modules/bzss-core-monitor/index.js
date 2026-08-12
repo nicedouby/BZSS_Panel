@@ -300,6 +300,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       draft.mainZones = [];
       draft.vehicles = [];
       draft.vehicleFrameUpdatedAt = "";
+      draft.vehicleChunkUpdatedAt = "";
       draft.vehicleDebug = createEmptyVehicleDebugState();
       draft.explosions = [];
       draft.rawLineHash = "";
@@ -427,9 +428,28 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
           }
 
           if (parsed.type === "vehicles") {
-            draft.vehicles = parsed.partial
-              ? mergeVehicleChunk(draft.vehicles, parsed.vehicles, parsed.observedAt)
-              : parsed.vehicles;
+            if (parsed.partial) {
+              draft.vehicles = mergeVehicleChunk(draft.vehicles, parsed.vehicles, parsed.observedAt);
+              draft.vehicleChunkUpdatedAt = parsed.observedAt;
+              draft.vehicleFrameUpdatedAt = parsed.observedAt;
+              recordObservedVehicleTypes(draft, parsed.vehicles, parsed.observedAt);
+              continue;
+            }
+
+            const lastChunkAtMs = Date.parse(String(draft.vehicleChunkUpdatedAt ?? ""));
+            const chunkIsRecent = Number.isFinite(lastChunkAtMs)
+              && Date.now() - lastChunkAtMs <= VEHICLE_CHUNK_STALE_MS;
+            if (parsed.vehicles.length === 0 && chunkIsRecent) {
+              appendDiagnostic(draft, {
+                type: "vehicles",
+                reason: "ignored_empty_legacy_frame_during_chunk_stream",
+                rawLineHash: hashText(segment),
+                observedAt: parsed.observedAt,
+              });
+              continue;
+            }
+
+            draft.vehicles = parsed.vehicles;
             draft.vehicleFrameUpdatedAt = parsed.observedAt;
             recordObservedVehicleTypes(draft, parsed.vehicles, parsed.observedAt);
             continue;
@@ -1064,6 +1084,7 @@ function createInitialState() {
     // VRI frames so new SDK enum values are visible for later icon mapping.
     vehicleTypes: new Map(),
     vehicleFrameUpdatedAt: "",
+    vehicleChunkUpdatedAt: "",
     vehicleDebug: createEmptyVehicleDebugState(),
     playerChunkDiagnostics: createEmptyPlayerChunkDiagnostics(),
     explosions: [],
