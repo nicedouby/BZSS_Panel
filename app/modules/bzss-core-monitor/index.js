@@ -2251,7 +2251,7 @@ export function parseBzssCoreVehicleLine(line) {
     frameContent = frame.content;
   } else {
     if (!isBareVehicleChunkLine(text)) return null;
-    const firstRecord = text.search(/\{\s*ID\s*[:=]\s*-?\d+\s*,\s*VT\s*[:=]/i);
+    const firstRecord = findBareVehicleRecordStart(text);
     if (firstRecord < 0) return null;
     frameContent = text.slice(firstRecord);
   }
@@ -2319,13 +2319,17 @@ export function parseBzssCoreVehicleLine(line) {
 }
 
 function isBareVehicleChunkLine(text) {
+  return findBareVehicleRecordStart(text) >= 0;
+}
+
+function findBareVehicleRecordStart(text) {
   const source = String(text ?? "");
-  return /\{\s*ID\s*[:=]\s*-?\d+\s*,\s*VT\s*[:=]/i.test(source)
-    && /[,;]\s*H\s*[:=]/i.test(source)
-    && /[,;]\s*P\s*[:=]/i.test(source)
-    && /[,;]\s*S\s*[:=]/i.test(source)
-    && /[,;]\s*T\s*[:=]/i.test(source)
-    && /[,;]\s*PS\s*[:=]/i.test(source);
+  // Identification at the transport boundary is intentionally based only on
+  // stable identity markers. H/P/S/T/PS are payload fields and may be absent,
+  // renamed, duplicated, or reordered by Blueprint revisions.
+  return source.search(
+    /\{(?=[^{}\r\n]*\b(?:ID|DriverID|DriverPlayerID)\s*[:=])(?=[^{}\r\n]*\b(?:VT|VehicleType)\s*[:=])/i,
+  );
 }
 
 function mergeVehicleChunk(currentVehicles, incomingVehicles, observedAt) {
