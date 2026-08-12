@@ -12,6 +12,7 @@ const PRI_FRAME_TIMEOUT_MS = 500;
 const COMPACT_RUNTIME_POSITION_SCALE = 100;
 const RAW_CAPTURE_RELATIVE_PATH = path.join("data", "bzss-core-monitor", "received-lines.jsonl");
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
+const BZSS_CORE_VEHICLE_CHUNK_EVENT_NAME = "On_BzssCoreVehicleChunk";
 const BZSS_CORE_BROADCAST_INTERVAL_MS = 200;
 // Keep partial round-robin chunks long enough for a complete vehicle pass,
 // including busy servers where LogPost/UDP delivery may be briefly delayed.
@@ -971,7 +972,10 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       explosionCleanupTimer.unref?.();
     }
     if (core.eventBus?.onCoreEvent) {
+      // Keep the raw-log subscription for legacy VRI frames, while new
+      // bounded vehicle chunks use their own state-critical event channel.
       unsubscribers.push(core.eventBus.onCoreEvent("On_RawLogLine", handleRawLogLine));
+      unsubscribers.push(core.eventBus.onCoreEvent(BZSS_CORE_VEHICLE_CHUNK_EVENT_NAME, handleRawLogLine));
       unsubscribers.push(core.eventBus.onCoreEvent(BZSS_CORE_PLAYER_CHUNK_EVENT_NAME, handleBzssCorePlayerChunk));
       unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", () => {
         publish((draft) => {
