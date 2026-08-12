@@ -533,5 +533,41 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
         self.assertEqual(app.stats["rawlog_forwarded"], 1)
 
+    def test_bzss_core_bare_vehicle_chunk_bypasses_saturated_raw_rate_limit(self) -> None:
+        app = self.make_app(raw_log_output={
+            "enabled": True,
+            "source": "Squad.log",
+            "contains": ["CPZ:"],
+            "max_per_second": 1,
+        })
+        ordinary_line = "CPZ: consume the generic raw-log quota"
+        vehicle_line = (
+            "PIE: Error: "
+            "{ID:-1,VT:IFVTracked,H:(1250/1250),,P:538,80,-134,-32,S:0,T:1,PS:,,,,}"
+            "{ID:-1,VT:Jeep,H:(500/500),,P:-507,320,-132,-105,S:0,T:2,PS:,,,,}"
+        )
+
+        app.process_line({
+            "line": ordinary_line,
+            "offset": 0,
+            "next_offset": len(ordinary_line) + 1,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+        app.process_line({
+            "line": vehicle_line,
+            "offset": len(ordinary_line) + 1,
+            "next_offset": len(ordinary_line) + len(vehicle_line) + 2,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        self.assertEqual(
+            [event["Event"] for event in app.udp_sender.sent],
+            ["On_RawLogLine", "On_RawLogLine"],
+        )
+        self.assertEqual(app.udp_sender.sent[1]["Raw"], vehicle_line)
+        self.assertEqual(app.stats["rawlog_forwarded"], 2)
+
 if __name__ == "__main__":
     unittest.main()
