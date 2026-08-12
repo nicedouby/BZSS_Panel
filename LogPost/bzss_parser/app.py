@@ -344,8 +344,13 @@ class BzssLogParserApp:
             early_preserved_rule = ""
             if self.preserve_enabled:
                 early_preserved_rule = self.preserve_filter.match(line)
+            critical_vehicle_line = is_bzss_core_vehicle_line(line)
 
-            if self.blacklist.is_blacklisted(line) and not early_preserved_rule:
+            if (
+                self.blacklist.is_blacklisted(line)
+                and not early_preserved_rule
+                and not critical_vehicle_line
+            ):
                 self.stats["lines_blacklisted"] += 1
                 self.persist_checkpoint(
                     record,
@@ -376,6 +381,21 @@ class BzssLogParserApp:
                     self.raw_input_writer.write(line)
                 except Exception as e:
                     self.console.warn(f"Raw input write failed: {e}")
+
+            # Vehicle chunks are panel state, just like the dedicated player
+            # chunks above. Forward them before generic matchers and regardless
+            # of local raw-log sampling/filter settings. This keeps deployments
+            # with an older config.json compatible after updating LogPost.
+            if critical_vehicle_line:
+                self.forward_raw_log_line(line, source_meta, preserved_rule=early_preserved_rule)
+                self.persist_checkpoint(
+                    record,
+                    source_mode,
+                    last_raw_line_hash=str(raw_archive.get("rawLineHash", "")),
+                    last_log_time=str(raw_archive.get("logTime", "")),
+                    force=self.checkpoint_force_on_event,
+                )
+                return True
 
             self.auxiliary_identity_matcher.update(line)
 
@@ -559,6 +579,12 @@ class BzssLogParserApp:
         )
 
     def should_forward_raw_log_line(self, line: str, preserved_rule: str = "") -> bool:
+        # Vehicle chunks are required panel state. Keep this check before the
+        # optional raw-log output switch and its blacklist so an older local
+        # config cannot silently disable tactical vehicle telemetry.
+        if is_bzss_core_vehicle_line(line):
+            return True
+
         if not self.raw_log_output_enabled:
             return False
 
@@ -569,13 +595,6 @@ class BzssLogParserApp:
         # the panel state monitor. They bypass the generic sampled token list.
         # They are not part of the generic raw output token list because they
         # are emitted as PIE/Error lines, so keep them even when contains is set.
-        # Vehicle output is already emitted in bounded chunks (currently 8
-        # records per line). It is state-critical and every chunk belongs to a
-        # round-robin snapshot, so sharing the generic raw-log budget can starve
-        # the tactical map when player/runtime traffic consumes that budget.
-        if is_bzss_core_vehicle_line(line):
-            return True
-
         if (
             is_bzss_core_runtime_line(line)
             or is_bzss_core_scoreboard_line(line)
