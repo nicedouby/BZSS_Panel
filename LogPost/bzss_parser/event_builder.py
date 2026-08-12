@@ -95,6 +95,46 @@ class EventBuilder:
         event["EventId"] = self._build_event_id("On_RawLogLine", source_seq, raw_line_hash, self.seq)
         return event
 
+    def build_bzss_core_vehicle_chunk(
+        self,
+        *,
+        raw: str,
+        source: str = "Squad.log",
+        source_meta: Dict[str, Any] | None = None,
+    ) -> Dict[str, str]:
+        """Build state-critical vehicle telemetry on a dedicated event channel."""
+        self.seq += 1
+
+        raw_value, raw_truncated = truncate_raw(raw, self.max_raw_chars)
+        source_seq = clean_value((source_meta or {}).get("source_seq"))
+        raw_line_hash = clean_value((source_meta or {}).get("rawLineHash"))
+        source_mode = normalize_source_mode((source_meta or {}).get("source_mode"))
+        can_trigger_actions = can_trigger_actions_value((source_meta or {}).get("can_trigger_actions"), source_mode)
+
+        event: Dict[str, str] = {
+            "Version": "1",
+            "ServerID": self.server_id,
+            "SessionID": self.session_id,
+            "Seq": str(self.seq),
+            "Event": "On_BzssCoreVehicleChunk",
+            "Time": now_time_string(),
+            "LogTime": extract_log_time(raw),
+            "RawTruncated": raw_truncated,
+            "Param1_Source": clean_value(source),
+            "SourceMode": source_mode,
+            "IsReplay": "true" if source_mode in {"replay", "backfill"} else "false",
+            "CanTriggerActions": "true" if can_trigger_actions else "false",
+            "Raw": raw_value,
+        }
+        self._apply_source_meta(event, source_meta)
+        event["EventId"] = self._build_event_id(
+            "On_BzssCoreVehicleChunk",
+            source_seq,
+            raw_line_hash,
+            self.seq,
+        )
+        return event
+
     def build_bzss_core_player_chunk(
         self,
         *,
