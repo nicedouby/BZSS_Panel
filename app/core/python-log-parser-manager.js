@@ -3,6 +3,7 @@
 import path from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { resolveLogPostWorkingDirectory } from "./logpost-working-directory.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -41,7 +42,7 @@ export class PythonLogParserManager {
     }
 
     const pythonExecutable = this.config.pythonExecutable ?? "python";
-    const workingDirectory = path.resolve(process.cwd(), String(this.config.workingDirectory ?? ".").trim());
+    const workingDirectory = resolveLogPostWorkingDirectory(this.config.workingDirectory ?? "./LogPost");
     const scriptPath = String(this.config.scriptPath ?? "./main.py").trim();
     const configPath = String(this.config.configPath ?? "./config.json").trim();
     const scriptAbsolutePath = path.resolve(workingDirectory, scriptPath);
