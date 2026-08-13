@@ -373,6 +373,32 @@ async function testTeamKillCoreEventIsVisible() {
   await harness.module.stop();
 }
 
+
+async function testCombatEventEmitsEveryRapidIngest() {
+  const harness = createHarness();
+  await harness.module.start();
+
+  for (const name of ["VictimA", "VictimB", "VictimC"]) {
+    harness.emit("On_PlayerWounded", makeEvent("On_PlayerWounded", [
+      ["VictimName", name],
+      ["AttackerName", "Attacker"],
+      ["AttackerSteam64ID", "steam-attacker"],
+      ["CausedBy", "BP_Rifle_C"],
+    ], { eventId: `rapid-wound:${name}` }));
+  }
+
+  const combatEvents = harness.moduleEvents.filter((item) => item.eventName === "combatEvent");
+  assert.equal(combatEvents.length, 3);
+  assert.deepEqual(combatEvents.map((item) => item.event.record.victimName), ["VictimA", "VictimB", "VictimC"]);
+
+  // The legacy UI/state channel is still debounced and may coalesce the burst.
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const updates = harness.moduleEvents.filter((item) => item.eventName === "updated");
+  assert.equal(updates.length, 1);
+
+  await harness.module.stop();
+}
+
 await testNormalizesDamageEventAndSearches();
 await testKeepsNullptrInvalidDeathEvent();
 await testDeathDamage300AddsGiveUpLabel();
@@ -383,6 +409,7 @@ await testSameTeamDamageIsFriendlyDamageNotTeamKill();
 await testSameTeamWoundIsTkDownNotTeamKill();
 await testReviveEventIsTrackedWithoutFriendlyFire();
 await testTeamKillCoreEventIsVisible();
+await testCombatEventEmitsEveryRapidIngest();
 testNormalizeParamsCompatibility();
 
 console.log("combat state tests passed");
