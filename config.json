@@ -529,7 +529,7 @@
   "pythonLogParser": {
     "enabled": true,
     "pythonExecutable": "python",
-    "workingDirectory": "E:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
+    "workingDirectory": "./LogPost",
     "scriptPath": "./main.py",
     "configPath": "./config.json",
     "autoStart": true,
@@ -539,7 +539,7 @@
   },
   "logPostFileBridge": {
     "enabled": true,
-    "workingDirectory": "E:\\BZSS_SQ_Server\\BZSS_Panel\\LogPost",
+    "workingDirectory": "./LogPost",
     "eventName": "On_RawLogLine",
     "pollIntervalMs": 250,
     "replayRecentLines": 120,
