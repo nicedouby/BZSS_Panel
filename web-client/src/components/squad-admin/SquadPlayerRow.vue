@@ -87,8 +87,8 @@
 
     <div class="player-steam-profile">
       <div class="player-time-tags" aria-label="玩家服务器时长">
-        <span class="player-time-tag player-time-tag--server">游玩时长 {{ serverPlaytimeText }}</span>
-        <span class="player-time-tag player-time-tag--warmup">暖服时长 {{ warmupPlaytimeText }}</span>
+        <span class="player-time-tag player-time-tag--server">游玩 {{ serverPlaytimeText }}</span>
+        <span class="player-time-tag player-time-tag--warmup">暖服 {{ warmupPlaytimeText }}</span>
       </div>
       <a
         v-if="avatarUrl"
@@ -266,11 +266,11 @@ function formatTrackedDuration(secondsValue?: number | null) {
   if (!Number.isFinite(seconds) || seconds < 0) return "--";
 
   const totalMinutes = Math.floor(seconds / 60);
-  if (totalMinutes < 60) return `${totalMinutes}分钟`;
+  if (totalMinutes < 60) return `${totalMinutes}m`;
 
   const hours = seconds / 3600;
-  if (hours < 100) return `${hours.toFixed(1)}小时`;
-  return `${Math.floor(hours)}小时`;
+  if (hours < 100) return `${hours.toFixed(1)}h`;
+  return `${Math.floor(hours)}h`;
 }
 
 function handleSelect(event: MouseEvent) {
@@ -1412,13 +1412,13 @@ function displayRole(role: string | null | undefined) {
 
 /* Player time summary: two compact labels above a larger Steam avatar. */
 .squad-player-row.player-row {
-  min-height: 108px !important;
-  contain-intrinsic-size: 108px !important;
+  min-height: 86px !important;
+  contain-intrinsic-size: 86px !important;
 }
 
 .squad-player-row .player-main,
 .squad-player-row.has-steam-avatar .player-main {
-  padding-right: 126px !important;
+  padding-right: 132px !important;
 }
 
 .squad-player-row .player-steam-profile {
@@ -1426,34 +1426,35 @@ function displayRole(role: string | null | undefined) {
   top: 7px;
   right: 9px;
   z-index: 3;
-  width: 116px;
+  width: 122px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 5px;
+  gap: 4px;
   pointer-events: none;
 }
 
 .squad-player-row .player-time-tags {
   width: 100%;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 3px;
 }
 
 .squad-player-row .player-time-tag {
   display: block;
   min-width: 0;
-  padding: 2px 6px;
+  padding: 1px 4px;
   overflow: hidden;
   border: 1px solid var(--color-border-soft);
   border-radius: 5px;
   color: var(--color-text-secondary);
   background: color-mix(in srgb, var(--color-bg-elevated) 92%, transparent);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 750;
-  line-height: 15px;
-  text-align: right;
+  line-height: 14px;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -1494,26 +1495,26 @@ function displayRole(role: string | null | undefined) {
 
 @media (max-width: 720px) {
   .squad-player-row.player-row {
-    min-height: 100px !important;
-    contain-intrinsic-size: 100px !important;
+    min-height: 80px !important;
+    contain-intrinsic-size: 80px !important;
   }
 
   .squad-player-row .player-main,
   .squad-player-row.has-steam-avatar .player-main {
-    padding-right: 103px !important;
+    padding-right: 114px !important;
   }
 
   .squad-player-row .player-steam-profile {
     top: 6px;
     right: 7px;
-    width: 94px;
-    gap: 4px;
+    width: 106px;
+    gap: 3px;
   }
 
   .squad-player-row .player-time-tag {
-    padding-inline: 4px;
-    font-size: 8px;
-    line-height: 14px;
+    padding-inline: 3px;
+    font-size: 7px;
+    line-height: 13px;
   }
 
   .squad-player-row .player-steam-profile .player-steam-bg,
