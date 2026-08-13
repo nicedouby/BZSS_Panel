@@ -182,7 +182,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="vehicle in filteredVehicles" :key="`${payload?.updatedAt}-${vehicle.frameIndex}`" class="vehicle-row">
+            <tr v-for="vehicle in filteredVehicles" :key="vehicle.trackId ?? `${vehicle.frameIndex}-${vehicle.vehicleType}`" class="vehicle-row">
               <td class="muted mono text-center">{{ vehicle.frameIndex + 1 }}</td>
               <td>
                 <span class="team-badge" :class="`team-${vehicle.teamId ?? 0}`">
