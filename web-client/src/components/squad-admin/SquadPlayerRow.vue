@@ -85,27 +85,33 @@
 
     </div>
 
-    <!-- Steam Avatar - Right side decorative with slanted fade -->
-    <a
-      v-if="avatarUrl"
-      class="player-steam-bg"
-      :href="`https://steamcommunity.com/profiles/${player.steamId}`"
-      target="_blank"
-      rel="noopener noreferrer"
-      :title="`查看 ${displayName} 的 Steam 个人资料`"
-      @click.stop
-    >
-      <img
-        class="player-steam-bg-img"
-        :src="avatarUrl"
-        alt=""
-        width="34"
-        height="34"
-        loading="lazy"
-        decoding="async"
-        fetchpriority="low"
-      />
-    </a>
+    <div class="player-steam-profile">
+      <div class="player-time-tags" aria-label="玩家服务器时长">
+        <span class="player-time-tag player-time-tag--server">游玩时长 {{ serverPlaytimeText }}</span>
+        <span class="player-time-tag player-time-tag--warmup">暖服时长 {{ warmupPlaytimeText }}</span>
+      </div>
+      <a
+        v-if="avatarUrl"
+        class="player-steam-bg"
+        :href="`https://steamcommunity.com/profiles/${player.steamId}`"
+        target="_blank"
+        rel="noopener noreferrer"
+        :title="`查看 ${displayName} 的 Steam 个人资料`"
+        @click.stop
+      >
+        <img
+          class="player-steam-bg-img"
+          :src="avatarUrl"
+          alt=""
+          width="48"
+          height="48"
+          loading="lazy"
+          decoding="async"
+          fetchpriority="low"
+        />
+      </a>
+      <div v-else class="player-steam-bg player-steam-bg--empty" aria-hidden="true">?</div>
+    </div>
   </div>
 </template>
 
@@ -124,6 +130,8 @@ const props = defineProps<{
   multiSelectMode?: boolean;
   checked?: boolean;
   steamAvatar?: string | null;
+  serverPlaytimeSeconds?: number | null;
+  warmupPlaytimeSeconds?: number | null;
 }>();
 
 const emit = defineEmits<{
@@ -175,6 +183,8 @@ const displayName = computed(() => {
 });
 
 const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
+const serverPlaytimeText = computed(() => formatTrackedDuration(props.serverPlaytimeSeconds));
+const warmupPlaytimeText = computed(() => formatTrackedDuration(props.warmupPlaytimeSeconds));
 const playtimeTitle = computed(() => {
   const hours = props.playtimeHours;
   if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam 时长未公开";
@@ -249,6 +259,18 @@ function formatPlaytime(hours?: number | null) {
   }
 
   return `${hours.toFixed(1)}h`;
+}
+
+function formatTrackedDuration(secondsValue?: number | null) {
+  const seconds = Number(secondsValue);
+  if (!Number.isFinite(seconds) || seconds < 0) return "--";
+
+  const totalMinutes = Math.floor(seconds / 60);
+  if (totalMinutes < 60) return `${totalMinutes}分钟`;
+
+  const hours = seconds / 3600;
+  if (hours < 100) return `${hours.toFixed(1)}小时`;
+  return `${Math.floor(hours)}小时`;
 }
 
 function handleSelect(event: MouseEvent) {
@@ -1385,6 +1407,120 @@ function displayRole(role: string | null | undefined) {
 
 .squad-player-row .scoreboard-chip {
   transition: none !important;
+}
+
+
+/* Player time summary: two compact labels above a larger Steam avatar. */
+.squad-player-row.player-row {
+  min-height: 108px !important;
+  contain-intrinsic-size: 108px !important;
+}
+
+.squad-player-row .player-main,
+.squad-player-row.has-steam-avatar .player-main {
+  padding-right: 126px !important;
+}
+
+.squad-player-row .player-steam-profile {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  z-index: 3;
+  width: 116px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.squad-player-row .player-time-tags {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+}
+
+.squad-player-row .player-time-tag {
+  display: block;
+  min-width: 0;
+  padding: 2px 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-bg-elevated) 92%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 15px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.squad-player-row .player-time-tag--server {
+  border-color: color-mix(in srgb, var(--color-brand-primary) 38%, var(--color-border-soft));
+}
+
+.squad-player-row .player-time-tag--warmup {
+  border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-soft));
+}
+
+.squad-player-row .player-steam-profile .player-steam-bg {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 48px !important;
+  height: 48px !important;
+  transform: none !important;
+  pointer-events: auto;
+}
+
+.squad-player-row .player-steam-profile .player-steam-bg--empty {
+  display: grid !important;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  font-weight: 800;
+  pointer-events: none;
+}
+
+.squad-player-row:hover .player-steam-profile .player-steam-bg {
+  width: 48px !important;
+  transform: scale(1.04) !important;
+}
+
+@media (max-width: 720px) {
+  .squad-player-row.player-row {
+    min-height: 100px !important;
+    contain-intrinsic-size: 100px !important;
+  }
+
+  .squad-player-row .player-main,
+  .squad-player-row.has-steam-avatar .player-main {
+    padding-right: 103px !important;
+  }
+
+  .squad-player-row .player-steam-profile {
+    top: 6px;
+    right: 7px;
+    width: 94px;
+    gap: 4px;
+  }
+
+  .squad-player-row .player-time-tag {
+    padding-inline: 4px;
+    font-size: 8px;
+    line-height: 14px;
+  }
+
+  .squad-player-row .player-steam-profile .player-steam-bg,
+  .squad-player-row:hover .player-steam-profile .player-steam-bg {
+    width: 42px !important;
+    height: 42px !important;
+  }
 }
 
 </style>
