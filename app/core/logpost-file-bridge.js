@@ -3,6 +3,7 @@
 import { FileIOManager } from "./file-io-manager.js";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
+import { resolveLogPostWorkingDirectory } from "./logpost-working-directory.js";
 
 const MAX_READ_CHUNK_BYTES = 256 * 1024;
 const MAX_PARTIAL_LINE_CHARS = 1024 * 1024;
@@ -27,7 +28,7 @@ export class LogPostFileBridge {
     this.performanceMonitor = performanceMonitor;
 
     this.enabled = Boolean(this.config.enabled);
-    this.workingDirectory = path.resolve(process.cwd(), String(this.config.workingDirectory ?? "./LogPost").trim());
+    this.workingDirectory = resolveLogPostWorkingDirectory(this.config.workingDirectory ?? "./LogPost");
     this.eventName = String(this.config.eventName ?? DEFAULT_EVENT_NAME).trim() || DEFAULT_EVENT_NAME;
     this.pollIntervalMs = Math.max(100, Number(this.config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS) || DEFAULT_POLL_INTERVAL_MS);
     this.replayRecentLines = Math.max(0, Number(this.config.replayRecentLines ?? DEFAULT_RECENT_REPLAY_LINES) || 0);
