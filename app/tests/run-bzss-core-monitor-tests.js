@@ -147,6 +147,22 @@ function testParseLogLine() {
   assert.equal(bareVehicleChunk.vehicles[0].teamId, 1);
   assert.deepEqual(bareVehicleChunk.vehicles[0].occupantPlayerIds, []);
 
+  const realMultiVehicleLine = parseBzssCoreLogLine(
+    "[2026.08.13-05.15.00:114][654]PIE: Error: {ID:-1,VT:IFVTracked,H:(2000/2000),,P:363,-210,0,90,S:0,T:1,PS:,,,,,,,,,,,,,,,,,,,,}{ID:-1,VT:IFVTracked,H:(2000/2000),,P:342,-210,0,89,S:0,T:1,PS:,,,,,,,,,,,,,,,,,,,,}{ID:-1,VT:IFVTracked,H:(2000/2000),,P:373,-210,0,89,S:0,T:1,PS:,,,,,,,,,,,,,,,,,,,,}",
+  );
+  assert.equal(realMultiVehicleLine.type, "vehicles");
+  assert.equal(realMultiVehicleLine.partial, true);
+  assert.equal(realMultiVehicleLine.vehicles.length, 3);
+  assert.deepEqual(
+    realMultiVehicleLine.vehicles.map((vehicle) => vehicle.position),
+    [
+      { x: 36300, y: -21000, z: 0 },
+      { x: 34200, y: -21000, z: 0 },
+      { x: 37300, y: -21000, z: 0 },
+    ],
+  );
+  assert.deepEqual(realMultiVehicleLine.vehicles.map((vehicle) => vehicle.yaw), [90, 89, 89]);
+
   const reorderedPartialVehicleChunk = parseBzssCoreLogLine(
     "PIE: Error: {VT:IFVTracked,ID:-1,P:538,80,-134,-32,T:1,H:(1250/1250)}",
   );
