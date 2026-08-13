@@ -50,6 +50,17 @@ export function createCombatStateModule({ core, modules, config, logger }) {
     }
 
     lastUpdatedAt = record.time || new Date().toISOString();
+    // Real-time consumers must receive every finalized combat record.  Unlike
+    // "updated", this signal never enters the UI/state debounce queue.
+    core.eventBus.emitModuleEvent("module.combatState", "combatEvent", {
+      eventName: "module.combatState.combatEvent",
+      layer: "module",
+      source: "module.combatState",
+      serverId: storedRecord.serverId,
+      time: storedRecord.time || new Date().toISOString(),
+      record: enrichEvent(storedRecord),
+    });
+
     logWithFallback(moduleLogger, "debug", () => `Combat event captured ${record.type}`, {
       operation: "ingest",
       eventName: record.eventName,
