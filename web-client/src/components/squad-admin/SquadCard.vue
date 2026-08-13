@@ -70,6 +70,8 @@
           :combat-stats="getPlayerCombatStats(squad.leader)"
           :health="getPlayerHealth(squad.leader)"
           :steam-avatar="getPlayerSteamAvatar(squad.leader.steamId)"
+          :server-playtime-seconds="getPlayerServerSeconds(squad.leader.steamId)"
+          :warmup-playtime-seconds="getPlayerWarmupSeconds(squad.leader.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
@@ -88,6 +90,8 @@
           :combat-stats="getPlayerCombatStats(member)"
           :health="getPlayerHealth(member)"
           :steam-avatar="getPlayerSteamAvatar(member.steamId)"
+          :server-playtime-seconds="getPlayerServerSeconds(member.steamId)"
+          :warmup-playtime-seconds="getPlayerWarmupSeconds(member.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
@@ -213,6 +217,25 @@ function getPlayerSteamAvatar(steamId: string | null | undefined): string | null
   if (!steamId) return null;
   const playtime = props.playtimes[steamId];
   return playtime?.steam_avatar || playtime?.steamAvatar || null;
+}
+
+function getPlayerServerSeconds(steamId: string | null | undefined): number | null {
+  return getCachedDurationSeconds(steamId, "serverSeconds", "server_seconds");
+}
+
+function getPlayerWarmupSeconds(steamId: string | null | undefined): number | null {
+  return getCachedDurationSeconds(steamId, "warmupSeconds", "warmup_seconds");
+}
+
+function getCachedDurationSeconds(
+  steamId: string | null | undefined,
+  camelKey: string,
+  snakeKey: string,
+): number | null {
+  if (!steamId) return null;
+  const record = props.playtimes[steamId];
+  const value = Number(record?.[camelKey] ?? record?.[snakeKey]);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : null;
 }
 
 function getPlayerCombatStats(player: PlayerRowViewModel): CombatStats {
