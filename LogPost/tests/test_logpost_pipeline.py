@@ -543,6 +543,40 @@ class LogPostPipelineTests(unittest.TestCase):
         self.assertEqual(app.stats["vehicle_chunks_forwarded"], 1)
         self.assertEqual(app.stats["rawlog_forwarded"], 1)
 
+
+    def test_real_multi_vehicle_log_line_is_forwarded_without_filtering(self) -> None:
+        app = self.make_app(
+            raw_log_output={
+                "enabled": False,
+                "source": "Squad.log",
+                "contains": ["CPZ:"],
+                "max_per_second": 1,
+            },
+            blacklist_contains=["PIE: Error:"],
+        )
+        line = (
+            "[2026.08.13-05.15.00:114][654]PIE: Error: "
+            "{ID:-1,VT:IFVTracked,H:(2000/2000),,P:363,-210,0,90,S:0,T:1,PS:,,,,,,,,,,,,,,,,,,,,}"
+            "{ID:-1,VT:IFVTracked,H:(2000/2000),,P:342,-210,0,89,S:0,T:1,PS:,,,,,,,,,,,,,,,,,,,,}"
+            "{ID:-1,VT:IFVTracked,H:(2000/2000),,P:373,-210,0,89,S:0,T:1,PS:,,,,,,,,,,,,,,,,,,,,}"
+        )
+
+        app.process_line({
+            "line": line,
+            "offset": 0,
+            "next_offset": len(line) + 1,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        self.assertEqual(
+            [event["Event"] for event in app.udp_sender.sent],
+            ["On_BzssCoreVehicleChunk", "On_RawLogLine"],
+        )
+        self.assertTrue(all(event["Raw"] == line for event in app.udp_sender.sent))
+        self.assertEqual(app.stats["vehicle_chunks_forwarded"], 1)
+        self.assertEqual(app.stats["lines_blacklisted"], 0)
+
     def test_bzss_core_bare_vehicle_chunk_is_forwarded_when_raw_output_is_disabled_and_blacklisted(self) -> None:
         app = self.make_app(
             raw_log_output={
