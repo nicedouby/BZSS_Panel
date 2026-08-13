@@ -587,7 +587,7 @@ export class PlayerRepository {
 
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, current_ip, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
+      `SELECT id, current_name, steam_id, eos_id, current_ip, steam_game_seconds, game_seconds, game_seconds_override, server_seconds, warmup_seconds, steam_avatar, updated_at, assets_json
        FROM players
        WHERE steam_id IN (${placeholders})`,
       ...ids,
