@@ -1,11 +1,53 @@
 // -*- coding: utf-8 -*-
 
 const SOURCE_URL = "https://squadbrowser.app/players";
-const PROFILE_ACTION = "40bf33ab7238c92dd51fce05c8de745f64c5600d25";
-const SESSIONS_ACTION = "40b74301b9fe2a47ce1df21e51688fc5496f856f96";
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const CACHE_TTL_MS = 60_000;
+
+let actionCache = {
+  profile: "404fee0c709081e101437b42eca9a7480cf839f19e",
+  sessions: "40e689b5cfcae1b65138618595288f2cedf3530132",
+  fetchedAt: Date.now(),
+};
+
+async function discoverActionsFromUpstream() {
+  try {
+    const [htmlRes, rscRes] = await Promise.all([
+      fetch(SOURCE_URL, { headers: { "User-Agent": "BZSS-Panel SquadBrowser lookup/1.0" } }),
+      fetch(SOURCE_URL, { headers: { RSC: "1", "User-Agent": "BZSS-Panel SquadBrowser lookup/1.0" } }),
+    ]);
+    const html = await htmlRes.text();
+    const rsc = await rscRes.text();
+    const combined = html + "\n" + rsc;
+
+    const chunkRegex = /\/_next\/static\/chunks\/[a-f0-9]+\.js/g;
+    const scriptUrls = new Set(combined.match(chunkRegex) || []);
+
+    const discovered = {};
+    for (const urlPath of scriptUrls) {
+      const jsRes = await fetch(`https://squadbrowser.app${urlPath}`, {
+        headers: { "User-Agent": "BZSS-Panel SquadBrowser lookup/1.0" },
+      });
+      const text = await jsRes.text();
+      if (!text.includes("createServerReference")) continue;
+
+      const regex = /["']([a-f0-9]{30,60})["']\s*,\s*[^,]+\s*,\s*[^,]+\s*,\s*[^,]+\s*,\s*["'](getPlayerProfile|getPlayerSessions)["']/g;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const [, hash, name] = match;
+        if (name === "getPlayerProfile") discovered.profile = hash;
+        if (name === "getPlayerSessions") discovered.sessions = hash;
+      }
+    }
+
+    if (discovered.profile && discovered.sessions) {
+      actionCache = { ...discovered, fetchedAt: Date.now() };
+      return discovered;
+    }
+  } catch {}
+  return actionCache;
+}
 
 function normalizeSteam64(value) {
   const steam64 = String(value ?? "").trim();
@@ -130,10 +172,31 @@ function normalizeSessions(sessions) {
 }
 
 async function fetchLookupResult(steam64) {
-  const [profile, sessionData] = await Promise.all([
-    callServerAction(PROFILE_ACTION, steam64),
-    callServerAction(SESSIONS_ACTION, steam64),
-  ]);
+  let profileAction = actionCache.profile;
+  let sessionsAction = actionCache.sessions;
+
+  try {
+    const [profile, sessionData] = await Promise.all([
+      callServerAction(profileAction, steam64),
+      callServerAction(sessionsAction, steam64),
+    ]);
+    return buildLookupPayload(profile, sessionData, steam64);
+  } catch (error) {
+    if (error?.statusCode === 404 || error?.code === "SquadBrowserHttpError") {
+      const freshActions = await discoverActionsFromUpstream();
+      if (freshActions.profile !== profileAction || freshActions.sessions !== sessionsAction) {
+        const [profile, sessionData] = await Promise.all([
+          callServerAction(freshActions.profile, steam64),
+          callServerAction(freshActions.sessions, steam64),
+        ]);
+        return buildLookupPayload(profile, sessionData, steam64);
+      }
+    }
+    throw error;
+  }
+}
+
+function buildLookupPayload(profile, sessionData, steam64) {
   return {
     ok: true,
     source: "SquadBrowser",
