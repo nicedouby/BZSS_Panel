@@ -53,6 +53,8 @@ export interface BzssCoreMainZoneInfo {
 }
 
 export interface BzssCoreVehicleInfo {
+  /** Stable synthetic identity for anonymous ID:-1 telemetry tracks. */
+  trackId?: number;
   frameIndex: number;
   driverPlayerId: number | null;
   occupied: boolean;
