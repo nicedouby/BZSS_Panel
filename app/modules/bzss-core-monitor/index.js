@@ -16,7 +16,10 @@ const BZSS_CORE_VEHICLE_CHUNK_EVENT_NAME = "On_BzssCoreVehicleChunk";
 const BZSS_CORE_BROADCAST_INTERVAL_MS = 200;
 // Keep partial round-robin chunks long enough for a complete vehicle pass,
 // including busy servers where LogPost/UDP delivery may be briefly delayed.
-const VEHICLE_CHUNK_STALE_MS = 10_000;
+// Chunks are emitted in small rotating batches (currently as few as four
+// vehicles). Keep a track through a full slow pass so missing batches do not
+// make markers blink out between updates.
+const VEHICLE_CHUNK_STALE_MS = 60_000;
 const VEHICLE_CHUNK_MATCH_MAX_DISTANCE_CM = 25_000;
 const SCOREBOARD_FIELDS = [
   ["dataLives", "Data lives"],
@@ -2341,6 +2344,10 @@ function mergeVehicleChunk(currentVehicles, incomingVehicles, observedAt) {
       || observedAtMs - seenAtMs <= VEHICLE_CHUNK_STALE_MS;
   });
   const matchedIndexes = new Set();
+  let nextTrackId = active.reduce(
+    (highest, vehicle) => Math.max(highest, Number(vehicle?.trackId) || 0),
+    0,
+  ) + 1;
 
   for (const incoming of Array.isArray(incomingVehicles) ? incomingVehicles : []) {
     let bestIndex = -1;
@@ -2376,11 +2383,17 @@ function mergeVehicleChunk(currentVehicles, incomingVehicles, observedAt) {
       active[bestIndex] = {
         ...active[bestIndex],
         ...incoming,
+        // ID:-1 payloads have no engine identity. Preserve this synthetic ID
+        // across batches so the UI keeps one DOM marker and one pinned panel.
+        trackId: active[bestIndex]?.trackId ?? nextTrackId++,
         frameIndex: active[bestIndex]?.frameIndex ?? incoming?.frameIndex ?? null,
       };
       matchedIndexes.add(bestIndex);
     } else {
-      active.push(incoming);
+      active.push({
+        ...incoming,
+        trackId: nextTrackId++,
+      });
       matchedIndexes.add(active.length - 1);
     }
   }
