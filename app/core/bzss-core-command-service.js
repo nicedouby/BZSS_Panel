@@ -10,6 +10,7 @@ const ALLOWED_DIRECTIVES = new Set([
   "SetFobResourceRegeneration",
   "SetAutomaticHeal",
   "SetAutomaticHealValue",
+  "EnableLocalVOIP",
   "CreateVehicle",
   "AdminTrack",
   "RemoveAdminTrack",
@@ -164,6 +165,9 @@ export class BzssCoreCommandService {
     if (/\r|\n/.test(text)) return invalid("InvalidBzssCoreParameter", "Parameter must be a single line.");
     if (normalizedDirective === "SetAutomaticHeal" && !/^[01]$/.test(text)) {
       return invalid("InvalidAutomaticHealParameter", "SetAutomaticHeal only accepts 1 (enabled) or 0 (disabled).");
+    }
+    if (normalizedDirective === "EnableLocalVOIP" && !/^[01]$/.test(text)) {
+      return invalid("InvalidEnableLocalVOIPParameter", "EnableLocalVOIP only accepts 1 (enabled) or 0 (disabled).");
     }
     if (normalizedDirective === "SetWeather" && !/^(?:[0-9]|1[0-2]),\d+$/.test(text)) {
       return invalid("InvalidWeatherParameter", "SetWeather requires WeatherIndex 0-12 and a non-negative transition in seconds.");
