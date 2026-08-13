@@ -59,8 +59,8 @@ def is_bzss_core_vehicle_line(line: str) -> bool:
     # or reorders optional fields, silently treating it as generic raw output
     # makes the line disappear behind contains/rate-limit filters.
     vehicle_candidate = bool(
-        re.search(r"\\{[^{}\\r\\n]*\\b(?:ID|DriverID|DriverPlayerID)\\s*[:=]", source, re.IGNORECASE)
-        and re.search(r"(?:^|[,;{\\s])(?:VT|VehicleType)\\s*[:=]", source, re.IGNORECASE)
+        re.search(r"\{[^{}\r\n]*\b(?:ID|DriverID|DriverPlayerID)\s*[:=]", source, re.IGNORECASE)
+        and re.search(r"(?:^|[,;{\s])(?:VT|VehicleType)\s*[:=]", source, re.IGNORECASE)
     )
     return bool(
         BZSS_CORE_VEHICLE_FRAME_RE.search(source)
