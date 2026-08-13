@@ -1878,10 +1878,24 @@ export class WebServer {
         .map((id) => id.trim())
         .filter(Boolean);
       const items = {};
+      let playerTimeRows = [];
+      try {
+        playerTimeRows = await this.modules.playerDatabase?.listPlayersBySteamIDs?.(steamIDs) ?? [];
+      } catch {}
+
+      const playerTimeBySteamID = new Map(
+        playerTimeRows.map((row) => [String(row?.steam_id ?? row?.steamID ?? "").trim(), row]),
+      );
+
       await Promise.all(steamIDs.map(async (steamID) => {
         try {
-          const row = await this.modules.playtime.getBySteamID(steamID);
-          if (row) items[steamID] = normalizePlaytimeRow(row);
+          const [row, playerTimeRow] = await Promise.all([
+            this.modules.playtime.getBySteamID(steamID),
+            Promise.resolve(playerTimeBySteamID.get(steamID) ?? null),
+          ]);
+          if (row || playerTimeRow) {
+            items[steamID] = normalizePlaytimeRow(row ?? playerTimeRow, playerTimeRow);
+          }
         } catch {}
       }));
       return this.json(res, 200, { items });
@@ -6429,8 +6443,12 @@ function parseOptionalDateMs(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizePlaytimeRow(row) {
+function normalizePlaytimeRow(row, playerTimeRow = null) {
   const steamSeconds = Number(row?.steam_game_seconds ?? row?.steamGameSeconds ?? row?.steam_seconds ?? row?.steamSeconds ?? row?.game_seconds ?? row?.gameSeconds ?? 0);
+  const serverSecondsValue = Number(playerTimeRow?.server_seconds ?? playerTimeRow?.serverSeconds ?? row?.server_seconds ?? row?.serverSeconds ?? 0);
+  const warmupSecondsValue = Number(playerTimeRow?.warmup_seconds ?? playerTimeRow?.warmupSeconds ?? row?.warmup_seconds ?? row?.warmupSeconds ?? 0);
+  const serverSeconds = Number.isFinite(serverSecondsValue) ? Math.max(0, Math.floor(serverSecondsValue)) : 0;
+  const warmupSeconds = Number.isFinite(warmupSecondsValue) ? Math.max(0, Math.floor(warmupSecondsValue)) : 0;
   const overrideValue = row?.game_seconds_override ?? row?.gameSecondsOverride;
   const normalizedOverride = overrideValue == null || String(overrideValue).trim() === ""
     ? null
@@ -6450,10 +6468,12 @@ function normalizePlaytimeRow(row) {
     gameSecondsOverride: safeOverrideSeconds,
     gameHours: Number((safeSeconds / 3600).toFixed(2)),
     steamGameHours: Number((safeSteamSeconds / 3600).toFixed(2)),
+    serverSeconds,
+    warmupSeconds,
     fetchedAt: Number(row?.fetched_at ?? row?.fetchedAt ?? 0) || null,
     lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
-    steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
-    steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? null,
+    steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? playerTimeRow?.steam_avatar ?? playerTimeRow?.steamAvatar ?? null,
+    steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? playerTimeRow?.steam_avatar ?? playerTimeRow?.steamAvatar ?? null,
   };
 }
 
