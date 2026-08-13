@@ -2689,7 +2689,9 @@ const vehicleMarkers = computed<VehicleMarker[]>(() => {
         : ["当前无人乘坐"]),
     ];
     markers.push({
-      id: `runtime-vehicle:${normalizedTeamId ?? 0}:${vehicleType}:${index}`,
+      id: `runtime-vehicle:${Number(vehicle?.trackId) > 0
+        ? Number(vehicle.trackId)
+        : `${normalizedTeamId ?? 0}:${vehicleType}:${index}`}`,
       teamId: normalizedTeamId,
       vehicleType,
       mapX: project(x, bounds.minX, bounds.maxX),
