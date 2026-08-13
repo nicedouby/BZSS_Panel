@@ -20,6 +20,12 @@
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('automatic-heal')">
           Automatic Heal
         </button>
+        <button type="button" class="bzss-core-item" role="menuitem" :disabled="busy" @click="setLocalVoip(true)">
+          Local VOIP · Enable
+        </button>
+        <button type="button" class="bzss-core-item" role="menuitem" :disabled="busy" @click="setLocalVoip(false)">
+          Local VOIP · Disable
+        </button>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('time')">
           Time
         </button>
@@ -745,6 +751,41 @@ async function submitForbRessCommand() {
     ui.pushToast({
       title: t("common.error"),
       message: error?.message || "FOB resource regeneration failed.",
+      tone: "error",
+      durationMs: 7000,
+    });
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function setLocalVoip(enabled: boolean) {
+  if (busy.value) return;
+  closeMenu();
+  busy.value = true;
+  const command = `EnableLocalVOIP:${enabled ? "1" : "0"}`;
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "EnableLocalVOIP",
+      parameter: enabled ? "1" : "0",
+    });
+    if (!result.ok) {
+      throw new Error(result.message || `${command} failed.`);
+    }
+    const output = [result.stdout, result.stderr]
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean)
+      .join(" / ");
+    ui.pushToast({
+      title: "Local VOIP updated",
+      message: `${enabled ? "Enabled" : "Disabled"}.${output ? ` ${output}` : ""}`,
+      tone: "ok",
+      durationMs: 4200,
+    });
+  } catch (error: any) {
+    ui.pushToast({
+      title: t("common.error"),
+      message: error?.message || `${command} failed.`,
       tone: "error",
       durationMs: 7000,
     });
