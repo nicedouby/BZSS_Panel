@@ -487,6 +487,20 @@ function testMonitorState() {
     .sort((left, right) => left.position.x - right.position.x);
   assert.deepEqual(movedIfvs.map((vehicle) => vehicle.position.x), [1100, 10100]);
   assert.equal(movedIfvs[0].healthPercent, 80);
+  const stableIfvTrackIds = movedIfvs.map((vehicle) => vehicle.trackId);
+  assert.equal(stableIfvTrackIds.every((trackId) => Number.isInteger(trackId) && trackId > 0), true);
+
+  // A later small batch can arrive in a different order. Its stable tracking
+  // IDs must remain attached to the same physical IFVs, rather than the
+  // current four-row frame indexes that make tactical-map markers flicker.
+  const reorderedMovedVehicleChunk = "PIE: Error: "
+    + "{ID:-1,VT:IFV,H:(1250/1250),,P:102,100,0,96,S:10,T:1,PS:}"
+    + "{ID:-1,VT:IFV,H:(1000/1250),,P:12,10,0,6,S:20,T:1,PS:}";
+  assert.equal(module.api.ingestLogLine(reorderedMovedVehicleChunk).ok, true);
+  const stableIfvsAfterReorder = module.api.getVehicles()
+    .filter((vehicle) => vehicle.vehicleType === "IFV")
+    .sort((left, right) => left.position.x - right.position.x);
+  assert.deepEqual(stableIfvsAfterReorder.map((vehicle) => vehicle.trackId), stableIfvTrackIds);
 
   // A legacy empty VRI frame may still be emitted while the new chunk stream
   // is active. It must not erase the partial round-robin snapshot.
