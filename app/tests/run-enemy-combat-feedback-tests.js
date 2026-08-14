@@ -46,6 +46,7 @@ function event(overrides = {}) {
       serverId: "BZSS_Main",
       time: "2026-08-13T00:00:00.000Z",
       type: "wound",
+      damage: 25,
       attackerName: "Attacker",
       attackerSteam64ID: "steam-attacker",
       attackerEOSID: "eos-attacker",
@@ -67,7 +68,15 @@ async function send(overrides, harnessOptions) {
   return harness;
 }
 
-let harness = await send({});
+let harness = await send({ type: "damage", damage: 25.125 });
+assert.equal(harness.warnings.length, 1);
+assert.match(harness.warnings[0].message, /你对 Victim 造成了 25\.13 点伤害/);
+assert.equal(harness.warnings[0].targetName, "Attacker");
+assert.equal(harness.warnings[0].targetPlayerId, "42");
+assert.equal(harness.warnings[0].requireTargetPlayerId, true);
+assert.equal(harness.warnings[0].reason, "enemy_combat_feedback_damage");
+
+harness = await send({});
 assert.equal(harness.warnings.length, 1);
 assert.match(harness.warnings[0].message, /你击倒了 Victim/);
 assert.equal(harness.warnings[0].targetPlayerId, "42");
@@ -78,6 +87,9 @@ assert.equal(harness.warnings.length, 1);
 assert.match(harness.warnings[0].message, /你击杀了 Victim/);
 
 for (const record of [
+  { type: "damage", damage: 0 },
+  { type: "damage", damage: "invalid" },
+  { type: "damage", attackerTeamID: "1", victimTeamID: "1" },
   { attackerTeamID: "1", victimTeamID: "1" },
   { type: "death", attackerTeamID: "1", victimTeamID: "1" },
   { isFriendlyFire: true },
@@ -93,16 +105,18 @@ for (const record of [
 }
 
 harness = createHarness();
-await harness.plugin.api.handleCombatEvent(event());
-await harness.plugin.api.handleCombatEvent(event());
+await harness.plugin.api.handleCombatEvent(event({ type: "damage" }));
+await harness.plugin.api.handleCombatEvent(event({ type: "damage" }));
 assert.equal(harness.warnings.length, 1);
 
-harness = await send({}, { attacker: { name: "Attacker", steamID: "steam-attacker" } });
+harness = await send({ type: "damage" }, { attacker: { name: "Attacker", steamID: "steam-attacker" } });
 assert.equal(harness.warnings.length, 0);
 
-harness = await send({ type: "wound" }, { settings: { "plugins.enemyCombatFeedback": { woundEnabled: false, deathEnabled: true } } });
+harness = await send({ type: "damage" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: false, woundEnabled: true, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 0);
-harness = await send({ type: "death" }, { settings: { "plugins.enemyCombatFeedback": { woundEnabled: false, deathEnabled: true } } });
+harness = await send({ type: "wound" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: false, deathEnabled: true } } });
+assert.equal(harness.warnings.length, 0);
+harness = await send({ type: "death" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: false, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 1);
 
 harness = await send({}, { settings: { "plugins.enemyCombatFeedback": { enabled: false } } });
