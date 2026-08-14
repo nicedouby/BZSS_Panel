@@ -605,14 +605,27 @@ function normalizeServerKey(value = "") {
     limit: 5000,
     offset: 0,
   }) ?? [];
+  const replay = modulesRef?.killRecords?.getCombatRecords?.({
+    serverId,
+    source: "replay",
+    type: "all",
+    limit: 5000,
+    offset: 0,
+  })?.records ?? [];
 
   let events;
   if (mode === "raw") {
     events = raw;
   } else if (mode === "processed") {
     events = processed;
+  } else if (mode === "replay") {
+    events = replay;
   } else {
-    events = mergeCombatEventLists(raw, processed);
+    // Cleaned events are the authoritative live stream. Raw events are only
+    // the fallback when the clean layer has not produced anything yet.
+    events = processed.length
+      ? mergeCombatEventLists([], processed, replay)
+      : mergeCombatEventLists(raw, [], replay);
   }
 
   const playerKeys = [
@@ -656,11 +669,11 @@ function normalizeServerKey(value = "") {
   return events.slice().reverse().slice(offset, offset + limit);
 }
 
-function mergeCombatEventLists(rawEvents = [], processedEvents = []) {
+function mergeCombatEventLists(rawEvents = [], processedEvents = [], replayEvents = []) {
   const merged = [];
   const seen = new Set();
 
-  for (const event of [...rawEvents, ...processedEvents]) {
+  for (const event of [...rawEvents, ...processedEvents, ...replayEvents]) {
     const key = buildCombatEventDedupKey(event);
     if (key && seen.has(key)) continue;
     if (key) seen.add(key);
@@ -671,6 +684,8 @@ function mergeCombatEventLists(rawEvents = [], processedEvents = []) {
 }
 
 function buildCombatEventDedupKey(event = {}) {
+  const rawLog = String(event?.rawLog ?? event?.raw?.rawLog ?? "").trim();
+  if (rawLog) return `rawLog|${rawLog}`;
   const sourceEventId = String(
     event?.raw?.sourceEventId
     ?? event?.sourceEventId
@@ -736,6 +751,8 @@ function matchesSearch(event, search) {
     event?.eventName,
     event?.sourceModule,
     event?.sourceLayer,
+    event?.sourceMode,
+    event?.rawLog,
     ...(Array.isArray(event?.tags) ? event.tags : []),
   ]
     .map((item) => String(item ?? "").toLowerCase())
