@@ -164,6 +164,9 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     if (!runtimeConfig.enabled || !isSubscribed()) return skip("disabled");
 
     const record = getRecord(event);
+    if (event?.isReplay === true || record?.isReplay === true || event?.canTriggerActions === false || record?.canTriggerActions === false) {
+      return skip("replay_event");
+    }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
     if (type === "damage" && !runtimeConfig.damageEnabled) return skip("damage_disabled");
