@@ -10,6 +10,7 @@ import { dedupeKillRecords } from "./kill-record-dedupe.js";
 
 const MODULE_ID = "module.killRecords";
 const WORKER_PATH = new URL("../../workers/kill-replay-worker.js", import.meta.url);
+const REPLAY_PARSER_VERSION = 2;
 
 export function createKillRecordsModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({ moduleId: MODULE_ID, source: MODULE_ID, channel: "module" }) ?? core.logger;
@@ -56,7 +57,8 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
 
     const sourceFileId = makeFileId(stat);
     const previous = store.getStats().state ?? {};
-    const canResume = previous.sourcePath === sourcePath
+    const canResume = Number(previous.parserVersion) === REPLAY_PARSER_VERSION
+      && previous.sourcePath === sourcePath
       && previous.sourceFileId === sourceFileId
       && Number(previous.completedOffset) >= 0
       && Number(previous.completedOffset) <= stat.size;
@@ -66,6 +68,7 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
     replayStatus = {
       ...createReplayStatus(),
       status: "starting",
+      parserVersion: REPLAY_PARSER_VERSION,
       sourcePath,
       sourceFileId,
       startOffset,
@@ -337,6 +340,7 @@ async function resolveSourcePath(moduleConfig) {
 function createReplayStatus() {
   return {
     schema: "kill-replay-state.v1",
+    parserVersion: REPLAY_PARSER_VERSION,
     status: "idle",
     progress: 0,
     scannedBytes: 0,
