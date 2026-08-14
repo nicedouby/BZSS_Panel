@@ -145,10 +145,25 @@ async function testDedupesAndUnsubscribes() {
   assert.equal(listeners.get("module.combatManager:COMBAT_EVENT_PROCESSED").size, 0);
 }
 
+async function testReplayDamageNeverWarnsPlayers() {
+  const { plugin, warnings } = createHarness();
+  await plugin.start();
+  await plugin.api.handleCombatEvent({
+    eventId: "replay-damage",
+    isReplay: true,
+    canTriggerActions: false,
+    record: damageRecord({ id: "replay-damage", isReplay: true, canTriggerActions: false }),
+  });
+  assert.equal(warnings.length, 0);
+  assert.equal(plugin.api.getState().lastSkipReason, "replay_event");
+  await plugin.stop();
+}
+
 await testStandardDamageAndWeaponCompaction();
 await testFriendlyFallbackBotAndEmptyWeapon();
 await testExplosiveDamageWithoutResolvedAttackerStillDisplays();
 await testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage();
 await testDedupesAndUnsubscribes();
+await testReplayDamageNeverWarnsPlayers();
 
 console.log("victim damage display tests passed");
