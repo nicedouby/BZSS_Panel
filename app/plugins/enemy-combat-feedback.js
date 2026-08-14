@@ -9,7 +9,7 @@ const MAX_HANDLED_EVENTS = 2_000;
 const DEFAULT_CONFIG = {
   enabled: true,
   damageEnabled: false,
-  woundEnabled: true,
+  woundEnabled: false,
   deathEnabled: true,
   ignoreGiveUp: true,
   requirePlayerId: true,
@@ -169,12 +169,11 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
-    // 全局策略：彻底关闭实时伤害显示。即使配置误设 damageEnabled=true，
-    // damage 事件也永远不会向攻击者发送 AdminWarn；击倒和击杀反馈保持独立。
+    // 全局策略：永久关闭普通伤害与击倒的实时警告。即使旧配置误设为 true，
+    // damage / wound 事件也不会发送 AdminWarn；只有确认的敌方 death 可反馈。
     if (type === "damage") return skip("damage_display_disabled");
-    if (type === "wound" && !runtimeConfig.woundEnabled) return skip("wound_disabled");
+    if (type === "wound") return skip("wound_display_disabled");
     if (type === "death" && !runtimeConfig.deathEnabled) return skip("death_disabled");
-    if (type === "damage" && !(Number(record?.damage) > 0)) return skip("invalid_damage");
     if (hasFriendlyFire(record)) return skip("friendly_fire");
     if (sameIdentity(record)) return skip("self_damage");
     if (!isConfirmedEnemy(record)) return skip("team_unknown");
@@ -190,11 +189,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     const playerID = playerIdOf(attacker);
     if (runtimeConfig.requirePlayerId && !playerID) return skip("player_id_missing");
 
-    const template = type === "damage"
-      ? runtimeConfig.damageMessage
-      : type === "wound"
-        ? runtimeConfig.woundMessage
-        : runtimeConfig.deathMessage;
+    const template = runtimeConfig.deathMessage;
     const message = formatMessage(template, record);
     const reason = `enemy_combat_feedback_${type}`;
 
@@ -218,9 +213,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
         return { success: false, error: state.lastError };
       }
 
-      if (type === "damage") state.totalDamageFeedback += 1;
-      else if (type === "wound") state.totalWoundFeedback += 1;
-      else state.totalDeathFeedback += 1;
+      state.totalDeathFeedback += 1;
       state.lastFeedbackAt = new Date().toISOString();
       logger?.info?.(`[EnemyCombatFeedback] ${type} attacker=${normalizeText(attacker.name)} victim=${safeVictimName(record)} playerID=${playerID}`);
       return result;
@@ -241,8 +234,8 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "敌方战斗反馈",
       kind: "plugin",
-      version: "0.3.0",
-      description: "仅在击倒或击杀敌方玩家时向攻击者发送私人反馈；实时伤害显示永久关闭。",
+      version: "0.4.0",
+      description: "仅在击杀敌方玩家时向攻击者发送私人反馈；普通伤害与击倒显示永久关闭。",
     },
     api: { getState, handleCombatEvent },
     async start() {

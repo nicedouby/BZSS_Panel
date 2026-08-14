@@ -903,7 +903,7 @@
     "enemyCombatFeedback": {
       "enabled": true,
       "damageEnabled": false,
-      "woundEnabled": true,
+      "woundEnabled": false,
       "deathEnabled": true
     },
     "victimDamageDisplay": {
