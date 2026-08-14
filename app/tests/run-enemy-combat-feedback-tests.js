@@ -122,6 +122,9 @@ assert.equal(harness.warnings.length, 1);
 harness = await send({}, { settings: { "plugins.enemyCombatFeedback": { enabled: false } } });
 assert.equal(harness.warnings.length, 0);
 
+harness = await send({ type: "damage", isReplay: true, canTriggerActions: false });
+assert.equal(harness.warnings.length, 0);
+
 harness = createHarness();
 await harness.plugin.start();
 assert.equal(harness.moduleHandlers.has("module.combatState:combatEvent"), true);
