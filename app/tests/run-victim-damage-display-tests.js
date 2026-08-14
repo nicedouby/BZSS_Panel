@@ -22,8 +22,8 @@ function createHarness(pluginConfig = {}) {
         if (identity.steam64ID === "steam-attacker" || identity.eosID === "eos-attacker" || identity.name === "Attacker") {
           return { name: "Attacker", steamID: "steam-attacker", eosID: "eos-attacker", playerID: "42" };
         }
-        if (identity.steam64ID === "steam-victim" || identity.eosID === "eos-victim" || identity.name === "Victim") {
-          return { name: "Victim", steamID: "steam-victim", eosID: "eos-victim", playerID: "84" };
+        if (identity.steam64ID === "steam-victim" || identity.eosID === "eos-victim" || identity.controllerID === "controller-victim" || identity.name === "Victim") {
+          return { name: "Victim", steamID: "steam-victim", eosID: "eos-victim", controllerID: "controller-victim", playerID: "84" };
         }
         return null;
       },
@@ -66,6 +66,7 @@ async function testStandardDamageAndWeaponCompaction() {
   const victimWarning = warnings.find((warning) => warning.reason === "victim_damage_display");
   const attackerWarning = warnings.find((warning) => warning.reason === "attacker_damage_display");
   assert.equal(victimWarning.targetPlayerId, "84");
+  assert.equal(victimWarning.requireTargetPlayerId, true);
   assert.match(victimWarning.message, /来源：Attacker/);
   assert.match(victimWarning.message, /武器：M4A1突击步枪/);
   assert.equal(attackerWarning.targetPlayerId, "42");
@@ -74,6 +75,38 @@ async function testStandardDamageAndWeaponCompaction() {
   assert.match(attackerWarning.message, /造成 25 点伤害/);
   assert.match(attackerWarning.message, /目标：Victim/);
   assert.match(attackerWarning.message, /武器：M4A1突击步枪/);
+  await plugin.stop();
+}
+
+async function testVictimControllerIdResolvesListPlayersIdAndSendsFirst() {
+  const { plugin, warnings } = createHarness();
+  await plugin.start();
+  await plugin.api.handleCombatEvent({
+    eventId: "controller-victim",
+    record: damageRecord({
+      id: "controller-victim",
+      victimName: "",
+      victimSteam64ID: "",
+      victimEOSID: "",
+      victimControllerID: "controller-victim",
+      victim: {
+        resolved: true,
+        name: "",
+        steam64ID: "",
+        eosID: "",
+        controllerID: "controller-victim",
+        playerId: "",
+      },
+    }),
+  });
+
+  assert.equal(warnings.length, 2);
+  assert.equal(warnings[0].reason, "victim_damage_display");
+  assert.equal(warnings[0].targetPlayerId, "84");
+  assert.equal(warnings[0].requireTargetPlayerId, true);
+  assert.match(warnings[0].message, /受到 25 点伤害/);
+  assert.equal(warnings[1].reason, "attacker_damage_display");
+  assert.equal(warnings[1].targetPlayerId, "42");
   await plugin.stop();
 }
 
@@ -160,6 +193,7 @@ async function testReplayDamageNeverWarnsPlayers() {
 }
 
 await testStandardDamageAndWeaponCompaction();
+await testVictimControllerIdResolvesListPlayersIdAndSendsFirst();
 await testFriendlyFallbackBotAndEmptyWeapon();
 await testExplosiveDamageWithoutResolvedAttackerStillDisplays();
 await testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage();
