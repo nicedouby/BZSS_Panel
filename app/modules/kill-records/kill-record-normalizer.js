@@ -3,10 +3,77 @@
 import crypto from "node:crypto";
 
 const DEATH_MARKER = "Die(): Player:";
+const WOUND_MARKER = "Wound(): Player:";
 
 export function isLikelyDeathLine(line) {
   const text = String(line ?? "");
   return text.includes(DEATH_MARKER) && text.includes("KillingDamage=") && text.includes("caused by");
+}
+
+export function isLikelyCombatLine(line) {
+  const text = String(line ?? "");
+  if (text.includes("SQVehicle::OnTakeDamage") || text.includes("SQVehicle::TakeDamage")) return false;
+  if (!text.includes("caused by")) return false;
+  return isLikelyDeathLine(text)
+    || (text.includes(WOUND_MARKER) && text.includes("KillingDamage="))
+    || (text.includes("Player:") && text.includes("ActualDamage=") && text.includes(" from "));
+}
+
+export function parseReplayCombatLine(line, context = {}) {
+  const rawLog = String(line ?? "").replace(/[\r\n]+$/, "");
+  if (!isLikelyCombatLine(rawLog)) return null;
+  if (isLikelyDeathLine(rawLog)) return parseReplayKillLine(rawLog, context);
+
+  const type = rawLog.includes(WOUND_MARKER) ? "wound" : "damage";
+  const damageField = type === "wound" ? "KillingDamage" : "ActualDamage";
+  const victimPattern = type === "wound"
+    ? /Wound\(\): Player:\s*(.*?)\s+KillingDamage=/i
+    : /Player:\s*(.*?)\s+ActualDamage=/i;
+  const victimName = capture(rawLog, victimPattern);
+  const damage = capture(rawLog, new RegExp(`${damageField}=([^\\s]+)`, "i"));
+  const fromObject = capture(rawLog, /\sfrom\s+(.*?)\s*\(Online IDs:/i)
+    || capture(rawLog, /\sfrom\s+(.*?)\s+caused by\s/i);
+  const causedBy = capture(rawLog, /\scaused by\s+(.+?)\s*$/i);
+  const eosID = capture(rawLog, /\bEOS:\s*([^\s|)]+)/i);
+  const steam64ID = capture(rawLog, /\bsteam:\s*([^\s|)]+)/i);
+  const controllerID = capture(rawLog, /(?:Player\s+)?Cont(?:r)?oller ID:\s*([^\s|)]+)/i)
+    || (/PlayerController/i.test(fromObject) ? fromObject : "");
+  const attackerName = normalizeAttackerName(fromObject);
+  const sourceOffset = Math.max(0, Number(context.sourceOffset) || 0);
+  const sourceFileId = String(context.sourceFileId ?? "").trim();
+  const sourceFile = String(context.sourceFile ?? "").trim();
+  const logTime = extractLogTime(rawLog);
+
+  return normalizeReplayRecord({
+    id: buildReplayCombatId({ type, sourceFileId, sourceFile, sourceOffset, rawLog }),
+    type,
+    serverId: String(context.serverId ?? ""),
+    time: logTimeToIso(logTime) || String(context.time ?? new Date().toISOString()),
+    logTime,
+    attacker: {
+      name: attackerName,
+      steam64ID: normalizeOnlineId(steam64ID),
+      eosID: normalizeOnlineId(eosID),
+      controllerID,
+      teamID: null,
+      squadID: null,
+    },
+    victim: { name: victimName, steam64ID: "", eosID: "", controllerID: "", teamID: null, squadID: null },
+    weapon: causedBy,
+    damage: parseOptionalNumber(damage),
+    isTeamKill: false,
+    relation: { known: false, sameTeam: false, reason: "team_identity_unavailable" },
+    parse: {
+      confidence: victimName && damage ? (attackerName || controllerID || steam64ID || eosID ? "High" : "Medium") : "Low",
+      identityConfidence: attackerName || controllerID || steam64ID || eosID ? "Medium" : "Low",
+      parseConfidence: victimName && damage ? "High" : "Low",
+      status: victimName && damage ? "Full" : "Partial",
+    },
+    sourceFile,
+    sourceFileId,
+    sourceOffset,
+    rawLog,
+  });
 }
 
 export function parseReplayKillLine(line, context = {}) {
@@ -35,6 +102,7 @@ export function parseReplayKillLine(line, context = {}) {
 
   return normalizeReplayRecord({
     id,
+    type: "kill",
     serverId: String(context.serverId ?? ""),
     time: logTimeToIso(logTime) || String(context.time ?? new Date().toISOString()),
     logTime,
@@ -80,6 +148,7 @@ export function normalizeReplayRecord(input = {}) {
   return {
     ...input,
     id: String(input.id ?? ""),
+    type: normalizeCombatType(input.type ?? "kill"),
     source: "replay",
     sourceMode: "replay",
     canTriggerActions: false,
@@ -111,6 +180,10 @@ export function normalizeReplayRecord(input = {}) {
 }
 
 export function normalizeLiveKill(record = {}) {
+  return normalizeLiveCombat(record);
+}
+
+export function normalizeLiveCombat(record = {}) {
   const attacker = record.attacker ?? {};
   const victim = record.victim ?? {};
   const sourceEventId = String(record.raw?.sourceEventId ?? record.sourceEventId ?? record.id ?? "");
@@ -118,6 +191,7 @@ export function normalizeLiveKill(record = {}) {
   const sourceFileId = String(record.sourceFileId ?? record.raw?.sourceFileId ?? "");
   return {
     id: sourceEventId ? `live:${sourceEventId}` : `live:${hashText(JSON.stringify(record))}`,
+    type: normalizeCombatType(record.type ?? "kill"),
     source: "live",
     sourceMode: "live",
     canTriggerActions: true,
@@ -168,6 +242,21 @@ export function buildReplayKillId({ sourceFileId = "", sourceFile = "", sourceOf
   const identity = String(sourceFileId || hashText(String(sourceFile || "unknown-source")));
   if (Number.isFinite(Number(sourceOffset))) return `kill:${identity}:${Math.max(0, Number(sourceOffset) || 0)}`;
   return `kill:${hashText(String(rawLog ?? ""))}`;
+}
+
+export function buildReplayCombatId({ type = "damage", sourceFileId = "", sourceFile = "", sourceOffset = 0, rawLog = "" } = {}) {
+  const normalizedType = normalizeCombatType(type);
+  const identity = String(sourceFileId || hashText(String(sourceFile || "unknown-source")));
+  if (Number.isFinite(Number(sourceOffset))) return `combat:${normalizedType}:${identity}:${Math.max(0, Number(sourceOffset) || 0)}`;
+  return `combat:${normalizedType}:${hashText(String(rawLog ?? ""))}`;
+}
+
+function normalizeCombatType(value) {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (text === "damaged") return "damage";
+  if (text === "wounded") return "wound";
+  if (["death", "died", "dead", "tk"].includes(text)) return "kill";
+  return ["damage", "wound", "kill"].includes(text) ? text : "kill";
 }
 
 function normalizePlayer(value = {}) {
