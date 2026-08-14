@@ -17,6 +17,17 @@ function createHarness(pluginConfig = {}) {
     pluginSubscriptions: { isSubscribed: () => true },
   };
   const modules = {
+    playerState: {
+      findPlayer(_serverId, identity = {}) {
+        if (identity.steam64ID === "steam-attacker" || identity.eosID === "eos-attacker" || identity.name === "Attacker") {
+          return { name: "Attacker", steamID: "steam-attacker", eosID: "eos-attacker", playerID: "42" };
+        }
+        if (identity.steam64ID === "steam-victim" || identity.eosID === "eos-victim" || identity.name === "Victim") {
+          return { name: "Victim", steamID: "steam-victim", eosID: "eos-victim", playerID: "84" };
+        }
+        return null;
+      },
+    },
     adminWarn: {
       async warnPlayer(request) {
         warnings.push(request);
@@ -39,8 +50,9 @@ function damageRecord(overrides = {}) {
     type: "damage",
     damage: 25,
     weapon: { raw: "BP-M4A1-C-123456789" },
-    attacker: { resolved: true, playerId: "attacker-id", name: "Attacker" },
-    victim: { resolved: true, playerId: "victim-id", name: "Victim" },
+    serverId: "BZSS_Main",
+    attacker: { resolved: true, steam64ID: "steam-attacker", eosID: "eos-attacker", name: "Attacker" },
+    victim: { resolved: true, steam64ID: "steam-victim", eosID: "eos-victim", name: "Victim" },
     relation: { isFriendlyFire: false },
     ...overrides,
   };
@@ -53,11 +65,12 @@ async function testStandardDamageAndWeaponCompaction() {
   assert.equal(warnings.length, 2);
   const victimWarning = warnings.find((warning) => warning.reason === "victim_damage_display");
   const attackerWarning = warnings.find((warning) => warning.reason === "attacker_damage_display");
-  assert.equal(victimWarning.targetPlayerId, "victim-id");
+  assert.equal(victimWarning.targetPlayerId, "84");
   assert.match(victimWarning.message, /来源：Attacker/);
   assert.match(victimWarning.message, /武器：M4A1突击步枪/);
-  assert.equal(attackerWarning.targetPlayerId, "attacker-id");
+  assert.equal(attackerWarning.targetPlayerId, "42");
   assert.equal(attackerWarning.targetName, "Attacker");
+  assert.equal(attackerWarning.requireTargetPlayerId, true);
   assert.match(attackerWarning.message, /造成 25 点伤害/);
   assert.match(attackerWarning.message, /目标：Victim/);
   assert.match(attackerWarning.message, /武器：M4A1突击步枪/);
