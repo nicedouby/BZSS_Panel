@@ -7,7 +7,7 @@
     "from_end": true,
     "reopen_on_truncate": true,
     "read_chunk_bytes": 1048576,
-    "max_recovery_bytes": 8388608,
+    "max_recovery_bytes": 0,
     "max_line_bytes": 1048576
   },
   "udp": {
@@ -62,7 +62,7 @@
   "raw_log_output": {
     "enabled": true,
     "source": "Squad.log",
-    "mode": "sampled",
+    "mode": "business_lossless",
     "max_per_second": 20,
     "only_preserved": false,
     "drop_blacklisted": true,

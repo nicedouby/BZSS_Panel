@@ -1,5 +1,6 @@
 /LogPost/ReceivedLogs
 /LogPost/LogPost
+/LogPost/dead-letter
 /MicePanel
 node_modules/
 web-client/dist/

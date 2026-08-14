@@ -19,7 +19,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "from_end": True,
         "reopen_on_truncate": True,
         "read_chunk_bytes": 1048576,
-        "max_recovery_bytes": 8388608,
+        "max_recovery_bytes": 0,
         "max_line_bytes": 1048576,
     },
 
@@ -67,6 +67,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "raw_log_output": {
         "enabled": False,
         "source": "Squad.log",
+        "mode": "business_lossless",
+        "max_per_second": 20,
     },
 
     "blacklist_contains": [

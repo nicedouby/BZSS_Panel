@@ -453,7 +453,10 @@
     "eventName": "On_RawLogLine",
     "pollIntervalMs": 250,
     "replayRecentLines": 120,
-    "fromEnd": true
+    "fromEnd": true,
+    "serverId": "BZSS_Main",
+    "checkpointPath": "./data/logpost-consumer/BZSS_Main.json",
+    "deadLetterDirectory": "./LogPost/dead-letter"
   },
   "steam": {
     "appId": 393380,
@@ -727,6 +730,14 @@
     },
     "killManage": {
       "enabled": true
+    },
+    "killRecords": {
+      "enabled": true,
+      "replayOnStart": true,
+      "storeDirectory": "./data/kill-records/BZSS_Main",
+      "logPostConfigPath": "./LogPost/config.json",
+      "readChunkBytes": 4194304,
+      "batchSize": 100
     },
     "combatClean": {
       "enabled": true,
