@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { createCombatManagerService, bindCombatManagerModules } from "../plugins/services/combat_manager_service.js";
 
-function createHarness({ combatStateEvents = [], combatCleanEvents = [], combatStateOverview = {}, combatCleanOverview = {}, combatStateClear = 0, combatCleanClear = 0, cacheDir = "data/combat-manager" } = {}) {
+function createHarness({ combatStateEvents = [], combatCleanEvents = [], replayEvents = [], combatStateOverview = {}, combatCleanOverview = {}, combatStateClear = 0, combatCleanClear = 0, cacheDir = "data/combat-manager" } = {}) {
   const moduleEvents = [];
   const moduleListeners = new Map();
   const core = {
@@ -61,6 +61,13 @@ function createHarness({ combatStateEvents = [], combatCleanEvents = [], combatS
       },
       clear() {
         return { ok: true, cleared: combatCleanClear };
+      },
+    },
+    killRecords: {
+      getCombatRecords(filter = {}) {
+        let records = replayEvents;
+        if (filter.serverId) records = records.filter((event) => event.serverId === filter.serverId);
+        return { total: records.length, records };
       },
     },
   };
@@ -165,6 +172,38 @@ async function testIgnoresCombatStateUpdatedDirectly() {
   await service.stop();
 }
 
+async function testIncludesReplayDamageWithoutEmittingEvents() {
+  const replayDamage = {
+    id: "combat:damage:file:10",
+    type: "damage",
+    serverId: "BZSS_Main",
+    time: "2026-05-09T09:00:00.000Z",
+    attacker: { name: "ReplayAttacker", steam64ID: "steam-a" },
+    victim: { name: "ReplayVictim" },
+    damage: 25,
+    weapon: "BP_Rifle_C",
+    source: "replay",
+    sourceMode: "replay",
+    isReplay: true,
+    canTriggerActions: false,
+    rawLog: "historical damage line",
+  };
+  const { service, moduleEvents } = createHarness({
+    combatCleanEvents: [{ id: "live-1", type: "damage", serverId: "BZSS_Main", time: "2026-05-09T10:00:00.000Z" }],
+    replayEvents: [replayDamage],
+  });
+
+  await service.start();
+  moduleEvents.splice(0);
+  const all = service.api.getEvents({ serverId: "BZSS_Main", type: "damage", limit: 20 });
+  assert.equal(all.length, 2);
+  assert.ok(all.some((event) => event.id === replayDamage.id && event.canTriggerActions === false));
+  const replayOnly = service.api.getEvents({ serverId: "BZSS_Main", type: "damage", mode: "replay", limit: 20 });
+  assert.equal(replayOnly.length, 1);
+  assert.equal(moduleEvents.length, 0);
+  await service.stop();
+}
+
 async function testSerializesCacheWrites() {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "combat-manager-cache-"));
   const { service } = createHarness({ cacheDir: tempDir });
@@ -189,6 +228,7 @@ async function testSerializesCacheWrites() {
 await testGetRecentKillsAndOverview();
 await testUsesCombatCleanAsPrimaryIngress();
 await testIgnoresCombatStateUpdatedDirectly();
+await testIncludesReplayDamageWithoutEmittingEvents();
 await testSerializesCacheWrites();
 
 console.log("combat manager tests passed");
