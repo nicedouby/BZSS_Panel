@@ -120,6 +120,29 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     };
   }
 
+  function resolveLiveIdentity(serverId, identity = {}) {
+    const playerState = modules?.playerState;
+    const player = playerState?.findPlayer?.(serverId, {
+      steam64ID: identity.steamId,
+      eosID: identity.eosId,
+      name: identity.name,
+    })
+      ?? playerState?.getPlayerBySteamID?.(serverId, identity.steamId)
+      ?? playerState?.getPlayerByEOSID?.(serverId, identity.eosId)
+      ?? playerState?.getPlayerByName?.(serverId, identity.name)
+      ?? null;
+    if (!player) return identity;
+    return {
+      ...identity,
+      name: identity.name || normalizeText(player.name),
+      displayName: identity.displayName || normalizeText(player.name),
+      playerId: normalizeText(player.playerID ?? player.playerId ?? identity.playerId),
+      steamId: identity.steamId || normalizeText(player.steamID ?? player.steamId ?? player.steam64ID),
+      eosId: identity.eosId || normalizeText(player.eosID ?? player.eosId),
+      resolved: true,
+    };
+  }
+
   function stableIdentity(identity = {}) {
     if (identity.playerId) return `player:${identity.playerId}`;
     if (identity.steamId) return `steam:${identity.steamId}`;
@@ -234,7 +257,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return `造成 ${formatDamage(damage)} 点${damageLabel}｜目标：${victimName}${weapon}`;
   }
 
-  async function sendDamageWarning(event, record, target, message, reason) {
+  async function sendDamageWarning(event, record, target, message, reason, requireTargetPlayerId = false) {
     const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
     if (typeof sender !== "function") throw new Error("adminWarn API unavailable");
     return sender.call(modules.adminWarn, {
@@ -242,6 +265,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       targetName: target.name || undefined,
       targetEosId: target.eosId || undefined,
       targetSteamId: target.steamId || undefined,
+      requireTargetPlayerId,
       message,
       reason,
       sourceModule: PLUGIN_ID,
@@ -260,9 +284,10 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     const damage = normalizeDamage(record?.damage);
     if (!(damage > 0)) { recordAudit(event, record, "intercepted", "invalid_damage"); return skip("invalid_damage"); }
 
-    const victim = resolveIdentity(record, "victim");
+    const serverId = normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId);
+    const victim = resolveLiveIdentity(serverId, resolveIdentity(record, "victim"));
     if (!victim.playerId && !victim.name) { recordAudit(event, record, "intercepted", "invalid_victim"); return skip("invalid_victim"); }
-    const attacker = resolveIdentity(record, "attacker");
+    const attacker = resolveLiveIdentity(serverId, resolveIdentity(record, "attacker"));
     const source = classifyAttackerSource(record, attacker, victim);
 
     const eventKey = buildEventKey(event, record, attacker, victim, damage);
@@ -272,13 +297,17 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       const victimMessage = buildVictimMessage(record, source, damage);
       const attackerMessage = buildAttackerMessage(record, victim, damage);
       const canWarnAttacker = runtimeConfig.showAttackerDamage && source.kind === "player"
-        && Boolean(attacker.playerId || attacker.name);
+        && /^\d+$/.test(attacker.playerId);
+      if (runtimeConfig.showAttackerDamage && source.kind === "player" && !canWarnAttacker) {
+        state.invalidAttackerSkipped += 1;
+        logger?.warn?.(`[VictimDamageDisplay] attacker warning skipped: numeric ListPlayers playerID unavailable attacker=${attacker.name || attacker.steamId || attacker.eosId || "unknown"}`);
+      }
       const [victimSettled, attackerSettled] = await Promise.allSettled([
         runtimeConfig.showVictimDamage
           ? sendDamageWarning(event, record, victim, victimMessage, "victim_damage_display")
           : Promise.resolve({ success: false, skipped: true, skipReason: "victim_display_disabled" }),
         canWarnAttacker
-          ? sendDamageWarning(event, record, attacker, attackerMessage, "attacker_damage_display")
+          ? sendDamageWarning(event, record, attacker, attackerMessage, "attacker_damage_display", true)
           : Promise.resolve({ success: false, skipped: true, skipReason: "attacker_unavailable" }),
       ]);
       const victimResult = settledResult(victimSettled);
@@ -389,4 +418,3 @@ function addAlias(map, alias, label) {
 }
 
 export default { createPlugin };
-
