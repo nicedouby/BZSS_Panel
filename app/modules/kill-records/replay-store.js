@@ -83,8 +83,9 @@ export class ReplayKillStore {
     const query = String(search ?? "").trim().toLowerCase();
     let result = this.records;
     if (serverId) result = result.filter((record) => String(record.serverId ?? "") === String(serverId));
-    if (type === "tk") result = result.filter((record) => record.isTeamKill);
-    else if (type === "kill") result = result.filter((record) => !record.isTeamKill);
+    if (type === "tk") result = result.filter((record) => record.type === "kill" && record.isTeamKill);
+    else if (type === "kill") result = result.filter((record) => record.type === "kill" && !record.isTeamKill);
+    else if (type === "damage" || type === "wound") result = result.filter((record) => record.type === type);
     if (query) result = result.filter((record) => matchesSearch(record, query));
     const start = Math.max(0, Number(offset) || 0);
     const size = Math.max(1, Math.min(1000, Number(limit) || 200));
@@ -101,6 +102,9 @@ export class ReplayKillStore {
   getStats() {
     return {
       count: this.records.length,
+      damage: this.records.filter((record) => record.type === "damage").length,
+      wound: this.records.filter((record) => record.type === "wound").length,
+      kill: this.records.filter((record) => record.type === "kill").length,
       teamKills: this.records.filter((record) => record.isTeamKill).length,
       state: clone(this.state),
     };
