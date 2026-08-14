@@ -279,6 +279,10 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     state.received += 1;
     state.lastReceivedAt = new Date().toISOString();
     const record = resolveRecord(event);
+    if (event?.isReplay === true || record?.isReplay === true || event?.canTriggerActions === false || record?.canTriggerActions === false) {
+      recordAudit(event, record, "intercepted", "replay_event");
+      return skip("replay_event");
+    }
     if (normalizeText(record?.type).toLowerCase() !== "damage") return skip("non_damage");
 
     const damage = normalizeDamage(record?.damage);
