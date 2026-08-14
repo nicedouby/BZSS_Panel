@@ -105,6 +105,8 @@ async function testLiveReplayDedupeAndSafety() {
       const combat = instance.api.getCombatRecords({ source: "replay", limit: 20 });
       assert.equal(combat.total, 2);
       assert.equal(combat.records.find((record) => record.type === "damage").canTriggerActions, false);
+      assert.equal(instance.api.getOverview().total, 1);
+      assert.equal(instance.api.getOverview().replayDamage, 1);
       assert.equal(coreEvents, 0);
       assert.equal(moduleEvents, 0);
     } finally { await instance.stop(); }
