@@ -5,7 +5,7 @@ import path from "node:path";
 import { Worker } from "node:worker_threads";
 
 import { ReplayKillStore } from "./replay-store.js";
-import { normalizeLiveKill } from "./kill-record-normalizer.js";
+import { normalizeLiveCombat, normalizeLiveKill } from "./kill-record-normalizer.js";
 import { dedupeKillRecords } from "./kill-record-dedupe.js";
 
 const MODULE_ID = "module.killRecords";
@@ -25,7 +25,8 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
   const api = {
     getStatus,
     getReplayStatus: () => clone(replayStatus),
-    getReplayKills: (filter = {}) => store.query(filter),
+    getReplayKills: (filter = {}) => applyFilters(store.getAll().filter((record) => record.type === "kill"), filter),
+    getCombatRecords,
     getLiveKills,
     getRecords,
     getOverview,
@@ -108,7 +109,7 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
   }
 
   async function handleWorkerMessage(message = {}) {
-    if (message.type === "killBatch") {
+    if (message.type === "combatBatch" || message.type === "killBatch") {
       await importReplayBatch(message.records);
       return;
     }
@@ -146,7 +147,7 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       const result = await store.insertBatch(records);
       replayStatus.imported += result.inserted;
       replayStatus.duplicates += result.duplicates;
-      replayStatus.killsFound = Math.max(replayStatus.killsFound, replayStatus.imported + replayStatus.duplicates);
+      replayStatus.combatFound = Math.max(replayStatus.combatFound, replayStatus.imported + replayStatus.duplicates);
       return result;
     });
     return importQueue;
@@ -160,9 +161,19 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
     return applyFilters(records, filter);
   }
 
-  function getRecords(filter = {}) {
+  function getCombatRecords(filter = {}) {
     const source = String(filter.source ?? "all");
     const replay = source === "live" ? [] : store.getAll();
+    const liveEvents = source === "replay"
+      ? []
+      : (modules?.combatClean?.getEvents?.({ serverId: filter.serverId, type: "all", limit: 5000, offset: 0 }) ?? [])
+        .map(normalizeLiveCombat);
+    return applyCombatFilters(dedupeCombatRecords([...replay, ...liveEvents]), filter);
+  }
+
+  function getRecords(filter = {}) {
+    const source = String(filter.source ?? "all");
+    const replay = source === "live" ? [] : store.getAll().filter((record) => record.type === "kill");
     const live = source === "replay" ? [] : getLiveKills({ serverId: filter.serverId, raw: true }).records;
     const merged = dedupeKillRecords([...replay, ...live]);
     return applyFilters(merged, filter);
@@ -173,7 +184,10 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
     const live = getLiveKills({ raw: true }).records;
     const combined = dedupeKillRecords([...store.getAll(), ...live]);
     return {
-      replayCount: replayStats.count,
+      replayCount: replayStats.kill,
+      replayDamage: replayStats.damage,
+      replayWound: replayStats.wound,
+      replayKills: replayStats.kill,
       liveCount: live.length,
       total: combined.length,
       teamKills: combined.filter((record) => record.isTeamKill).length,
@@ -215,8 +229,8 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       id: MODULE_ID,
       name: "击杀记录",
       kind: "module",
-      version: "1.0.0",
-      description: "在独立 Worker 中回溯 SquadGame.log 的历史击杀，并与只读实时击杀统一查询；回溯不进入 EventBus。",
+      version: "1.1.0",
+      description: "在独立 Worker 中回溯 SquadGame.log 的历史伤害、击倒和击杀；回溯只进入查询存储，不进入 EventBus。",
     },
     apiName: "killRecords",
     api,
@@ -271,6 +285,40 @@ function applyFilters(records, filter = {}) {
   return { total: result.length, records: result.slice(offset, offset + limit) };
 }
 
+function applyCombatFilters(records, filter = {}) {
+  const serverId = String(filter.serverId ?? "");
+  const type = normalizeCombatType(filter.type ?? "all");
+  const search = String(filter.search ?? "").trim().toLowerCase();
+  let result = records;
+  if (serverId) result = result.filter((record) => record.serverId === serverId);
+  if (type !== "all") result = result.filter((record) => normalizeCombatType(record.type) === type);
+  if (search) result = result.filter((record) => [record.attacker, record.victim, record.weapon, record.rawLog]
+    .some((value) => JSON.stringify(value ?? "").toLowerCase().includes(search)));
+  result = result.slice().sort((a, b) => Date.parse(b.time) - Date.parse(a.time) || Number(b.sourceOffset) - Number(a.sourceOffset));
+  const offset = Math.max(0, Number(filter.offset) || 0);
+  const limit = Math.max(1, Math.min(5000, Number(filter.limit) || 300));
+  return { total: result.length, records: result.slice(offset, offset + limit) };
+}
+
+function dedupeCombatRecords(records = []) {
+  const byKey = new Map();
+  for (const record of records) {
+    const key = String(record.rawLog ?? "").trim()
+      || [record.serverId, record.type, record.time, record.attacker?.name, record.victim?.name, record.damage, record.weapon].join("|");
+    const previous = byKey.get(key);
+    if (!previous || (record.source === "live" && previous.source !== "live")) byKey.set(key, record);
+  }
+  return [...byKey.values()];
+}
+
+function normalizeCombatType(value) {
+  const type = String(value ?? "").trim().toLowerCase();
+  if (type === "damaged") return "damage";
+  if (type === "wounded") return "wound";
+  if (["death", "died", "dead", "tk"].includes(type)) return "kill";
+  return ["damage", "wound", "kill"].includes(type) ? type : "all";
+}
+
 async function resolveSourcePath(moduleConfig) {
   if (String(moduleConfig.sourcePath ?? "").trim()) return path.resolve(String(moduleConfig.sourcePath));
   const candidates = [
@@ -294,6 +342,9 @@ function createReplayStatus() {
     scannedBytes: 0,
     totalBytes: 0,
     scannedLines: 0,
+    combatFound: 0,
+    damageFound: 0,
+    woundsFound: 0,
     killsFound: 0,
     imported: 0,
     duplicates: 0,
@@ -314,6 +365,9 @@ function pickProgress(message) {
     scannedBytes,
     totalBytes,
     scannedLines: Math.max(0, Number(message.scannedLines) || 0),
+    combatFound: Math.max(0, Number(message.combatFound) || 0),
+    damageFound: Math.max(0, Number(message.damageFound) || 0),
+    woundsFound: Math.max(0, Number(message.woundsFound) || 0),
     killsFound: Math.max(0, Number(message.killsFound) || 0),
     completedOffset: Math.max(0, Number(message.completedOffset) || 0),
     progress: Number.isFinite(Number(message.percentage)) ? Number(message.percentage) : (totalBytes ? scannedBytes / totalBytes * 100 : 100),
