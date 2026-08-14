@@ -59,22 +59,19 @@ function damageRecord(overrides = {}) {
 }
 
 async function testStandardDamageAndWeaponCompaction() {
-  const { plugin, warnings } = createHarness({ weaponAliases: { "bp-m4a1-c": "M4A1突击步枪" } });
+  const { plugin, warnings } = createHarness({
+    showAttackerDamage: true,
+    weaponAliases: { "bp-m4a1-c": "M4A1突击步枪" },
+  });
   await plugin.start();
   await plugin.api.handleCombatEvent({ eventId: "event-1", record: damageRecord() });
-  assert.equal(warnings.length, 2);
-  const victimWarning = warnings.find((warning) => warning.reason === "victim_damage_display");
-  const attackerWarning = warnings.find((warning) => warning.reason === "attacker_damage_display");
+  assert.equal(warnings.length, 1, "attacker feedback must remain disabled even when config requests it");
+  const victimWarning = warnings[0];
   assert.equal(victimWarning.targetPlayerId, "84");
   assert.equal(victimWarning.requireTargetPlayerId, true);
   assert.match(victimWarning.message, /来源：Attacker/);
   assert.match(victimWarning.message, /武器：M4A1突击步枪/);
-  assert.equal(attackerWarning.targetPlayerId, "42");
-  assert.equal(attackerWarning.targetName, "Attacker");
-  assert.equal(attackerWarning.requireTargetPlayerId, true);
-  assert.match(attackerWarning.message, /造成 25 点伤害/);
-  assert.match(attackerWarning.message, /目标：Victim/);
-  assert.match(attackerWarning.message, /武器：M4A1突击步枪/);
+  assert.equal(plugin.api.getState().attackerDisplayed, 0);
   await plugin.stop();
 }
 
@@ -100,13 +97,11 @@ async function testVictimControllerIdResolvesListPlayersIdAndSendsFirst() {
     }),
   });
 
-  assert.equal(warnings.length, 2);
+  assert.equal(warnings.length, 1);
   assert.equal(warnings[0].reason, "victim_damage_display");
   assert.equal(warnings[0].targetPlayerId, "84");
   assert.equal(warnings[0].requireTargetPlayerId, true);
   assert.match(warnings[0].message, /受到 25 点伤害/);
-  assert.equal(warnings[1].reason, "attacker_damage_display");
-  assert.equal(warnings[1].targetPlayerId, "42");
   await plugin.stop();
 }
 
@@ -116,8 +111,7 @@ async function testFriendlyFallbackBotAndEmptyWeapon() {
   await plugin.api.handleCombatEvent({ eventId: "friendly", record: damageRecord({ id: "friendly", relation: { isFriendlyFire: true } }) });
   await plugin.api.handleCombatEvent({ eventId: "fallback", record: damageRecord({ id: "fallback", attacker: { resolved: true, isFallback: true, playerId: "victim-id", name: "Victim" }, weapon: "" }) });
   await plugin.api.handleCombatEvent({ eventId: "bot", record: damageRecord({ id: "bot", isBotAttack: true, attacker: { isBot: true }, weapon: { raw: "Projectile 7.62mm" } }) });
-  assert.equal(warnings.length, 4);
-  assert.match(warnings.find((warning) => warning.reason === "attacker_damage_display").message, /造成 25 点友军伤害/);
+  assert.equal(warnings.length, 3);
   const victimWarnings = warnings.filter((warning) => warning.reason === "victim_damage_display");
   assert.match(victimWarnings[0].message, /友伤：Attacker/);
   assert.match(victimWarnings[1].message, /来源：自身\/环境｜武器：$/);
@@ -148,11 +142,10 @@ async function testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage(
   await plugin.api.handleCombatEvent({ eventId: "wound", record: damageRecord({ id: "wound", type: "wound" }) });
   await plugin.api.handleCombatEvent({ eventId: "unresolved", record: damageRecord({ id: "unresolved", attacker: { resolved: false } }) });
   await plugin.api.handleCombatEvent({ eventId: "self", record: damageRecord({ id: "self", attacker: { resolved: true, playerId: "victim-id", name: "Victim" } }) });
-  assert.equal(warnings.length, 4);
+  assert.equal(warnings.length, 3);
   const victimWarnings = warnings.filter((warning) => warning.reason === "victim_damage_display");
   const attackerWarnings = warnings.filter((warning) => warning.reason === "attacker_damage_display");
-  assert.equal(attackerWarnings.length, 1);
-  assert.match(attackerWarnings[0].message, /造成 1000000 点伤害/);
+  assert.equal(attackerWarnings.length, 0);
   assert.match(victimWarnings[0].message, /受到 1000000 点伤害/);
   assert.match(victimWarnings[1].message, /来源：自身\/环境/);
   assert.match(victimWarnings[2].message, /来源：自身/);
@@ -170,9 +163,9 @@ async function testDedupesAndUnsubscribes() {
   handler({ eventId: "dup", record: damageRecord({ id: "dup" }) });
   await new Promise((resolve) => setImmediate(resolve));
   await plugin.api.handleCombatEvent({ eventId: "dup", record: damageRecord({ id: "dup" }) });
-  assert.equal(warnings.length, 2);
-  assert.equal(warnings.filter((warning) => warning.reason === "attacker_damage_display").length, 1);
-  assert.equal(plugin.api.getState().attackerDisplayed, 1);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings.filter((warning) => warning.reason === "attacker_damage_display").length, 0);
+  assert.equal(plugin.api.getState().attackerDisplayed, 0);
   assert.equal(plugin.api.getState().duplicateSkipped, 1);
   await plugin.stop();
   assert.equal(listeners.get("module.combatManager:COMBAT_EVENT_PROCESSED").size, 0);

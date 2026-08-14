@@ -1077,6 +1077,8 @@
     "victimDamageDisplay": {
       "enabled": true,
       "showWeapon": true,
+      "showVictimDamage": true,
+      "showAttackerDamage": false,
       "showAttackerName": true,
       "showFriendlyFireLabel": true,
       "adminPunishmentDamage": 1000000,

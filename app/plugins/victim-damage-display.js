@@ -275,15 +275,6 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return `受到 ${formatDamage(damage)} 点伤害｜${sourceLabel}${weapon}`;
   }
 
-  function buildAttackerMessage(record, victim, damage) {
-    const relation = record?.relation ?? {};
-    const friendly = Boolean(record?.isFriendlyFire ?? relation.isFriendlyFire);
-    const damageLabel = friendly && runtimeConfig.showFriendlyFireLabel ? "友军伤害" : "伤害";
-    const victimName = victim.displayName || victim.name || "未知玩家";
-    const weapon = runtimeConfig.showWeapon ? `｜武器：${displayWeapon(record)}` : "";
-    return `造成 ${formatDamage(damage)} 点${damageLabel}｜目标：${victimName}${weapon}`;
-  }
-
   async function sendDamageWarning(event, record, target, message, reason, requireTargetPlayerId = false) {
     const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
     if (typeof sender !== "function") throw new Error("adminWarn API unavailable");
@@ -326,21 +317,14 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
     try {
       const victimMessage = buildVictimMessage(record, source, damage);
-      const attackerMessage = buildAttackerMessage(record, victim, damage);
-      const canWarnAttacker = runtimeConfig.showAttackerDamage && source.kind === "player"
-        && /^\d+$/.test(attacker.playerId);
-      if (runtimeConfig.showAttackerDamage && source.kind === "player" && !canWarnAttacker) {
-        state.invalidAttackerSkipped += 1;
-        logger?.warn?.(`[VictimDamageDisplay] attacker warning skipped: numeric ListPlayers playerID unavailable attacker=${attacker.name || attacker.steamId || attacker.eosId || "unknown"}`);
-      }
       const canWarnVictim = runtimeConfig.showVictimDamage && /^\d+$/.test(victim.playerId);
       if (runtimeConfig.showVictimDamage && !canWarnVictim) {
         state.invalidVictimSkipped += 1;
         logger?.warn?.(`[VictimDamageDisplay] victim warning skipped: numeric ListPlayers playerID unavailable victim=${victim.name || victim.steamId || victim.eosId || victim.controllerId || "unknown"}`);
       }
 
-      // 顺序发送：先保证受害者收到“受到伤害”，再通知攻击者，避免两条高优先级
-      // AdminWarnById 同时入队时由不同 RCON lane 并发执行。
+      // 伤害信息只发送给受害者。攻击者永远不接收任何伤害反馈，
+      // 避免向可疑玩家暴露命中结果，同时便于受害者追踪伤害来源。
       const victimResult = runtimeConfig.showVictimDamage
         ? (canWarnVictim
           ? settledResult(await settle(sendDamageWarning(
@@ -353,26 +337,20 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
           )))
           : { success: false, skipped: true, skipReason: "victim_unavailable" })
         : { success: false, skipped: true, skipReason: "victim_display_disabled" };
-      const attackerResult = canWarnAttacker
-        ? settledResult(await settle(sendDamageWarning(
-          event,
-          record,
-          attacker,
-          attackerMessage,
-          "attacker_damage_display",
-          true,
-        )))
-        : { success: false, skipped: true, skipReason: "attacker_unavailable" };
-      const success = Boolean(victimResult.success || attackerResult.success);
-      const errorMessage = victimResult.errorMessage || attackerResult.errorMessage || "";
+      const attackerResult = {
+        success: false,
+        skipped: true,
+        skipReason: "attacker_display_forbidden",
+      };
+      const success = Boolean(victimResult.success);
+      const errorMessage = victimResult.errorMessage || "";
 
       recordAudit(event, record, success ? "warned" : "send_failed", success ? "admin_warn_sent" : "admin_warn_failed", {
-        message: [victimResult.success ? victimMessage : "", attackerResult.success ? attackerMessage : ""].filter(Boolean).join(" || "),
+        message: victimResult.success ? victimMessage : "",
         success,
         error: errorMessage,
       });
       if (victimResult.success) state.displayed += 1;
-      if (attackerResult.success) state.attackerDisplayed += 1;
       if (success) state.lastDisplayedAt = new Date().toISOString();
       if (errorMessage) state.lastError = errorMessage;
       return { success, victimResult, attackerResult };
@@ -417,9 +395,9 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "战斗伤害显示",
       kind: "plugin",
-      version: "1.2.0",
+      version: "1.3.0",
       category: "Combat",
-      description: "订阅清洗后的伤害事件，分别向受害者和有效攻击者发送私人伤害提示。",
+      description: "订阅清洗后的伤害事件，只向受害者发送包含伤害来源的私人提示，攻击者永不接收伤害反馈。",
     },
     apiName: "victimDamageDisplay",
     api: { getState, handleCombatEvent, displayWeapon, getDebugSnapshot, clearDebugRecords },
@@ -461,7 +439,8 @@ function readRuntimeConfig(config) {
     enabled: raw.enabled !== false,
     showWeapon: raw.showWeapon !== false,
     showVictimDamage: raw.showVictimDamage !== false,
-    showAttackerDamage: raw.showAttackerDamage !== false,
+    // 安全策略：攻击者伤害反馈永久关闭，不允许配置重新启用。
+    showAttackerDamage: false,
     showAttackerName: raw.showAttackerName !== false,
     showFriendlyFireLabel: raw.showFriendlyFireLabel !== false,
     adminPunishmentDamage: Number.isFinite(adminPunishmentDamage) ? adminPunishmentDamage : DEFAULT_ADMIN_PUNISHMENT_DAMAGE,
