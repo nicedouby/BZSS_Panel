@@ -99,40 +99,44 @@ async function testClockThresholdsAndEscapedNewlines() {
 
   h.clock.seconds = 300;
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 4);
+  assert.equal(h.warnings.length, 3, "squad roster must only be sent to squad leaders");
   const alpha = h.warnings.find((item) => item.targetName === "Alpha");
   const bravo = h.warnings.find((item) => item.targetName === "Bravo");
   assert.ok(alpha);
-  assert.equal(alpha.message, bravo.message);
-  assert.match(alpha.message, /（A组）小队长 Alpha 游戏时长 100小时/);
-  assert.match(alpha.message, /（B组）步枪兵 Bravo 游戏时长 200小时/);
+  assert.equal(bravo, undefined);
+  assert.match(alpha.message, /A组小队长 Alpha 100h/);
+  assert.match(alpha.message, /B组步枪兵 Bravo 200h/);
   assert.equal(alpha.message.includes("\n"), false, "RCON payload must not contain a raw newline");
   assert.equal(alpha.message.split("\\n").length, 2, "RCON payload should use literal \\n separators");
   assert.ok(alpha.message.length <= 180);
 
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 4);
+  assert.equal(h.warnings.length, 3);
 
   h.clock.seconds = 450;
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 8);
-  const team1LeaderSummary = h.warnings.slice(4).find((item) => item.targetName === "Bravo");
+  assert.equal(h.warnings.length, 7);
+  const team1LeaderSummary = h.warnings.slice(3).find((item) => item.targetName === "Bravo");
   assert.ok(team1LeaderSummary);
-  assert.match(team1LeaderSummary.message, /步兵队 队长游戏时长 100小时/);
-  assert.match(team1LeaderSummary.message, /后勤队 队长游戏时长 300小时/);
+  assert.match(team1LeaderSummary.message, /步兵队队长 100h/);
+  assert.match(team1LeaderSummary.message, /后勤队队长 300h/);
   assert.equal(team1LeaderSummary.message.split("\\n").length, 2);
 }
 
 async function testNewRoundResetsDispatch() {
   const h = createHarness();
   await h.plugin.init();
+  h.clock.seconds = 299;
+  await h.plugin.api.evaluateNow();
   h.clock.seconds = 300;
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 4);
+  assert.equal(h.warnings.length, 3);
   h.clock.key = "round-b";
+  h.clock.seconds = 299;
+  await h.plugin.api.evaluateNow();
   h.clock.seconds = 300;
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 8);
+  assert.equal(h.warnings.length, 6);
 }
 
 async function testManualNonceTriggersOnlyOnce() {
@@ -140,16 +144,16 @@ async function testManualNonceTriggersOnlyOnce() {
   await h.plugin.init();
   h.configValue.manualSquadTriggerNonce = "manual-squad-1";
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 4);
+  assert.equal(h.warnings.length, 3);
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 4);
+  assert.equal(h.warnings.length, 3);
   assert.equal(h.plugin.api.getState().lastManualSquadNonce, "manual-squad-1");
 
   h.configValue.manualLeaderTriggerNonce = "manual-leader-1";
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 8);
+  assert.equal(h.warnings.length, 7);
   await h.plugin.api.evaluateNow();
-  assert.equal(h.warnings.length, 8);
+  assert.equal(h.warnings.length, 7);
 }
 
 function testFireTeamEvidenceAndOnlineMerge() {
@@ -166,8 +170,8 @@ function testFireTeamEvidenceAndOnlineMerge() {
     { source: "playerState", players: [{ name: "Conflict", steamID: "9002", online: true, fireTeamName: "A" }] },
     { source: "bzssCore", players: [{ playerName: "Conflict", steamID: "9002", ftIndex: 1 }] },
   ])[0];
-  assert.equal(conflict.fireTeam, "A", "explicit fireteam label should beat numeric index");
-  assert.equal(conflict.fireTeamConflict, true);
+  assert.equal(conflict.fireTeam, "B", "BZSS Core numeric fireteam evidence should be used");
+  assert.equal(conflict.fireTeamConflict, false);
 }
 
 function testLongMessagePreservesEncodedLines() {
@@ -178,13 +182,20 @@ function testLongMessagePreservesEncodedLines() {
     name: `玩家名称非常非常长${index}`,
     gameSeconds: (index + 1) * 123.4 * 3600,
   }));
-  const message = __test.buildSquadRosterMessage(players, 180, "escaped");
-  assert.ok(message.length <= 180);
-  assert.equal(message.split("\\n").length, players.length);
-  assert.equal(message.includes("\n"), false);
+  const messages = __test.buildSquadRosterMessages(players, 180, "escaped");
+  assert.ok(messages.length > 1, "large roster must be split instead of compressed");
+  assert.ok(messages.every((message) => message.length <= 180));
+  assert.ok(messages.every((message) => message.includes("\n") === false));
+  const encodedLines = messages.flatMap((message) => message.replace(/^\[\d+\/\d+\] /, "").split("\\n"));
+  assert.equal(encodedLines.length, players.length);
+  players.forEach((player, index) => {
+    assert.match(encodedLines[index], new RegExp(player.name));
+    assert.match(encodedLines[index], /重型反坦克兵/);
+  });
 
-  const actual = __test.buildSquadRosterMessage(players.slice(0, 2), 180, "actual");
-  assert.equal(actual.split("\n").length, 2);
+  const actual = __test.buildSquadRosterMessages(players.slice(0, 2), 180, "actual");
+  assert.equal(actual.length, 1);
+  assert.equal(actual[0].split("\n").length, 2);
 }
 
 try {

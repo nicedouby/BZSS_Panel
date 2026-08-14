@@ -7,6 +7,8 @@ const PLUGIN_ID = "squad-members-playtime-warning";
 const DEFAULT_FIRST_WARNING_SECONDS = 5 * 60;
 const DEFAULT_LEADER_WARNING_SECONDS = 7 * 60 + 30;
 const DEFAULT_POLL_INTERVAL_MS = 1000;
+const DEFAULT_MAX_WARNING_CHARS = 180;
+const DEFAULT_SPLIT_WARNING_DELAY_MS = 500;
 
 function text(value, fallback = "") {
   const result = String(value ?? "").trim();
@@ -111,7 +113,53 @@ function readConfig(config) {
     leaderWarningSeconds: Math.max(1, Number(cfg.leaderWarningSeconds ?? DEFAULT_LEADER_WARNING_SECONDS)),
     pollIntervalMs: Math.max(250, Number(cfg.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS)),
     liveLookupWhenMissing: Boolean(cfg.liveLookupWhenMissing ?? false),
+    maxWarningChars: Math.max(80, Math.min(180, Math.floor(Number(cfg.maxWarningChars ?? DEFAULT_MAX_WARNING_CHARS) || DEFAULT_MAX_WARNING_CHARS))),
+    splitWarningDelayMs: Math.max(0, Math.min(5000, Math.floor(Number(cfg.splitWarningDelayMs ?? DEFAULT_SPLIT_WARNING_DELAY_MS) || 0))),
   };
+}
+
+function paginateWarningLines(lines, maxChars = DEFAULT_MAX_WARNING_CHARS) {
+  const safeMax = Math.max(80, Math.min(180, Math.floor(Number(maxChars) || DEFAULT_MAX_WARNING_CHARS)));
+  const normalized = (lines ?? []).map((line) => text(line)).filter(Boolean);
+  if (!normalized.length) return [];
+  const separator = "\\n";
+  const encoded = normalized.join(separator);
+  if (encoded.length <= safeMax) return [encoded];
+
+  // 为 [99/99] 前缀预留空间；只在单独一行本身过长时截断该行。
+  const bodyMax = Math.max(1, safeMax - 12);
+  const chunks = [];
+  let current = [];
+  let currentLength = 0;
+  for (const rawLine of normalized) {
+    const line = truncateLine(rawLine, bodyMax);
+    const nextLength = current.length ? currentLength + separator.length + line.length : line.length;
+    if (current.length && nextLength > bodyMax) {
+      chunks.push(current);
+      current = [line];
+      currentLength = line.length;
+    } else {
+      current.push(line);
+      currentLength = nextLength;
+    }
+  }
+  if (current.length) chunks.push(current);
+
+  return chunks.map((chunk, index) => {
+    const prefix = `[${index + 1}/${chunks.length}] `;
+    return `${prefix}${chunk.join(separator)}`;
+  });
+}
+
+function truncateLine(value, maxChars) {
+  const raw = text(value);
+  if (raw.length <= maxChars) return raw;
+  return maxChars <= 1 ? raw.slice(0, maxChars) : `${raw.slice(0, maxChars - 1)}…`;
+}
+
+function delay(ms) {
+  if (!ms) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function createPlugin({ core, modules, config, logger } = {}) {
@@ -279,18 +327,32 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     for (const squad of squads.values()) {
       const lines = [];
       for (const member of squad.members) lines.push(await buildMemberLine(member));
-      const message = lines.join("\n");
+      const messages = paginateWarningLines(lines, runtimeConfig.maxWarningChars);
 
+      // 本队成员信息只发送给本队小队长，避免人数越多时成倍放大 RCON 命令量。
+      const recipients = squad.members.filter(isLeader);
       const seen = new Set();
-      for (const recipient of squad.members) {
+      const uniqueRecipients = recipients.filter((recipient) => {
         const key = recipientKey(recipient);
-        if (!key || seen.has(key)) continue;
+        if (!key || seen.has(key)) return false;
         seen.add(key);
-        try {
-          if (await warnPlayer(warnApi, recipient, message, "squad_members_playtime_warning", snapshot)) sent = true;
-        } catch (error) {
-          pluginLogger?.warn?.(`[${PLUGIN_ID}] member warning failed: ${error?.message ?? error}`);
+        return true;
+      });
+      if (!uniqueRecipients.length) {
+        pluginLogger?.warn?.(`[${PLUGIN_ID}] squad ${squad.teamId}/${squad.squadId} has no leader recipient; skipped.`);
+        continue;
+      }
+
+      for (let partIndex = 0; partIndex < messages.length; partIndex += 1) {
+        const message = messages[partIndex];
+        for (const recipient of uniqueRecipients) {
+          try {
+            if (await warnPlayer(warnApi, recipient, message, "squad_members_playtime_warning", snapshot)) sent = true;
+          } catch (error) {
+            pluginLogger?.warn?.(`[${PLUGIN_ID}] member warning failed: ${error?.message ?? error}`);
+          }
         }
+        if (partIndex + 1 < messages.length) await delay(runtimeConfig.splitWarningDelayMs);
       }
     }
 
@@ -321,18 +383,25 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const leaders = [...team.leaders.values()];
       const lines = [];
       for (const leader of leaders) lines.push(await buildLeaderLine(leader.player, leader.squadName));
-      const message = lines.join("\n");
+      const messages = paginateWarningLines(lines, runtimeConfig.maxWarningChars);
 
       const seen = new Set();
-      for (const recipient of team.players) {
+      const recipients = team.players.filter((recipient) => {
         const key = recipientKey(recipient);
-        if (!key || seen.has(key)) continue;
+        if (!key || seen.has(key)) return false;
         seen.add(key);
-        try {
-          if (await warnPlayer(warnApi, recipient, message, "squad_leaders_playtime_warning", snapshot)) sent = true;
-        } catch (error) {
-          pluginLogger?.warn?.(`[${PLUGIN_ID}] leader warning failed: ${error?.message ?? error}`);
+        return true;
+      });
+      for (let partIndex = 0; partIndex < messages.length; partIndex += 1) {
+        const message = messages[partIndex];
+        for (const recipient of recipients) {
+          try {
+            if (await warnPlayer(warnApi, recipient, message, "squad_leaders_playtime_warning", snapshot)) sent = true;
+          } catch (error) {
+            pluginLogger?.warn?.(`[${PLUGIN_ID}] leader warning failed: ${error?.message ?? error}`);
+          }
         }
+        if (partIndex + 1 < messages.length) await delay(runtimeConfig.splitWarningDelayMs);
       }
     }
 
@@ -406,8 +475,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "小队成员与队长游戏时长警告",
       kind: "plugin",
-      version: "1.0.0",
-      description: "开局5分钟向各小队成员发送本队成员游戏时长，7分30秒向各阵营发送本阵营小队长游戏时长。",
+      version: "1.1.0",
+      description: "开局5分钟向各小队长分片发送本队成员游戏时长，7分30秒向各阵营分片发送本阵营小队长游戏时长。",
       configSchema: [
         {
           key: `plugins.${PLUGIN_ID}.enabled`,
@@ -439,6 +508,18 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           default: false,
           description: "本地无缓存时是否实时查询 Steam 时长",
         },
+        {
+          key: `plugins.${PLUGIN_ID}.maxWarningChars`,
+          type: "number",
+          default: DEFAULT_MAX_WARNING_CHARS,
+          description: "单条 RCON 警告最大字符数，超出后按完整玩家行分片",
+        },
+        {
+          key: `plugins.${PLUGIN_ID}.splitWarningDelayMs`,
+          type: "number",
+          default: DEFAULT_SPLIT_WARNING_DELAY_MS,
+          description: "多片警告之间的发送间隔（毫秒）",
+        },
       ],
     },
     apiName: "squadMembersPlaytimeWarning",
@@ -466,3 +547,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
   };
 }
+
+export const __test = {
+  paginateWarningLines,
+};

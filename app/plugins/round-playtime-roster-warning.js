@@ -262,16 +262,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       let failed = 0;
       for (const members of groups.values()) {
         members.sort(memberSort);
-        const message = buildSquadRosterMessage(members, cfg.maxWarningChars, cfg.lineBreakMode);
-        for (const recipient of dedupe(members)) {
-          attempted += 1;
-          try {
-            const result = await warn(recipient, message, `round_squad_playtime_${reason}`);
-            if (result?.success) succeeded += 1;
-            else failed += 1;
-          } catch {
-            failed += 1;
+        const messages = buildSquadRosterMessages(members, cfg.maxWarningChars, cfg.lineBreakMode);
+        const recipients = dedupe(members.filter((player) => player.isLeader));
+        for (let partIndex = 0; partIndex < messages.length; partIndex += 1) {
+          const message = messages[partIndex];
+          for (const recipient of recipients) {
+            attempted += 1;
+            try {
+              const result = await warn(recipient, message, `round_squad_playtime_${reason}`);
+              if (result?.success) succeeded += 1;
+              else failed += 1;
+            } catch {
+              failed += 1;
+            }
           }
+          if (partIndex + 1 < messages.length) await delay(cfg.splitWarningDelayMs);
         }
       }
       const result = { type: "squad", attempted, succeeded, failed, groupCount: groups.size, at: new Date().toISOString() };
@@ -300,16 +305,21 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           ...leader,
           squadName: text(squadNames.get(`${leader.teamID}|${leader.squadID}`)) || "未命名队",
         })).sort((a, b) => a.squadName.localeCompare(b.squadName, "zh-CN"));
-        const message = buildLeaderRosterMessage(lines, cfg.maxWarningChars, cfg.lineBreakMode);
-        for (const recipient of dedupe(recipients.get(teamID) ?? [])) {
-          attempted += 1;
-          try {
-            const result = await warn(recipient, message, `round_leader_playtime_${reason}`);
-            if (result?.success) succeeded += 1;
-            else failed += 1;
-          } catch {
-            failed += 1;
+        const messages = buildLeaderRosterMessages(lines, cfg.maxWarningChars, cfg.lineBreakMode);
+        const teamRecipients = dedupe(recipients.get(teamID) ?? []);
+        for (let partIndex = 0; partIndex < messages.length; partIndex += 1) {
+          const message = messages[partIndex];
+          for (const recipient of teamRecipients) {
+            attempted += 1;
+            try {
+              const result = await warn(recipient, message, `round_leader_playtime_${reason}`);
+              if (result?.success) succeeded += 1;
+              else failed += 1;
+            } catch {
+              failed += 1;
+            }
           }
+          if (partIndex + 1 < messages.length) await delay(cfg.splitWarningDelayMs);
         }
       }
       const result = { type: "leader", attempted, succeeded, failed, teamCount: byTeam.size, at: new Date().toISOString() };
@@ -339,7 +349,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       id: PLUGIN_ID,
       name: "开局小队与队长游戏时长提醒",
       kind: "plugin",
-      version: "1.1.0",
+      version: "1.2.0",
       category: "Moderation",
       description: "日志时间达到5分钟时发送小队成员时长，达到7分30秒时发送本阵营各小队长时长。",
       config: { ...cfg },
@@ -352,7 +362,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           { label: "真实换行", value: "actual" },
           { label: "竖线分隔", value: "separator" },
         ], description: "游戏内多行传输方式" },
-        { key: "maxWarningChars", type: "number", default: 180, description: "单条警告最大字符数" },
+        { key: "maxWarningChars", type: "number", default: 180, description: "单条警告最大字符数；超出后按完整玩家行分片" },
+        { key: "splitWarningDelayMs", type: "number", default: 500, description: "多片警告之间的发送间隔（毫秒）" },
         { key: "liveLookupWhenMissing", type: "boolean", default: false, description: "缺少缓存时实时查询 Steam 时长" },
       ],
     },
@@ -407,6 +418,7 @@ function readConfig(config) {
     leaderWarningSeconds: Math.max(squadWarningSeconds, number(raw.leaderWarningSeconds, 450, 0, 86400)),
     pollIntervalMs: number(raw.pollIntervalMs, 1000, 250, 30000),
     maxWarningChars: number(raw.maxWarningChars, 180, 80, 180),
+    splitWarningDelayMs: number(raw.splitWarningDelayMs, 500, 0, 5000),
     lineBreakMode: normalizeLineBreakMode(raw.lineBreakMode),
     liveLookupWhenMissing: raw.liveLookupWhenMissing === true,
     persistState: raw.persistState !== false,
@@ -561,6 +573,22 @@ function resolveRole(value) {
   };
 }
 
+function resolveRoleLabel(value) {
+  return resolveRoleEntry(value)?.[1] ?? "未知兵种";
+}
+
+function resolveRoleShortLabel(value) {
+  return resolveRoleEntry(value)?.[2] ?? "未知";
+}
+
+function resolveRoleEntry(value) {
+  const normalized = text(value).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (!normalized) return null;
+  return ROLE_LABELS.find(([aliases]) => aliases.some((alias) => (
+    normalized.includes(String(alias).toLowerCase().replace(/[^a-z0-9]+/g, ""))
+  ))) ?? null;
+}
+
 function buildSquadRosterLines(players, compact = false) {
   if (!compact) return players.map((player) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.role} ${player.name} ${hours(player.gameSeconds)}`);
   return players.map((player) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.roleShort} ${truncate(player.name, 10)} ${hours(player.gameSeconds)}`);
@@ -571,30 +599,53 @@ function buildLeaderRosterLines(leaders, compact = false) {
   return leaders.map((leader) => `${truncate(leader.squadName, 10)}队长 ${hours(leader.gameSeconds)}`);
 }
 
+function buildSquadRosterMessages(players, maxChars, lineBreakMode = "escaped") {
+  return paginateLines(buildSquadRosterLines(players, false), maxChars, lineBreakMode);
+}
+
+function buildLeaderRosterMessages(leaders, maxChars, lineBreakMode = "escaped") {
+  return paginateLines(buildLeaderRosterLines(leaders, false), maxChars, lineBreakMode);
+}
+
+// 兼容旧测试/调用方：单条场景仍返回原消息，多片场景仅用于旧预览。
 function buildSquadRosterMessage(players, maxChars, lineBreakMode = "escaped") {
-  const full = buildSquadRosterLines(players, false);
-  if (wireLength(full, lineBreakMode) <= maxChars) return encodeLines(full, lineBreakMode);
-  const compact = buildSquadRosterLines(players, true);
-  if (wireLength(compact, lineBreakMode) <= maxChars) return encodeLines(compact, lineBreakMode);
-  return budget(players, maxChars, lineBreakMode, (player, limit) => `${player.fireTeam ? `${player.fireTeam}组` : ""}${player.roleShort} ${truncate(player.name, Math.max(1, limit - player.roleShort.length - 7))} ${hoursShort(player.gameSeconds)}`);
+  return buildSquadRosterMessages(players, maxChars, lineBreakMode)[0] ?? "";
 }
 
 function buildLeaderRosterMessage(leaders, maxChars, lineBreakMode = "escaped") {
-  const full = buildLeaderRosterLines(leaders, false);
-  if (wireLength(full, lineBreakMode) <= maxChars) return encodeLines(full, lineBreakMode);
-  const compact = buildLeaderRosterLines(leaders, true);
-  if (wireLength(compact, lineBreakMode) <= maxChars) return encodeLines(compact, lineBreakMode);
-  return budget(leaders, maxChars, lineBreakMode, (leader, limit) => `${truncate(leader.squadName, Math.max(1, limit - 7))}队长${hoursShort(leader.gameSeconds)}`);
+  return buildLeaderRosterMessages(leaders, maxChars, lineBreakMode)[0] ?? "";
+}
+
+function paginateLines(lines, maxChars, mode) {
+  const safeMax = Math.max(1, Math.floor(Number(maxChars) || 180));
+  if (wireLength(lines, mode) <= safeMax) return [encodeLines(lines, mode)];
+
+  const separator = lineSeparator(mode);
+  const bodyMax = Math.max(1, safeMax - 12);
+  const chunks = [];
+  let current = [];
+  let currentLength = 0;
+  for (const rawLine of lines) {
+    const line = truncate(rawLine, bodyMax);
+    const nextLength = current.length ? currentLength + separator.length + line.length : line.length;
+    if (current.length && nextLength > bodyMax) {
+      chunks.push(current);
+      current = [line];
+      currentLength = line.length;
+    } else {
+      current.push(line);
+      currentLength = nextLength;
+    }
+  }
+  if (current.length) chunks.push(current);
+
+  return chunks.map((chunk, index) => `[${index + 1}/${chunks.length}] ${encodeLines(chunk, mode)}`);
 }
 
 function encodeLines(lines, mode) { return lines.join(lineSeparator(mode)); }
 function lineSeparator(mode) { return mode === "actual" ? "\n" : mode === "separator" ? "｜" : "\\n"; }
 function wireLength(lines, mode) { return lines.reduce((sum, line) => sum + line.length, 0) + Math.max(0, lines.length - 1) * lineSeparator(mode).length; }
-function budget(items, maxChars, mode, builder) {
-  const separatorLength = Math.max(0, items.length - 1) * lineSeparator(mode).length;
-  const limit = Math.max(1, Math.floor((maxChars - separatorLength) / Math.max(1, items.length)));
-  return encodeLines(items.map((item) => truncate(builder(item, limit), limit)), mode);
-}
+function delay(ms) { return ms ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve(); }
 function normalizeLineBreakMode(value) { const mode = text(value).toLowerCase(); return ["escaped", "actual", "separator"].includes(mode) ? mode : "actual"; }
 function summarizeDispatch(result) { return result ? { ...result } : null; }
 function group(players, keyFn) { const map = new Map(); for (const player of players) { const key = keyFn(player); if (!key) continue; if (!map.has(key)) map.set(key, []); map.get(key).push(player); } return map; }
@@ -614,6 +665,9 @@ function number(value, fallback, min, max) { const parsed = Number(value); retur
 export const __test = {
   buildSquadRosterMessage,
   buildLeaderRosterMessage,
+  buildSquadRosterMessages,
+  buildLeaderRosterMessages,
+  paginateLines,
   buildSquadRosterLines,
   buildLeaderRosterLines,
   mergePlayerSources: mergePlayers,
