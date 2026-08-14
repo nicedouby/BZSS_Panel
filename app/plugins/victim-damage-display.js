@@ -21,6 +21,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
   const state = {
     received: 0,
     displayed: 0,
+    attackerDisplayed: 0,
     skipped: 0,
     invalidAttackerSkipped: 0,
     invalidVictimSkipped: 0,
@@ -224,16 +225,25 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return `受到 ${formatDamage(damage)} 点伤害｜${sourceLabel}${weapon}`;
   }
 
-  async function sendVictimWarning(event, record, victim, message) {
+  function buildAttackerMessage(record, victim, damage) {
+    const relation = record?.relation ?? {};
+    const friendly = Boolean(record?.isFriendlyFire ?? relation.isFriendlyFire);
+    const damageLabel = friendly && runtimeConfig.showFriendlyFireLabel ? "友军伤害" : "伤害";
+    const victimName = victim.displayName || victim.name || "未知玩家";
+    const weapon = runtimeConfig.showWeapon ? `｜武器：${displayWeapon(record)}` : "";
+    return `造成 ${formatDamage(damage)} 点${damageLabel}｜目标：${victimName}${weapon}`;
+  }
+
+  async function sendDamageWarning(event, record, target, message, reason) {
     const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
     if (typeof sender !== "function") throw new Error("adminWarn API unavailable");
     return sender.call(modules.adminWarn, {
-      targetPlayerId: victim.playerId || undefined,
-      targetName: victim.name || undefined,
-      targetEosId: victim.eosId || undefined,
-      targetSteamId: victim.steamId || undefined,
+      targetPlayerId: target.playerId || undefined,
+      targetName: target.name || undefined,
+      targetEosId: target.eosId || undefined,
+      targetSteamId: target.steamId || undefined,
       message,
-      reason: "victim_damage_display",
+      reason,
       sourceModule: PLUGIN_ID,
       relatedEventId: normalizeText(record?.id ?? event?.eventId),
       system: true,
@@ -259,14 +269,33 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     if (isDuplicate(eventKey)) { recordAudit(event, record, "intercepted", "duplicate"); return skip("duplicate"); }
 
     try {
-      const message = buildVictimMessage(record, source, damage);
-      const result = await sendVictimWarning(event, record, victim, message);
-      recordAudit(event, record, result?.success ? "warned" : "send_failed", result?.success ? "admin_warn_sent" : "admin_warn_failed", { message, success: Boolean(result?.success), error: result?.errorMessage });
-      if (result?.success) {
-        state.displayed += 1;
-        state.lastDisplayedAt = new Date().toISOString();
-      }
-      return result;
+      const victimMessage = buildVictimMessage(record, source, damage);
+      const attackerMessage = buildAttackerMessage(record, victim, damage);
+      const canWarnAttacker = runtimeConfig.showAttackerDamage && source.kind === "player"
+        && Boolean(attacker.playerId || attacker.name);
+      const [victimSettled, attackerSettled] = await Promise.allSettled([
+        runtimeConfig.showVictimDamage
+          ? sendDamageWarning(event, record, victim, victimMessage, "victim_damage_display")
+          : Promise.resolve({ success: false, skipped: true, skipReason: "victim_display_disabled" }),
+        canWarnAttacker
+          ? sendDamageWarning(event, record, attacker, attackerMessage, "attacker_damage_display")
+          : Promise.resolve({ success: false, skipped: true, skipReason: "attacker_unavailable" }),
+      ]);
+      const victimResult = settledResult(victimSettled);
+      const attackerResult = settledResult(attackerSettled);
+      const success = Boolean(victimResult.success || attackerResult.success);
+      const errorMessage = victimResult.errorMessage || attackerResult.errorMessage || "";
+
+      recordAudit(event, record, success ? "warned" : "send_failed", success ? "admin_warn_sent" : "admin_warn_failed", {
+        message: [victimResult.success ? victimMessage : "", attackerResult.success ? attackerMessage : ""].filter(Boolean).join(" || "),
+        success,
+        error: errorMessage,
+      });
+      if (victimResult.success) state.displayed += 1;
+      if (attackerResult.success) state.attackerDisplayed += 1;
+      if (success) state.lastDisplayedAt = new Date().toISOString();
+      if (errorMessage) state.lastError = errorMessage;
+      return { success, victimResult, attackerResult };
     } catch (error) {
       state.lastError = error instanceof Error ? error.message : String(error);
       logger?.warn?.(`[VictimDamageDisplay] warning failed: ${state.lastError}`);
@@ -306,11 +335,11 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
   return {
     manifest: {
       id: PLUGIN_ID,
-      name: "被命中伤害显示",
+      name: "战斗伤害显示",
       kind: "plugin",
-      version: "1.0.0",
+      version: "1.1.0",
       category: "Combat",
-      description: "仅订阅清洗后的伤害事件，并且只向受害者发送伤害提示。",
+      description: "订阅清洗后的伤害事件，分别向受害者和有效攻击者发送私人伤害提示。",
     },
     apiName: "victimDamageDisplay",
     api: { getState, handleCombatEvent, displayWeapon, getDebugSnapshot, clearDebugRecords },
@@ -331,12 +360,20 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
   };
 }
 
+function settledResult(result) {
+  if (result?.status === "fulfilled") return result.value ?? { success: false };
+  const errorMessage = result?.reason instanceof Error ? result.reason.message : String(result?.reason ?? "AdminWarn failed");
+  return { success: false, errorMessage };
+}
+
 function readRuntimeConfig(config) {
   const raw = config?.get?.("plugins.victimDamageDisplay", {}) ?? {};
   const adminPunishmentDamage = Number(raw.adminPunishmentDamage);
   return {
     enabled: raw.enabled !== false,
     showWeapon: raw.showWeapon !== false,
+    showVictimDamage: raw.showVictimDamage !== false,
+    showAttackerDamage: raw.showAttackerDamage !== false,
     showAttackerName: raw.showAttackerName !== false,
     showFriendlyFireLabel: raw.showFriendlyFireLabel !== false,
     adminPunishmentDamage: Number.isFinite(adminPunishmentDamage) ? adminPunishmentDamage : DEFAULT_ADMIN_PUNISHMENT_DAMAGE,
@@ -352,3 +389,4 @@ function addAlias(map, alias, label) {
 }
 
 export default { createPlugin };
+
