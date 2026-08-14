@@ -213,6 +213,18 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "kill-records",
+    path: "/kill-records",
+    component: () => import("../pages/KillRecordsPage.vue"),
+    title: "击杀记录",
+    category: "core",
+    refreshPolicy: "polling",
+    nav: { section: "combat", label: "击杀记录", icon: "🎯", order: 5 },
+    requiredPermission: "combat_manager.view",
+    legacyRequiredPermissions: ["kill_manager.view"],
+    ...workspacePage,
+  },
+  {
     name: "combat-log",
     path: "/combat-log",
     component: () => import("../pages/CombatLogPage.vue"),

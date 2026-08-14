@@ -2449,6 +2449,50 @@ export class WebServer {
       return this.json(res, 200, this.modules.combatState.getOverview());
     }
 
+    if (url.pathname === "/api/kill-records" && req.method === "GET") {
+      const killRecords = this.modules.killRecords;
+      if (!killRecords) {
+        return this.json(res, 404, { ok: false, error: "KillRecordsUnavailable" });
+      }
+      const result = killRecords.getRecords({
+        serverId: url.searchParams.get("serverId") ?? "",
+        source: url.searchParams.get("source") ?? "all",
+        type: url.searchParams.get("type") ?? "all",
+        search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+        offset: url.searchParams.get("offset") ?? "0",
+        limit: url.searchParams.get("limit") ?? "200",
+      });
+      return this.json(res, 200, {
+        ok: true,
+        records: result.records,
+        total: result.total,
+        overview: killRecords.getOverview(),
+      });
+    }
+
+    if (url.pathname === "/api/kill-records/status" && req.method === "GET") {
+      const killRecords = this.modules.killRecords;
+      if (!killRecords) return this.json(res, 404, { ok: false, error: "KillRecordsUnavailable" });
+      return this.json(res, 200, killRecords.getStatus());
+    }
+
+    if (url.pathname === "/api/kill-records/replay" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const killRecords = this.modules.killRecords;
+      if (!killRecords) return this.json(res, 404, { ok: false, error: "KillRecordsUnavailable" });
+      const body = await this.readJsonBody(req);
+      const result = await killRecords.restartReplay({ clear: Boolean(body?.clear) });
+      return this.json(res, result.ok ? 200 : result.code === "ReplayAlreadyRunning" ? 409 : 400, result);
+    }
+
+    if (url.pathname === "/api/kill-records/replay/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const killRecords = this.modules.killRecords;
+      if (!killRecords) return this.json(res, 404, { ok: false, error: "KillRecordsUnavailable" });
+      const result = await killRecords.clearReplay();
+      return this.json(res, result.ok ? 200 : 409, result);
+    }
+
     if (url.pathname === "/api/combat-manager/overview") {
       const combatManager = this.modules.combatManager;
       if (!combatManager) {

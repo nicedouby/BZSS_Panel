@@ -150,6 +150,9 @@ class BzssLogParserApp:
         raw_log_output_config = self.config.get("raw_log_output", {})
         self.raw_log_output_enabled = bool(raw_log_output_config.get("enabled", False))
         self.raw_log_output_source = str(raw_log_output_config.get("source", "Squad.log"))
+        self.raw_log_output_mode = str(
+            raw_log_output_config.get("mode", "business_lossless")
+        ).strip().lower()
         self.raw_log_output_only_preserved = bool(raw_log_output_config.get("only_preserved", False))
         self.raw_log_output_drop_blacklisted = bool(raw_log_output_config.get("drop_blacklisted", True))
         self.raw_log_output_contains = [
@@ -196,7 +199,7 @@ class BzssLogParserApp:
             reopen_on_truncate=bool(tail_config.get("reopen_on_truncate", True)),
             state_store=state_store,
             read_chunk_bytes=int(tail_config.get("read_chunk_bytes", 1024 * 1024) or 1024 * 1024),
-            max_recovery_bytes=int(tail_config.get("max_recovery_bytes", 8 * 1024 * 1024) or 0),
+            max_recovery_bytes=int(tail_config.get("max_recovery_bytes", 0) or 0),
             max_line_bytes=int(tail_config.get("max_line_bytes", 1024 * 1024) or 1024 * 1024),
         )
 
@@ -637,6 +640,11 @@ class BzssLogParserApp:
         if not self.raw_log_output_enabled:
             return False
 
+        # Business/state lines are lossless. Sampling is reserved for generic
+        # diagnostics and trace spam, never moderation or game-state inputs.
+        if is_critical_business_log_line(line):
+            return True
+
         if self.raw_log_output_drop_blacklisted and self.blacklist.is_blacklisted(line):
             return False
 
@@ -648,7 +656,7 @@ class BzssLogParserApp:
             is_bzss_core_runtime_line(line)
             or is_bzss_core_scoreboard_line(line)
         ):
-            return self.raw_log_rate_limiter_allow()
+            return True
 
         if self.raw_log_output_only_preserved:
             return bool(preserved_rule or self.preserve_filter.match(line))
@@ -657,6 +665,8 @@ class BzssLogParserApp:
             if not any(token in line for token in self.raw_log_output_contains):
                 return False
 
+        if self.raw_log_output_mode == "lossless":
+            return True
         return self.raw_log_rate_limiter_allow()
 
     def raw_log_rate_limiter_allow(self) -> bool:
@@ -831,3 +841,30 @@ def looks_like_combat_line(line: str) -> bool:
         or ("KillingDamage=" in line and "Player:" in line and "caused by" in line)
         or ("has revived" in line and "Online IDs:" in line)
     )
+
+
+def is_critical_business_log_line(line: str) -> bool:
+    text = str(line or "")
+    critical_tokens = (
+        "Die(): Player:",
+        "Wound(): Player:",
+        "ActualDamage=",
+        "has revived",
+        "LogNet: Join succeeded:",
+        "PostLogin: NewPlayer:",
+        "UNetConnection::Close:",
+        "Squad created",
+        "has created Squad",
+        "disbanded Squad",
+        "has placed FOB Team:",
+        "LogWorld: SeamlessTravel to:",
+        "Round winner",
+        "Round ended",
+        "CPZ:",
+        "FOBI:",
+        "MainZone:{",
+        "VRI{",
+        "VehicleInfo{",
+        "BZSSCORE|",
+    )
+    return any(token in text for token in critical_tokens)
