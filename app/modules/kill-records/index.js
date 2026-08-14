@@ -184,8 +184,9 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
 
   function getOverview() {
     const replayStats = store.getStats();
+    const replayKills = store.getAll().filter((record) => record.type === "kill");
     const live = getLiveKills({ raw: true }).records;
-    const combined = dedupeKillRecords([...store.getAll(), ...live]);
+    const combined = dedupeKillRecords([...replayKills, ...live]);
     return {
       replayCount: replayStats.kill,
       replayDamage: replayStats.damage,
