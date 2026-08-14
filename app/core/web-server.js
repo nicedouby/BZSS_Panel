@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 63935)
-Total output lines: 6817
-
 // -*- coding: utf-8 -*-
 
 import http from "node:http";
@@ -2625,7 +2622,1381 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/combat-logs/status" && req.method === "GET") {
-        return t…13935 tokens truncated…ner: url.searchParams.get("winner") ?? "",
+        return this.json(res, 200, combatLog.getStatus?.() ?? { ok: true });
+      }
+
+      if (url.pathname === "/api/combat-logs/months" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          months: await combatLog.listMonths?.() ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/combat-logs/files" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          month: url.searchParams.get("month") ?? "",
+          files: await combatLog.listFiles?.(url.searchParams.get("month") ?? "") ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/combat-logs/read" && req.method === "GET") {
+        return this.json(res, 200, await combatLog.readLog?.({
+          month: url.searchParams.get("month") ?? "",
+          date: url.searchParams.get("date") ?? "",
+          q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
+          limit: url.searchParams.get("limit") ?? "300",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
+
+      if (url.pathname === "/api/combat-logs/search" && req.method === "GET") {
+        return this.json(res, 200, await combatLog.searchLog?.({
+          from: url.searchParams.get("from") ?? "",
+          to: url.searchParams.get("to") ?? "",
+          attacker: url.searchParams.get("attacker") ?? "",
+          eventType: url.searchParams.get("eventType") ?? "",
+          victim: url.searchParams.get("victim") ?? "",
+          weapon: url.searchParams.get("weapon") ?? "",
+          damage: url.searchParams.get("damage") ?? "",
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      }
+    }
+
+    if (url.pathname.startsWith("/api/combat-clean")) {
+      const combatClean = this.modules.combatClean;
+      if (!combatClean) {
+        return this.json(res, 404, {
+          error: "CombatCleanUnavailable",
+          message: "Combat clean module is not loaded.",
+        });
+      }
+      const serverId = url.searchParams.get("serverId") ?? "";
+
+      if (url.pathname === "/api/combat-clean/events" && req.method === "GET") {
+        return this.json(res, 200, {
+          events: combatClean.getEvents({
+            serverId,
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+          }),
+          overview: combatClean.getOverview(serverId),
+        });
+      }
+
+      if (url.pathname === "/api/combat-clean/overview" && req.method === "GET") {
+        return this.json(res, 200, combatClean.getOverview(serverId));
+      }
+
+      if (url.pathname === "/api/combat-clean/rates" && req.method === "GET") {
+        const windowMinutes = Number(url.searchParams.get("window") ?? 30);
+        return this.json(res, 200, {
+          rates: combatClean.getRateHistory(serverId, windowMinutes),
+        });
+      }
+
+      const cleanEventMatch = url.pathname.match(/^\/api\/combat-clean\/events\/(.+)$/);
+      if (cleanEventMatch && req.method === "GET") {
+        const record = combatClean.getEventById(decodeURIComponent(cleanEventMatch[1]));
+        if (!record) return this.json(res, 404, { error: "CombatCleanEventNotFound" });
+        return this.json(res, 200, { event: record });
+      }
+
+      if (url.pathname === "/api/combat-clean/player-events" && req.method === "GET") {
+        return this.json(res, 200, {
+          events: combatClean.getPlayerEvents(serverId, {
+            steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+            eosID: url.searchParams.get("eosID") ?? "",
+            controllerID: url.searchParams.get("controllerID") ?? "",
+            name: url.searchParams.get("name") ?? "",
+            playerKey: url.searchParams.get("playerKey") ?? "",
+          }, {
+            limit: url.searchParams.get("limit") ?? "20",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+          overview: combatClean.getOverview(serverId),
+        });
+      }
+
+    if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, combatClean.clear(body.serverId ?? serverId));
+    }
+  }
+
+    if (url.pathname.startsWith("/api/battle-log")) {
+      const battleLog = this.modules.battleLog;
+      if (!battleLog) {
+        return this.json(res, 404, {
+          error: "BattleLogUnavailable",
+          message: "Battle log module is not loaded.",
+        });
+      }
+
+      const battleServerId = url.searchParams.get("serverId") ?? "";
+
+      if (url.pathname === "/api/battle-log/status" && req.method === "GET") {
+        return this.json(res, 200, battleLog.getStatus?.() ?? { ok: true });
+      }
+
+      if (url.pathname === "/api/battle-log/overview" && req.method === "GET") {
+        return this.json(res, 200, cleanBattleLogOverviewForClient(battleLog.getOverview?.(battleServerId)));
+      }
+
+      if (url.pathname === "/api/battle-log/events" && req.method === "GET") {
+        return this.json(res, 200, cleanBattleLogEventsResponseForClient({
+          events: battleLog.getEvents?.({
+            serverId: battleServerId,
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+            limit: url.searchParams.get("limit") ?? "300",
+            offset: url.searchParams.get("offset") ?? "0",
+            playerKey: url.searchParams.get("playerKey") ?? url.searchParams.get("player") ?? "",
+          }) ?? [],
+          overview: battleLog.getOverview?.(battleServerId) ?? null,
+        }));
+      }
+
+      if (url.pathname === "/api/battle-log/player" && req.method === "GET") {
+        return this.json(res, 200, cleanBattleLogPlayerResponseForClient(battleLog.getPlayerStats?.(battleServerId, {
+          q: url.searchParams.get("q") ?? url.searchParams.get("search") ?? "",
+          playerKey: url.searchParams.get("playerKey") ?? "",
+          steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
+          eosID: url.searchParams.get("eosID") ?? "",
+          controllerID: url.searchParams.get("controllerID") ?? "",
+          name: url.searchParams.get("name") ?? "",
+        })));
+      }
+
+      if (url.pathname === "/api/battle-log/rates" && req.method === "GET") {
+        const windowMinutes = Number(url.searchParams.get("window") ?? 30);
+        return this.json(res, 200, {
+          rates: battleLog.getRateHistory?.(battleServerId, windowMinutes) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/battle-log/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, battleLog.clear?.(body?.serverId ?? battleServerId));
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/fair-team-balance")) {
+      const pluginApi = this.getPluginApi("plugin.fairTeamBalance");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "FairTeamBalanceUnavailable",
+          message: "Fair team balance plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/requests" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            requests: pluginApi.listRequests?.() ?? [],
+          },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/history" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            history: await pluginApi.listHistory?.({
+              limit: Number(url.searchParams.get("limit") ?? "100") || 100,
+            }) ?? [],
+          },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/approve" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.approveRequest?.({
+            requestId: body?.requestId,
+            direct: body?.direct === true,
+            actor: user,
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reject" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.rejectRequest?.({
+            requestId: body?.requestId,
+            reason: body?.reason,
+            actor: user,
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reset-period-quotas" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.resetPeriodQuotas?.("manual_period_reset", {
+            by: user?.username || user?.name || "admin",
+            serverId: this.core?.webStatus?.serverId ?? "",
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reset-round" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.resetRound?.("manual_round_reset", {
+            by: user?.username || user?.name || "admin",
+            serverId: this.core?.webStatus?.serverId ?? "",
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/reset-player-quota" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.resetPlayerQuota?.({
+            playerKey: body?.playerKey,
+            reason: "manual_player_reset",
+            meta: {
+              by: user?.username || user?.name || "admin",
+              serverId: this.core?.webStatus?.serverId ?? "",
+            },
+          }),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/fair-team-balance/clear-history" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.clearHistory?.(),
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/pjsc-average-duration")) {
+      const pluginApi = this.getPluginApi("plugin.pjscAverageDuration");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "PjscAverageDurationUnavailable",
+          message: "PJSC average duration plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/history" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: {
+            history: pluginApi.getHistory?.(Number(url.searchParams.get("limit") ?? "50") || 50) ?? [],
+          },
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateChatMessage?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/broadcast" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.broadcastNow?.(body?.reason ?? "manual_trigger"),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/pjsc-average-duration/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/admin-camera-duration")) {
+      const pluginApi = this.getPluginApi("plugin.adminCameraDuration");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "AdminCameraDurationUnavailable",
+          message: "Admin camera duration plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/admin-camera-duration/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/draw-vote-guard")) {
+      const pluginApi = this.getPluginApi("plugin.drawVoteGuard");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "DrawVoteGuardUnavailable",
+          message: "Draw vote guard plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/draw-vote-guard/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/draw-vote-guard/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateTrigger?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/draw-vote-guard/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/victim-damage-display")) {
+      const pluginApi = this.getPluginApi("plugin.victimDamageDisplay");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "VictimDamageDisplayUnavailable",
+          message: "Victim damage display plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/victim-damage-display/debug" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getDebugSnapshot?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/victim-damage-display/debug/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearDebugRecords?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/squad-leader-impeachment")) {
+      const pluginApi = this.getPluginApi("plugin.squadLeaderImpeachment");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "SquadLeaderImpeachmentUnavailable",
+          message: "Squad leader impeachment plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/squad-leader-impeachment/debug" && req.method === "GET") {
+        return this.json(res, 200, { ok: true, data: pluginApi.getDebugSnapshot?.() ?? null });
+      }
+
+      if (url.pathname === "/api/plugins/squad-leader-impeachment/cancel" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, { ok: true, data: await pluginApi.cancelVote?.(body?.voteId) });
+      }
+
+      if (url.pathname === "/api/plugins/squad-leader-impeachment/cooldowns/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, { ok: true, data: pluginApi.clearCooldowns?.() ?? null });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/welcome-join-warning")) {
+      const pluginApi = this.getPluginApi("welcome-join-warning");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "WelcomeJoinWarningUnavailable",
+          message: "Welcome join warning plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/recent-events" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getRecentEvents?.(Number(url.searchParams.get("limit") ?? "50") || 50) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateJoin?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/clear-events" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearRecentEvents?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/welcome-join-warning/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateConfig?.(body ?? {}),
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/tactical-report")) {
+      const pluginApi = this.getPluginApi("plugin.tacticalReport");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "TacticalReportUnavailable",
+          message: "Tactical report plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getConfig?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.updateConfig?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.clearHistory?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/recent" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? "100") || 100;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.()?.recentRecords?.slice(0, limit) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/logs" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? "100") || 100;
+        const logs = pluginApi.getLogs?.() ?? pluginApi.getState?.()?.history ?? [];
+        return this.json(res, 200, {
+          ok: true,
+          data: logs.slice(0, limit),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/tactical-report/user-codes" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getUserCodes?.() ?? pluginApi.getState?.()?.userCodes ?? {},
+        });
+      }
+
+      const deleteUserCodeMatch = url.pathname.match(/^\/api\/plugins\/tactical-report\/user-codes\/([^/]+)\/([^/]+)$/);
+      if (deleteUserCodeMatch && req.method === "DELETE") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.deleteUserCode?.(
+            decodeURIComponent(deleteUserCodeMatch[1]),
+            decodeURIComponent(deleteUserCodeMatch[2]),
+          ) ?? { ok: false, error: "Unavailable" },
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/enabled" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (typeof body?.enabled !== "boolean") {
+          return this.json(res, 400, { error: "InvalidBody", message: "enabled must be boolean" });
+        }
+        const current = this.core.config?.get?.("plugins.stepwiseSquadPlaytimeGuard", {}) ?? {};
+        this.core.config?.set?.("plugins.stepwiseSquadPlaytimeGuard", { ...current, enabled: body.enabled });
+        await this.core.config?.save?.().catch(() => {});
+        return this.json(res, 200, { ok: true, enabled: body.enabled });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/config" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (!body || typeof body !== "object" || Array.isArray(body)) {
+          return this.json(res, 400, { error: "InvalidBody", message: "body must be object" });
+        }
+        const current = this.core.config?.get?.("plugins.stepwiseSquadPlaytimeGuard", {}) ?? {};
+        this.core.config?.set?.("plugins.stepwiseSquadPlaytimeGuard", { ...current, ...body });
+        await this.core.config?.save?.().catch(() => {});
+        const pluginApiForState = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
+        return this.json(res, 200, { ok: true, data: pluginApiForState?.getState?.() ?? null });
+      }
+
+      const pluginApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "StepwiseSquadPlaytimeGuardUnavailable",
+          message: "Stepwise squad playtime guard plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/simulate" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.simulateCreation?.(body ?? {}),
+        });
+      }
+
+    }
+
+    if (url.pathname.startsWith("/api/plugins/panel-ban")) {
+      const pluginApi = this.getPluginApi("plugin.panelBan");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "PanelBanUnavailable",
+          message: "Panel ban plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.listEntries?.({
+            status: url.searchParams.get("status") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            includeExpired: url.searchParams.get("includeExpired") !== "false",
+          }) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/load" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.load?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/reload" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.reload?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/rescan" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.rescan?.(body?.serverId ?? core.webStatus?.serverId ?? ""),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.createEntry?.({
+            ...body,
+            actor: user,
+            createdBy: user?.username ?? "",
+          }),
+        });
+      }
+
+      if (url.pathname.startsWith("/api/plugins/panel-ban/entries/")) {
+        const entryId = decodeURIComponent(url.pathname.slice("/api/plugins/panel-ban/entries/".length));
+        if (!entryId) {
+          return this.json(res, 400, {
+            error: "InvalidBanEntryId",
+            message: "Ban entry id is required.",
+          });
+        }
+
+        if (req.method === "PATCH") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, {
+            ok: true,
+            data: await pluginApi.updateEntry?.(entryId, {
+              ...body,
+              actor: user,
+              updatedBy: user?.username ?? "",
+            }),
+          });
+        }
+
+        if (req.method === "DELETE") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, {
+            ok: true,
+            data: await pluginApi.deleteEntry?.(entryId, {
+              actor: user,
+            }),
+          });
+        }
+      }
+    }
+
+    if (url.pathname.startsWith("/api/modules/player-session-records")) {
+      const moduleApi = this.modules.playerSessionRecords;
+      if (!moduleApi) {
+        return this.json(res, 404, {
+          error: "PlayerSessionRecordsUnavailable",
+          message: "Player session records module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/modules/player-session-records/state" && req.method === "GET") {
+        const limit = Number(url.searchParams.get("limit") ?? "200") || 200;
+        return this.json(res, 200, {
+          ok: true,
+          data: moduleApi.getState?.(limit) ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/modules/player-session-records/records" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: moduleApi.getRecords?.({
+            limit: Number(url.searchParams.get("limit") ?? "200") || 200,
+            kind: url.searchParams.get("kind") ?? "all",
+            serverId: url.searchParams.get("serverId") ?? "",
+            playerName: url.searchParams.get("playerName") ?? "",
+          }) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/modules/player-session-records/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: moduleApi.clearRecords?.() ?? null,
+        });
+      }
+    }
+
+    if (url.pathname.startsWith("/api/plugins/infantry-combat-enhancer")) {
+      const infantryCombatEnhancer = this.modules.infantryCombatEnhancer;
+      if (!infantryCombatEnhancer) {
+        return this.json(res, 404, {
+          error: "InfantryCombatEnhancerUnavailable",
+          message: "Infantry combat enhancer module is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          config: infantryCombatEnhancer.getConfig?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          config: await infantryCombatEnhancer.updateConfig?.(body ?? {}),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/events" && req.method === "GET") {
+        const filter = {
+          serverId: url.searchParams.get("serverId") ?? "",
+          type: url.searchParams.get("type") ?? "all",
+          warning: url.searchParams.get("warning") ?? "all",
+          relation: url.searchParams.get("relation") ?? "all",
+          weapon: url.searchParams.get("weapon") ?? "all",
+          search: url.searchParams.get("search") ?? "",
+          limit: url.searchParams.get("limit") ?? "100",
+          offset: url.searchParams.get("offset") ?? "0",
+        };
+        return this.json(res, 200, {
+          events: infantryCombatEnhancer.getEvents?.(filter) ?? [],
+          overview: infantryCombatEnhancer.getOverview?.(filter) ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/infantry-combat-enhancer/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, infantryCombatEnhancer.clear?.() ?? { ok: true, cleared: 0 });
+      }
+    }
+
+    if (url.pathname === "/api/player-database/list") {
+      const result = await this.modules.playerDatabase.listPlayers({
+        query: url.searchParams.get("q") ?? "",
+        q: url.searchParams.get("q") ?? "",
+        limit: url.searchParams.get("limit") ?? "100",
+        offset: url.searchParams.get("offset") ?? "0",
+        sort: url.searchParams.get("sort") ?? "updated_desc",
+      });
+      return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/squadbrowser/player" && req.method === "GET") {
+      const lookup = this.modules.squadBrowserPlayerLookup;
+      if (!lookup?.lookup) {
+        return this.json(res, 503, { error: "SquadBrowserLookupUnavailable" });
+      }
+      try {
+        return this.json(res, 200, await lookup.lookup(url.searchParams.get("steam64") ?? ""));
+      } catch (error) {
+        return this.json(res, Number(error?.statusCode ?? 502), {
+          error: error?.code ?? "SquadBrowserLookupFailed",
+          message: error?.message ?? "SquadBrowser 查询失败。",
+        });
+      }
+    }
+
+    if (url.pathname === "/api/player-database/detail") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail", playerId, async () => {
+        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
+        if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+        return this.json(res, 200, detail);
+      });
+    }
+
+    if (url.pathname === "/api/player-database/sync-online" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(
+        res,
+        200,
+        await this.modules.playerDatabase.syncOnline(url.searchParams.get("serverId") ?? this.getCurrentServerId("")),
+      );
+    }
+
+    if (url.pathname === "/api/db/stats") {
+      return this.runTimedPlayerDatabaseQuery("/api/db/stats", null, async () => this.json(res, 200, await this.modules.playerDatabase.getStats({
+        top: url.searchParams.get("top") ?? "10",
+        days: url.searchParams.get("days") ?? "14",
+      })));
+    }
+
+    if (url.pathname === "/api/player-database/detail/aliases") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/aliases", playerId, async () => {
+        return this.json(res, 200, {
+          items: await this.modules.playerDatabase.listPlayerAliases(playerId, {
+            limit: url.searchParams.get("limit") ?? "12",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+        });
+      });
+    }
+
+    if (url.pathname === "/api/player-database/detail/ips") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/ips", playerId, async () => {
+        return this.json(res, 200, {
+          items: await this.modules.playerDatabase.listPlayerIps(playerId, {
+            limit: url.searchParams.get("limit") ?? "12",
+            offset: url.searchParams.get("offset") ?? "0",
+          }),
+        });
+      });
+    }
+
+    if (url.pathname === "/api/player-database/detail/steam-friends") {
+      const playerId = url.searchParams.get("id");
+      return this.runTimedPlayerDatabaseQuery("/api/player-database/detail/steam-friends", playerId, async () => {
+        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
+        if (!detail?.player?.steam_id) {
+          return this.json(res, 200, { items: [] });
+        }
+        const steamID = detail.player.steam_id;
+
+        let friends = await this.modules.playerDatabase.listSteamFriends(playerId);
+        const staleThreshold = 24 * 60 * 60 * 1000;
+        const force = url.searchParams.get("force") === "true";
+        const isStale = friends.length === 0 || force || (friends[0]?.updated_at && (Date.now() - friends[0].updated_at > staleThreshold));
+
+        const playtimeApi = this.modules.playtime?.api ?? this.modules.playtime;
+        if (isStale && playtimeApi?.fetchSteamFriends) {
+          try {
+            const fetchedFriends = await playtimeApi.fetchSteamFriends(steamID);
+            await this.modules.playerDatabase.upsertSteamFriends(playerId, fetchedFriends);
+            friends = await this.modules.playerDatabase.listSteamFriends(playerId);
+          } catch (err) {
+            this.logger.warn(`Failed to on-demand fetch Steam friends for player ${playerId} (${steamID}): ${err.message}`);
+          }
+        }
+
+        return this.json(res, 200, { items: friends });
+      });
+    }
+
+    if (url.pathname.startsWith("/api/player-database/detail/container/")) {
+      const playerId = url.searchParams.get("id");
+      const container = decodeURIComponent(url.pathname.slice("/api/player-database/detail/container/".length));
+      return this.runTimedPlayerDatabaseQuery(`/api/player-database/detail/container/${container}`, playerId, async () => {
+        const detail = await this.modules.playerDatabase.getPlayerDetail(playerId);
+        if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+        if (container === "steam-friends" && url.searchParams.get("refresh") === "true" && detail.player?.steam_id) {
+          const playtimeApi = this.modules.playtime?.api ?? this.modules.playtime;
+          if (playtimeApi?.fetchSteamFriends) {
+            const friends = await playtimeApi.fetchSteamFriends(detail.player.steam_id);
+            await this.modules.playerDatabase.upsertSteamFriends(Number(playerId), friends);
+          }
+        }
+        return this.json(res, 200, await this.modules.playerDatabase.listPlayerContainer(playerId, container, {
+          limit: url.searchParams.get("limit") ?? "30",
+          offset: url.searchParams.get("offset") ?? "0",
+        }));
+      });
+    }
+
+    if (url.pathname === "/api/db/players") {
+      const searchQuery = url.searchParams.get("q") ?? url.searchParams.get("query") ?? "";
+      const result = await this.modules.playerDatabase.listPlayers({
+        query: searchQuery,
+        q: searchQuery,
+        limit: url.searchParams.get("limit") ?? "200",
+        offset: url.searchParams.get("offset") ?? "0",
+        sort: url.searchParams.get("sort") ?? "updated_desc",
+        top: url.searchParams.get("top") ?? "10",
+        days: url.searchParams.get("days") ?? "14",
+      });
+      return this.json(res, 200, {
+        items: result.items ?? [],
+        total: result.total ?? 0,
+      });
+    }
+
+    const dbPlayerMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)$/);
+    if (dbPlayerMatch && req.method === "GET") {
+      const detail = await this.modules.playerDatabase.getPlayerDetail(dbPlayerMatch[1]);
+      if (!detail) return this.json(res, 404, { error: "PlayerNotFound" });
+      return this.json(res, 200, detail);
+    }
+
+    const dbPermissionMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/permission-group$/);
+    if (dbPermissionMatch && req.method === "PATCH") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      return this.json(res, 200, await this.modules.playerDatabase.setPermissionGroup(dbPermissionMatch[1], body.permissionGroup));
+    }
+
+    const dbPlayerPlaytimeMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/playtime$/);
+    if (dbPlayerPlaytimeMatch && req.method === "PATCH") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return this.json(res, 400, {
+          error: "InvalidRequestBody",
+          message: "Request body must be an object.",
+        });
+      }
+
+      const hasGameHours = Object.prototype.hasOwnProperty.call(body, "gameHours");
+      const hasGameSeconds = Object.prototype.hasOwnProperty.call(body, "gameSeconds");
+      const rawValue = hasGameHours ? body.gameHours : (hasGameSeconds ? body.gameSeconds : undefined);
+      let overrideSeconds = null;
+
+      if (rawValue != null && String(rawValue).trim() !== "") {
+        const numeric = Number(rawValue);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          return this.json(res, 400, {
+            error: "InvalidGameHours",
+            message: "gameHours must be a non-negative number or null.",
+          });
+        }
+        overrideSeconds = hasGameHours ? Math.round(numeric * 3600) : Math.floor(numeric);
+      } else if (rawValue === 0) {
+        overrideSeconds = 0;
+      } else {
+        overrideSeconds = null;
+      }
+
+      const updatedDetail = await this.modules.playerDatabase.setGameDurationOverride(dbPlayerPlaytimeMatch[1], overrideSeconds);
+      if (!updatedDetail) {
+        return this.json(res, 404, {
+          error: "PlayerNotFound",
+          message: "Player not found.",
+        });
+      }
+
+      return this.json(res, 200, {
+        ok: true,
+        data: updatedDetail,
+      });
+    }
+
+    if (dbPlayerMatch && req.method === "DELETE") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));
+    }
+
+    if (url.pathname === "/api/squads/list") {
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
+      const squadManagement = this.modules.squadManagement;
+      return this.json(res, 200, {
+        squads: squadManagement?.getSquads?.(serverId) ?? [],
+      });
+    }
+
+    if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
+      const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId);
+      return this.json(res, 200, {
+        current: lifecycle ?? {
+          serverId,
+          matchId: null,
+          updatedAt: new Date().toISOString(),
+          list: [],
+          byKey: {},
+        },
+      });
+    }
+
+    if (url.pathname === "/api/squad-creation-order/clear" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
+      this.modules.squadLifecycle?.clearCurrent?.(serverId);
+      const ruleChain = this.modules.squadRuleChain?.clearCurrent?.() ?? null;
+      return this.json(res, 200, {
+        ok: true,
+        data: {
+          serverId,
+          ruleChain,
+        },
+      });
+    }
+
+    if (url.pathname === "/api/squad-name-tracking/state" && req.method === "GET") {
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId?.("") ?? this.core.webStatus?.serverId ?? "";
+      const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId) ?? { list: [] };
+      const guard = this.modules.squadNamePolicyGuard?.getState?.() ?? { enabled: false, recent: [] };
+      const patrol = this.modules.squadNamePolicyPatrol?.getState?.() ?? { enabled: false, recent: [] };
+      const ruleChain = this.modules.squadRuleChain?.getState?.() ?? { recent: [], stats: {} };
+
+      const stepwiseApi = this.getPluginApi("plugin.stepwiseSquadPlaytimeGuard");
+      const fairApi = this.getPluginApi("plugin.fairSquadGuard");
+
+      const stepwise = stepwiseApi?.getStatus?.() ?? stepwiseApi?.getState?.() ?? { recentRecords: [] };
+      const fair = fairApi?.getStatus?.() ?? fairApi?.getState?.() ?? { recentRecords: [] };
+
+      const records = buildSquadNameTrackingRecords({
+        guard,
+        stepwise,
+        fair,
+        ruleChain,
+        lifecycle,
+      });
+
+      return this.json(res, 200, {
+        ok: true,
+        data: {
+          lifecycle,
+          guard,
+          patrol,
+          ruleChain,
+          stepwise,
+          fair,
+          records,
+        },
+      });
+    }
+
+    if (url.pathname === "/api/kills/recent") {
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
+      const records = this.modules.combatManager?.getEvents
+        ? this.modules.combatManager.getEvents({
+            serverId,
+            type: url.searchParams.get("type") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            limit: url.searchParams.get("limit") ?? "100",
+          })
+        : this.modules.killManage?.getRecentKills?.(serverId, 100) ?? [];
+      return this.json(res, 200, {
+        records,
+        viewer: {
+          username: user.username,
+          role: user.role,
+          isSuperAdmin: this.core.authManager.hasEverything(user),
+        },
+      });
+    }
+
+    if (url.pathname === "/api/weapon-collector/stats" && req.method === "GET") {
+      const pluginApi = this.getPluginApi("plugin.weaponCollector");
+      if (!pluginApi) {
+        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
+      }
+      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
+      const weapons = pluginApi.getWeaponStats(serverId);
+      const totals = weapons.reduce(
+        (acc, w) => {
+          acc.damaged += w.damaged;
+          acc.wounded += w.wounded;
+          acc.died += w.died;
+          return acc;
+        },
+        { damaged: 0, wounded: 0, died: 0 },
+      );
+      return this.json(res, 200, {
+        serverId,
+        weapons,
+        totals,
+        weaponTypeMap: pluginApi.getWeaponTypeMap?.() ?? {},
+      });
+    }
+
+    if (url.pathname === "/api/weapon-collector/type-map" && req.method === "GET") {
+      const pluginApi = this.getPluginApi("plugin.weaponCollector");
+      if (!pluginApi) {
+        return this.json(res, 404, { error: "WeaponCollectorNotLoaded" });
+      }
+      return this.json(res, 200, {
+        weaponTypeMap: pluginApi.getWeaponTypeMap?.() ?? {},
+      });
+    }
+
+    if (url.pathname === "/api/squad-management/actions" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) {
+        return this.json(res, 404, { error: "SquadManagementUnavailable" });
+      }
+
+      const result = await api.executeAction({
+        ...body,
+        actor: user,
+        source: body.source ?? "web.squadManagement",
+        system: false,
+      });
+
+      return this.json(res, result.ok ? 200 : 400, result);
+    }
+
+    if (url.pathname === "/api/squad-disband/execute" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
+      try {
+        const result = await api.executeAction({
+          ...body,
+          actor: user,
+          type: "disband_squad",
+          source: body.source ?? "web.squadDisband",
+          system: Boolean(body.system ?? false),
+        });
+        return this.json(res, result.ok ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/squad-kick/execute" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
+      try {
+        const result = await api.executeAction({
+          ...body,
+          actor: user,
+          type: "kick_player",
+          source: body.source ?? "web.squadKick",
+          system: Boolean(body.system ?? false),
+        });
+        return this.json(res, result.ok ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/squad-remove/execute" && req.method === "POST") {
+      const body = await this.readJsonBody(req);
+      const api = this.modules.squadManagement;
+      if (!api?.executeAction) return this.json(res, 404, { error: "SquadManagementUnavailable" });
+      try {
+        const auditContext = this.buildRemoveFromSquadAuditContext(req, user, body);
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.executeAction({
+            ...body,
+            actor: user,
+            type: "remove_from_squad",
+            source: body.source ?? "web.squadRemove",
+            system: false,
+            operatorName: user?.username ?? "",
+            requestId,
+          }), {
+            relatedRecordIdBuilder: (payload) => payload?.record?.id ?? payload?.recordId ?? "",
+          });
+        return this.json(res, result.ok ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/admin-warns/warn" && req.method === "POST") {
+      const api = this.modules.adminWarn;
+      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      try {
+        const auditContext = {
+          action: AUDIT_ACTIONS.PLAYER_WARN,
+          category: AUDIT_CATEGORIES.PLAYER_MANAGEMENT,
+          actor: user,
+          request: req,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+          serverId: body.serverId ?? this.getCurrentServerId(""),
+          target: {
+            type: "player",
+            id: body.targetSteamId ?? body.steamId ?? body.steamID ?? body.targetEosId ?? body.eosId ?? body.eosID ?? body.targetName,
+            name: body.targetName ?? body.name ?? "",
+            steamId: body.targetSteamId ?? body.steamId ?? body.steamID ?? "",
+            eosId: body.targetEosId ?? body.eosId ?? body.eosID ?? "",
+          },
+          parameters: { message: body.message ?? "" },
+          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
+        };
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.warnPlayer({
+          ...body,
+          origin: "web",
+          actor: user,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+          requestId,
+          system: false,
+        }));
+        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/admin-warns/broadcast" && req.method === "POST") {
+      const api = this.modules.adminWarn;
+      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      try {
+        const auditContext = {
+          action: AUDIT_ACTIONS.SERVER_BROADCAST,
+          category: AUDIT_CATEGORIES.SERVER_MANAGEMENT,
+          actor: user,
+          request: req,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+          serverId: body.serverId ?? this.getCurrentServerId(""),
+          target: { type: "server", id: body.serverId ?? this.getCurrentServerId(""), name: this.getServerName(body.serverId ?? this.getCurrentServerId("")) },
+          parameters: {
+            message: body.message ?? "",
+            messageLength: String(body.message ?? "").length,
+          },
+          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
+        };
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.broadcastMessage({
+          ...body,
+          origin: "web",
+          actor: user,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.RCON_CONSOLE,
+          requestId,
+          system: false,
+        }));
+        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/kill-manage/kill" && req.method === "POST") {
+      const api = this.modules.killManage;
+      if (!api?.killPlayer) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      try {
+        const result = await api.killPlayer({ ...body, actor: user, system: Boolean(body?.system ?? false) });
+        return this.json(res, result?.success ? 200 : result?.skipped ? 400 : 500, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
+    if (url.pathname === "/api/kill-manage/recent" && req.method === "GET") {
+      const api = this.modules.killManage;
+      if (!api?.getRecentKills) return this.json(res, 404, { error: "ModuleNotFound" });
+      const limit = url.searchParams.get("limit") ?? 20;
+      return this.json(res, 200, { records: api.getRecentKills("", limit) });
+    }
+
+    if (url.pathname === "/api/match-snapshot/list" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-snapshot");
+      if (!pluginApi?.listSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
+      return this.json(res, 200, await pluginApi.listSnapshots());
+    }
+
+    if (url.pathname === "/api/match-snapshot/capture" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const pluginApi = this.getPluginApi("match-snapshot");
+      if (!pluginApi?.takeManualSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
+      const snapshot = await pluginApi.takeManualSnapshot({
+        includeSteamID: body?.includeSteamID ?? body?.options?.includeSteamID,
+        includeEOSID: body?.includeEOSID ?? body?.options?.includeEOSID,
+        overview: body?.overview ?? body?.matchState ?? body?.snapshot ?? null,
+      });
+      return this.json(res, 200, { ok: true, snapshot });
+    }
+
+    if (url.pathname === "/api/match-snapshot/delete" && req.method === "DELETE") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const id = url.searchParams.get("id");
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+      const pluginApi = this.getPluginApi("match-snapshot");
+      if (!pluginApi?.deleteSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
+      const result = await pluginApi.deleteSnapshot(id);
+      if (!result?.removed) return this.json(res, 404, { error: "SnapshotNotFound" });
+      return this.json(res, 200, { ok: true, snapshot: result });
+    }
+
+    if (url.pathname === "/api/match-snapshot/view" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const id = url.searchParams.get("id");
+      if (!id) return this.json(res, 400, { error: "MissingId" });
+
+      try {
+        const pluginApi = this.getPluginApi("match-snapshot");
+        if (pluginApi?.readSnapshotArtifact) {
+          const artifact = await pluginApi.readSnapshotArtifact(
+            id,
+            url.searchParams.get("format") ?? url.searchParams.get("type") ?? "json",
+          );
+          const headers = {
+            "Content-Type": artifact.contentType,
+            "Cache-Control": "no-store",
+          };
+          if (url.searchParams.get("download") === "1") {
+            headers["Content-Disposition"] = `attachment; filename="${safeHeaderFileName(artifact.fileName)}"`;
+          }
+          res.writeHead(200, headers);
+          return res.end(artifact.content);
+        }
+
+        const safeId = path.basename(id);
+        const filePath = path.join(process.cwd(), "data", "match-snapshots", safeId);
+        const content = await fs.readFile(filePath);
+        res.writeHead(200, {
+          "Content-Type": contentType(filePath),
+          "Cache-Control": "no-store",
+        });
+        return res.end(content);
+      } catch (err) {
+        if (err?.statusCode === 400) {
+          return this.json(res, 400, { error: err.code ?? "InvalidSnapshotArtifact", message: err.message });
+        }
+        return this.json(res, 404, { error: "FileNotFound" });
+      }
+    }
+
+    if (url.pathname === "/api/match-end-snapshot/list" && req.method === "GET") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const pluginApi = this.getPluginApi("match-end-snapshot");
+      if (!pluginApi?.listSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
+      return this.json(res, 200, await pluginApi.listSnapshots({
+        scope: url.searchParams.get("scope") ?? "official",
+        search: url.searchParams.get("search") ?? "",
+        map: url.searchParams.get("map") ?? "",
+        mode: url.searchParams.get("mode") ?? "",
+        winner: url.searchParams.get("winner") ?? "",
         from: url.searchParams.get("from") ?? "",
         to: url.searchParams.get("to") ?? "",
         minPlayers: url.searchParams.get("minPlayers"),
