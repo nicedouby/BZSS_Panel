@@ -114,6 +114,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       playerId: normalizeText(record?.[`${prefix}PlayerId`] ?? record?.[`${prefix}PlayerID`] ?? nested.playerId ?? nested.playerID ?? nested.controllerID),
       steamId: normalizeText(record?.[`${prefix}Steam64ID`] ?? record?.[`${prefix}SteamId`] ?? record?.[`${prefix}SteamID`] ?? nested.steam64ID ?? nested.steamId ?? nested.steamID),
       eosId: normalizeText(record?.[`${prefix}EOSID`] ?? record?.[`${prefix}EosID`] ?? nested.eosID ?? nested.eosId),
+      controllerId: normalizeText(record?.[`${prefix}ControllerID`] ?? record?.[`${prefix}ControllerId`] ?? nested.controllerID ?? nested.controllerId),
       resolved: nested.resolved === true || record?.[`${prefix}Resolved`] === true,
       isFallback: nested.isFallback === true,
       isBot: nested.isBot === true,
@@ -122,15 +123,27 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
   function resolveLiveIdentity(serverId, identity = {}) {
     const playerState = modules?.playerState;
-    const player = playerState?.findPlayer?.(serverId, {
+    const lookup = {
+      steamID: identity.steamId,
       steam64ID: identity.steamId,
       eosID: identity.eosId,
+      controllerID: identity.controllerId,
       name: identity.name,
-    })
-      ?? playerState?.getPlayerBySteamID?.(serverId, identity.steamId)
-      ?? playerState?.getPlayerByEOSID?.(serverId, identity.eosId)
-      ?? playerState?.getPlayerByName?.(serverId, identity.name)
+    };
+    let player = playerState?.findPlayer?.(serverId, lookup)
+      ?? (identity.steamId ? playerState?.getPlayerBySteamID?.(serverId, identity.steamId) : null)
+      ?? (identity.eosId ? playerState?.getPlayerByEOSID?.(serverId, identity.eosId) : null)
+      ?? (identity.controllerId ? playerState?.getPlayerByControllerID?.(serverId, identity.controllerId) : null)
+      ?? (identity.name ? playerState?.getPlayerByName?.(serverId, identity.name) : null)
       ?? null;
+
+    // 兼容不同 playerState API 版本，并确保取到 ListPlayers 返回的数字 playerID。
+    if (!player) {
+      const livePlayers = playerState?.getPlayerList?.(serverId) ?? playerState?.getOnlinePlayers?.(serverId) ?? [];
+      player = Array.isArray(livePlayers)
+        ? livePlayers.find((candidate) => liveIdentityMatches(candidate, identity)) ?? null
+        : null;
+    }
     if (!player) return identity;
     return {
       ...identity,
@@ -139,14 +152,28 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       playerId: normalizeText(player.playerID ?? player.playerId ?? identity.playerId),
       steamId: identity.steamId || normalizeText(player.steamID ?? player.steamId ?? player.steam64ID),
       eosId: identity.eosId || normalizeText(player.eosID ?? player.eosId),
+      controllerId: identity.controllerId || normalizeText(player.controllerID ?? player.controllerId),
       resolved: true,
     };
+  }
+
+  function liveIdentityMatches(player = {}, identity = {}) {
+    const same = (left, right) => {
+      const a = normalizeText(left).toLocaleLowerCase();
+      const b = normalizeText(right).toLocaleLowerCase();
+      return Boolean(a && b && a === b);
+    };
+    return same(player.steamID ?? player.steamId ?? player.steam64ID, identity.steamId)
+      || same(player.eosID ?? player.eosId, identity.eosId)
+      || same(player.controllerID ?? player.controllerId, identity.controllerId)
+      || same(player.name ?? player.playerName, identity.name);
   }
 
   function stableIdentity(identity = {}) {
     if (identity.playerId) return `player:${identity.playerId}`;
     if (identity.steamId) return `steam:${identity.steamId}`;
     if (identity.eosId) return `eos:${identity.eosId}`;
+    if (identity.controllerId) return `controller:${identity.controllerId}`;
     return "";
   }
 
@@ -248,15 +275,6 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return `受到 ${formatDamage(damage)} 点伤害｜${sourceLabel}${weapon}`;
   }
 
-  function buildAttackerMessage(record, victim, damage) {
-    const relation = record?.relation ?? {};
-    const friendly = Boolean(record?.isFriendlyFire ?? relation.isFriendlyFire);
-    const damageLabel = friendly && runtimeConfig.showFriendlyFireLabel ? "友军伤害" : "伤害";
-    const victimName = victim.displayName || victim.name || "未知玩家";
-    const weapon = runtimeConfig.showWeapon ? `｜武器：${displayWeapon(record)}` : "";
-    return `造成 ${formatDamage(damage)} 点${damageLabel}｜目标：${victimName}${weapon}`;
-  }
-
   async function sendDamageWarning(event, record, target, message, reason, requireTargetPlayerId = false) {
     const sender = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
     if (typeof sender !== "function") throw new Error("adminWarn API unavailable");
@@ -299,33 +317,40 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
     try {
       const victimMessage = buildVictimMessage(record, source, damage);
-      const attackerMessage = buildAttackerMessage(record, victim, damage);
-      const canWarnAttacker = runtimeConfig.showAttackerDamage && source.kind === "player"
-        && /^\d+$/.test(attacker.playerId);
-      if (runtimeConfig.showAttackerDamage && source.kind === "player" && !canWarnAttacker) {
-        state.invalidAttackerSkipped += 1;
-        logger?.warn?.(`[VictimDamageDisplay] attacker warning skipped: numeric ListPlayers playerID unavailable attacker=${attacker.name || attacker.steamId || attacker.eosId || "unknown"}`);
+      const canWarnVictim = runtimeConfig.showVictimDamage && /^\d+$/.test(victim.playerId);
+      if (runtimeConfig.showVictimDamage && !canWarnVictim) {
+        state.invalidVictimSkipped += 1;
+        logger?.warn?.(`[VictimDamageDisplay] victim warning skipped: numeric ListPlayers playerID unavailable victim=${victim.name || victim.steamId || victim.eosId || victim.controllerId || "unknown"}`);
       }
-      const [victimSettled, attackerSettled] = await Promise.allSettled([
-        runtimeConfig.showVictimDamage
-          ? sendDamageWarning(event, record, victim, victimMessage, "victim_damage_display")
-          : Promise.resolve({ success: false, skipped: true, skipReason: "victim_display_disabled" }),
-        canWarnAttacker
-          ? sendDamageWarning(event, record, attacker, attackerMessage, "attacker_damage_display", true)
-          : Promise.resolve({ success: false, skipped: true, skipReason: "attacker_unavailable" }),
-      ]);
-      const victimResult = settledResult(victimSettled);
-      const attackerResult = settledResult(attackerSettled);
-      const success = Boolean(victimResult.success || attackerResult.success);
-      const errorMessage = victimResult.errorMessage || attackerResult.errorMessage || "";
+
+      // 伤害信息只发送给受害者。攻击者永远不接收任何伤害反馈，
+      // 避免向可疑玩家暴露命中结果，同时便于受害者追踪伤害来源。
+      const victimResult = runtimeConfig.showVictimDamage
+        ? (canWarnVictim
+          ? settledResult(await settle(sendDamageWarning(
+            event,
+            record,
+            victim,
+            victimMessage,
+            "victim_damage_display",
+            true,
+          )))
+          : { success: false, skipped: true, skipReason: "victim_unavailable" })
+        : { success: false, skipped: true, skipReason: "victim_display_disabled" };
+      const attackerResult = {
+        success: false,
+        skipped: true,
+        skipReason: "attacker_display_forbidden",
+      };
+      const success = Boolean(victimResult.success);
+      const errorMessage = victimResult.errorMessage || "";
 
       recordAudit(event, record, success ? "warned" : "send_failed", success ? "admin_warn_sent" : "admin_warn_failed", {
-        message: [victimResult.success ? victimMessage : "", attackerResult.success ? attackerMessage : ""].filter(Boolean).join(" || "),
+        message: victimResult.success ? victimMessage : "",
         success,
         error: errorMessage,
       });
       if (victimResult.success) state.displayed += 1;
-      if (attackerResult.success) state.attackerDisplayed += 1;
       if (success) state.lastDisplayedAt = new Date().toISOString();
       if (errorMessage) state.lastError = errorMessage;
       return { success, victimResult, attackerResult };
@@ -370,9 +395,9 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "战斗伤害显示",
       kind: "plugin",
-      version: "1.1.0",
+      version: "1.3.0",
       category: "Combat",
-      description: "订阅清洗后的伤害事件，分别向受害者和有效攻击者发送私人伤害提示。",
+      description: "订阅清洗后的伤害事件，只向受害者发送包含伤害来源的私人提示，攻击者永不接收伤害反馈。",
     },
     apiName: "victimDamageDisplay",
     api: { getState, handleCombatEvent, displayWeapon, getDebugSnapshot, clearDebugRecords },
@@ -393,6 +418,14 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
   };
 }
 
+async function settle(promise) {
+  try {
+    return { status: "fulfilled", value: await promise };
+  } catch (reason) {
+    return { status: "rejected", reason };
+  }
+}
+
 function settledResult(result) {
   if (result?.status === "fulfilled") return result.value ?? { success: false };
   const errorMessage = result?.reason instanceof Error ? result.reason.message : String(result?.reason ?? "AdminWarn failed");
@@ -406,7 +439,8 @@ function readRuntimeConfig(config) {
     enabled: raw.enabled !== false,
     showWeapon: raw.showWeapon !== false,
     showVictimDamage: raw.showVictimDamage !== false,
-    showAttackerDamage: raw.showAttackerDamage !== false,
+    // 安全策略：攻击者伤害反馈永久关闭，不允许配置重新启用。
+    showAttackerDamage: false,
     showAttackerName: raw.showAttackerName !== false,
     showFriendlyFireLabel: raw.showFriendlyFireLabel !== false,
     adminPunishmentDamage: Number.isFinite(adminPunishmentDamage) ? adminPunishmentDamage : DEFAULT_ADMIN_PUNISHMENT_DAMAGE,
