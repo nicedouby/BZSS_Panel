@@ -1087,9 +1087,7 @@
       "firstWarningSeconds": 300,
       "leaderWarningSeconds": 450,
       "pollIntervalMs": 1000,
-      "liveLookupWhenMissing": false,
-      "maxWarningChars": 180,
-      "splitWarningDelayMs": 500
+      "liveLookupWhenMissing": false
     }
   },
   "warmup": {

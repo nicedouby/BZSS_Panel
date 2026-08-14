@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 7,
+  "revision": 9,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-08-03T13:13:26.648Z",
+  "updatedAt": "2026-08-08T14:46:21.469Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -719,13 +719,27 @@
       "defaultMaxPlayers": null,
       "assetMode": "none",
       "enabled": true,
-      "sortOrder": 120,
-      "ruleExemptions": {
-        "supervision": true
-      }
+      "sortOrder": 120
     }
   ],
   "entries": [
+    {
+      "id": "rule:manual_msej5qz8",
+      "name": "凯申物流大队长",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "logistics",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": true,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
     {
       "id": "rule:manual_msd7aw55",
       "name": "直升机",
@@ -6029,7 +6043,7 @@
       "name": "虎虎虎",
       "aliases": [],
       "keywords": [],
-      "typeId": "infantry",
+      "typeId": "matv",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,
@@ -6553,7 +6567,9 @@
       "id": "rule:bzss神人聚集地",
       "name": "BZSS神人聚集地",
       "aliases": [],
-      "keywords": [],
+      "keywords": [
+        "BZSS"
+      ],
       "typeId": "infantry",
       "faction": "",
       "asset": "",
@@ -6564,7 +6580,9 @@
       "source": "manual",
       "notes": "",
       "legacyVehicleType": "",
-      "searchTokens": []
+      "searchTokens": [
+        "BZSS"
+      ]
     },
     {
       "id": "rule:雷霆步兵队",
@@ -6587,7 +6605,9 @@
       "id": "rule:opop_督战队",
       "name": "OPOP 督战队",
       "aliases": [],
-      "keywords": [],
+      "keywords": [
+        "OPOP"
+      ],
       "typeId": "supervision",
       "faction": "",
       "asset": "",
@@ -6598,7 +6618,9 @@
       "source": "manual",
       "notes": "督战队：不受监督规则限制。",
       "legacyVehicleType": "",
-      "searchTokens": []
+      "searchTokens": [
+        "OPOP"
+      ]
     },
     {
       "id": "rule:政工组织",
