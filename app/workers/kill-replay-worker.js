@@ -3,7 +3,7 @@
 import fsp from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
 
-import { isLikelyDeathLine, parseReplayKillLine } from "../modules/kill-records/kill-record-normalizer.js";
+import { isLikelyCombatLine, parseReplayCombatLine } from "../modules/kill-records/kill-record-normalizer.js";
 
 const READ_CHUNK_BYTES = Math.max(4096, Number(workerData?.readChunkBytes) || 4 * 1024 * 1024);
 const BATCH_SIZE = Math.max(1, Number(workerData?.batchSize) || 100);
@@ -26,6 +26,8 @@ async function run() {
   let partialOffset = currentOffset;
   let scannedLines = 0;
   let killsFound = 0;
+  let woundsFound = 0;
+  let damageFound = 0;
   let nextProgressAt = currentOffset + PROGRESS_BYTES;
   let batch = [];
   const identities = new Map();
@@ -58,8 +60,8 @@ async function run() {
         scannedLines += 1;
         const line = lineBytes.toString("utf8");
         rememberIdentity(line, identities);
-        if (!isLikelyDeathLine(line)) continue;
-        const record = parseReplayKillLine(line, {
+        if (!isLikelyCombatLine(line)) continue;
+        const record = parseReplayCombatLine(line, {
           serverId: workerData?.serverId,
           sourceFile: sourcePath,
           sourceFileId,
@@ -69,7 +71,7 @@ async function run() {
         enrichAttacker(record, identities);
         rememberRecordIdentity(record, identities);
         batch.push(record);
-        killsFound += 1;
+        countRecord(record);
         if (batch.length >= BATCH_SIZE) flushBatch();
       }
       partial = cursor < blob.length ? Buffer.from(blob.subarray(cursor)) : Buffer.alloc(0);
@@ -84,8 +86,8 @@ async function run() {
       scannedLines += 1;
       const line = partial.toString("utf8");
       rememberIdentity(line, identities);
-      if (isLikelyDeathLine(line)) {
-        const record = parseReplayKillLine(line, {
+      if (isLikelyCombatLine(line)) {
+        const record = parseReplayCombatLine(line, {
           serverId: workerData?.serverId,
           sourceFile: sourcePath,
           sourceFileId,
@@ -95,7 +97,7 @@ async function run() {
           enrichAttacker(record, identities);
           rememberRecordIdentity(record, identities);
           batch.push(record);
-          killsFound += 1;
+          countRecord(record);
         }
       }
     }
@@ -106,6 +108,9 @@ async function run() {
       completedOffset: currentOffset,
       totalBytes: Math.max(0, cutoff - Number(workerData?.startOffset || 0)),
       scannedLines,
+      combatFound: damageFound + woundsFound + killsFound,
+      damageFound,
+      woundsFound,
       killsFound,
       durationMs: Date.now() - startedAt,
     });
@@ -115,7 +120,7 @@ async function run() {
 
   function flushBatch() {
     if (!batch.length) return;
-    parentPort?.postMessage({ type: "killBatch", records: batch });
+    parentPort?.postMessage({ type: "combatBatch", records: batch });
     batch = [];
   }
 
@@ -128,9 +133,18 @@ async function run() {
       completedOffset: currentOffset,
       totalBytes,
       scannedLines,
+      combatFound: damageFound + woundsFound + killsFound,
+      damageFound,
+      woundsFound,
       killsFound,
       percentage: totalBytes ? Math.min(100, (scannedBytes / totalBytes) * 100) : 100,
     });
+  }
+
+  function countRecord(record) {
+    if (record?.type === "damage") damageFound += 1;
+    else if (record?.type === "wound") woundsFound += 1;
+    else killsFound += 1;
   }
 }
 
