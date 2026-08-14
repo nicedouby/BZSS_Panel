@@ -8,7 +8,7 @@ const MAX_HANDLED_EVENTS = 2_000;
 
 const DEFAULT_CONFIG = {
   enabled: true,
-  damageEnabled: true,
+  damageEnabled: false,
   woundEnabled: true,
   deathEnabled: true,
   ignoreGiveUp: true,
@@ -169,7 +169,9 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
-    if (type === "damage" && !runtimeConfig.damageEnabled) return skip("damage_disabled");
+    // 全局策略：彻底关闭实时伤害显示。即使配置误设 damageEnabled=true，
+    // damage 事件也永远不会向攻击者发送 AdminWarn；击倒和击杀反馈保持独立。
+    if (type === "damage") return skip("damage_display_disabled");
     if (type === "wound" && !runtimeConfig.woundEnabled) return skip("wound_disabled");
     if (type === "death" && !runtimeConfig.deathEnabled) return skip("death_disabled");
     if (type === "damage" && !(Number(record?.damage) > 0)) return skip("invalid_damage");
@@ -239,8 +241,8 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "敌方战斗反馈",
       kind: "plugin",
-      version: "0.2.0",
-      description: "对敌方玩家造成伤害、击倒或击杀时，向攻击者发送实时私人反馈。",
+      version: "0.3.0",
+      description: "仅在击倒或击杀敌方玩家时向攻击者发送私人反馈；实时伤害显示永久关闭。",
     },
     api: { getState, handleCombatEvent },
     async start() {

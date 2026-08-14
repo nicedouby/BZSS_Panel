@@ -1074,10 +1074,16 @@
       "timeoutAction": "remove_from_squad",
       "broadcastOnApology": true
     },
-    "victimDamageDisplay": {
+    "enemyCombatFeedback": {
       "enabled": true,
+      "damageEnabled": false,
+      "woundEnabled": true,
+      "deathEnabled": true
+    },
+    "victimDamageDisplay": {
+      "enabled": false,
       "showWeapon": true,
-      "showVictimDamage": true,
+      "showVictimDamage": false,
       "showAttackerDamage": false,
       "showAttackerName": true,
       "showFriendlyFireLabel": true,

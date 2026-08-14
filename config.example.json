@@ -900,9 +900,16 @@
       "logSuccess": false,
       "logFailure": true
     },
-    "victimDamageDisplay": {
+    "enemyCombatFeedback": {
       "enabled": true,
+      "damageEnabled": false,
+      "woundEnabled": true,
+      "deathEnabled": true
+    },
+    "victimDamageDisplay": {
+      "enabled": false,
       "showWeapon": true,
+      "showVictimDamage": false,
       "showAttackerName": true,
       "showFriendlyFireLabel": true,
       "adminPunishmentDamage": 1000000,

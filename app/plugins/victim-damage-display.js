@@ -395,9 +395,9 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "战斗伤害显示",
       kind: "plugin",
-      version: "1.3.0",
+      version: "1.4.0",
       category: "Combat",
-      description: "订阅清洗后的伤害事件，只向受害者发送包含伤害来源的私人提示，攻击者永不接收伤害反馈。",
+      description: "实时伤害显示已全局停用；保留插件接口仅用于兼容旧配置与调试页面。",
     },
     apiName: "victimDamageDisplay",
     api: { getState, handleCombatEvent, displayWeapon, getDebugSnapshot, clearDebugRecords },
@@ -436,9 +436,10 @@ function readRuntimeConfig(config) {
   const raw = config?.get?.("plugins.victimDamageDisplay", {}) ?? {};
   const adminPunishmentDamage = Number(raw.adminPunishmentDamage);
   return {
-    enabled: raw.enabled !== false,
+    // 全局策略：彻底关闭实时伤害显示，旧配置或页面不能重新启用。
+    enabled: false,
     showWeapon: raw.showWeapon !== false,
-    showVictimDamage: raw.showVictimDamage !== false,
+    showVictimDamage: false,
     // 安全策略：攻击者伤害反馈永久关闭，不允许配置重新启用。
     showAttackerDamage: false,
     showAttackerName: raw.showAttackerName !== false,

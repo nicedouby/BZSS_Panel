@@ -19,12 +19,7 @@ function createHarness(pluginConfig = {}) {
   const modules = {
     playerState: {
       findPlayer(_serverId, identity = {}) {
-        if (identity.steam64ID === "steam-attacker" || identity.eosID === "eos-attacker" || identity.name === "Attacker") {
-          return { name: "Attacker", steamID: "steam-attacker", eosID: "eos-attacker", playerID: "42" };
-        }
-        if (identity.steam64ID === "steam-victim" || identity.eosID === "eos-victim" || identity.controllerID === "controller-victim" || identity.name === "Victim") {
-          return { name: "Victim", steamID: "steam-victim", eosID: "eos-victim", controllerID: "controller-victim", playerID: "84" };
-        }
+        if (identity.name === "Victim") return { name: "Victim", playerID: "84" };
         return null;
       },
     },
@@ -44,153 +39,44 @@ function createHarness(pluginConfig = {}) {
   return { plugin, listeners, warnings };
 }
 
-function damageRecord(overrides = {}) {
+function damageRecord() {
   return {
-    id: "damage-1",
+    id: "damage-disabled",
     type: "damage",
-    damage: 25,
-    weapon: { raw: "BP-M4A1-C-123456789" },
+    damage: 40,
+    weapon: { raw: "QJB95-1 LSW Optic" },
     serverId: "BZSS_Main",
-    attacker: { resolved: true, steam64ID: "steam-attacker", eosID: "eos-attacker", name: "Attacker" },
-    victim: { resolved: true, steam64ID: "steam-victim", eosID: "eos-victim", name: "Victim" },
-    relation: { isFriendlyFire: false },
-    ...overrides,
+    attacker: { resolved: true, name: "Attacker" },
+    victim: { resolved: true, name: "Victim", playerID: "84" },
   };
 }
 
-async function testStandardDamageAndWeaponCompaction() {
-  const { plugin, warnings } = createHarness({
-    showAttackerDamage: true,
-    weaponAliases: { "bp-m4a1-c": "M4A1突击步枪" },
-  });
-  await plugin.start();
-  await plugin.api.handleCombatEvent({ eventId: "event-1", record: damageRecord() });
-  assert.equal(warnings.length, 1, "attacker feedback must remain disabled even when config requests it");
-  const victimWarning = warnings[0];
-  assert.equal(victimWarning.targetPlayerId, "84");
-  assert.equal(victimWarning.requireTargetPlayerId, true);
-  assert.match(victimWarning.message, /来源：Attacker/);
-  assert.match(victimWarning.message, /武器：M4A1突击步枪/);
-  assert.equal(plugin.api.getState().attackerDisplayed, 0);
-  await plugin.stop();
-}
+const harness = createHarness({
+  enabled: true,
+  showVictimDamage: true,
+  showAttackerDamage: true,
+});
+await harness.plugin.start();
 
-async function testVictimControllerIdResolvesListPlayersIdAndSendsFirst() {
-  const { plugin, warnings } = createHarness();
-  await plugin.start();
-  await plugin.api.handleCombatEvent({
-    eventId: "controller-victim",
-    record: damageRecord({
-      id: "controller-victim",
-      victimName: "",
-      victimSteam64ID: "",
-      victimEOSID: "",
-      victimControllerID: "controller-victim",
-      victim: {
-        resolved: true,
-        name: "",
-        steam64ID: "",
-        eosID: "",
-        controllerID: "controller-victim",
-        playerId: "",
-      },
-    }),
-  });
+assert.equal(harness.plugin.api.getState().active, false);
+assert.equal(harness.plugin.api.getState().config.enabled, false);
+assert.equal(harness.plugin.api.getState().config.showVictimDamage, false);
+assert.equal(harness.plugin.api.getState().config.showAttackerDamage, false);
 
-  assert.equal(warnings.length, 1);
-  assert.equal(warnings[0].reason, "victim_damage_display");
-  assert.equal(warnings[0].targetPlayerId, "84");
-  assert.equal(warnings[0].requireTargetPlayerId, true);
-  assert.match(warnings[0].message, /受到 25 点伤害/);
-  await plugin.stop();
-}
+const result = await harness.plugin.api.handleCombatEvent({
+  eventId: "damage-disabled",
+  record: damageRecord(),
+});
+assert.equal(result.skipped, true);
+assert.equal(result.skipReason, "disabled");
+assert.equal(harness.warnings.length, 0, "neither victim nor attacker may receive damage warnings");
 
-async function testFriendlyFallbackBotAndEmptyWeapon() {
-  const { plugin, warnings } = createHarness();
-  await plugin.start();
-  await plugin.api.handleCombatEvent({ eventId: "friendly", record: damageRecord({ id: "friendly", relation: { isFriendlyFire: true } }) });
-  await plugin.api.handleCombatEvent({ eventId: "fallback", record: damageRecord({ id: "fallback", attacker: { resolved: true, isFallback: true, playerId: "victim-id", name: "Victim" }, weapon: "" }) });
-  await plugin.api.handleCombatEvent({ eventId: "bot", record: damageRecord({ id: "bot", isBotAttack: true, attacker: { isBot: true }, weapon: { raw: "Projectile 7.62mm" } }) });
-  assert.equal(warnings.length, 3);
-  const victimWarnings = warnings.filter((warning) => warning.reason === "victim_damage_display");
-  assert.match(victimWarnings[0].message, /友伤：Attacker/);
-  assert.match(victimWarnings[1].message, /来源：自身\/环境｜武器：$/);
-  assert.match(victimWarnings[2].message, /来源：BOT/);
-  await plugin.stop();
-}
+const handler = [...harness.listeners.get("module.combatManager:COMBAT_EVENT_PROCESSED")][0];
+handler({ eventId: "event-bus-damage", record: { ...damageRecord(), id: "event-bus-damage" } });
+await new Promise((resolve) => setImmediate(resolve));
+assert.equal(harness.warnings.length, 0);
 
-async function testExplosiveDamageWithoutResolvedAttackerStillDisplays() {
-  const { plugin, warnings } = createHarness();
-  await plugin.start();
-  await plugin.api.handleCombatEvent({
-    eventId: "explosive",
-    record: damageRecord({
-      id: "explosive",
-      attacker: { resolved: false },
-      weapon: { raw: "BP_M67_Frag_Grenade_C_123456" },
-    }),
-  });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0].message, /来源：自身\/环境/);
-  await plugin.stop();
-}
+await harness.plugin.stop();
+assert.equal(harness.listeners.get("module.combatManager:COMBAT_EVENT_PROCESSED").size, 0);
 
-async function testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage() {
-  const { plugin, warnings } = createHarness();
-  await plugin.start();
-  await plugin.api.handleCombatEvent({ eventId: "admin", record: damageRecord({ id: "admin", damage: "1000000" }) });
-  await plugin.api.handleCombatEvent({ eventId: "wound", record: damageRecord({ id: "wound", type: "wound" }) });
-  await plugin.api.handleCombatEvent({ eventId: "unresolved", record: damageRecord({ id: "unresolved", attacker: { resolved: false } }) });
-  await plugin.api.handleCombatEvent({ eventId: "self", record: damageRecord({ id: "self", attacker: { resolved: true, playerId: "victim-id", name: "Victim" } }) });
-  assert.equal(warnings.length, 3);
-  const victimWarnings = warnings.filter((warning) => warning.reason === "victim_damage_display");
-  const attackerWarnings = warnings.filter((warning) => warning.reason === "attacker_damage_display");
-  assert.equal(attackerWarnings.length, 0);
-  assert.match(victimWarnings[0].message, /受到 1000000 点伤害/);
-  assert.match(victimWarnings[1].message, /来源：自身\/环境/);
-  assert.match(victimWarnings[2].message, /来源：自身/);
-  const state = plugin.api.getState();
-  assert.equal(state.adminPunishmentSkipped, 0);
-  assert.equal(state.nonDamageSkipped, 1);
-  assert.equal(state.selfAttackerSkipped, 0);
-  await plugin.stop();
-}
-
-async function testDedupesAndUnsubscribes() {
-  const { plugin, listeners, warnings } = createHarness();
-  await plugin.start();
-  const handler = [...listeners.get("module.combatManager:COMBAT_EVENT_PROCESSED")][0];
-  handler({ eventId: "dup", record: damageRecord({ id: "dup" }) });
-  await new Promise((resolve) => setImmediate(resolve));
-  await plugin.api.handleCombatEvent({ eventId: "dup", record: damageRecord({ id: "dup" }) });
-  assert.equal(warnings.length, 1);
-  assert.equal(warnings.filter((warning) => warning.reason === "attacker_damage_display").length, 0);
-  assert.equal(plugin.api.getState().attackerDisplayed, 0);
-  assert.equal(plugin.api.getState().duplicateSkipped, 1);
-  await plugin.stop();
-  assert.equal(listeners.get("module.combatManager:COMBAT_EVENT_PROCESSED").size, 0);
-}
-
-async function testReplayDamageNeverWarnsPlayers() {
-  const { plugin, warnings } = createHarness();
-  await plugin.start();
-  await plugin.api.handleCombatEvent({
-    eventId: "replay-damage",
-    isReplay: true,
-    canTriggerActions: false,
-    record: damageRecord({ id: "replay-damage", isReplay: true, canTriggerActions: false }),
-  });
-  assert.equal(warnings.length, 0);
-  assert.equal(plugin.api.getState().lastSkipReason, "replay_event");
-  await plugin.stop();
-}
-
-await testStandardDamageAndWeaponCompaction();
-await testVictimControllerIdResolvesListPlayersIdAndSendsFirst();
-await testFriendlyFallbackBotAndEmptyWeapon();
-await testExplosiveDamageWithoutResolvedAttackerStillDisplays();
-await testWarnsEveryPositiveDamageIncludingAdministrativeAndSelfDamage();
-await testDedupesAndUnsubscribes();
-await testReplayDamageNeverWarnsPlayers();
-
-console.log("victim damage display tests passed");
+console.log("victim damage display disabled tests passed");
