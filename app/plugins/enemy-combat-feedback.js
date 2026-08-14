@@ -8,10 +8,12 @@ const MAX_HANDLED_EVENTS = 2_000;
 
 const DEFAULT_CONFIG = {
   enabled: true,
+  damageEnabled: true,
   woundEnabled: true,
   deathEnabled: true,
   ignoreGiveUp: true,
   requirePlayerId: true,
+  damageMessage: "[伤害反馈] 你对 {victim} 造成了 {damage} 点伤害",
   woundMessage: "[击杀反馈] 你击倒了 {victim}",
   deathMessage: "[击杀反馈] 你击杀了 {victim}",
 };
@@ -22,6 +24,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
   let runtimeConfig = readConfig(config);
 
   const state = {
+    totalDamageFeedback: 0,
     totalWoundFeedback: 0,
     totalDeathFeedback: 0,
     totalSkipped: 0,
@@ -144,8 +147,16 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return (victim || "未知玩家").slice(0, 80);
   }
 
+  function formatDamage(value) {
+    const damage = Number(value);
+    if (!Number.isFinite(damage)) return "";
+    return Number.isInteger(damage) ? String(damage) : String(Math.round(damage * 100) / 100);
+  }
+
   function formatMessage(template, record) {
-    return String(template ?? "").replaceAll("{victim}", safeVictimName(record));
+    return String(template ?? "")
+      .replaceAll("{victim}", safeVictimName(record))
+      .replaceAll("{damage}", formatDamage(record?.damage));
   }
 
   async function handleCombatEvent(event = {}) {
@@ -154,9 +165,11 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
     const record = getRecord(event);
     const type = normalizeText(record?.type).toLocaleLowerCase();
-    if (type !== "wound" && type !== "death") return skip("unsupported_type");
+    if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
+    if (type === "damage" && !runtimeConfig.damageEnabled) return skip("damage_disabled");
     if (type === "wound" && !runtimeConfig.woundEnabled) return skip("wound_disabled");
     if (type === "death" && !runtimeConfig.deathEnabled) return skip("death_disabled");
+    if (type === "damage" && !(Number(record?.damage) > 0)) return skip("invalid_damage");
     if (hasFriendlyFire(record)) return skip("friendly_fire");
     if (sameIdentity(record)) return skip("self_damage");
     if (!isConfirmedEnemy(record)) return skip("team_unknown");
@@ -172,8 +185,13 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     const playerID = playerIdOf(attacker);
     if (runtimeConfig.requirePlayerId && !playerID) return skip("player_id_missing");
 
-    const message = formatMessage(type === "wound" ? runtimeConfig.woundMessage : runtimeConfig.deathMessage, record);
-    const reason = type === "wound" ? "enemy_combat_feedback_wound" : "enemy_combat_feedback_death";
+    const template = type === "damage"
+      ? runtimeConfig.damageMessage
+      : type === "wound"
+        ? runtimeConfig.woundMessage
+        : runtimeConfig.deathMessage;
+    const message = formatMessage(template, record);
+    const reason = `enemy_combat_feedback_${type}`;
 
     try {
       const result = await modules?.adminWarn?.sendAdminWarn?.({
@@ -195,7 +213,8 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
         return { success: false, error: state.lastError };
       }
 
-      if (type === "wound") state.totalWoundFeedback += 1;
+      if (type === "damage") state.totalDamageFeedback += 1;
+      else if (type === "wound") state.totalWoundFeedback += 1;
       else state.totalDeathFeedback += 1;
       state.lastFeedbackAt = new Date().toISOString();
       logger?.info?.(`[EnemyCombatFeedback] ${type} attacker=${normalizeText(attacker.name)} victim=${safeVictimName(record)} playerID=${playerID}`);
@@ -215,10 +234,10 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
   return {
     manifest: {
       id: PLUGIN_ID,
-      name: "敌方击杀反馈",
+      name: "敌方战斗反馈",
       kind: "plugin",
-      version: "0.1.0",
-      description: "敌方玩家被击倒或击杀时，向攻击者发送实时私人反馈。",
+      version: "0.2.0",
+      description: "对敌方玩家造成伤害、击倒或击杀时，向攻击者发送实时私人反馈。",
     },
     api: { getState, handleCombatEvent },
     async start() {
