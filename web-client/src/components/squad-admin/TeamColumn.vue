@@ -4,6 +4,12 @@
       class="team-column-header"
       :class="{ 'has-flag': !!factionFlagUrl }"
       style="position: relative;"
+      role="button"
+      tabindex="0"
+      :aria-label="`向 TEAM ${team.teamId} 发送警告`"
+      @click="emit('warn-team', team.teamId)"
+      @keydown.enter.prevent="emit('warn-team', team.teamId)"
+      @keydown.space.prevent="emit('warn-team', team.teamId)"
     >
       <div v-if="factionFlagUrl" class="team-header-flag-bg">
         <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
@@ -12,13 +18,7 @@
         <!-- Title Row -->
         <div class="team-header-top-row">
           <h2 class="team-title-line">
-            <button
-              type="button"
-              class="team-id-badge team-warn-trigger"
-              :disabled="!canWarn"
-              :title="`向 TEAM ${team.teamId} 发送 AdminWarn`"
-              @click="$emit('warn-team', team.teamId)"
-            >TEAM {{ team.teamId }}</button>
+            <span class="team-id-badge">TEAM {{ team.teamId }}</span>
             <span class="team-name" :title="team.teamName">{{ team.teamName }}</span>
           </h2>
 
@@ -27,15 +27,17 @@
 
         <!-- Secondary Stats Chips -->
         <div class="team-secondary-stats">
-          <TeamHeaderQuickStats
-            :team-id="team.teamId"
-            :ticket-count="team.ticketCount"
-            :player-count="team.playerCount"
-            :max-players="team.maxPlayers"
-            :can-edit-tickets="canEditTickets"
-            :class="teamColorClass"
-            @edit-tickets="$emit('edit-tickets', props.team)"
-          />
+          <div class="team-ticket-controls" @click.stop @keydown.stop>
+            <TeamHeaderQuickStats
+              :team-id="team.teamId"
+              :ticket-count="team.ticketCount"
+              :player-count="team.playerCount"
+              :max-players="team.maxPlayers"
+              :can-edit-tickets="canEditTickets"
+              :class="teamColorClass"
+              @edit-tickets="$emit('edit-tickets', props.team)"
+            />
+          </div>
 
           <span class="team-stat-chip avg" title="队伍平均游戏时长">
             <svg class="chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -128,7 +130,6 @@ const props = defineProps<{
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
   canEditTickets?: boolean;
-  canWarn?: boolean;
   searchQuery?: string;
 }>();
 
@@ -272,13 +273,17 @@ const teamAveragePingText = computed(() => {
   border-color: rgba(56, 189, 248, 0.5);
 }
 
-.team-warn-trigger {
+.team-column-header[role="button"] {
   cursor: pointer;
 }
 
-.team-warn-trigger:disabled {
-  cursor: not-allowed;
-  opacity: .58;
+.team-column-header[role="button"]:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, .82);
+  outline-offset: 2px;
+}
+
+.team-ticket-controls {
+  display: contents;
 }
 
 .team-column {
