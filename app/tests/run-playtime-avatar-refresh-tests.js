@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { createPlaytimeAvatarRefreshModule } from "../modules/playtime-avatar-refresh/index.js";
 import { SteamGameDurationService } from "../modules/playtime/index.js";
 
+const HOUR_MS = 60 * 60_000;
+const DAY_MS = 24 * HOUR_MS;
+
 function createBaseModuleFactory() {
   const jobs = new Map();
   return () => ({
@@ -48,7 +51,7 @@ function createBaseModuleFactory() {
   });
 }
 
-async function main() {
+async function testManualAvatarPersistenceCompatibility() {
   const steamID = "76561198000000001";
   let databaseReads = 0;
   const playerDatabase = {
@@ -98,7 +101,9 @@ async function main() {
   const lookupCompleted = await module.api.waitForJob(lookup.id, 500);
   assert.equal(lookupCompleted.status, "completed");
   assert.equal(lookupCompleted.result.avatarPersisted, true);
+}
 
+async function testBaseBackfillStillProcessesEligibleRows() {
   let missingAvatarQueries = 0;
   const persistedAvatars = [];
   const service = new SteamGameDurationService({
@@ -159,11 +164,110 @@ async function main() {
     ["76561198000000011", "76561198000000012"],
     ["76561198000000013", "76561198000000014"],
   ]);
-
-  console.log("run-playtime-avatar-refresh-tests: ok");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+async function testAutomaticRefreshOwnershipAndInactiveBackfillGuard() {
+  const now = Date.now();
+  const activeSteamID = "76561198000000021";
+  const inactiveSteamID = "76561198000000022";
+  const migratedSteamID = "76561198000000023";
+  let underlyingConnectRegistrations = 0;
+  let filteredRows = null;
+
+  const eventBus = {
+    onCoreEvent() {
+      underlyingConnectRegistrations += 1;
+      return () => {};
+    },
+  };
+
+  const playerDatabase = {
+    async listPlayersWithSteamID(options = {}) {
+      assert.equal(options.missingAvatarOnly, true);
+      return [
+        { id: 21, steam_id: activeSteamID },
+        { id: 22, steam_id: inactiveSteamID },
+        { id: 23, steam_id: migratedSteamID },
+      ];
+    },
+    async listPlayerSessionHistory(playerId, options = {}) {
+      assert.deepEqual(options, { limit: 1, offset: 0 });
+      if (playerId === 21) return [{ joined_at: now - 2 * DAY_MS }];
+      if (playerId === 22) return [{ joined_at: now - 16 * DAY_MS }];
+      return [];
+    },
+    async listPlayerAliases(playerId, options = {}) {
+      assert.deepEqual(options, { limit: 1, offset: 0 });
+      if (playerId === 22) {
+        throw new Error("stale session history must short-circuit alias fallback");
+      }
+      return [];
+    },
+  };
+
+  const logger = {
+    info() {},
+    warn() {},
+    error() {},
+  };
+
+  const guardProbeBaseFactory = (baseContext) => ({
+    manifest: {
+      id: "module.playtime",
+      name: "Playtime Module",
+      kind: "module",
+      version: "guard-probe",
+    },
+    apiName: "playtime",
+    api: {
+      getStatus() {
+        return { configured: true };
+      },
+    },
+    async init() {
+      // The real base playtime module registers exactly this unconditional
+      // automatic refresh hook. The wrapper must consume it without registering
+      // it on the shared event bus.
+      baseContext.core.eventBus.onCoreEvent("On_PlayerConnected", () => {
+        throw new Error("suppressed handler must never execute");
+      });
+
+      filteredRows = await baseContext.modules.playerDatabase.listPlayersWithSteamID({
+        missingAvatarOnly: true,
+      });
+    },
+  });
+
+  const module = createPlaytimeAvatarRefreshModule({
+    core: { eventBus },
+    modules: { playerDatabase },
+    config: {
+      get() {
+        return {};
+      },
+    },
+    logger,
+  }, guardProbeBaseFactory);
+
+  await module.init();
+
+  assert.equal(underlyingConnectRegistrations, 0);
+  assert.deepEqual(
+    filteredRows.map((row) => row.steam_id),
+    [activeSteamID, migratedSteamID],
+  );
+
+  const status = module.api.getStatus();
+  assert.equal(status.configured, true);
+  assert.equal(status.automaticRefreshPolicy.owner, "plugin.player_duration_slow_refresh");
+  assert.equal(status.automaticRefreshPolicy.playtimeCooldownMs, 10 * HOUR_MS);
+  assert.equal(status.automaticRefreshPolicy.profileCooldownMs, 24 * HOUR_MS);
+  assert.equal(status.automaticRefreshPolicy.inactivePlayerCutoffMs, 15 * DAY_MS);
+  assert.equal(status.automaticRefreshPolicy.baseConnectRefreshSuppressed, true);
+}
+
+await testManualAvatarPersistenceCompatibility();
+await testBaseBackfillStillProcessesEligibleRows();
+await testAutomaticRefreshOwnershipAndInactiveBackfillGuard();
+
+console.log("run-playtime-avatar-refresh-tests: ok");
