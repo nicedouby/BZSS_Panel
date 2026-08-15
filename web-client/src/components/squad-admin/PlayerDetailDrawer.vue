@@ -352,6 +352,35 @@
                   </div>
                 </div>
 
+                <div class="hud-pane-section hud-component-tags">
+                  <div class="hud-section-header">
+                    <span class="hud-section-title">成分标记 / PLAYER TAGS</span>
+                    <span class="hud-section-subtitle">爱好</span>
+                  </div>
+                  <div class="component-tag-list">
+                    <button
+                      v-for="tag in hobbyTags"
+                      :key="tag"
+                      type="button"
+                      class="component-tag-chip"
+                      :class="{ active: selectedHobbyTags.includes(tag) }"
+                      :disabled="!canEditPlayerTags || tagsSaving || !playerDatabaseRecord"
+                      @click="toggleHobbyTag(tag)"
+                    >{{ tag }}</button>
+                  </div>
+                  <div class="component-tag-actions">
+                    <span v-if="!canEditPlayerTags" class="component-tag-note">仅超级管理员可编辑</span>
+                    <span v-else-if="!playerDatabaseRecord" class="component-tag-note">正在加载玩家数据库记录…</span>
+                    <button
+                      v-else
+                      type="button"
+                      class="hud-mini-btn save-btn"
+                      :disabled="tagsSaving"
+                      @click="saveHobbyTags"
+                    >{{ tagsSaving ? "保存中…" : "保存成分标记" }}</button>
+                  </div>
+                </div>
+
                 <!-- Steam Friends Section (Collapsible Accordion) -->
                 <div class="hud-pane-section hud-friends-panel">
                   <button type="button" class="hud-accordion-btn" @click="showFriendsCollapsed = !showFriendsCollapsed">
@@ -608,6 +637,13 @@ const databaseLoading = ref(false);
 const databaseError = ref("");
 const playtimeOverrideHours = ref("");
 const playtimeSaving = ref(false);
+const tagsSaving = ref(false);
+const selectedHobbyTags = ref<string[]>([]);
+const hobbyTags = [
+  "爱好铁皮", "爱好压家", "爱好单载", "爱好甩锅", "爱好带队", "爱好带节奏",
+  "爱好狗官", "爱好TK", "爱好载具打狙", "爱好擦边压家", "爱好ZCC", "爱好IFV",
+  "爱好ZSJ", "爱好APC", "爱好龟壳", "爱好拉点", "爱好劫二点", "爱好劫拉点",
+];
 const loadToken = ref(0);
 const steamFriends = ref<any[]>([]);
 const friendsLoading = ref(false);
@@ -806,6 +842,7 @@ const canWarnPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermi
 const canKickPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.kick")));
 const canRemovePlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.remove")));
 const canEditPlaytime = computed(() => Boolean(auth.user?.isSuperAdmin));
+const canEditPlayerTags = computed(() => Boolean(auth.user?.isSuperAdmin));
 const viewerSteam64 = computed(() => normalizeSteam64(auth.user?.steam64));
 const adminRuntimePlayer = computed(() => {
   const steam64 = viewerSteam64.value;
@@ -925,6 +962,9 @@ watch(
   () => playerDatabaseRecord.value?.id,
   (newId) => {
     syncPlaytimeOverrideInput();
+    selectedHobbyTags.value = Array.isArray(databaseDetail.value?.tags)
+      ? databaseDetail.value.tags.filter((tag: any) => tag?.tag_type === "hobby").map((tag: any) => String(tag.tag_value))
+      : [];
     if (newId) {
       void loadSteamFriends();
     } else {
@@ -1100,6 +1140,32 @@ async function savePlaytimeOverride(clear = false) {
     });
   } finally {
     playtimeSaving.value = false;
+  }
+}
+
+function toggleHobbyTag(tag: string) {
+  if (!canEditPlayerTags.value || tagsSaving.value) return;
+  selectedHobbyTags.value = selectedHobbyTags.value.includes(tag)
+    ? selectedHobbyTags.value.filter((value) => value !== tag)
+    : [...selectedHobbyTags.value, tag];
+}
+
+async function saveHobbyTags() {
+  const playerId = playerDatabaseRecord.value?.id;
+  if (!canEditPlayerTags.value || !playerId || tagsSaving.value) return;
+  tagsSaving.value = true;
+  try {
+    const result = await apiPost<any>(`/api/db/players/${encodeURIComponent(String(playerId))}/tags`, {
+      tagType: "hobby",
+      tagValues: selectedHobbyTags.value,
+    });
+    if (!result?.ok) throw new Error(result?.message || "保存失败");
+    databaseDetail.value = result.data ?? databaseDetail.value;
+    ui.pushToast({ title: "成分标记已保存", message: `已保存 ${selectedHobbyTags.value.length} 个爱好标记`, tone: "ok" });
+  } catch (error) {
+    ui.pushToast({ title: "保存失败", message: error instanceof Error ? error.message : String(error), tone: "error" });
+  } finally {
+    tagsSaving.value = false;
   }
 }
 
@@ -3971,6 +4037,43 @@ onUnmounted(() => {
 .hud-admin-console .hud-action-btn-styled:disabled {
   opacity: 0.38;
   filter: saturate(0.55);
+}
+
+.hud-component-tags {
+  gap: 10px;
+}
+.component-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.component-tag-chip {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 11px;
+  cursor: pointer;
+}
+.component-tag-chip.active {
+  color: #fef3c7;
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.18);
+}
+.component-tag-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.component-tag-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.component-tag-note {
+  color: var(--color-text-muted);
+  font-size: 11px;
 }
 
 .hud-friends-panel {
