@@ -17,15 +17,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: agent/reserve-slot-timed-cdk
-          fetch-depth: 0
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            .github/scripts
+            app
+            web-client
+          sparse-checkout-cone-mode: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            web-client/package-lock.json
 
       - name: Apply patch
         run: python .github/scripts/apply_timed_cdk_patch.py
