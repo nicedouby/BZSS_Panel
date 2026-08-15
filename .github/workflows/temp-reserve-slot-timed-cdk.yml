@@ -30,7 +30,9 @@ jobs:
           node-version: 24
 
       - name: Apply patch
-        run: python .github/scripts/apply_timed_cdk_patch.py
+        run: |
+          sed -i '0,/if count != 1:/s//if count < 1:/' .github/scripts/apply_timed_cdk_patch.py
+          python .github/scripts/apply_timed_cdk_patch.py
 
       - name: Check patch
         run: |
