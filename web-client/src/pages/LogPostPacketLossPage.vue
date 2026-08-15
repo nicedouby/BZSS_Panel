@@ -150,6 +150,8 @@
         <div><dt>750ms 后到达</dt><dd>{{ formatInteger(monitor?.metrics?.latePacketsAfterFinalize) }}</dd></div>
         <div><dt>统计窗口</dt><dd>{{ formatInteger(monitor?.metrics?.finalizedWindows) }}</dd></div>
         <div><dt>活动发送会话</dt><dd>{{ formatInteger(monitor?.sessions?.length) }}</dd></div>
+        <div><dt>历史保留</dt><dd>{{ formatInteger(monitor?.retentionHours) }} 小时</dd></div>
+        <div><dt>历史写入错误</dt><dd>{{ formatInteger(monitor?.metrics?.persistenceErrors) }}</dd></div>
       </dl>
     </section>
   </main>
@@ -179,6 +181,7 @@ const statusLabel = computed(() => {
   if (status === "healthy") return "正常";
   if (status === "warning") return "警告";
   if (status === "critical") return "严重丢包";
+  if (status === "stale") return "统计已过期";
   return "等待统计";
 });
 
@@ -276,6 +279,7 @@ h2 { font-size: 16px; }
 .status-healthy { color: #75d99b; background: rgba(34, 197, 94, .1); }
 .status-warning { color: #f2c66d; background: rgba(245, 158, 11, .1); }
 .status-critical { color: #ff8080; background: rgba(239, 68, 68, .12); }
+.status-stale { color: #f2c66d; background: rgba(245, 158, 11, .08); }
 .status-waiting { color: #9aa9b8; background: rgba(148, 163, 184, .08); }
 .refresh-button { color: inherit; background: rgba(148, 163, 184, .08); border: 1px solid rgba(148, 163, 184, .18); cursor: pointer; }
 .metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
@@ -309,7 +313,7 @@ th, td { padding: 9px 10px; text-align: left; border-top: 1px solid rgba(148, 16
 th { color: #748597; font-weight: 700; }
 td { color: #c8d3de; font-variant-numeric: tabular-nums; }
 code { color: #9fb1c2; }
-.detail-panel dl { margin: 14px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.detail-panel dl { margin: 14px 0 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 .detail-panel dl div { padding: 10px 12px; border-radius: 8px; background: rgba(148, 163, 184, .05); }
 dt { color: #7c8d9e; font-size: 11px; }
 dd { margin: 5px 0 0; font-size: 14px; font-weight: 700; }
