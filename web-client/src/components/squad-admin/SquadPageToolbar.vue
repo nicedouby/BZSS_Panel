@@ -3,37 +3,11 @@
     <div class="toolbar-row">
 
 
-      <div class="filter-chips" aria-label="Quick filters">
-        <button
-          v-for="filter in filters"
-          :key="filter.value"
-          type="button"
-          class="filter-chip"
-          :class="{ active: filterMode === filter.value }"
-          :aria-pressed="filterMode === filter.value"
-          @click="$emit('filter-change', filter.value)"
-        >
-          {{ filter.label }}
-        </button>
-      </div>
-
-      <div class="view-mode-toggle">
-        <button
-          type="button"
-          class="toggle-btn"
-          :class="{ active: viewMode === 'list' }"
-          @click="$emit('view-mode-change', 'list')"
-        >
-          列表
-        </button>
-        <button
-          type="button"
-          class="toggle-btn"
-          :class="{ active: viewMode === 'map' }"
-          @click="$emit('view-mode-change', 'map')"
-        >
-          地图
-        </button>
+      <div class="admin-warn-targets" aria-label="AdminWarn target">
+        <span class="admin-warn-label">AdminWarn</span>
+        <button type="button" class="admin-warn-choice all" :disabled="!canRefresh || isRefreshing" @click="$emit('warn-target', 'all')">All</button>
+        <button type="button" class="admin-warn-choice team1" :disabled="!canRefresh || isRefreshing" @click="$emit('warn-target', 'team1')">TEAM 1</button>
+        <button type="button" class="admin-warn-choice team2" :disabled="!canRefresh || isRefreshing" @click="$emit('warn-target', 'team2')">TEAM 2</button>
       </div>
 
       <div class="toolbar-spacer" />
@@ -54,14 +28,6 @@
         >
           <span class="select-icon">★</span>
           <span>{{ multiSelectMode ? '退出批量' : '批量操作' }}</span>
-        </button>
-        <button
-          type="button"
-          class="refresh-button warning-target"
-          :disabled="!canRefresh || isRefreshing"
-          @click="$emit('warn-all')"
-        >
-          AdminWarn All
         </button>
         <div ref="refreshMenuRoot" class="refresh-dropdown">
           <button
@@ -127,10 +93,8 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { t } from "../../i18n";
 
 type RefreshType = "players" | "squads" | "all";
-type FilterMode = "all" | "no_leader" | "locked" | "alerts";
 
 const props = defineProps<{
-  filterMode: FilterMode;
   canRefresh: boolean;
   refreshingType: RefreshType | "";
   refreshingPlaytime?: boolean;
@@ -142,7 +106,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: "filter-change", mode: FilterMode): void;
+  (event: "warn-target", target: "all" | "team1" | "team2"): void;
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
@@ -151,16 +115,8 @@ const emit = defineEmits<{
   (event: "view-mode-change", mode: "list" | "map"): void;
 }>();
 
-const filters = [
-  { value: "all", label: "All" },
-  { value: "no_leader", label: "No leader" },
-  { value: "locked", label: "Locked" },
-  { value: "alerts", label: "Alerts" },
-] as const;
-
 const isRefreshing = computed(() => Boolean(props.refreshingType));
 const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
-const filterMode = computed(() => props.filterMode);
 const refreshMenuOpen = ref(false);
 const refreshMenuRoot = ref<HTMLElement | null>(null);
 
@@ -284,17 +240,15 @@ onBeforeUnmount(removeWindowListeners);
   box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.12);
 }
 
-.filter-chips,
-.refresh-controls,
-.view-mode-toggle {
+.admin-warn-targets,
+.refresh-controls {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.filter-chip,
-.toggle-btn,
+.admin-warn-choice,
 .refresh-button,
 .menu-item {
   display: inline-flex;
@@ -312,8 +266,6 @@ onBeforeUnmount(removeWindowListeners);
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
 }
 
-.filter-chip.active,
-.toggle-btn.active,
 .refresh-button.active,
 .refresh-button.primary-select {
   color: var(--color-text-primary);
@@ -321,15 +273,15 @@ onBeforeUnmount(removeWindowListeners);
   background: linear-gradient(180deg, rgba(56, 189, 248, 0.18), rgba(56, 189, 248, 0.08));
 }
 
-.toggle-btn.active {
-  border-color: rgba(245, 158, 11, 0.42);
-  background: linear-gradient(180deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.08));
+ .admin-warn-label {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.refresh-button.warning-target {
-  border-color: rgba(245, 158, 11, 0.48);
-  color: #fcd34d;
-}
+.admin-warn-choice.all { border-color: rgba(245, 158, 11, 0.48); color: #fcd34d; }
+.admin-warn-choice.team1 { border-color: rgba(56, 189, 248, 0.48); color: #7dd3fc; }
+.admin-warn-choice.team2 { border-color: rgba(251, 146, 60, 0.48); color: #fdba74; }
 
 .danger-item {
   color: #fca5a5;
@@ -347,16 +299,14 @@ onBeforeUnmount(removeWindowListeners);
   border-color: rgba(239, 68, 68, 0.34);
 }
 
-.filter-chip:hover,
-.toggle-btn:hover,
+.admin-warn-choice:hover,
 .refresh-button:hover,
 .menu-item:hover {
   transform: translateY(-1px);
   color: var(--color-text-primary);
 }
 
-.filter-chip:disabled,
-.toggle-btn:disabled,
+.admin-warn-choice:disabled,
 .refresh-button:disabled,
 .menu-item:disabled {
   opacity: 0.55;
@@ -451,9 +401,8 @@ onBeforeUnmount(removeWindowListeners);
     min-width: 0;
   }
 
-  .filter-chips,
-  .refresh-controls,
-  .view-mode-toggle {
+  .admin-warn-targets,
+  .refresh-controls {
     width: 100%;
   }
 
@@ -461,8 +410,7 @@ onBeforeUnmount(removeWindowListeners);
     gap: 6px;
   }
 
-  .filter-chip,
-  .toggle-btn,
+  .admin-warn-choice,
   .refresh-button,
   .menu-item {
     min-height: 32px;
