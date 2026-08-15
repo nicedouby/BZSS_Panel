@@ -25,6 +25,18 @@ export const router = createRouter({
       },
     },
     {
+      path: "/system/logpost-packet-loss",
+      name: "logpost-packet-loss",
+      component: () => import("../pages/LogPostPacketLossPage.vue"),
+      meta: {
+        title: "LogPost 丢包监控",
+        refreshPolicy: "polling",
+        layoutMode: "workspace",
+        contentPadding: "none",
+        superAdminOnly: true,
+      },
+    },
+    {
       path: "/system/logpost-consumption-performance",
       name: "logpost-consumption-performance",
       component: () => import("../pages/LogPostConsumptionPerformancePage.vue"),
