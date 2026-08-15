@@ -13,6 +13,9 @@
         <AppStatusBadge :tone="cacheLoaded ? 'ok' : 'warn'">
           {{ cacheLoaded ? "缓存已加载" : "缓存未加载" }}
         </AppStatusBadge>
+        <AppStatusBadge v-if="replayStatus" :tone="replayStatus.status === 'failed' ? 'error' : replayStatus.status === 'completed' ? 'ok' : 'warn'">
+          {{ replayStatusLabel }}
+        </AppStatusBadge>
       </div>
 
       <template #actions>
@@ -37,6 +40,13 @@
     </WorkspaceToolbar>
 
     <div v-if="error" class="banner error">{{ error }}</div>
+    <div v-if="replayStatus && replayStatus.status !== 'idle'" class="banner replay-status">
+      <span>{{ replayStatusLabel }}</span>
+      <span>发现 {{ replayStatus.squadCreatesFound ?? 0 }}</span>
+      <span>接受 {{ replayStatus.accepted ?? 0 }}</span>
+      <span>违规拒绝 {{ replayStatus.rejectedPolicy ?? 0 }}</span>
+      <span>等待阵营解析 {{ replayStatus.pendingTeamResolution ?? 0 }}</span>
+    </div>
 
     <section class="summary-grid">
       <StatCard
@@ -180,12 +190,40 @@ type FinalPassRecord = {
 type TrackingStateResponse = {
   ok?: boolean;
   data?: {
-    lifecycle?: { matchId?: string | null };
+    lifecycle?: {
+      matchId?: string | null;
+      list?: LifecycleRecord[];
+      replay?: ReplayStatus | null;
+    };
     ruleChain?: {
       finalPassRecords?: FinalPassRecord[];
       finalPassCache?: { loaded?: boolean; cacheKey?: string };
     };
   };
+};
+
+type ReplayStatus = {
+  status?: string;
+  progress?: number;
+  squadCreatesFound?: number;
+  accepted?: number;
+  rejectedPolicy?: number;
+  pendingTeamResolution?: number;
+};
+
+type LifecycleRecord = {
+  key?: string;
+  order?: number;
+  matchId?: string;
+  teamId?: number | null;
+  squadId?: number | null;
+  squadName?: string;
+  creatorName?: string;
+  createdAt?: string;
+  createdAtMs?: number;
+  sourceOffset?: number;
+  sourceMode?: string;
+  replayAccepted?: boolean | null;
 };
 
 type OrderRecord = {
@@ -233,14 +271,24 @@ const error = computed(() => {
 });
 
 const rawRecords = computed<FinalPassRecord[]>(() => stateData.value?.data?.ruleChain?.finalPassRecords ?? []);
+const replayStatus = computed<ReplayStatus | null>(() => stateData.value?.data?.lifecycle?.replay ?? null);
+const replayStatusLabel = computed(() => {
+  const status = replayStatus.value?.status ?? "idle";
+  if (status === "completed") return "建队顺序已根据日志恢复";
+  if (status === "failed") return "建队日志回溯失败";
+  if (["scanning", "resolving", "rebuilding"].includes(status)) {
+    return `建队日志回溯中 ${Math.round(Number(replayStatus.value?.progress ?? 0))}%`;
+  }
+  return "等待建队日志回溯";
+});
 const cacheLoaded = computed(() => Boolean(stateData.value?.data?.ruleChain?.finalPassCache?.loaded));
 const cacheKey = computed(() => String(stateData.value?.data?.ruleChain?.finalPassCache?.cacheKey ?? ""));
 const matchId = computed(() => String(stateData.value?.data?.lifecycle?.matchId ?? ""));
 const matchLabel = computed(() => matchId.value || cacheKey.value || "-");
 const canClear = computed(() => auth.user?.isSuperAdmin === true);
 
-const allRecords = computed<OrderRecord[]>(() => rawRecords.value
-  .map((record, index) => ({
+const allRecords = computed<OrderRecord[]>(() => {
+  const liveRecords = rawRecords.value.map((record, index) => ({
     id: record.id || `creation-order-${index}`,
     creationOrderCode: Number(record.creationOrderCode ?? 0) || 0,
     matchId: record.event?.matchId ?? "",
@@ -250,8 +298,33 @@ const allRecords = computed<OrderRecord[]>(() => rawRecords.value
     leaderName: record.event?.leaderName ?? "",
     createdAt: record.event?.createdAt || record.createdAt || record.updatedAt || "",
     replacedRecordId: record.replacedRecordId,
-  }))
-  .sort((left, right) => left.creationOrderCode - right.creationOrderCode));
+    sourceOffset: Number.MAX_SAFE_INTEGER,
+  }));
+  const replayRecords = (stateData.value?.data?.lifecycle?.list ?? [])
+    .filter((record) => record.sourceMode === "replay" && record.replayAccepted === true)
+    .map((record, index) => ({
+      id: record.key || `replay-creation-${index}`,
+      creationOrderCode: Number(record.order ?? 0) || 0,
+      matchId: record.matchId ?? "",
+      teamId: record.teamId ?? null,
+      squadId: record.squadId ?? null,
+      squadName: record.squadName ?? "",
+      leaderName: record.creatorName ?? "",
+      createdAt: record.createdAt ?? "",
+      sourceOffset: Number.isFinite(Number(record.sourceOffset)) ? Number(record.sourceOffset) : Number.MAX_SAFE_INTEGER,
+    }));
+  const byCreation = new Map<string, OrderRecord & { sourceOffset?: number }>();
+  for (const record of [...liveRecords, ...replayRecords]) {
+    const timeBucket = Math.floor((Date.parse(record.createdAt || "") || 0) / 10_000);
+    const key = [record.matchId, record.teamId, record.squadId, record.squadName, record.leaderName, timeBucket].join("|");
+    if (!byCreation.has(key)) byCreation.set(key, record);
+  }
+  return [...byCreation.values()]
+    .sort((left, right) => (Date.parse(left.createdAt || "") || 0) - (Date.parse(right.createdAt || "") || 0)
+      || Number(left.sourceOffset ?? Number.MAX_SAFE_INTEGER) - Number(right.sourceOffset ?? Number.MAX_SAFE_INTEGER)
+      || Number(left.squadId ?? 0) - Number(right.squadId ?? 0))
+    .map((record, index) => ({ ...record, creationOrderCode: index + 1 }));
+});
 
 const filteredRecords = computed<OrderRecord[]>(() => allRecords.value.filter((record) => {
   if (searchQuery.value) {
@@ -352,6 +425,18 @@ async function clearCurrentRound() {
   background: rgba(255, 92, 92, 0.14);
   color: #ffb3b3;
   font-size: 13px;
+}
+
+.banner.replay-status {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(78, 167, 255, 0.3);
+  background: rgba(78, 167, 255, 0.1);
+  color: var(--color-text-secondary);
+  font-size: 12px;
 }
 
 .summary-grid {

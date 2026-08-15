@@ -10,11 +10,14 @@ import { dedupeKillRecords } from "./kill-record-dedupe.js";
 
 const MODULE_ID = "module.killRecords";
 const WORKER_PATH = new URL("../../workers/kill-replay-worker.js", import.meta.url);
-const REPLAY_PARSER_VERSION = 2;
+const REPLAY_PARSER_VERSION = 3;
 
 export function createKillRecordsModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({ moduleId: MODULE_ID, source: MODULE_ID, channel: "module" }) ?? core.logger;
   const moduleConfig = config?.get?.("modules.killRecords", {}) ?? {};
+  const squadLifecycleConfig = config?.get?.("modules.squadLifecycle", {}) ?? {};
+  const squadReplayConfig = config?.get?.("modules.squadLifecycle.replay", squadLifecycleConfig.replay ?? {}) ?? squadLifecycleConfig.replay ?? {};
+  const restoreSquadCreationOrder = squadReplayConfig.enabled !== false && squadReplayConfig.restoreCreationOrder !== false;
   const serverId = String(moduleConfig.serverId ?? config?.get?.("serverId", "") ?? core.webStatus?.serverId ?? "BZSS_Main") || "BZSS_Main";
   const storeDirectory = path.resolve(moduleConfig.storeDirectory ?? `./data/kill-records/${safeSegment(serverId)}`);
   const store = new ReplayKillStore({ directory: storeDirectory, logger: moduleLogger });
@@ -62,7 +65,10 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       && previous.sourceFileId === sourceFileId
       && Number(previous.completedOffset) >= 0
       && Number(previous.completedOffset) <= stat.size;
-    const startOffset = canResume ? Number(previous.completedOffset) : 0;
+    // SquadLifecycle is intentionally in-memory, so restoring its current-round state
+    // requires a bounded scan from byte zero on every process start. Kill records are
+    // still deduped by their persistent store during that shared scan.
+    const startOffset = restoreSquadCreationOrder ? 0 : (canResume ? Number(previous.completedOffset) : 0);
     const replayCutoffOffset = stat.size;
     const startedAt = new Date().toISOString();
     replayStatus = {
@@ -78,6 +84,15 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       startedAt,
     };
     await store.saveState(replayStatus);
+    if (restoreSquadCreationOrder) {
+      modules?.squadLifecycle?.updateReplayProgress?.({
+        status: "scanning",
+        progress: 0,
+        scannedBytes: 0,
+        totalBytes: replayStatus.totalBytes,
+        startedAt,
+      });
+    }
 
     worker = new Worker(WORKER_PATH, {
       workerData: {
@@ -116,8 +131,15 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       await importReplayBatch(message.records);
       return;
     }
+    if (message.type === "squadCreateBatch") {
+      if (restoreSquadCreationOrder) {
+        modules?.squadLifecycle?.importReplayCreateBatch?.(message.records ?? []);
+      }
+      return;
+    }
     if (message.type === "progress") {
       replayStatus = { ...replayStatus, ...pickProgress(message), status: "running" };
+      modules?.squadLifecycle?.updateReplayProgress?.({ ...pickProgress(message), status: "scanning" });
       await store.saveState(replayStatus);
       return;
     }
@@ -133,11 +155,26 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
         durationMs: Number(message.durationMs) || 0,
       };
       await store.saveState(replayStatus);
+      if (restoreSquadCreationOrder) {
+        modules?.squadLifecycle?.finalizeReplay?.({
+          serverId,
+          scannedBytes: replayStatus.scannedBytes,
+          totalBytes: replayStatus.totalBytes,
+          scannedLines: replayStatus.scannedLines,
+          sourceFile: replayStatus.sourcePath,
+          sourceFileId: replayStatus.sourceFileId,
+          replayCutoffOffset: replayStatus.replayCutoffOffset,
+          roundBoundaryOffset: Number(message.roundBoundaryOffset) || 0,
+        });
+      }
       return;
     }
     if (message.type === "sourceChanged") {
       replayStatus = { ...replayStatus, status: "source_changed", completed: false, completedOffset: Number(message.offset) || replayStatus.completedOffset };
       await store.saveState(replayStatus);
+      if (restoreSquadCreationOrder) {
+        modules?.squadLifecycle?.finalizeReplay?.({ serverId, error: "SquadGame.log changed during replay" });
+      }
       return;
     }
     if (message.type === "error") {
@@ -225,6 +262,9 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       completedOffset: offset === null ? replayStatus.completedOffset : Number(offset) || replayStatus.completedOffset,
     };
     await store.saveState(replayStatus);
+    if (restoreSquadCreationOrder) {
+      modules?.squadLifecycle?.finalizeReplay?.({ serverId, error: replayStatus.error });
+    }
     moduleLogger?.warn?.(`Kill replay failed: ${replayStatus.error}`);
   }
 

@@ -4,6 +4,7 @@ import fsp from "node:fs/promises";
 import { parentPort, workerData } from "node:worker_threads";
 
 import { isLikelyCombatLine, parseReplayCombatLine } from "../modules/kill-records/kill-record-normalizer.js";
+import { parseReplaySquadCreateLine } from "../modules/squad-lifecycle/log-adapter.js";
 
 const READ_CHUNK_BYTES = Math.max(4096, Number(workerData?.readChunkBytes) || 4 * 1024 * 1024);
 const BATCH_SIZE = Math.max(1, Number(workerData?.batchSize) || 100);
@@ -28,6 +29,8 @@ async function run() {
   let killsFound = 0;
   let woundsFound = 0;
   let damageFound = 0;
+  let squadCreates = [];
+  let roundBoundaryOffset = 0;
   let nextProgressAt = currentOffset + PROGRESS_BYTES;
   let batch = [];
   const identities = new Map();
@@ -59,6 +62,7 @@ async function run() {
         if (!lineBytes.length) continue;
         scannedLines += 1;
         const line = lineBytes.toString("utf8");
+        collectSquadCreate(line, lineOffset);
         rememberIdentity(line, identities);
         if (!isLikelyCombatLine(line)) continue;
         const record = parseReplayCombatLine(line, {
@@ -85,6 +89,7 @@ async function run() {
     if (partial.length && partialOffset < cutoff) {
       scannedLines += 1;
       const line = partial.toString("utf8");
+      collectSquadCreate(line, partialOffset);
       rememberIdentity(line, identities);
       if (isLikelyCombatLine(line)) {
         const record = parseReplayCombatLine(line, {
@@ -102,6 +107,7 @@ async function run() {
       }
     }
     flushBatch();
+    flushSquadCreateBatches();
     parentPort?.postMessage({
       type: "complete",
       scannedBytes: Math.max(0, currentOffset - Number(workerData?.startOffset || 0)),
@@ -112,6 +118,8 @@ async function run() {
       damageFound,
       woundsFound,
       killsFound,
+      squadCreatesFound: squadCreates.length,
+      roundBoundaryOffset,
       durationMs: Date.now() - startedAt,
     });
   } finally {
@@ -146,6 +154,37 @@ async function run() {
     else if (record?.type === "wound") woundsFound += 1;
     else killsFound += 1;
   }
+
+  function collectSquadCreate(line, sourceOffset) {
+    if (isCurrentRoundBoundary(line)) {
+      squadCreates = [];
+      roundBoundaryOffset = sourceOffset;
+    }
+    if (!/LogSquad:/i.test(line) || !/has created Squad/i.test(line)) return;
+    const record = parseReplaySquadCreateLine(line, {
+      serverId: workerData?.serverId,
+      matchId: workerData?.matchId,
+      sourceFile: sourcePath,
+      sourceFileId,
+      sourceOffset,
+    });
+    if (record) squadCreates.push(record);
+  }
+
+  function flushSquadCreateBatches() {
+    for (let index = 0; index < squadCreates.length; index += BATCH_SIZE) {
+      parentPort?.postMessage({
+        type: "squadCreateBatch",
+        records: squadCreates.slice(index, index + BATCH_SIZE),
+      });
+    }
+  }
+}
+
+export function isCurrentRoundBoundary(line) {
+  const text = String(line ?? "");
+  return /LogWorld:\s+(?:SeamlessTravel to:|Bringing World\s+\S+\s+up for play)/i.test(text)
+    || /(?:^|\W)(?:GAME_START|MATCH_START|ROUND_START|NEW_GAME)(?:\W|$)/i.test(text);
 }
 
 function makeFileId(stat) {

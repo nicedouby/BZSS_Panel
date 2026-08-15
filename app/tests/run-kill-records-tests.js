@@ -14,8 +14,30 @@ async function main() {
   await testWorkerFindsDamageAndWound();
   await testFixedStartupCutoff();
   await testUtf8AcrossChunks();
+  await testWorkerKeepsOnlyCurrentRoundSquadCreates();
   await testLiveReplayDedupeAndSafety();
   console.log("[run-kill-records-tests] OK");
+}
+
+async function testWorkerKeepsOnlyCurrentRoundSquadCreates() {
+  await withTemp(async (root) => {
+    const sourcePath = path.join(root, "SquadGame.log");
+    const lines = [
+      squadCreateLine(1, "Squad 1", "Old Leader"),
+      "[2026.08.14-08.00.00:000][1]LogWorld: SeamlessTravel to: /Game/Maps/Test/NewLayer",
+      squadCreateLine(7, "Squad 7", "Current Leader"),
+      squadCreateLine(2, "Squad 2", "Current Leader 2"),
+    ];
+    await fsp.writeFile(sourcePath, `${lines.join("\n")}\n`, "utf8");
+    const result = await runWorker(sourcePath, { readChunkBytes: 23, batchSize: 1 });
+    assert.deepEqual(result.squadCreates.map((record) => record.squadId), [7, 2]);
+    assert.equal(result.complete.squadCreatesFound, 2);
+    for (const record of result.squadCreates) {
+      assert.equal(record.sourceMode, "replay");
+      assert.equal(record.canTriggerActions, false);
+      assert.equal(record.isReplay, true);
+    }
+  });
 }
 
 async function testWorkerFindsDamageAndWound() {
@@ -118,6 +140,7 @@ function runWorker(sourcePath, options = {}) {
     const stat = await fsp.stat(sourcePath);
     const sourceFileId = stat.ino ? `${stat.dev}:${stat.ino}` : `${stat.dev}:0:${Math.trunc(stat.ctimeMs)}`;
     const records = [];
+    const squadCreates = [];
     let complete = null;
     const worker = new Worker(WORKER_PATH, { workerData: {
       sourcePath, sourceFileId, serverId: "BZSS_Main", startOffset: 0,
@@ -126,11 +149,12 @@ function runWorker(sourcePath, options = {}) {
     } });
     worker.on("message", (message) => {
       if (message.type === "combatBatch" || message.type === "killBatch") records.push(...message.records);
+      if (message.type === "squadCreateBatch") squadCreates.push(...message.records);
       if (message.type === "complete") complete = message;
       if (message.type === "error") reject(new Error(message.message));
     });
     worker.on("error", reject);
-    worker.on("exit", (code) => code === 0 ? resolve({ records, complete }) : reject(new Error(`worker exit ${code}`)));
+    worker.on("exit", (code) => code === 0 ? resolve({ records, squadCreates, complete }) : reject(new Error(`worker exit ${code}`)));
   });
 }
 
@@ -142,6 +166,9 @@ function damageLine(victim, attacker, damage = 25) {
 }
 function woundLine(victim, attacker, damage = 80) {
   return `[2026.08.14-07.00.00:003][3]LogSquadTrace: Wound(): Player: ${victim} KillingDamage=${Number(damage).toFixed(6)} from ${attacker} (Online IDs: EOS: eos-wound steam: 76561198000000002 | Player Controller ID: Controller_W) caused by BP_Rifle_C`;
+}
+function squadCreateLine(squadId, squadName, leader) {
+  return `[2026.08.14-08.01.00:001][2]LogSquad: ${leader} (Online IDs: EOS: eos-${squadId} steam: 7656119800000000${squadId}) has created Squad ${squadId} (Squad Name: ${squadName}) on United States Army`;
 }
 async function withTemp(callback) { const root = await fsp.mkdtemp(path.join(os.tmpdir(), "kill-records-")); try { await callback(root); } finally { await fsp.rm(root, { recursive: true, force: true }); } }
 function silentLogger() { return { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } }; }

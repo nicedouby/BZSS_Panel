@@ -41,6 +41,10 @@ export function formatOrderedSquads(records) {
       const rightTime = Number(right.createdAtMs ?? 0);
       if (leftTime !== rightTime) return leftTime - rightTime;
 
+      const leftOffset = Number.isFinite(Number(left.sourceOffset)) ? Number(left.sourceOffset) : Number.MAX_SAFE_INTEGER;
+      const rightOffset = Number.isFinite(Number(right.sourceOffset)) ? Number(right.sourceOffset) : Number.MAX_SAFE_INTEGER;
+      if (leftOffset !== rightOffset) return leftOffset - rightOffset;
+
       const leftGeneration = Number(left.generation ?? 0);
       const rightGeneration = Number(right.generation ?? 0);
       if (leftGeneration !== rightGeneration) return leftGeneration - rightGeneration;

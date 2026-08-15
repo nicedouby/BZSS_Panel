@@ -54,6 +54,10 @@ export function parseSquadCreateEvent(event) {
       creatorEosId: parsed.creatorEosId,
       rawLog,
       sourceEventId: String(event.sourceEventId ?? event.eventId ?? event.rawEvent?.EventId ?? event.rawEvent?.eventId ?? ""),
+      sourceFile: String(event.sourceFile ?? ""),
+      sourceFileId: String(event.sourceFileId ?? ""),
+      sourceOffset: toNumber(event.sourceOffset),
+      isReplay: event.isReplay === true,
       teamId: null,
       needsTeamId: true,
       needsMatchId: !matchId,
@@ -129,11 +133,31 @@ export function parseSquadCreateEvent(event) {
     creatorEosId,
     rawLog: String(event.rawLog ?? event.sourceRaw ?? event.raw ?? ""),
     sourceEventId: String(event.sourceEventId ?? event.eventId ?? ""),
+    sourceFile: String(event.sourceFile ?? ""),
+    sourceFileId: String(event.sourceFileId ?? ""),
+    sourceOffset: toNumber(event.sourceOffset),
+    isReplay: event.isReplay === true,
     teamId,
     needsTeamId: teamId == null,
     needsMatchId: !matchId,
     parsedFromRawLogLine: false,
   };
+}
+
+export function parseReplaySquadCreateLine(rawLog, metadata = {}) {
+  return parseSquadCreateEvent({
+    eventName: "On_RawLogLine",
+    serverId: metadata.serverId,
+    matchId: metadata.matchId,
+    sourceMode: "replay",
+    isReplay: true,
+    canTriggerActions: false,
+    rawLog,
+    sourceFile: metadata.sourceFile,
+    sourceFileId: metadata.sourceFileId,
+    sourceOffset: metadata.sourceOffset,
+    sourceEventId: `squadcreate:${String(metadata.sourceFileId ?? "unknown")}:${Number(metadata.sourceOffset) || 0}`,
+  });
 }
 
 export function normalizeSquadName(value) {
