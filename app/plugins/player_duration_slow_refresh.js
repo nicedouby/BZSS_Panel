@@ -36,11 +36,6 @@ function ageMs(timestamp, nowTs = Date.now()) {
   return Math.max(0, nowTs - ts);
 }
 
-function isFresh(timestamp, freshnessMs, nowTs = Date.now()) {
-  const ts = normalizeTimestamp(timestamp);
-  return ts > 0 && ageMs(ts, nowTs) < freshnessMs;
-}
-
 function pickInterval(intervals, streak = 0) {
   const index = Math.max(0, Math.min(intervals.length - 1, Math.floor(Number(streak) || 0)));
   return intervals[index];
@@ -313,18 +308,31 @@ export function createPlugin(context = {}) {
     if (player?.source === "current-match") return Date.now();
 
     const playerId = Number(player?.id);
+    if (Number.isFinite(playerId) && typeof playerRepository?.listPlayerSessionHistory === "function") {
+      try {
+        const sessions = await playerRepository.listPlayerSessionHistory(playerId, { limit: 1, offset: 0 });
+        const sessionSeenAt = normalizeTimestamp(sessions?.[0]?.joined_at ?? sessions?.[0]?.joinedAt);
+        if (sessionSeenAt) return sessionSeenAt;
+      } catch (error) {
+        log.warn(`读取玩家会话时间失败：player=${playerId} error=${error?.message || error}`);
+      }
+    }
+
+    // Alias timestamps are only a compatibility fallback. Steam refresh writes
+    // can touch aliases through upsertFromPresence, so session history must win
+    // whenever it exists; otherwise an old player can be kept alive by refreshes.
     if (Number.isFinite(playerId) && typeof playerRepository?.listPlayerAliases === "function") {
       try {
         const aliases = await playerRepository.listPlayerAliases(playerId, { limit: 1, offset: 0 });
         const aliasSeenAt = normalizeTimestamp(aliases?.[0]?.seen_at ?? aliases?.[0]?.seenAt);
         if (aliasSeenAt) return aliasSeenAt;
       } catch (error) {
-        log.warn(`读取玩家最后出现时间失败：player=${playerId} error=${error?.message || error}`);
+        log.warn(`读取玩家别名时间失败：player=${playerId} error=${error?.message || error}`);
       }
     }
 
-    // Fallback only. players.updated_at can also be touched by non-presence
-    // writes, so aliases.seen_at remains the primary inactivity signal.
+    // Last-resort migration fallback only. players.updated_at can also be
+    // touched by Steam/profile/stat writes and is not considered authoritative.
     return normalizeTimestamp(player?.updatedAt ?? player?.updated_at);
   }
 
@@ -726,7 +734,7 @@ export function createPlugin(context = {}) {
       id: "plugin.player_duration_slow_refresh",
       name: "Player Duration Slow Refresh",
       kind: "plugin",
-      version: "0.2.0",
+      version: "0.2.1",
       description: "后台刷新玩家 Steam 信息：游戏时长至少间隔 10 小时、Steam 资料至少间隔 24 小时，并停止刷新超过 15 天未出现的历史玩家。",
     },
     apiName: "playerDurationSlowRefresh",
