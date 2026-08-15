@@ -113,6 +113,18 @@ async function startReplay({ clear = false } = {}) {
       modules?.squadLifecycle?.importReplayCreateBatch?.(message.records ?? []);
       return;
     }
+    if (kind === "squad" && message.type === "boundaryUnknown") {
+      replayStatus = { ...replayStatus, squad: { ...(replayStatus.squad ?? {}), status: "boundary_unknown", boundaryFound: false, roundBoundaryOffset: null, cutoffOffset: message.cutoffOffset } };
+      modules?.squadLifecycle?.updateReplayProgress?.({ status: "boundary_unknown", boundaryFound: false, roundBoundaryOffset: null, cutoffOffset: message.cutoffOffset });
+      await store.saveState(replayStatus);
+      return;
+    }
+    if (kind === "squad" && message.type === "boundaryFound") {
+      replayStatus = { ...replayStatus, squad: { ...(replayStatus.squad ?? {}), status: "scanning", boundaryFound: true, roundBoundaryOffset: message.roundBoundaryOffset, cutoffOffset: message.cutoffOffset } };
+      modules?.squadLifecycle?.updateReplayProgress?.({ status: "scanning", boundaryFound: true, roundBoundaryOffset: message.roundBoundaryOffset, cutoffOffset: message.cutoffOffset });
+      await store.saveState(replayStatus);
+      return;
+    }
     if (kind === "squad" && message.type === "progress") {
       modules?.squadLifecycle?.updateReplayProgress?.({ ...message, status: "scanning" });
       replayStatus = { ...replayStatus, squad: { ...(replayStatus.squad ?? {}), ...message, status: "scanning" } };
