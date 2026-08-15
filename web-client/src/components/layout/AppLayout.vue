@@ -2,10 +2,13 @@
   <div class="app-shell" :class="{ collapsed: ui.sidebarCollapsed }">
     <Sidebar />
     <main class="main-shell">
-      <Topbar
-        @open-plugin-center="pluginCenterOpen = true"
-        @open-rcon-modal="rconModalOpen = true"
-      />
+      <div class="topbar-stack">
+        <Topbar
+          @open-plugin-center="pluginCenterOpen = true"
+          @open-rcon-modal="rconModalOpen = true"
+        />
+        <MatchLifecycleIndicator />
+      </div>
       <CleanWarzoneButton />
       <SectionSubnav />
       <section class="content-shell" :class="contentShellClass">
@@ -41,6 +44,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { useIsCompactLandscape, useIsMobile } from "../../composables/useMediaQuery";
 import Topbar from "./Topbar.vue";
+import MatchLifecycleIndicator from "./MatchLifecycleIndicator.vue";
 import CleanWarzoneButton from "./CleanWarzoneButton.vue";
 import Sidebar from "./StableSidebar.vue";
 import SectionSubnav from "./SectionSubnav.vue";
@@ -120,6 +124,12 @@ const contentShellClass = computed(() => {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.015), transparent 16%),
     var(--app-background, var(--color-bg-page));
+}
+
+.topbar-stack {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: auto auto;
 }
 
 .content-shell {
