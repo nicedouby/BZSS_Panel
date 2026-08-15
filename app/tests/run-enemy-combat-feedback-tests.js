@@ -77,8 +77,8 @@ assert.equal(harness.warnings.length, 0, "wound feedback must remain globally di
 assert.equal(harness.plugin.api.getState().totalWoundFeedback, 0);
 
 harness = await send({ type: "death" });
-assert.equal(harness.warnings.length, 1);
-assert.match(harness.warnings[0].message, /你击杀了 Victim/);
+assert.equal(harness.warnings.length, 0, "death feedback must remain globally disabled");
+assert.equal(harness.plugin.api.getState().totalDeathFeedback, 0);
 
 for (const record of [
   { type: "damage", damage: 0 },
@@ -101,7 +101,7 @@ for (const record of [
 harness = createHarness();
 await harness.plugin.api.handleCombatEvent(event({ type: "death" }));
 await harness.plugin.api.handleCombatEvent(event({ type: "death" }));
-assert.equal(harness.warnings.length, 1, "duplicate death events must still be deduplicated");
+assert.equal(harness.warnings.length, 0, "death events must never produce real-time warnings");
 
 harness = await send({ type: "death" }, { attacker: { name: "Attacker", steamID: "steam-attacker" } });
 assert.equal(harness.warnings.length, 0);
@@ -110,8 +110,8 @@ harness = await send({ type: "damage" }, { settings: { "plugins.enemyCombatFeedb
 assert.equal(harness.warnings.length, 0, "configuration must not re-enable damage feedback");
 harness = await send({ type: "wound" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 0, "configuration must not re-enable wound feedback");
-harness = await send({ type: "death" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: false, deathEnabled: true } } });
-assert.equal(harness.warnings.length, 1);
+harness = await send({ type: "death" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
+assert.equal(harness.warnings.length, 0, "configuration must not re-enable death feedback");
 
 harness = await send({}, { settings: { "plugins.enemyCombatFeedback": { enabled: false } } });
 assert.equal(harness.warnings.length, 0);

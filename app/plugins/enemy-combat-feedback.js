@@ -10,7 +10,7 @@ const DEFAULT_CONFIG = {
   enabled: true,
   damageEnabled: false,
   woundEnabled: false,
-  deathEnabled: true,
+  deathEnabled: false,
   ignoreGiveUp: true,
   requirePlayerId: true,
   damageMessage: "[伤害反馈] 你对 {victim} 造成了 {damage} 点伤害",
@@ -35,7 +35,14 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
 
   function readConfig(configStore) {
     const value = configStore?.get?.("plugins.enemyCombatFeedback", {});
-    return { ...DEFAULT_CONFIG, ...(value && typeof value === "object" ? value : {}) };
+    const merged = { ...DEFAULT_CONFIG, ...(value && typeof value === "object" ? value : {}) };
+    // 全局策略：所有实时战斗反馈永久关闭，旧配置或页面不能重新启用。
+    return {
+      ...merged,
+      damageEnabled: false,
+      woundEnabled: false,
+      deathEnabled: false,
+    };
   }
 
   function normalizeText(value) {
@@ -169,11 +176,10 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
-    // 全局策略：永久关闭普通伤害与击倒的实时警告。即使旧配置误设为 true，
-    // damage / wound 事件也不会发送 AdminWarn；只有确认的敌方 death 可反馈。
+    // 全局策略：永久关闭普通伤害、击倒和击杀的实时警告。
     if (type === "damage") return skip("damage_display_disabled");
     if (type === "wound") return skip("wound_display_disabled");
-    if (type === "death" && !runtimeConfig.deathEnabled) return skip("death_disabled");
+    if (type === "death") return skip("death_display_disabled");
     if (hasFriendlyFire(record)) return skip("friendly_fire");
     if (sameIdentity(record)) return skip("self_damage");
     if (!isConfirmedEnemy(record)) return skip("team_unknown");
@@ -234,8 +240,8 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "敌方战斗反馈",
       kind: "plugin",
-      version: "0.4.0",
-      description: "仅在击杀敌方玩家时向攻击者发送私人反馈；普通伤害与击倒显示永久关闭。",
+      version: "0.5.0",
+      description: "普通伤害、击倒和击杀的实时私人反馈均已全局停用。",
     },
     api: { getState, handleCombatEvent },
     async start() {

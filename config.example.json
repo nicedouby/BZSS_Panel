@@ -904,7 +904,7 @@
       "enabled": true,
       "damageEnabled": false,
       "woundEnabled": false,
-      "deathEnabled": true
+      "deathEnabled": false
     },
     "victimDamageDisplay": {
       "enabled": false,
