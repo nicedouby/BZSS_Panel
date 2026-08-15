@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { UdpEventReceiver } from "../core/udp-event-receiver.js";
+import { UdpPacketLossMonitor } from "../core/udp-packet-loss-monitor.js";
 
 function createHarness() {
   const emitted = [];
@@ -12,6 +13,8 @@ function createHarness() {
       host: "127.0.0.1",
       port: 12345,
       maxMessageBytes: 65535,
+      // Keep the timer from finalizing during this synchronous unit test.
+      packetStatsFinalizeGraceMs: 60_000,
     },
     logger: {
       info() {},
@@ -60,6 +63,10 @@ function createHarness() {
   };
 }
 
+function remote(port = 10000) {
+  return { address: "127.0.0.1", port };
+}
+
 function testChunkFastPath() {
   const { receiver, emitted, counts } = createHarness();
   const rawEvent = {
@@ -78,10 +85,7 @@ function testChunkFastPath() {
     IsReplay: "false",
   };
 
-  receiver.handleMessage(Buffer.from(JSON.stringify(rawEvent), "utf8"), {
-    address: "127.0.0.1",
-    port: 10000,
-  });
+  receiver.handleMessage(Buffer.from(JSON.stringify(rawEvent), "utf8"), remote());
 
   assert.equal(counts.pipelineCalls, 0);
   assert.equal(counts.inspectCalls, 0);
@@ -106,10 +110,7 @@ function testRegularEventStillUsesPipeline() {
     Raw: "PIE: Error: PlayerBaseInfo{}",
   };
 
-  receiver.handleMessage(Buffer.from(JSON.stringify(rawEvent), "utf8"), {
-    address: "127.0.0.1",
-    port: 10001,
-  });
+  receiver.handleMessage(Buffer.from(JSON.stringify(rawEvent), "utf8"), remote(10001));
 
   assert.equal(counts.pipelineCalls, 1);
   assert.equal(counts.inspectCalls, 1);
@@ -118,7 +119,118 @@ function testRegularEventStillUsesPipeline() {
   assert.equal(emitted[1].eventName, "On_RawLogLine");
 }
 
+function testStatPacketNeverEntersBusinessPipeline() {
+  const { receiver, emitted, counts } = createHarness();
+  const stat = {
+    Event: "LOGPOST_PACKET_STAT",
+    PacketType: "STAT",
+    PacketSessionId: "sender-a",
+    StatSeq: "1",
+    WindowStartMs: "1000",
+    WindowEndMs: "11000",
+    FirstSeq: "1",
+    LastSeq: "3",
+    SentPackets: "3",
+    TotalSent: "3",
+  };
+
+  receiver.handleMessage(Buffer.from(JSON.stringify(stat), "utf8"), remote(10002));
+
+  assert.equal(counts.pipelineCalls, 0);
+  assert.equal(counts.inspectCalls, 0);
+  assert.equal(emitted.length, 0);
+  assert.equal(receiver.getDiagnostics().packetLoss.metrics.statPacketsObserved, 1);
+}
+
+function createLossMonitor() {
+  const monitor = new UdpPacketLossMonitor({ finalizeGraceMs: 0 });
+  // Unit tests exercise calculation only; persistence is covered by the
+  // production path and should not write into the repository test checkout.
+  monitor.persistPoint = () => {};
+  return monitor;
+}
+
+function businessPacket(sessionId, seq) {
+  return {
+    Event: "On_RawLogLine",
+    PacketType: "EVENT",
+    PacketSessionId: sessionId,
+    PacketSeq: String(seq),
+  };
+}
+
+function statSnapshot(sessionId, statSeq, firstSeq, lastSeq, reportedSent = lastSeq - firstSeq + 1) {
+  return {
+    sessionId,
+    statSeq,
+    firstSeq,
+    lastSeq,
+    reportedSent,
+    totalSent: lastSeq,
+    windowStartMs: 1_000 * statSeq,
+    windowEndMs: 1_000 * statSeq + 10_000,
+    receivedAtMs: 1_000 * statSeq + 10_001,
+  };
+}
+
+function testLossCalculationUsesUniquePacketSequence() {
+  const monitor = createLossMonitor();
+  monitor.recordEvent(businessPacket("sender-a", 1));
+  monitor.recordEvent(businessPacket("sender-a", 1)); // duplicate must not inflate received count
+  monitor.recordEvent(businessPacket("sender-a", 3));
+  monitor.finalizeStat(statSnapshot("sender-a", 1, 1, 3, 3));
+
+  const state = monitor.getState();
+  assert.equal(state.current.sentPackets, 3);
+  assert.equal(state.current.receivedPackets, 2);
+  assert.equal(state.current.lostPackets, 1);
+  assert.equal(state.current.maxConsecutiveLost, 1);
+  assert.equal(state.current.lossRate, 1 / 3);
+  assert.equal(state.metrics.duplicateBusinessPackets, 1);
+}
+
+function testMissingStatCannotHideBusinessPacketGap() {
+  const monitor = createLossMonitor();
+  monitor.recordEvent(businessPacket("sender-a", 1));
+  monitor.recordEvent(businessPacket("sender-a", 2));
+  monitor.finalizeStat(statSnapshot("sender-a", 1, 1, 2, 2));
+
+  // Pretend the next STAT packet was lost.  The following STAT says only two
+  // packets were sent in its immediate window, but the receiver must span from
+  // the last finalized high-water mark and therefore evaluate seq 3..5.
+  monitor.recordEvent(businessPacket("sender-a", 3));
+  monitor.recordEvent(businessPacket("sender-a", 5));
+  monitor.finalizeStat(statSnapshot("sender-a", 3, 4, 5, 2));
+
+  const state = monitor.getState();
+  assert.equal(state.current.firstSeq, 3);
+  assert.equal(state.current.lastSeq, 5);
+  assert.equal(state.current.sentPackets, 3);
+  assert.equal(state.current.receivedPackets, 2);
+  assert.equal(state.current.lostPackets, 1);
+}
+
+function testSenderRestartUsesIndependentSession() {
+  const monitor = createLossMonitor();
+  monitor.recordEvent(businessPacket("sender-a", 1));
+  monitor.finalizeStat(statSnapshot("sender-a", 1, 1, 1, 1));
+
+  monitor.recordEvent(businessPacket("sender-b", 1));
+  monitor.finalizeStat(statSnapshot("sender-b", 1, 1, 1, 1));
+
+  const state = monitor.getState();
+  assert.equal(state.current.sessionId, "sender-b");
+  assert.equal(state.current.sentPackets, 1);
+  assert.equal(state.current.receivedPackets, 1);
+  assert.equal(state.current.lostPackets, 0);
+  assert.equal(state.sessions.length, 2);
+}
+
 testChunkFastPath();
 testRegularEventStillUsesPipeline();
+testStatPacketNeverEntersBusinessPipeline();
+testLossCalculationUsesUniquePacketSequence();
+testMissingStatCannotHideBusinessPacketGap();
+testSenderRestartUsesIndependentSession();
 
 console.log("run-udp-event-receiver-tests: ok");
