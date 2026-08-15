@@ -779,7 +779,7 @@ const viewModels = computed(() => {
   });
   const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
-    teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId).map((team) => attachTacticalStateInfoToTeam(team, tacticalPlayerLookup.value)),
+    teams: sortTeamsForAdminPerspective(searchedTeams, viewerTeamId).map((team) => attachTacticalStateInfoToTeam(team, tacticalPlayerLookup.value)),
     viewerTeamId,
     viewerSteam64: viewerSteam64.value,
     viewerPerspectiveText: buildViewerPerspectiveTextEnglish(viewerTeamId, viewerAutoSwapEnabled.value),
