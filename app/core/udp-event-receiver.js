@@ -1,9 +1,11 @@
 // -*- coding: utf-8 -*-
 
 import dgram from "node:dgram";
+import { UdpPacketLossMonitor } from "./udp-packet-loss-monitor.js";
 
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
 const BZSS_CORE_VEHICLE_CHUNK_EVENT_NAME = "On_BzssCoreVehicleChunk";
+const PACKET_STAT_EVENT_NAME = "LOGPOST_PACKET_STAT";
 const DIAGNOSTICS_PUBLISH_INTERVAL_MS = 250;
 
 /**
@@ -41,6 +43,12 @@ export class UdpEventReceiver {
       lastPacketBytes: 0,
       lastRemote: "",
     };
+    this.packetLossMonitor = new UdpPacketLossMonitor({
+      logger: this.logger,
+      finalizeGraceMs: Number(config.packetStatsFinalizeGraceMs ?? 750),
+      historySize: Number(config.packetStatsHistorySize ?? 180),
+      onUpdate: () => this.publishDiagnostics(true),
+    });
 
     this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
     this.socket.on("error", (error) => {
@@ -135,6 +143,16 @@ export class UdpEventReceiver {
       return;
     }
 
+    const packetType = String(rawEvent?.PacketType ?? "").trim().toUpperCase();
+    if (packetType === "EVENT") {
+      this.packetLossMonitor.recordEvent(rawEvent);
+    }
+    if (packetType === "STAT" || rawEvent.Event === PACKET_STAT_EVENT_NAME) {
+      this.packetLossMonitor.recordStat(rawEvent);
+      this.publishDiagnostics();
+      return;
+    }
+
     const eventId = String(rawEvent?.EventId ?? "").trim();
     if (eventId && this.eventBus?.hasRecentCoreEventId?.(eventId)) {
       this.metrics.duplicateEventsDropped += 1;
@@ -192,6 +210,7 @@ export class UdpEventReceiver {
       port: this.port,
       maxMessageBytes: this.maxMessageBytes,
       status: this.webStatus?.state?.udpReceiver ?? "unknown",
+      packetLoss: this.packetLossMonitor.getState(),
     };
   }
 
