@@ -243,9 +243,6 @@ async function startReplay({ clear = false } = {}) {
       completedOffset: offset === null ? replayStatus.completedOffset : Number(offset) || replayStatus.completedOffset,
     };
     await store.saveState(replayStatus);
-    if (restoreSquadCreationOrder) {
-      modules?.squadLifecycle?.finalizeReplay?.({ serverId, error: replayStatus.error });
-    }
     moduleLogger?.warn?.(`Kill replay failed: ${replayStatus.error}`);
   }
 
