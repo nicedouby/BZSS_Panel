@@ -2449,6 +2449,26 @@ export class WebServer {
       return this.json(res, 200, this.modules.combatState.getOverview());
     }
 
+    if (url.pathname === "/api/combat-records" && req.method === "GET") {
+      const killRecords = this.modules.killRecords;
+      if (!killRecords) return this.json(res, 404, { ok: false, error: "KillRecordsUnavailable" });
+      const result = killRecords.getCombatRecords({
+        serverId: url.searchParams.get("serverId") ?? "",
+        source: url.searchParams.get("source") ?? "all",
+        type: url.searchParams.get("type") ?? "all",
+        search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
+        offset: url.searchParams.get("offset") ?? "0",
+        limit: url.searchParams.get("limit") ?? "200",
+      });
+      return this.json(res, 200, {
+        ok: true,
+        records: result.records,
+        total: result.total,
+        overview: killRecords.getOverview(),
+        replay: killRecords.getReplayStatus?.() ?? null,
+      });
+    }
+
     if (url.pathname === "/api/kill-records" && req.method === "GET") {
       const killRecords = this.modules.killRecords;
       if (!killRecords) {
