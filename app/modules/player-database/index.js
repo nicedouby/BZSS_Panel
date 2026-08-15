@@ -155,6 +155,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayerContainer(playerId, container, options);
     },
 
+    async listPlayerTags(playerId, tagType = null) {
+      return repo.listPlayerTags(playerId, tagType);
+    },
+
+    async replacePlayerTags(playerId, tagType, tagValues = []) {
+      return repo.replacePlayerTags(playerId, tagType, tagValues);
+    },
+
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
