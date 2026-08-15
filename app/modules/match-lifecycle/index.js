@@ -14,18 +14,17 @@ export const MATCH_LIFECYCLE_STATE = Object.freeze({
   NEXT_MATCH: "next_match",
 });
 
+const VALID_STATES = new Set(Object.values(MATCH_LIFECYCLE_STATE));
 const DEFAULT_STATE_FILE = "./data/match-state/lifecycle.json";
-const DEFAULT_HISTORY_LIMIT = 100;
-const DEFAULT_FINISH_SETTLE_MS = 1500;
-const DEFAULT_NEXT_MATCH_DELAY_MS = 8000;
 const STATE_FILE_VERSION = 1;
 
 /**
  * Authoritative match lifecycle state machine.
  *
- * match-state remains responsible for RCON/roster telemetry. This module owns
- * only lifecycle semantics and publishes one stable lifecycle snapshot through
- * WebStatus, which is already included in /api/snapshot/all.
+ * module.matchState remains the RCON/roster telemetry aggregator. This module
+ * is the single source of truth for lifecycle semantics and deliberately gives
+ * strong log events (world bring-up / winner) priority over briefly stale RCON
+ * snapshots during map transitions.
  */
 export function createMatchLifecycleModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -35,26 +34,28 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
   }) ?? core.logger;
   const moduleConfig = config.get("modules.matchLifecycle", {});
   const enabled = moduleConfig.enabled !== false;
+  const historyLimit = positiveInt(moduleConfig.historyLimit, 100);
+  const finishSettleMs = nonNegativeInt(moduleConfig.finishSettleMs, 1500);
+  const nextMatchDelayMs = nonNegativeInt(moduleConfig.nextMatchDelayMs, 8000);
+  const worldIdentityGraceMs = nonNegativeInt(moduleConfig.worldIdentityGraceMs, 12_000);
   const stateFile = path.resolve(
     process.cwd(),
     String(moduleConfig.stateFile ?? DEFAULT_STATE_FILE).trim() || DEFAULT_STATE_FILE,
   );
-  const historyLimit = positiveInt(moduleConfig.historyLimit, DEFAULT_HISTORY_LIMIT);
-  const finishSettleMs = nonNegativeInt(moduleConfig.finishSettleMs, DEFAULT_FINISH_SETTLE_MS);
-  const nextMatchDelayMs = nonNegativeInt(moduleConfig.nextMatchDelayMs, DEFAULT_NEXT_MATCH_DELAY_MS);
 
   const unsubscribers = [];
   const recentEventIds = new Map();
+  let started = false;
   let persistTimer = null;
   let finishTimer = null;
   let nextMatchTimer = null;
-  let started = false;
+  let identityLockUntil = 0;
   let writeChain = Promise.resolve();
 
   const state = {
     state: MATCH_LIFECYCLE_STATE.UNKNOWN,
     previousState: "",
-    serverId: normalizeText(core.webStatus?.serverId),
+    serverId: text(core.webStatus?.serverId),
     map: "",
     layer: "",
     mode: "",
@@ -80,19 +81,15 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
   };
 
   const api = {
-    getState() {
-      return publicSnapshot();
-    },
-    getHistory() {
-      return state.history.map(clone);
-    },
+    getState: () => snapshot(),
+    getHistory: () => state.history.map(clone),
     reconcile(reason = "manual") {
       reconcileFromMatchState(reason);
-      return publicSnapshot();
+      return snapshot();
     },
   };
 
-  function publicSnapshot() {
+  function snapshot() {
     return {
       state: state.state,
       previousState: state.previousState,
@@ -121,9 +118,8 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
   }
 
   function publish({ persist = true, emit = true } = {}) {
-    const snapshot = publicSnapshot();
-    core.webStatus?.patch?.({ matchLifecycle: snapshot });
-
+    const lifecycle = snapshot();
+    core.webStatus?.patch?.({ matchLifecycle: lifecycle });
     if (emit) {
       core.eventBus?.emitModuleEvent?.("module.matchLifecycle", "updated", {
         eventName: "module.matchLifecycle.updated",
@@ -131,44 +127,39 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
         source: "module.matchLifecycle",
         serverId: state.serverId,
         time: state.updatedAt,
-        lifecycle: snapshot,
-        canTriggerActions: snapshot.canTriggerActions,
-        isReplay: snapshot.isReplay,
-        sourceMode: snapshot.sourceMode,
+        lifecycle,
+        sourceMode: lifecycle.sourceMode,
+        isReplay: lifecycle.isReplay,
+        canTriggerActions: lifecycle.canTriggerActions,
       });
     }
-
     if (persist) schedulePersist();
-    return snapshot;
   }
 
   function transition(nextState, meta = {}) {
-    if (!Object.values(MATCH_LIFECYCLE_STATE).includes(nextState)) return false;
-
-    const now = normalizeIso(meta.at) || new Date().toISOString();
+    if (!VALID_STATES.has(nextState)) return false;
     const from = state.state;
+    const at = eventIso(meta.at) || new Date().toISOString();
     const stateChanged = from !== nextState;
-    const identityChanged = applyIdentity(meta);
-    const metadataChanged = applyMetadata(meta);
-
-    if (!stateChanged && !identityChanged && !metadataChanged) return false;
+    const changed = applyMeta(meta);
+    if (!stateChanged && !changed) return false;
 
     if (stateChanged) {
       state.previousState = from;
       state.state = nextState;
-      state.stateChangedAt = now;
+      state.stateChangedAt = at;
       state.history.push({
         from,
         to: nextState,
-        at: now,
-        source: normalizeText(meta.source) || state.source,
-        reason: normalizeText(meta.reason),
+        at,
+        source: text(meta.source) || state.source,
+        reason: text(meta.reason),
         map: state.map,
         layer: state.layer,
         mode: state.mode,
         sessionKey: state.sessionKey,
         winner: state.winner,
-        sourceMode: normalizeText(meta.sourceMode) || state.sourceMode,
+        sourceMode: text(meta.sourceMode) || state.sourceMode,
         isReplay: Boolean(meta.isReplay),
         canTriggerActions: Boolean(meta.canTriggerActions) && !meta.isReplay,
       });
@@ -177,14 +168,7 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
       }
     }
 
-    state.updatedAt = now;
-    state.source = normalizeText(meta.source) || state.source || "unknown";
-    state.reason = normalizeText(meta.reason) || state.reason;
-    state.sourceMode = normalizeText(meta.sourceMode) || state.sourceMode || "live";
-    state.isReplay = Boolean(meta.isReplay);
-    state.canTriggerActions = Boolean(meta.canTriggerActions) && !state.isReplay;
-    state.revision += 1;
-
+    finalizeMeta(meta, at);
     if (stateChanged) {
       moduleLogger.info?.(`[MatchLifecycle] ${from} -> ${nextState}`, {
         operation: "matchLifecycle.transition",
@@ -200,32 +184,33 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
         },
       });
     }
-
     publish();
     return true;
   }
 
-  function applyIdentity(meta = {}) {
+  function touch(meta = {}) {
+    if (!applyMeta(meta)) return false;
+    finalizeMeta(meta, eventIso(meta.at) || new Date().toISOString());
+    publish();
+    return true;
+  }
+
+  function applyMeta(meta = {}) {
     let changed = false;
     for (const key of ["serverId", "map", "layer", "mode", "nextLayer", "sessionKey", "winner"]) {
       if (!(key in meta)) continue;
-      const next = normalizeText(meta[key]);
-      if (state[key] === next) continue;
-      state[key] = next;
+      const value = text(meta[key]);
+      if (state[key] === value) continue;
+      state[key] = value;
       changed = true;
     }
     for (const key of ["startedAt", "endedAt"]) {
       if (!(key in meta)) continue;
-      const next = normalizeIso(meta[key]);
-      if (state[key] === next) continue;
-      state[key] = next;
+      const value = eventIso(meta[key]);
+      if (state[key] === value) continue;
+      state[key] = value;
       changed = true;
     }
-    return changed;
-  }
-
-  function applyMetadata(meta = {}) {
-    let changed = false;
     if (typeof meta.connected === "boolean" && state.connected !== meta.connected) {
       state.connected = meta.connected;
       changed = true;
@@ -235,96 +220,87 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
       changed = true;
     }
     if (meta.playtime !== undefined) {
-      const playtime = finiteOrNull(meta.playtime);
-      if (state.playtime !== playtime) {
-        state.playtime = playtime;
+      const value = finiteOrNull(meta.playtime);
+      if (state.playtime !== value) {
+        state.playtime = value;
         changed = true;
       }
     }
     return changed;
   }
 
-  function updateMetadata(meta = {}) {
-    const identityChanged = applyIdentity(meta);
-    const metadataChanged = applyMetadata(meta);
-    if (!identityChanged && !metadataChanged) return false;
-    state.updatedAt = normalizeIso(meta.at) || new Date().toISOString();
-    state.source = normalizeText(meta.source) || state.source;
-    state.reason = normalizeText(meta.reason) || state.reason;
-    state.sourceMode = normalizeText(meta.sourceMode) || state.sourceMode;
-    state.isReplay = Boolean(meta.isReplay ?? state.isReplay);
-    state.canTriggerActions = Boolean(meta.canTriggerActions ?? state.canTriggerActions) && !state.isReplay;
+  function finalizeMeta(meta, at) {
+    state.updatedAt = at;
+    state.source = text(meta.source) || state.source || "unknown";
+    state.reason = text(meta.reason) || state.reason;
+    state.sourceMode = text(meta.sourceMode) || state.sourceMode || "live";
+    state.isReplay = Boolean(meta.isReplay);
+    state.canTriggerActions = Boolean(meta.canTriggerActions) && !state.isReplay;
     state.revision += 1;
-    publish();
-    return true;
   }
 
   function handleWorldBringUp(event = {}) {
-    if (!enabled || !acceptLifecycleEvent(event)) return;
+    if (!enabled || !acceptLogEvent(event)) return;
     clearLifecycleTimers();
 
     const payload = event?.normalized?.roundWorldBringUp ?? {};
-    const eventAt = lifecycleEventIso(event, payload);
-    const map = normalizeText(payload.mapName) || normalizeText(readMatchState()?.serverStatus?.map);
-    const layer = normalizeText(payload.layerName) || normalizeText(readMatchState()?.serverStatus?.layer);
-    const mode = normalizeText(payload.gameMode) || normalizeText(readMatchState()?.serverStatus?.mode);
-    const serverId = normalizeText(payload.serverId) || normalizeText(event.serverId) || state.serverId;
-    const sessionKey = buildSessionKey({ serverId, layer, worldPath: payload.worldPath, logLineTime: payload.logLineTime });
+    const current = readMatchState();
+    const at = lifecycleEventIso(event, payload);
+    const map = text(payload.mapName) || text(current?.serverStatus?.map);
+    const layer = text(payload.layerName) || text(current?.serverStatus?.layer);
+    const mode = text(payload.gameMode) || text(current?.serverStatus?.mode);
+    const serverId = text(payload.serverId) || text(event.serverId) || state.serverId;
 
+    identityLockUntil = Date.now() + worldIdentityGraceMs;
     transition(MATCH_LIFECYCLE_STATE.MAP_READY, {
       source: "round.world_bring_up",
-      reason: state.layer && layer && state.layer !== layer ? "map_switch_completed" : "world_ready",
-      at: eventAt,
+      reason: state.layer && layer && !same(state.layer, layer) ? "map_switch_completed" : "world_ready",
+      at,
       serverId,
       map,
       layer,
       mode,
-      sessionKey,
+      sessionKey: sessionKey(serverId, layer, payload.worldPath, payload.logLineTime),
       winner: "",
-      startedAt: eventAt,
+      startedAt: at,
       endedAt: "",
-      connected: resolveConnected(readMatchState()),
+      connected: connected(current),
       stale: false,
-      sourceMode: normalizeText(event.sourceMode) || "live",
+      sourceMode: text(event.sourceMode) || "live",
       isReplay: Boolean(event.isReplay),
       canTriggerActions: Boolean(event.canTriggerActions) && !event.isReplay,
     });
 
-    reconcileFromMatchState("world_bring_up_reconcile", {
-      preserveMapReady: true,
-      event,
-    });
+    reconcileFromMatchState("world_bring_up_reconcile", { event });
   }
 
   function handleMatchWinner(event = {}) {
-    if (!enabled || !acceptLifecycleEvent(event)) return;
+    if (!enabled || !acceptLogEvent(event)) return;
+    clearLifecycleTimers();
 
     const payload = event?.normalized?.roundMatchWinner ?? event?.normalized ?? {};
-    const eventAt = lifecycleEventIso(event, payload);
-    const winner = normalizeText(payload.winner ?? event.winner);
-    const map = normalizeText(payload.mapName ?? event.mapName) || state.map;
-    const eventMeta = {
-      source: normalizeText(event.eventName) || "round.match_winner",
+    const at = lifecycleEventIso(event, payload);
+    const meta = {
+      source: text(event.eventName) || "round.match_winner",
       reason: "winner_declared",
-      at: eventAt,
-      map,
-      winner,
-      endedAt: eventAt,
-      sourceMode: normalizeText(event.sourceMode) || "live",
+      at,
+      map: text(payload.mapName ?? event.mapName) || state.map,
+      winner: text(payload.winner ?? event.winner),
+      endedAt: at,
+      sourceMode: text(event.sourceMode) || "live",
       isReplay: Boolean(event.isReplay),
       canTriggerActions: Boolean(event.canTriggerActions) && !event.isReplay,
-      connected: resolveConnected(readMatchState()),
+      connected: connected(readMatchState()),
       stale: false,
     };
 
-    clearLifecycleTimers();
-    transition(MATCH_LIFECYCLE_STATE.ENDING, eventMeta);
-    scheduleFinished(eventMeta);
+    transition(MATCH_LIFECYCLE_STATE.ENDING, meta);
+    scheduleFinished(meta);
   }
 
   function scheduleFinished(meta) {
     const expectedSession = state.sessionKey;
-    const run = () => {
+    const finish = () => {
       finishTimer = null;
       if (state.state !== MATCH_LIFECYCLE_STATE.ENDING || state.sessionKey !== expectedSession) return;
       transition(MATCH_LIFECYCLE_STATE.FINISHED, {
@@ -336,13 +312,12 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
       });
       scheduleNextMatch(meta, expectedSession);
     };
-
-    if (finishSettleMs <= 0) run();
-    else finishTimer = setTimeout(run, finishSettleMs);
+    if (finishSettleMs <= 0) finish();
+    else finishTimer = setTimeout(finish, finishSettleMs);
   }
 
   function scheduleNextMatch(meta, expectedSession) {
-    const run = () => {
+    const next = () => {
       nextMatchTimer = null;
       if (state.state !== MATCH_LIFECYCLE_STATE.FINISHED || state.sessionKey !== expectedSession) return;
       transition(MATCH_LIFECYCLE_STATE.NEXT_MATCH, {
@@ -353,36 +328,35 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
         canTriggerActions: false,
       });
     };
-
-    if (nextMatchDelayMs <= 0) run();
-    else nextMatchTimer = setTimeout(run, nextMatchDelayMs);
+    if (nextMatchDelayMs <= 0) next();
+    else nextMatchTimer = setTimeout(next, nextMatchDelayMs);
   }
 
   function reconcileFromMatchState(reason = "match_state_update", options = {}) {
-    const snapshot = readMatchState();
-    if (!snapshot) return false;
+    const current = readMatchState();
+    if (!current) return false;
 
-    const serverStatus = snapshot.serverStatus ?? {};
-    const match = snapshot.match ?? {};
-    const map = normalizeText(serverStatus.map || match.map);
-    const layer = normalizeText(serverStatus.layer || match.layer);
-    const mode = normalizeText(serverStatus.mode || match.mode);
-    const nextLayer = normalizeText(serverStatus.nextLayer || match.nextLayer);
-    const playtime = finiteOrNull(serverStatus.playtime ?? match.playtime);
-    const connected = resolveConnected(snapshot);
-    const source = normalizeText(options?.event?.eventName) || reason;
-    const baseMeta = {
+    const server = current.serverStatus ?? {};
+    const match = current.match ?? {};
+    const map = text(server.map || match.map);
+    const layer = text(server.layer || match.layer);
+    const mode = text(server.mode || match.mode);
+    const nextLayer = text(server.nextLayer || match.nextLayer);
+    const playtime = finiteOrNull(server.playtime ?? match.playtime);
+    const isConnected = connected(current);
+    const source = text(options.event?.eventName) || reason;
+    const base = {
       source,
       reason,
       map,
       layer,
       mode,
       nextLayer,
-      connected,
-      stale: !connected,
       playtime,
-      sourceMode: normalizeText(options?.event?.sourceMode) || "rcon",
-      isReplay: Boolean(options?.event?.isReplay),
+      connected: isConnected,
+      stale: !isConnected,
+      sourceMode: text(options.event?.sourceMode) || "rcon",
+      isReplay: Boolean(options.event?.isReplay),
       canTriggerActions: false,
     };
 
@@ -393,48 +367,59 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
     if (playtime != null) state.lastObservedPlaytime = playtime;
 
     if (!map && !layer) {
-      if (state.state === MATCH_LIFECYCLE_STATE.UNKNOWN && connected) {
-        return transition(MATCH_LIFECYCLE_STATE.WAITING, {
-          ...baseMeta,
-          reason: "connected_without_map",
-        });
+      if (state.state === MATCH_LIFECYCLE_STATE.UNKNOWN && isConnected) {
+        return transition(MATCH_LIFECYCLE_STATE.WAITING, { ...base, reason: "connected_without_map" });
       }
-      return updateMetadata(baseMeta);
+      return touch(base);
     }
 
-    const identityChanged = hasIdentityChanged({ map, layer });
+    const identityChanged = hasIdentityChanged(map, layer);
+    if (!identityChanged && identityLockUntil > 0) identityLockUntil = 0;
+
+    if (identityChanged && Date.now() < identityLockUntil) {
+      return touch({
+        ...base,
+        map: state.map,
+        layer: state.layer,
+        mode: state.mode,
+        reason: "ignored_stale_rcon_identity_after_world_bring_up",
+      });
+    }
+
     if (identityChanged) {
+      identityLockUntil = 0;
       clearLifecycleTimers();
       transition(MATCH_LIFECYCLE_STATE.LOADING_MAP, {
-        ...baseMeta,
+        ...base,
         reason: "rcon_map_changed",
         winner: "",
         startedAt: "",
         endedAt: "",
-        sessionKey: buildSessionKey({ serverId: state.serverId, layer, worldPath: map, logLineTime: String(Date.now()) }),
+        sessionKey: sessionKey(state.serverId, layer, map, String(Date.now())),
       });
-
-      if (playtime === 0 || playtime == null) {
-        return transition(MATCH_LIFECYCLE_STATE.MAP_READY, {
-          ...baseMeta,
-          reason: "rcon_map_loaded",
+      if (playtime != null && playtime > 0) {
+        return transition(MATCH_LIFECYCLE_STATE.LIVE, {
+          ...base,
+          reason: "rcon_new_map_live",
           winner: "",
           endedAt: "",
+          startedAt: new Date().toISOString(),
         });
       }
-      return transition(MATCH_LIFECYCLE_STATE.LIVE, {
-        ...baseMeta,
-        reason: "rcon_new_map_live",
-        startedAt: state.startedAt || new Date().toISOString(),
+      return transition(MATCH_LIFECYCLE_STATE.MAP_READY, {
+        ...base,
+        reason: "rcon_map_loaded",
         winner: "",
         endedAt: "",
       });
     }
 
-    if (playtimeRolledBack && !isEndedState(state.state)) {
+    if (isEndedState(state.state)) return touch(base);
+
+    if (playtimeRolledBack) {
       clearLifecycleTimers();
       transition(MATCH_LIFECYCLE_STATE.MAP_READY, {
-        ...baseMeta,
+        ...base,
         reason: "playtime_rollback_new_round",
         winner: "",
         endedAt: "",
@@ -442,85 +427,59 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
       });
     }
 
-    // A stale ShowServerInfo response from the just-finished round must never
-    // resurrect an ended match merely because PLAYTIME_I is still > 0.
-    if (isEndedState(state.state)) {
-      return updateMetadata(baseMeta);
-    }
-
-    if (options.preserveMapReady && state.state === MATCH_LIFECYCLE_STATE.MAP_READY) {
-      if (playtime != null && playtime > 0) {
-        return transition(MATCH_LIFECYCLE_STATE.LIVE, {
-          ...baseMeta,
-          reason: "world_ready_with_positive_playtime",
-          startedAt: state.startedAt || new Date().toISOString(),
-        });
-      }
-      return updateMetadata(baseMeta);
-    }
-
     if (playtime != null && playtime > 0) {
-      if ([
-        MATCH_LIFECYCLE_STATE.UNKNOWN,
-        MATCH_LIFECYCLE_STATE.WAITING,
-        MATCH_LIFECYCLE_STATE.LOADING_MAP,
-        MATCH_LIFECYCLE_STATE.MAP_READY,
-      ].includes(state.state)) {
+      if (state.state !== MATCH_LIFECYCLE_STATE.LIVE) {
         return transition(MATCH_LIFECYCLE_STATE.LIVE, {
-          ...baseMeta,
+          ...base,
           reason: "positive_playtime",
           startedAt: state.startedAt || new Date().toISOString(),
         });
       }
-    } else if (playtime === 0 && [
+      return touch(base);
+    }
+
+    if (playtime === 0 && [
       MATCH_LIFECYCLE_STATE.UNKNOWN,
       MATCH_LIFECYCLE_STATE.WAITING,
       MATCH_LIFECYCLE_STATE.LOADING_MAP,
     ].includes(state.state)) {
       return transition(MATCH_LIFECYCLE_STATE.MAP_READY, {
-        ...baseMeta,
+        ...base,
         reason: "zero_playtime_map_ready",
       });
     }
 
-    return updateMetadata(baseMeta);
+    return touch(base);
   }
 
-  function hasIdentityChanged({ map, layer }) {
-    const currentLayer = normalizeText(state.layer);
-    const currentMap = normalizeText(state.map);
-    if (currentLayer && layer) return !sameText(currentLayer, layer);
-    if (currentMap && map) return !sameText(currentMap, map);
+  function hasIdentityChanged(map, layer) {
+    if (state.layer && layer) return !same(state.layer, layer);
+    if (state.map && map) return !same(state.map, map);
     return false;
   }
 
-  function acceptLifecycleEvent(event = {}) {
-    const eventId = normalizeText(event.eventId);
-    if (eventId && recentEventIds.has(eventId)) return false;
-
-    const eventMs = lifecycleEventMs(event);
-    if (eventMs > 0 && state.logWatermarkMs > 0 && eventMs + 1000 < state.logWatermarkMs) {
+  function acceptLogEvent(event = {}) {
+    const id = text(event.eventId);
+    if (id && recentEventIds.has(id)) return false;
+    const ms = lifecycleEventMs(event);
+    if (ms > 0 && state.logWatermarkMs > 0 && ms + 1000 < state.logWatermarkMs) {
       moduleLogger.debug?.("[MatchLifecycle] ignored stale lifecycle event", {
         operation: "matchLifecycle.staleEvent",
         data: {
           eventName: event.eventName,
-          eventId,
-          eventMs,
+          eventId: id,
+          eventMs: ms,
           watermarkMs: state.logWatermarkMs,
           isReplay: Boolean(event.isReplay),
         },
       });
       return false;
     }
-
-    if (eventId) {
-      recentEventIds.set(eventId, Date.now());
-      if (recentEventIds.size > 300) {
-        const keys = [...recentEventIds.keys()].slice(0, recentEventIds.size - 250);
-        for (const key of keys) recentEventIds.delete(key);
-      }
+    if (id) {
+      recentEventIds.set(id, Date.now());
+      while (recentEventIds.size > 300) recentEventIds.delete(recentEventIds.keys().next().value);
     }
-    if (eventMs > state.logWatermarkMs) state.logWatermarkMs = eventMs;
+    if (ms > state.logWatermarkMs) state.logWatermarkMs = ms;
     return true;
   }
 
@@ -528,42 +487,38 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
     return modules?.matchState?.getState?.() ?? null;
   }
 
-  function resolveConnected(snapshot) {
-    if (!snapshot) return Boolean(core.rconManager?.getStatus?.()?.connected);
-    if (typeof snapshot.rconStatus?.connected === "boolean") return snapshot.rconStatus.connected;
+  function connected(current) {
+    if (typeof current?.rconStatus?.connected === "boolean") return current.rconStatus.connected;
     return Boolean(core.rconManager?.getStatus?.()?.connected);
   }
 
   async function loadPersistedState() {
     try {
       const parsed = JSON.parse(await fs.readFile(stateFile, "utf8"));
-      if (Number(parsed?.version) !== STATE_FILE_VERSION || !parsed?.lifecycle) return;
-      const restored = parsed.lifecycle;
-      const expectedServerId = normalizeText(core.webStatus?.serverId);
-      if (normalizeText(restored.serverId) && expectedServerId && normalizeText(restored.serverId) !== expectedServerId) return;
-      if (!Object.values(MATCH_LIFECYCLE_STATE).includes(restored.state)) return;
+      const saved = parsed?.lifecycle;
+      if (Number(parsed?.version) !== STATE_FILE_VERSION || !saved || !VALID_STATES.has(saved.state)) return;
+      const expectedServerId = text(core.webStatus?.serverId);
+      if (text(saved.serverId) && expectedServerId && text(saved.serverId) !== expectedServerId) return;
 
-      for (const key of [
-        "state", "previousState", "serverId", "map", "layer", "mode", "nextLayer", "sessionKey", "winner",
-        "startedAt", "endedAt", "stateChangedAt", "updatedAt", "source", "reason", "sourceMode",
-      ]) {
-        if (restored[key] !== undefined) state[key] = normalizeText(restored[key]);
-      }
-      state.isReplay = true;
-      state.canTriggerActions = false;
-      state.connected = false;
-      state.stale = true;
-      state.playtime = finiteOrNull(restored.playtime);
-      state.lastObservedPlaytime = finiteOrNull(restored.lastObservedPlaytime ?? restored.playtime);
-      state.logWatermarkMs = Math.max(0, Number(restored.logWatermarkMs ?? 0) || 0);
-      state.revision = Math.max(0, Number(restored.revision ?? 0) || 0);
-      state.history = Array.isArray(restored.history)
-        ? restored.history.slice(-historyLimit).map(clone)
-        : [];
-      state.source = "persisted_state";
-      state.reason = "restored_after_restart";
-      state.updatedAt = new Date().toISOString();
-      state.revision += 1;
+      Object.assign(state, {
+        ...state,
+        ...saved,
+        state: saved.state,
+        serverId: text(saved.serverId) || expectedServerId,
+        history: Array.isArray(saved.history) ? saved.history.slice(-historyLimit).map(clone) : [],
+        playtime: finiteOrNull(saved.playtime),
+        lastObservedPlaytime: finiteOrNull(saved.lastObservedPlaytime ?? saved.playtime),
+        logWatermarkMs: Math.max(0, Number(saved.logWatermarkMs ?? 0) || 0),
+        revision: Math.max(0, Number(saved.revision ?? 0) || 0) + 1,
+        source: "persisted_state",
+        reason: "restored_after_restart",
+        sourceMode: "restore",
+        isReplay: true,
+        canTriggerActions: false,
+        connected: false,
+        stale: true,
+        updatedAt: new Date().toISOString(),
+      });
       publish({ persist: false, emit: false });
     } catch (error) {
       if (error?.code !== "ENOENT") {
@@ -585,21 +540,16 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
     const payload = {
       version: STATE_FILE_VERSION,
       savedAt: new Date().toISOString(),
-      lifecycle: {
-        ...state,
-        history: state.history.slice(-historyLimit),
-      },
+      lifecycle: { ...state, history: state.history.slice(-historyLimit) },
     };
-    const tmpFile = `${stateFile}.tmp`;
-    writeChain = writeChain
-      .then(async () => {
-        await fs.mkdir(path.dirname(stateFile), { recursive: true });
-        await fs.writeFile(tmpFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-        await fs.rename(tmpFile, stateFile);
-      })
-      .catch((error) => {
-        moduleLogger.warn?.(`[MatchLifecycle] failed to persist state: ${error?.message ?? error}`);
-      });
+    const tmp = `${stateFile}.tmp`;
+    writeChain = writeChain.then(async () => {
+      await fs.mkdir(path.dirname(stateFile), { recursive: true });
+      await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+      await fs.rename(tmp, stateFile);
+    }).catch((error) => {
+      moduleLogger.warn?.(`[MatchLifecycle] failed to persist state: ${error?.message ?? error}`);
+    });
     return writeChain;
   }
 
@@ -617,7 +567,7 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
       kind: "module",
       version: "1.0.0",
       hidden: true,
-      description: "权威比赛生命周期状态机。融合日志强信号与 RCON 校验，统一维护地图切换、地图就绪、对局进行、结算、结束与等待下一局状态。",
+      description: "权威比赛生命周期状态机：地图切换、地图就绪、进行中、结算、结束及等待下一局。",
     },
     apiName: "matchLifecycle",
     api,
@@ -629,12 +579,12 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
 
       unsubscribers.push(core.eventBus.onCoreEvent("round.world_bring_up", handleWorldBringUp));
       unsubscribers.push(core.eventBus.onCoreEvent("round.match_winner", handleMatchWinner));
-      // Legacy compatibility. The real LogPost matcher emits round.match_winner.
+      // Compatibility only. LogPost's real matcher emits round.match_winner.
       unsubscribers.push(core.eventBus.onCoreEvent("round.winner_declared", handleMatchWinner));
       unsubscribers.push(core.eventBus.onCoreEvent("MATCH_END", handleMatchWinner));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_CONNECTED", () => reconcileFromMatchState("rcon_connected")));
       unsubscribers.push(core.eventBus.onCoreEvent("RCON_DISCONNECTED", () => {
-        updateMetadata({
+        touch({
           source: "RCON_DISCONNECTED",
           reason: "rcon_disconnected",
           connected: false,
@@ -648,11 +598,6 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
       unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "serverStatusUpdated", () => {
         reconcileFromMatchState("server_status_updated");
       }));
-      unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "roundUpdated", (event) => {
-        // round.world_bring_up is normally received directly as a core event.
-        // This is a reconciliation path only; it does not create a second event.
-        reconcileFromMatchState("round_state_updated", { event });
-      }));
 
       reconcileFromMatchState("startup_reconcile");
       publish();
@@ -664,10 +609,8 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
         try { unsubscribe(); } catch {}
       }
       clearLifecycleTimers();
-      if (persistTimer) {
-        clearTimeout(persistTimer);
-        persistTimer = null;
-      }
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = null;
       await persistNow();
     },
   };
@@ -684,51 +627,47 @@ function lifecycleEventMs(event = {}) {
     ?? event?.normalized?.roundMatchWinner
     ?? event?.normalized
     ?? {};
-  const raw = normalizeText(payload.logLineTime || payload.serverPlayAt || event.logTime || event.time);
-  return parseEventTime(raw);
+  return parseEventTime(text(payload.logLineTime || payload.serverPlayAt || event.logTime || event.time));
 }
 
 function lifecycleEventIso(event = {}, payload = {}) {
-  const raw = normalizeText(payload.logLineTime || payload.serverPlayAt || event.logTime || event.time);
-  const ms = parseEventTime(raw);
+  const ms = parseEventTime(text(payload.logLineTime || payload.serverPlayAt || event.logTime || event.time));
   return ms > 0 ? new Date(ms).toISOString() : new Date().toISOString();
 }
 
-function parseEventTime(value) {
-  const text = normalizeText(value);
-  if (!text) return 0;
-  const squad = text.match(/^(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})$/);
-  if (squad) {
-    const [, year, month, day, hour, minute, second, millis] = squad;
-    const valueMs = Date.UTC(
-      Number(year), Number(month) - 1, Number(day),
-      Number(hour), Number(minute), Number(second), Number(millis),
-    );
-    return Number.isFinite(valueMs) ? valueMs : 0;
-  }
-  const parsed = Date.parse(text);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function buildSessionKey({ serverId = "", layer = "", worldPath = "", logLineTime = "" } = {}) {
-  return [normalizeText(serverId), normalizeText(layer), normalizeText(worldPath), normalizeText(logLineTime)]
-    .filter(Boolean)
-    .join("|");
-}
-
-function sameText(left, right) {
-  return normalizeText(left).toLowerCase() === normalizeText(right).toLowerCase();
-}
-
-function normalizeText(value) {
-  return String(value ?? "").trim();
-}
-
-function normalizeIso(value) {
-  const text = normalizeText(value);
-  if (!text) return "";
-  const ms = parseEventTime(text);
+function eventIso(value) {
+  const raw = text(value);
+  if (!raw) return "";
+  const ms = parseEventTime(raw);
   return ms > 0 ? new Date(ms).toISOString() : "";
+}
+
+function parseEventTime(value) {
+  const raw = text(value);
+  if (!raw) return 0;
+  const match = raw.match(/^(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2}):(\d{3})$/);
+  if (match) {
+    const [, year, month, day, hour, minute, second, millis] = match;
+    const ms = Date.UTC(
+      Number(year), Number(month) - 1, Number(day), Number(hour),
+      Number(minute), Number(second), Number(millis),
+    );
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  const ms = Date.parse(raw);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function sessionKey(serverId, layer, worldPath, logLineTime) {
+  return [serverId, layer, worldPath, logLineTime].map(text).filter(Boolean).join("|");
+}
+
+function same(left, right) {
+  return text(left).toLowerCase() === text(right).toLowerCase();
+}
+
+function text(value) {
+  return String(value ?? "").trim();
 }
 
 function finiteOrNull(value) {
@@ -748,6 +687,5 @@ function nonNegativeInt(value, fallback) {
 }
 
 function clone(value) {
-  if (value == null) return value;
-  return JSON.parse(JSON.stringify(value));
+  return value == null ? value : JSON.parse(JSON.stringify(value));
 }
