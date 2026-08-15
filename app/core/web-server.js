@@ -3633,7 +3633,7 @@ export class WebServer {
       });
     }
 
-    if (dbPlayerTagsMatch && req.method === "PUT") {
+    if (dbPlayerTagsMatch && (req.method === "PUT" || req.method === "POST")) {
       if (!this.requireSuperAdmin(user, res)) return;
       const body = await this.readJsonBody(req);
       const tagType = String(body?.tagType ?? "").trim();
