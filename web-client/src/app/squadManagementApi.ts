@@ -281,8 +281,18 @@ export function warnPlayer(payload: {
   sourceModule?: string;
   targetSteamId?: string;
   targetEosId?: string;
+  record?: boolean;
 }) {
   return apiPost<any>("/api/admin-warns/warn", payload);
+}
+
+export function warnTarget(payload: {
+  targetScope: "all" | "team1" | "team2";
+  message: string;
+  reason?: string;
+  sourceModule?: string;
+}) {
+  return apiPost<any>("/api/admin-warns/warn-target", payload);
 }
 
 export async function killPlayer(payload: {
