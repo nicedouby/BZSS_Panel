@@ -102,7 +102,6 @@ const props = defineProps<{
   playersUpdatedAt?: number;
   squadsUpdatedAt?: number;
   multiSelectMode?: boolean;
-  viewMode: "list" | "map";
 }>();
 
 const emit = defineEmits<{
