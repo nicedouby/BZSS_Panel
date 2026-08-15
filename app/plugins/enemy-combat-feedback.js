@@ -9,12 +9,12 @@ const MAX_HANDLED_EVENTS = 2_000;
 const DEFAULT_CONFIG = {
   enabled: true,
   damageEnabled: false,
-  woundEnabled: false,
+
   deathEnabled: false,
   ignoreGiveUp: true,
   requirePlayerId: true,
   damageMessage: "[伤害反馈] 你对 {victim} 造成了 {damage} 点伤害",
-  woundMessage: "[击杀反馈] 你击倒了 {victim}",
+
   deathMessage: "[击杀反馈] 你击杀了 {victim}",
 };
 
@@ -39,9 +39,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     // 全局策略：所有实时战斗反馈永久关闭，旧配置或页面不能重新启用。
     return {
       ...merged,
-      damageEnabled: false,
-      woundEnabled: false,
-      deathEnabled: false,
+
     };
   }
 
@@ -136,16 +134,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       || ["team_damage", "team_wound", "team_kill"].includes(normalizeText(record?.friendlyFireType).toLocaleLowerCase());
   }
 
-  function resolveAttacker(serverId, record) {
-    const playerState = modules?.playerState;
-    return playerState?.getPlayerBySteamID?.(serverId, record?.attackerSteam64ID)
-      ?? playerState?.getPlayerByEOSID?.(serverId, record?.attackerEOSID)
-      ?? playerState?.getPlayerByControllerID?.(serverId, record?.attackerControllerID)
-      ?? playerState?.getPlayerByName?.(serverId, record?.attackerName)
-      ?? null;
-  }
 
-  function playerIdOf(player) {
     return normalizeText(player?.playerID ?? player?.playerId);
   }
 
@@ -160,11 +149,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return Number.isInteger(damage) ? String(damage) : String(Math.round(damage * 100) / 100);
   }
 
-  function formatMessage(template, record) {
-    return String(template ?? "")
-      .replaceAll("{victim}", safeVictimName(record))
-      .replaceAll("{damage}", formatDamage(record?.damage));
-  }
+
 
   async function handleCombatEvent(event = {}) {
     runtimeConfig = readConfig(config);
@@ -176,21 +161,13 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
-    // 全局策略：永久关闭普通伤害、击倒和击杀的实时警告。
-    if (type === "damage") return skip("damage_display_disabled");
-    if (type === "wound") return skip("wound_display_disabled");
-    if (type === "death") return skip("death_display_disabled");
+
     if (hasFriendlyFire(record)) return skip("friendly_fire");
     if (sameIdentity(record)) return skip("self_damage");
     if (!isConfirmedEnemy(record)) return skip("team_unknown");
     if (type === "death" && runtimeConfig.ignoreGiveUp && isGiveUp(record)) return skip("give_up");
 
-    const eventId = getEventId(event, record);
-    if (!claimEvent(eventId)) return skip("duplicate_event");
 
-    const serverId = normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId);
-    const attacker = resolveAttacker(serverId, record);
-    if (!attacker) return skip("attacker_missing");
 
     const playerID = playerIdOf(attacker);
     if (runtimeConfig.requirePlayerId && !playerID) return skip("player_id_missing");
@@ -240,8 +217,8 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "敌方战斗反馈",
       kind: "plugin",
-      version: "0.5.0",
-      description: "普通伤害、击倒和击杀的实时私人反馈均已全局停用。",
+
+
     },
     api: { getState, handleCombatEvent },
     async start() {

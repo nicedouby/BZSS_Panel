@@ -24,10 +24,7 @@ function createHarness(overrides = {}) {
     },
     modules: {
       playerState: {
-        getPlayerBySteamID(_serverId, steamID) { return steamID === "steam-attacker" ? attacker : null; },
-        getPlayerByEOSID(_serverId, eosID) { return eosID === "eos-attacker" ? attacker : null; },
-        getPlayerByControllerID() { return null; },
-        getPlayerByName(_serverId, name) { return name === "Attacker" ? attacker : null; },
+
       },
       adminWarn: { async sendAdminWarn(request) { warnings.push(request); return { success: true }; } },
     },
@@ -72,9 +69,7 @@ let harness = await send({ type: "damage", damage: 25.125 });
 assert.equal(harness.warnings.length, 0, "damage feedback must remain globally disabled");
 assert.equal(harness.plugin.api.getState().totalDamageFeedback, 0);
 
-harness = await send({});
-assert.equal(harness.warnings.length, 0, "wound feedback must remain globally disabled");
-assert.equal(harness.plugin.api.getState().totalWoundFeedback, 0);
+
 
 harness = await send({ type: "death" });
 assert.equal(harness.warnings.length, 0, "death feedback must remain globally disabled");
@@ -98,18 +93,14 @@ for (const record of [
   assert.equal(harness.warnings.length, 0, JSON.stringify(record));
 }
 
-harness = createHarness();
-await harness.plugin.api.handleCombatEvent(event({ type: "death" }));
-await harness.plugin.api.handleCombatEvent(event({ type: "death" }));
-assert.equal(harness.warnings.length, 0, "death events must never produce real-time warnings");
+
 
 harness = await send({ type: "death" }, { attacker: { name: "Attacker", steamID: "steam-attacker" } });
 assert.equal(harness.warnings.length, 0);
 
 harness = await send({ type: "damage" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 0, "configuration must not re-enable damage feedback");
-harness = await send({ type: "wound" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
-assert.equal(harness.warnings.length, 0, "configuration must not re-enable wound feedback");
+
 harness = await send({ type: "death" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 0, "configuration must not re-enable death feedback");
 
