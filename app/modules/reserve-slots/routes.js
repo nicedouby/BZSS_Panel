@@ -1,4 +1,4 @@
-﻿import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_SOURCE_PAGES } from "../../core/audit/audit-actions.js";
+import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_SOURCE_PAGES } from "../../core/audit/audit-actions.js";
 
 export async function handleReserveSlotsRoutes({
   core,
@@ -94,6 +94,8 @@ export async function handleReserveSlotsRoutes({
         quantity: body?.quantity ?? 0,
         durationDays: body?.durationDays ?? 0,
         allowMultiActivation: Boolean(body?.allowMultiActivation),
+        activateAt: body?.activateAt ?? null,
+        autoDeactivateAt: body?.autoDeactivateAt ?? null,
         minCurrentSessionSeconds: body?.minCurrentSessionSeconds ?? 0,
         minServerSeconds: body?.minServerSeconds ?? 0,
       },

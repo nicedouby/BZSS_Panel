@@ -367,6 +367,74 @@ async function testChatActivationRespectsEnabledFlag() {
   await fs.rm(module.tempDir, { recursive: true, force: true });
 }
 
+
+
+async function testCdkBatchActivationScheduleAndAutoDeactivation() {
+  const module = await setupReserveModule({ enabled: true });
+  await module.reserveModule.start();
+
+  const scheduledAt = new Date(Date.now() + 60_000).toISOString();
+  const scheduled = await module.reserveModule.api.createCdkBatch({
+    codeType: "VIP",
+    quantity: 1,
+    durationDays: 30,
+    activateAt: scheduledAt,
+    allowMultiActivation: false,
+  }, {
+    actor: { username: "admin" },
+  });
+
+  const scheduledBatch = scheduled.batches.find((item) => item.id === scheduled.createdBatchId);
+  assert.equal(scheduledBatch.status, "scheduled");
+  assert.equal(scheduled.summary.scheduledBatchCount, 1);
+
+  module.harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: scheduled.createdCodes[0],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const earlyState = await module.reserveModule.api.getCdkState();
+  const earlyActivation = earlyState.activations.find((item) => item.code === scheduled.createdCodes[0]);
+  assert.equal(earlyActivation?.result, "batch_not_active");
+  assert.equal(earlyState.summary.usedCodeCount, 0);
+
+  const autoDeactivateAt = new Date(Date.now() + 250).toISOString();
+  const expiring = await module.reserveModule.api.createCdkBatch({
+    codeType: "AUTO",
+    quantity: 1,
+    durationDays: 30,
+    autoDeactivateAt,
+    allowMultiActivation: false,
+  }, {
+    actor: { username: "admin" },
+  });
+  const expiringCode = expiring.createdCodes[0];
+  assert.equal(expiring.batches.find((item) => item.id === expiring.createdBatchId)?.status, "active");
+
+  await new Promise((resolve) => setTimeout(resolve, 320));
+  const expiredState = await module.reserveModule.api.getCdkState();
+  assert.equal(expiredState.batches.some((item) => item.id === expiring.createdBatchId), false);
+
+  module.harness.chatManager.api.emit("message", {
+    chatChannel: "all",
+    playerName: "Alpha",
+    steamId: "76561198377609640",
+    message: expiringCode,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  const afterExpiredAttempt = await module.reserveModule.api.getCdkState();
+  const expiredActivation = afterExpiredAttempt.activations.find((item) => item.code === expiringCode);
+  assert.equal(expiredActivation?.result, "batch_deactivated");
+  assert.match(expiredActivation?.failureReason ?? "", /自动报销/);
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
 async function testCsvImportSyncsAdminFile() {
   const module = await setupReserveModule();
   const csvText = [
@@ -475,6 +543,7 @@ async function main() {
   await testWarmupReasonUsesDatabaseNameWhenMissing();
   await testExpiredCleanupRemovesExpiredMembers();
   await testChatActivationRespectsEnabledFlag();
+  await testCdkBatchActivationScheduleAndAutoDeactivation();
   await testCsvImportSyncsAdminFile();
   await testRoutePermissions();
   console.log("reserve slots tests passed");
