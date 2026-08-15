@@ -160,8 +160,6 @@ const filters = [
 
 const isRefreshing = computed(() => Boolean(props.refreshingType));
 const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
-const showViewerPerspective = computed(() => Boolean(props.showViewerPerspective));
-const viewerPerspectiveText = computed(() => props.viewerPerspectiveText ?? "");
 const filterMode = computed(() => props.filterMode);
 const refreshMenuOpen = ref(false);
 const refreshMenuRoot = ref<HTMLElement | null>(null);
