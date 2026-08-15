@@ -10,12 +10,29 @@ export function createLogpostDiagnosticsModule(args) {
   const instance = createBaseModule(args);
   const core = args.core;
   const baseGetState = instance.api.getState.bind(instance.api);
+  const baseStart = instance.start?.bind(instance);
   let lastParserOffset = null;
   let lastBridgeOffset = null;
   let parserProgressAt = Date.now();
   let bridgeProgressAt = Date.now();
 
   instance.api.getState = () => enhanceState(baseGetState());
+  instance.start = async () => {
+    if (baseStart) await baseStart();
+    core.webRegistry.registerPage({
+      id: "web.logpostPacketLoss",
+      title: "LogPost 丢包监控",
+      group: "系统",
+      route: "/system/logpost-packet-loss",
+      source: "module.logpostDiagnostics",
+      description: "按 PacketSeq 对比 LogPost UDP 发送与接收，显示当前、1 分钟、5 分钟丢包率和连续丢包。",
+      required: false,
+      enabled: true,
+      order: 1003,
+      icon: "NET",
+      superAdminOnly: true,
+    });
+  };
 
   function enhanceState(input) {
     if (!input || typeof input !== "object") return input;
