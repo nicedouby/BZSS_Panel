@@ -63,7 +63,7 @@ async function run() {
     }
     if (partial.length && partialOffset < cutoff) collect(partial, partialOffset);
     flush();
-    parentPort?.postMessage({ type: "complete", scannedBytes: Math.max(0, currentOffset - Number(workerData?.startOffset || 0)), completedOffset: currentOffset, totalBytes: Math.max(0, cutoff - Number(workerData?.startOffset || 0)), scannedLines, squadCreatesFound, accepted: squadCreatesFound, duplicates: 0, pendingTeamResolution: 0, durationMs: Date.now() - startedAt });
+    parentPort?.postMessage({ type: "complete", scannedBytes: Math.max(0, currentOffset - Number(workerData?.startOffset || 0)), completedOffset: currentOffset, totalBytes: Math.max(0, cutoff - Number(workerData?.startOffset || 0)), scannedLines, squadCreatesFound, accepted: squadCreatesFound, duplicates: 0, pendingTeamResolution: 0, roundBoundaryOffset, durationMs: Date.now() - startedAt });
   } finally { await handle.close(); }
 
   function collect(lineBytes, sourceOffset) {
