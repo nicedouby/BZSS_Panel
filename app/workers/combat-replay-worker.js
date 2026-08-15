@@ -29,8 +29,6 @@ async function run() {
   let killsFound = 0;
   let woundsFound = 0;
   let damageFound = 0;
-  let roundBoundaryOffset = 0;
-  let squadCreatesFound = 0;
   let nextProgressAt = currentOffset + PROGRESS_BYTES;
   let batch = [];
   const identities = new Map();
@@ -179,69 +177,6 @@ async function findLastRoundBoundaryOffset(handle, cutoff) {
     end = start;
   }
   return 0;
-}
-
-async function restoreCurrentRoundSquads(handle, { sourcePath, sourceFileId, startOffset, cutoff }) {
-  let offset = startOffset;
-  let partial = Buffer.alloc(0);
-  let partialOffset = offset;
-  let batch = [];
-  let found = 0;
-
-  while (offset < cutoff) {
-    const length = Math.min(READ_CHUNK_BYTES, cutoff - offset);
-    const buffer = Buffer.allocUnsafe(length);
-    const { bytesRead } = await handle.read(buffer, 0, length, offset);
-    if (!bytesRead) break;
-    const chunkStart = offset;
-    offset += bytesRead;
-    const blob = partial.length ? Buffer.concat([partial, buffer.subarray(0, bytesRead)]) : buffer.subarray(0, bytesRead);
-    const blobStart = partial.length ? partialOffset : chunkStart;
-    let cursor = 0;
-    while (true) {
-      const newline = blob.indexOf(0x0a, cursor);
-      if (newline < 0) break;
-      let lineBytes = blob.subarray(cursor, newline);
-      if (lineBytes.at(-1) === 0x0d) lineBytes = lineBytes.subarray(0, -1);
-      const lineOffset = blobStart + cursor;
-      cursor = newline + 1;
-      collect(lineBytes, lineOffset);
-    }
-    partial = cursor < blob.length ? Buffer.from(blob.subarray(cursor)) : Buffer.alloc(0);
-    partialOffset = blobStart + cursor;
-  }
-  if (partial.length && partialOffset < cutoff) collect(partial, partialOffset);
-  flush();
-  return found;
-
-  function collect(lineBytes, sourceOffset) {
-    if (!lineBytes.length) return;
-    const line = lineBytes.toString("utf8");
-    if (!/LogSquad:/i.test(line) || !/has created Squad/i.test(line)) return;
-    const record = parseReplaySquadCreateLine(line, {
-      serverId: workerData?.serverId,
-      matchId: workerData?.matchId,
-      sourceFile: sourcePath,
-      sourceFileId,
-      sourceOffset,
-    });
-    if (!record) return;
-    batch.push(record);
-    found += 1;
-    if (batch.length >= BATCH_SIZE) flush();
-  }
-
-  function flush() {
-    if (!batch.length) return;
-    parentPort?.postMessage({ type: "squadCreateBatch", records: batch });
-    batch = [];
-  }
-}
-
-export function isCurrentRoundBoundary(line) {
-  const text = String(line ?? "");
-  return /LogWorld:\s+(?:SeamlessTravel to:|Bringing World\s+\S+\s+up for play)/i.test(text)
-    || /(?:^|\W)(?:GAME_START|MATCH_START|ROUND_START|NEW_GAME)(?:\W|$)/i.test(text);
 }
 
 function makeFileId(stat) {
