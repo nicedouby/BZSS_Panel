@@ -569,6 +569,36 @@ async function testPriorityRunsBeforeNormalButUsesCooldown() {
   assert.deepEqual(delays, [25]);
 }
 
+async function testInteractivePriorityAndExpiredQueueItemsNeverExecute() {
+  const executedCommands = [];
+  let release;
+  const blocked = new Promise((resolve) => { release = resolve; });
+  const lane = {
+    id: "command-1",
+    client: {
+      connected: true,
+      loggedIn: true,
+      async connect() {},
+      async execute(command) {
+        executedCommands.push(command);
+        if (command === "AdminBroadcast Block") await blocked;
+        return "OK";
+      },
+    },
+    busy: false, lastCommandTime: 0, lastUsedAt: 0, cooldownUntil: 0, failureCount: 0, lastError: "",
+  };
+  const { manager } = createHarness({ commandLanes: [lane] });
+  const first = manager.dispatchCommand({ command: "AdminBroadcast Block", system: true });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const expired = await manager.dispatchCommand({ command: "AdminForceTeamChange Expired", system: true, priority: "interactive", maxQueueWaitMs: 20 });
+  assert.equal(expired.success, false);
+  assert.equal(expired.code, "RconQueueTimeout");
+  release();
+  await first;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(executedCommands.includes("AdminForceTeamChange Expired"), false);
+}
+
 async function testQueryCommandsUseQueryPool() {
   const commandExecuted = [];
   const queryExecuted = [];
@@ -702,6 +732,7 @@ await testCommandPoolUsesMultipleReadyLanes();
 await testLowVolumeRotatesAwayFromRecentlyUsedLane();
 await testAllLanesCoolingWaitsForShortestDelay();
 await testPriorityRunsBeforeNormalButUsesCooldown();
+await testInteractivePriorityAndExpiredQueueItemsNeverExecute();
 await testQueryCommandsUseQueryPool();
 await testSharedClientDoesNotRunPoolsConcurrently();
 await testLaneFailureDoesNotBlockOtherLane();

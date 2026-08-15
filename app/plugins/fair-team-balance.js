@@ -32,13 +32,35 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   const state = createInitialState(runtimeConfig);
   const unsubscribers = [];
   let expiryTimer = null;
-  let serial = Promise.resolve();
+  let stateSerial = Promise.resolve();
   const processingRequestIds = new Set();
+  const processingPlayerKeys = new Set();
 
   function enqueue(task) {
-    const next = serial.then(() => task(), () => task());
-    serial = next.catch(() => {});
+    return withStateLock(task);
+  }
+
+  function withStateLock(task) {
+    const next = stateSerial.then(() => task(), () => task());
+    stateSerial = next.catch(() => {});
     return next;
+  }
+
+  function getPendingReservations({ playerKey = "", action = "" } = {}) {
+    return [...state.reservations.values()].filter((entry) =>
+      (!playerKey || entry.playerKey === playerKey) && (!action || entry.action === action));
+  }
+
+  function reserveSwitch({ playerKey, action, consumesPublicTb = false } = {}) {
+    if (!playerKey || getPendingReservations({ playerKey }).length) return null;
+    const id = crypto.randomUUID();
+    const reservation = { id, playerKey, action, consumesPublicTb, createdAtMs: Date.now() };
+    state.reservations.set(id, reservation);
+    return reservation;
+  }
+
+  function rollbackReservation(id) {
+    if (id) state.reservations.delete(id);
   }
 
   function isRequestProcessing(requestId = "") {
@@ -810,7 +832,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       const isGreen = isGreenBalanceSwitch(sideCheck);
 
       if (isGreen) {
-        if (state.round.publicTbRemaining <= 0) {
+        if (state.round.publicTbRemaining - getPendingReservations({ action: "tb" }).filter((entry) => entry.consumesPublicTb).length <= 0) {
           return {
             ok: false,
             error: "RoundTbQuotaExhausted",
@@ -824,7 +846,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         };
       }
 
-      if (state.round.publicTbRemaining <= 0) {
+      if (state.round.publicTbRemaining - getPendingReservations({ action: "tb" }).filter((entry) => entry.consumesPublicTb).length <= 0) {
         return {
           ok: false,
           error: "RoundTbQuotaExhausted",
@@ -848,7 +870,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         };
       }
 
-      if (Number(period?.tbUsed ?? 0) >= runtimeConfig.periodTbLimit) {
+      if (Number(period?.tbUsed ?? 0) + getPendingReservations({ playerKey, action: "tb" }).length >= runtimeConfig.periodTbLimit) {
         return {
           ok: false,
           error: "PlayerTbQuotaExhausted",
@@ -863,7 +885,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       };
     }
 
-    if (action === "sqtb" && Number(period?.sqtbClaimUsed ?? 0) >= runtimeConfig.periodSqtbClaimLimit) {
+    if (action === "sqtb" && Number(period?.sqtbClaimUsed ?? 0) + getPendingReservations({ playerKey, action: "sqtb" }).length >= runtimeConfig.periodSqtbClaimLimit) {
       return {
         ok: false,
         error: "PlayerSqtbQuotaExhausted",
@@ -1224,28 +1246,24 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
   }
 
   async function executeDirectSwitch(event = {}, action = "tb") {
+    const receivedAtMs = Date.now();
     const serverId = getServerId(event?.serverId);
     const { matchState, player } = getOnlinePlayerSnapshot(serverId, event);
     const actor = formatActor(player, event);
     const playerKey = actor.playerKey;
     const playerName = actor.playerName;
     const nowMs = Date.now();
-    const period = ensurePeriod(playerKey, {
-      nowMs,
-      playerName,
-      steamId: actor.steamId,
-      eosId: actor.eosId,
+    const preparation = await withStateLock(() => {
+      const period = ensurePeriod(playerKey, { nowMs, playerName, steamId: actor.steamId, eosId: actor.eosId });
+      const validation = validateDirectSwitch({ playerKey, playerName, player, matchState, webStatus: getCurrentWebStatus(), period, action });
+      const reservation = validation.ok
+        ? reserveSwitch({ playerKey, action, consumesPublicTb: action === "tb" && validation.mode !== "warmup" })
+        : null;
+      if (validation.ok && !reservation) return { period, validation: { ok: false, error: "RequestProcessing", message: "公平跳边正在处理中，请勿重复提交。" }, reservation: null };
+      return { period, validation, reservation };
     });
-    const webStatus = getCurrentWebStatus();
-    const validation = validateDirectSwitch({
-      playerKey,
-      playerName,
-      player,
-      matchState,
-      webStatus,
-      period,
-      action,
-    });
+    const { period, validation, reservation } = preparation;
+    const reservationAtMs = Date.now();
     const sourceMessageId = normalizeText(event?.id ?? event?.seq);
     const requestedType = action === "sqtb" ? "SQTB_REQUESTED" : "TB_REQUESTED";
     const rejectedType = action === "sqtb" ? "SQTB_REJECTED" : "TB_REJECTED";
@@ -1276,10 +1294,10 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         reason: validation.error,
         message: validation.message,
       });
-      await warnPlayer(actor, `公平跳边失败: ${validation.message}`, failureReason, {
+      void warnPlayer(actor, `公平跳边失败: ${validation.message}`, failureReason, {
         relatedEventId: sourceMessageId,
       });
-      await broadcastViolationMessage(buildViolationBroadcastMessage({
+      void broadcastViolationMessage(buildViolationBroadcastMessage({
         playerName,
         actionLabel: action === "sqtb" ? "公平跳边申请" : "公平跳边",
         reason: validation.message,
@@ -1310,6 +1328,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
     });
 
     if (!switchResult?.ok) {
+      await withStateLock(() => rollbackReservation(reservation?.id));
       await appendLog({
         type: rejectedType,
         serverId,
@@ -1320,10 +1339,10 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         reason: normalizeText(switchResult?.error) || "TeamBalanceRejected",
         message: normalizeText(switchResult?.message) || "TeamBalance rejected the switch.",
       });
-      await warnPlayer(actor, `公平跳边失败: ${normalizeText(switchResult?.message) || "跳边执行被拒绝"}`, action === "sqtb" ? "fair_sqtb_switch_rejected" : "fair_tb_switch_rejected", {
+      void warnPlayer(actor, `公平跳边失败: ${normalizeText(switchResult?.message) || "跳边执行被拒绝"}`, action === "sqtb" ? "fair_sqtb_switch_rejected" : "fair_tb_switch_rejected", {
         relatedEventId: sourceMessageId,
       });
-      await broadcastViolationMessage(buildViolationBroadcastMessage({
+      void broadcastViolationMessage(buildViolationBroadcastMessage({
         playerName,
         actionLabel: "公平跳边",
         reason: normalizeText(switchResult?.message) || "跳边执行被拒绝",
@@ -1337,21 +1356,21 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       };
     }
 
-    if (action === "tb") {
-      if (!Boolean(validation.mode === "warmup")) {
-        if (consumesTbQuotaMode(validation.mode)) {
-          period.tbUsed += 1;
+    await withStateLock(() => {
+      if (action === "tb") {
+        if (!Boolean(validation.mode === "warmup")) {
+          if (consumesTbQuotaMode(validation.mode)) period.tbUsed += 1;
+          state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
+          consumeRoundUse(playerKey);
         }
-        state.round.publicTbRemaining = Math.max(0, state.round.publicTbRemaining - 1);
+      } else {
+        period.sqtbClaimUsed += 1;
         consumeRoundUse(playerKey);
       }
-    } else {
-      period.sqtbClaimUsed += 1;
-      consumeRoundUse(playerKey);
-    }
-
-    period.lastActivityAt = nowIso();
-    period.lastActivityAtMs = nowMs;
+      period.lastActivityAt = nowIso();
+      period.lastActivityAtMs = nowMs;
+      rollbackReservation(reservation?.id);
+    });
 
     await appendLog({
       type: executedType,
@@ -1370,11 +1389,18 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         ok: Boolean(switchResult?.ok),
         message: normalizeText(switchResult?.message),
         command: normalizeText(switchResult?.command),
+        queueLane: normalizeText(switchResult?.queueLane),
+      },
+      latency: {
+        stateWaitMs: reservationAtMs - receivedAtMs,
+        rconQueuedMs: Number(switchResult?.queuedMs ?? 0) || 0,
+        rconExecutionMs: Number(switchResult?.executionMs ?? 0) || 0,
+        totalMs: Date.now() - receivedAtMs,
       },
     });
 
     if (action === "tb") {
-      await broadcastApprovedMessage(buildQuotaBroadcastMessage({
+      void broadcastApprovedMessage(buildQuotaBroadcastMessage({
         playerName,
         mode: Boolean(validation.mode === "warmup")
           ? "warmup_tb"
@@ -1384,7 +1410,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       }), "fair_tb_broadcast", {
         relatedEventId: sourceMessageId,
       });
-      await warnPlayer(actor, Boolean(validation.mode === "warmup")
+      void warnPlayer(actor, Boolean(validation.mode === "warmup")
         ? "公平跳边提醒: 已在暖服模式执行完成"
         : validation.mode === "green_balance"
           ? `公平跳边提醒: 已通过绿色通道执行完成，公共TB剩余 ${state.round.publicTbRemaining}/${runtimeConfig.publicTbLimit}`
@@ -1399,10 +1425,10 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
       };
     }
 
-    await broadcastApprovedMessage(`公平跳边 SQTB 执行成功: ${playerName || "unknown"}`, "fair_sqtb_broadcast", {
+    void broadcastApprovedMessage(`公平跳边 SQTB 执行成功: ${playerName || "unknown"}`, "fair_sqtb_broadcast", {
       relatedEventId: sourceMessageId,
     });
-    await warnPlayer(actor, "公平跳边提醒: SQTB 已在人数差允许时执行完成", "fair_sqtb_success_warning", {
+    void warnPlayer(actor, "公平跳边提醒: SQTB 已在人数差允许时执行完成", "fair_sqtb_success_warning", {
       relatedEventId: sourceMessageId,
     });
 
@@ -2435,21 +2461,25 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
   }
 
   function handleChatMessage(event = {}) {
-    return enqueue(async () => {
-      if (!isActive()) {
-        return { matched: false, skipped: true, reason: state.enabled ? "plugin_unsubscribed" : "plugin_disabled" };
-      }
+    // CHAT_MESSAGE is shared by every plugin: reject ordinary speech before it
+    // touches FairTB state or any serial work.
+    const message = String(event?.message ?? "").trim();
+    const lowerMessage = message.toLowerCase();
+    const isTb = lowerMessage === "tb" || message === "公平跳边" || message === "跳边";
+    const isSqtb = lowerMessage === "sqtb" || message === "申请跳边";
+    const isBlackEdge = message === "黑奴跳边";
+    const claimMatch = message.match(CLAIM_MESSAGE_PATTERN);
+    if (!isTb && !isSqtb && !isBlackEdge && !claimMatch) return Promise.resolve({ matched: false });
 
+    return (async () => {
+      if (!isActive()) return { matched: false, skipped: true, reason: state.enabled ? "plugin_unsubscribed" : "plugin_disabled" };
       expireRequests();
-      const message = String(event?.message ?? "").trim();
-      const lowerMessage = message.toLowerCase();
-      const isTb = lowerMessage === "tb" || message === "公平跳边" || message === "跳边";
-      const isSqtb = lowerMessage === "sqtb" || message === "申请跳边";
-      const isBlackEdge = message === "黑奴跳边";
-
-      if (!isTb && !isSqtb && !isBlackEdge && !CLAIM_MESSAGE_PATTERN.test(message)) {
-        return { matched: false };
+      const playerKey = buildPlayerKey({ steamId: event?.steamId ?? event?.steamID, eosId: event?.eosId ?? event?.eosID, playerName: event?.playerName ?? event?.name });
+      if (playerKey && processingPlayerKeys.has(playerKey)) {
+        return { matched: true, ok: false, error: "RequestProcessing", message: "公平跳边正在处理中，请勿重复提交。" };
       }
+      if (playerKey) processingPlayerKeys.add(playerKey);
+      try {
 
       if (isBlackEdge) {
         const result = await handleBlackEdgeSwitchMessage(event);
@@ -2478,8 +2508,7 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         };
       }
 
-      const match = message.match(CLAIM_MESSAGE_PATTERN);
-      const code = String(match?.[1] ?? "");
+      const code = String(claimMatch?.[1] ?? "");
       const result = await handleClaimMessage(event, code);
       return {
         matched: true,
@@ -2487,7 +2516,10 @@ function validateClaim({ claimantKey, claimantName, claimantPlayer, applicantPla
         code,
         ...result,
       };
-    });
+      } finally {
+        if (playerKey) processingPlayerKeys.delete(playerKey);
+      }
+    })();
   }
 
   const api = {
@@ -2587,6 +2619,7 @@ function createInitialState(runtimeConfig) {
     periods: new Map(),
     requests: new Map(),
     requestIdsByCode: new Map(),
+    reservations: new Map(),
     round: {
       publicTbRemaining: runtimeConfig.publicTbLimit,
       usedPlayerKeys: new Set(),
