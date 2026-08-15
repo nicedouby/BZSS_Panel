@@ -73,7 +73,7 @@ export function createAdminWarnModule({ core, config, logger }) {
     const reason = String(req?.reason ?? defaultReasonForKind(normalizedKind));
     const targetScope = normalizedKind === "warning" ? normalizeWarningTarget(req?.targetScope ?? req?.target) : "";
     // Selection-based batch warnings deliberately avoid one history line per player.
-    const appendRecord = (entry) => req?.record === false ? { ...entry, persisted: false } : appendRecord(entry);
+    const appendRecord = (entry) => req?.record === false ? { ...entry, persisted: false } : memoryStore.push(entry);
     const relatedEventId = optionalText(req?.relatedEventId);
     const actor = req?.actor ?? req?.viewer ?? null;
     const system = Boolean(req?.system);
