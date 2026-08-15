@@ -108,7 +108,7 @@ function getEosId(player) {
 function readConfig(config) {
   const cfg = config?.get?.(`plugins.${PLUGIN_ID}`, {}) ?? {};
   return {
-    enabled: Boolean(cfg.enabled ?? true),
+    enabled: Boolean(cfg.enabled ?? false),
     firstWarningSeconds: Math.max(1, Number(cfg.firstWarningSeconds ?? DEFAULT_FIRST_WARNING_SECONDS)),
     leaderWarningSeconds: Math.max(1, Number(cfg.leaderWarningSeconds ?? DEFAULT_LEADER_WARNING_SECONDS)),
     pollIntervalMs: Math.max(250, Number(cfg.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS)),
@@ -453,8 +453,16 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     }
 
     if (crossedLeaderThreshold && !leaderWarningSent) {
-      const sent = await sendLeaderWarnings(players, snapshot, warnApi);
-      if (sent) leaderWarningSent = true;
+      const isNewPluginActive = Boolean(
+        modules?.pluginSubscriptions?.isSubscribed?.("round-playtime-roster-warning") !== false
+        && core?.pluginSubscriptions?.isSubscribed?.("round-playtime-roster-warning") !== false
+      );
+      if (!isNewPluginActive) {
+        const sent = await sendLeaderWarnings(players, snapshot, warnApi);
+        if (sent) leaderWarningSent = true;
+      } else {
+        leaderWarningSent = true;
+      }
     }
   }
 

@@ -1091,11 +1091,22 @@
       "weaponAliasFile": "./config/victim-damage-display-weapons.json"
     },
     "squad-members-playtime-warning": {
-      "enabled": true,
+      "enabled": false,
       "firstWarningSeconds": 300,
       "leaderWarningSeconds": 450,
       "pollIntervalMs": 1000,
       "liveLookupWhenMissing": false
+    },
+    "round-playtime-roster-warning": {
+      "enabled": true,
+      "squadWarningSeconds": 300,
+      "leaderWarningSeconds": 450,
+      "pollIntervalMs": 1000,
+      "lineBreakMode": "actual",
+      "maxWarningChars": 180,
+      "splitWarningDelayMs": 500,
+      "liveLookupWhenMissing": false,
+      "persistState": true
     }
   },
   "warmup": {

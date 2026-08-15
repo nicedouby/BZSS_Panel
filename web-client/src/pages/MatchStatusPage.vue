@@ -98,6 +98,7 @@
               @select-player="selectPlayer"
               @toggle-player-check="togglePlayerCheck"
               @edit-tickets="openTicketEditor"
+              @select-team="handleTeamClick"
               @warn-team="handleTeamWarn"
               @search="teamSearchQueries[teamSearchKey(team.teamId)] = $event"
               @select-squad="handleSquadClick"
@@ -128,6 +129,16 @@
       :open="selectedSquadDetail !== null"
       :squad="selectedSquadDetail"
       @close="closeSquadDetail"
+    />
+
+    <TeamDetailDrawer
+      :open="selectedTeamDetail !== null"
+      :team="selectedTeamDetail"
+      :can-edit-tickets="canEditTickets"
+      @close="closeTeamDetail"
+      @warn-team="handleTeamWarn"
+      @edit-tickets="openTicketEditor"
+      @select-squad="handleSquadClick"
     />
 
     <div v-if="ticketEditorOpen" class="ticket-modal-backdrop" v-backdrop-close="closeTicketEditor">
@@ -304,6 +315,7 @@ import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import SquadDetailDrawer from "../components/squad-admin/SquadDetailDrawer.vue";
+import TeamDetailDrawer from "../components/squad-admin/TeamDetailDrawer.vue";
 import MobileSegmentTabs from "../components/mobile/MobileSegmentTabs.vue";
 import AppButton from "../components/ui/AppButton.vue";
 import StickyActionBar from "../components/mobile/StickyActionBar.vue";
@@ -430,6 +442,7 @@ const activePlayerWindow = ref<{
   notice: string;
 } | null>(null);
 const selectedSquadDetail = ref<SquadViewModel | null>(null);
+const selectedTeamDetail = ref<TeamViewModel | null>(null);
 const pageHidden = ref(typeof document !== "undefined" ? document.hidden : false);
 const active = ref(true);
 const { canAutoRefresh } = useAutoRefreshGate(computed(() => active.value && !pageHidden.value));
@@ -1341,6 +1354,14 @@ function togglePlayerCheck(payload: { player: PlayerRowViewModel; event: MouseEv
 
 function closeSquadDetail() {
   selectedSquadDetail.value = null;
+}
+
+function handleTeamClick(team: TeamViewModel) {
+  selectedTeamDetail.value = team;
+}
+
+function closeTeamDetail() {
+  selectedTeamDetail.value = null;
 }
 
 function handleDensityChange(mode: "comfortable" | "compact") {

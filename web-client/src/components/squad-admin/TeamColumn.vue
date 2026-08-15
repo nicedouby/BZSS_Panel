@@ -6,10 +6,10 @@
       style="position: relative;"
       role="button"
       tabindex="0"
-      :aria-label="`向 TEAM ${team.teamId} 发送警告`"
-      @click="emit('warn-team', team.teamId)"
-      @keydown.enter.prevent="emit('warn-team', team.teamId)"
-      @keydown.space.prevent="emit('warn-team', team.teamId)"
+      :aria-label="`查看 TEAM ${team.teamId} 阵营详情`"
+      @click="emit('select-team', team)"
+      @keydown.enter.prevent="emit('select-team', team)"
+      @keydown.space.prevent="emit('select-team', team)"
     >
       <div v-if="factionFlagUrl" class="team-header-flag-bg">
         <img class="team-faction-bg-img" :src="factionFlagUrl" alt="" />
@@ -137,6 +137,7 @@ const emit = defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
+  (event: "select-team", team: TeamViewModel): void;
   (event: "edit-tickets", team: TeamViewModel): void;
   (event: "warn-team", teamId: number): void;
   (event: "search", query: string): void;
