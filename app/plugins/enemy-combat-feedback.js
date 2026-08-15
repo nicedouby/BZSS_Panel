@@ -9,12 +9,12 @@ const MAX_HANDLED_EVENTS = 2_000;
 const DEFAULT_CONFIG = {
   enabled: true,
   damageEnabled: false,
-
+  woundEnabled: true,
   deathEnabled: false,
   ignoreGiveUp: true,
   requirePlayerId: true,
   damageMessage: "[伤害反馈] 你对 {victim} 造成了 {damage} 点伤害",
-
+  woundMessage: "[击倒警告] 你被 {attacker} 击倒了",
   deathMessage: "[击杀反馈] 你击杀了 {victim}",
 };
 
@@ -39,7 +39,9 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     // 全局策略：所有实时战斗反馈永久关闭，旧配置或页面不能重新启用。
     return {
       ...merged,
-
+      damageEnabled: false,
+      woundEnabled: true,
+      deathEnabled: false,
     };
   }
 
@@ -134,7 +136,25 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       || ["team_damage", "team_wound", "team_kill"].includes(normalizeText(record?.friendlyFireType).toLocaleLowerCase());
   }
 
+  function resolveAttacker(serverId, record) {
+    const playerState = modules?.playerState;
+    return playerState?.getPlayerBySteamID?.(serverId, record?.attackerSteam64ID)
+      ?? playerState?.getPlayerByEOSID?.(serverId, record?.attackerEOSID)
+      ?? playerState?.getPlayerByControllerID?.(serverId, record?.attackerControllerID)
+      ?? playerState?.getPlayerByName?.(serverId, record?.attackerName)
+      ?? null;
+  }
 
+  function resolveVictim(serverId, record) {
+    const playerState = modules?.playerState;
+    return playerState?.getPlayerBySteamID?.(serverId, record?.victimSteam64ID)
+      ?? playerState?.getPlayerByEOSID?.(serverId, record?.victimEOSID)
+      ?? playerState?.getPlayerByControllerID?.(serverId, record?.victimControllerID)
+      ?? playerState?.getPlayerByName?.(serverId, record?.victimName)
+      ?? null;
+  }
+
+  function playerIdOf(player) {
     return normalizeText(player?.playerID ?? player?.playerId);
   }
 
@@ -149,7 +169,17 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     return Number.isInteger(damage) ? String(damage) : String(Math.round(damage * 100) / 100);
   }
 
+  function safeAttackerName(record) {
+    const attacker = normalizeText(record?.attackerName).replaceAll('"', "").replace(/[\r\n]+/g, " ");
+    return (attacker || "未知玩家").slice(0, 80);
+  }
 
+  function formatMessage(template, record) {
+    return String(template ?? "")
+      .replaceAll("{victim}", safeVictimName(record))
+      .replaceAll("{attacker}", safeAttackerName(record))
+      .replaceAll("{damage}", formatDamage(record?.damage));
+  }
 
   async function handleCombatEvent(event = {}) {
     runtimeConfig = readConfig(config);
@@ -161,13 +191,56 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
-
+    // 普通伤害与击杀实时警告永久关闭；击倒仅向受害者发送警告。
+    if (type === "damage") return skip("damage_display_disabled");
+    if (type === "death") return skip("death_display_disabled");
     if (hasFriendlyFire(record)) return skip("friendly_fire");
     if (sameIdentity(record)) return skip("self_damage");
     if (!isConfirmedEnemy(record)) return skip("team_unknown");
     if (type === "death" && runtimeConfig.ignoreGiveUp && isGiveUp(record)) return skip("give_up");
 
+    const eventId = getEventId(event, record);
+    if (!claimEvent(eventId)) return skip("duplicate_event");
 
+    const serverId = normalizeText(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId);
+
+    if (type === "wound") {
+      const victim = resolveVictim(serverId, record);
+      if (!victim) return skip("victim_missing");
+      const victimPlayerID = playerIdOf(victim);
+      if (runtimeConfig.requirePlayerId && !victimPlayerID) return skip("victim_player_id_missing");
+      const message = formatMessage(runtimeConfig.woundMessage, record);
+      const reason = "enemy_combat_feedback_wound_victim";
+      try {
+        const result = await modules?.adminWarn?.sendAdminWarn?.({
+          targetName: normalizeText(victim.name) || normalizeText(record?.victimName),
+          targetPlayerId: victimPlayerID || undefined,
+          targetSteamId: normalizeText(victim.steamID ?? victim.steamId ?? record?.victimSteam64ID) || undefined,
+          targetEosId: normalizeText(victim.eosID ?? victim.eosId ?? record?.victimEOSID) || undefined,
+          requireTargetPlayerId: Boolean(runtimeConfig.requirePlayerId),
+          message,
+          sourceModule: PLUGIN_ID,
+          reason,
+          relatedEventId: eventId,
+          system: true,
+        });
+        if (!result?.success) {
+          state.totalSendFailed += 1;
+          state.lastError = normalizeText(result?.errorMessage ?? result?.error ?? "AdminWarn failed");
+          return { success: false, error: state.lastError };
+        }
+        state.totalWoundFeedback += 1;
+        state.lastFeedbackAt = new Date().toISOString();
+        return result;
+      } catch (error) {
+        state.totalSendFailed += 1;
+        state.lastError = error instanceof Error ? error.message : String(error);
+        return { success: false, error: state.lastError };
+      }
+    }
+
+    const attacker = resolveAttacker(serverId, record);
+    if (!attacker) return skip("attacker_missing");
 
     const playerID = playerIdOf(attacker);
     if (runtimeConfig.requirePlayerId && !playerID) return skip("player_id_missing");
@@ -217,8 +290,8 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       id: PLUGIN_ID,
       name: "敌方战斗反馈",
       kind: "plugin",
-
-
+      version: "0.6.0",
+      description: "仅向被击倒的受害者发送击倒警告；普通伤害与击杀反馈关闭。",
     },
     api: { getState, handleCombatEvent },
     async start() {

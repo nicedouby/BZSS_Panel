@@ -24,7 +24,22 @@ function createHarness(overrides = {}) {
     },
     modules: {
       playerState: {
-
+        getPlayerBySteamID(_serverId, steamID) {
+          if (steamID === "steam-attacker") return attacker;
+          if (steamID === "steam-victim") return { name: "Victim", steamID: "steam-victim", playerID: "84" };
+          return null;
+        },
+        getPlayerByEOSID(_serverId, eosID) {
+          if (eosID === "eos-attacker") return attacker;
+          if (eosID === "eos-victim") return { name: "Victim", steamID: "steam-victim", playerID: "84" };
+          return null;
+        },
+        getPlayerByControllerID() { return null; },
+        getPlayerByName(_serverId, name) {
+          if (name === "Attacker") return attacker;
+          if (name === "Victim") return { name: "Victim", steamID: "steam-victim", playerID: "84" };
+          return null;
+        },
       },
       adminWarn: { async sendAdminWarn(request) { warnings.push(request); return { success: true }; } },
     },
@@ -69,7 +84,12 @@ let harness = await send({ type: "damage", damage: 25.125 });
 assert.equal(harness.warnings.length, 0, "damage feedback must remain globally disabled");
 assert.equal(harness.plugin.api.getState().totalDamageFeedback, 0);
 
-
+harness = await send({});
+assert.equal(harness.warnings.length, 1, "victim must receive wound warning");
+assert.match(harness.warnings[0].message, /你被 Attacker 击倒了/);
+assert.equal(harness.warnings[0].targetPlayerId, "84");
+assert.equal(harness.warnings[0].reason, "enemy_combat_feedback_wound_victim");
+assert.equal(harness.plugin.api.getState().totalWoundFeedback, 1);
 
 harness = await send({ type: "death" });
 assert.equal(harness.warnings.length, 0, "death feedback must remain globally disabled");
@@ -93,14 +113,19 @@ for (const record of [
   assert.equal(harness.warnings.length, 0, JSON.stringify(record));
 }
 
-
+harness = createHarness();
+await harness.plugin.api.handleCombatEvent(event({ type: "wound" }));
+await harness.plugin.api.handleCombatEvent(event({ type: "wound" }));
+assert.equal(harness.warnings.length, 1, "duplicate wound events must be deduplicated");
 
 harness = await send({ type: "death" }, { attacker: { name: "Attacker", steamID: "steam-attacker" } });
 assert.equal(harness.warnings.length, 0);
 
 harness = await send({ type: "damage" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 0, "configuration must not re-enable damage feedback");
-
+harness = await send({ type: "wound" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: false, deathEnabled: true } } });
+assert.equal(harness.warnings.length, 1, "wound warning remains enabled for the victim");
+assert.equal(harness.warnings[0].targetPlayerId, "84");
 harness = await send({ type: "death" }, { settings: { "plugins.enemyCombatFeedback": { damageEnabled: true, woundEnabled: true, deathEnabled: true } } });
 assert.equal(harness.warnings.length, 0, "configuration must not re-enable death feedback");
 
