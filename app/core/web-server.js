@@ -3622,6 +3622,35 @@ export class WebServer {
       });
     }
 
+    const dbPlayerTagsMatch = url.pathname.match(/^\/api\/db\/players\/(\d+)\/tags$/);
+    if (dbPlayerTagsMatch && req.method === "GET") {
+      return this.json(res, 200, {
+        ok: true,
+        items: await this.modules.playerDatabase.listPlayerTags(
+          dbPlayerTagsMatch[1],
+          url.searchParams.get("tagType") ?? null,
+        ),
+      });
+    }
+
+    if (dbPlayerTagsMatch && req.method === "PUT") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const body = await this.readJsonBody(req);
+      const tagType = String(body?.tagType ?? "").trim();
+      const values = Array.isArray(body?.tagValues) ? body.tagValues.map((value) => String(value).trim()).filter(Boolean) : [];
+      const allowedHobbyTags = new Set([
+        "爱好铁皮", "爱好压家", "爱好单载", "爱好甩锅", "爱好带队", "爱好带节奏",
+        "爱好狗官", "爱好TK", "爱好载具打狙", "爱好擦边压家", "爱好ZCC", "爱好IFV",
+        "爱好ZSJ", "爱好APC", "爱好龟壳", "爱好拉点", "爱好劫二点", "爱好劫拉点",
+      ]);
+      if (tagType !== "hobby" || values.some((value) => !allowedHobbyTags.has(value))) {
+        return this.json(res, 400, { error: "InvalidPlayerTags", message: "Unsupported player tag." });
+      }
+      const detail = await this.modules.playerDatabase.replacePlayerTags(dbPlayerTagsMatch[1], tagType, values);
+      if (!detail) return this.json(res, 404, { error: "PlayerNotFound", message: "Player not found." });
+      return this.json(res, 200, { ok: true, data: detail });
+    }
+
     if (dbPlayerMatch && req.method === "DELETE") {
       if (!this.requireSuperAdmin(user, res)) return;
       return this.json(res, 200, await this.modules.playerDatabase.deletePlayer(dbPlayerMatch[1]));
