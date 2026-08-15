@@ -88,7 +88,7 @@
         type="search"
         class="team-search-input"
         :placeholder="`搜索 TEAM ${team.teamId} 玩家或小队`"
-        @input="$emit('search', ($event.target as HTMLInputElement).value)"
+        @input="handleSearch"
       />
     </label>
 
@@ -132,7 +132,7 @@ const props = defineProps<{
   searchQuery?: string;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (event: "select-player", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
@@ -140,6 +140,10 @@ defineEmits<{
   (event: "warn-team", teamId: number): void;
   (event: "search", query: string): void;
 }>();
+
+function handleSearch(event: Event) {
+  emit("search", (event.target as HTMLInputElement | null)?.value ?? "");
+}
 
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
 const isComfortable = computed(() => props.densityMode !== "compact");
