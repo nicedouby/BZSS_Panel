@@ -438,8 +438,15 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     }
 
     const validation = validateReplaySquadCreate(normalized, config);
-    if (!validation.accepted) {
-      rememberStableCreateEvent(serverId, normalized);
+    // Replay restores historical facts. Policy evaluation is audit metadata only;
+    // it must never reject a historical create or trigger enforcement.
+    normalized.policyEvaluation = validation.evaluation;
+    normalized.policyViolation = !validation.accepted;
+    normalized.sourceMode = "replay";
+    normalized.isReplay = true;
+    normalized.canTriggerActions = false;
+
+    rememberStableCreateEvent(serverId, normalized);
       const rejected = {
         status: "rejected",
         reason: "squad_name_policy",
@@ -459,15 +466,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     }
 
     if (normalized.teamId == null) {
-      normalized.teamId = getTeamIdByFactionName(serverId, normalized.factionName);
+      const mappedTeamId = getTeamIdByFactionName(serverId, normalized.factionName);
+      normalized.teamId = mappedTeamId ?? `provisional:${normalizeSquadName(normalized.factionName) || "unknown"}`;
     }
-    rememberStableCreateEvent(serverId, normalized);
-    if (normalized.teamId == null) {
-      replayPendingCreates.set(buildReplayId(normalized), normalized);
-      replayStatus.pendingTeamResolution = replayPendingCreates.size;
-      return { ok: true, status: "pending_team_resolution" };
-    }
-
     reducer.setCurrentMatchId(serverId, matchId);
     const imported = reducer.handleSquadCreateLogEvent(normalized);
     replayStatus.accepted += 1;
