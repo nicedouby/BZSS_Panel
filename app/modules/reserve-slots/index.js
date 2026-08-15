@@ -20,6 +20,7 @@ const ACTIVATION_RESULTS = {
   SUCCESS: "success",
   CODE_NOT_FOUND: "code_not_found",
   BATCH_DEACTIVATED: "batch_deactivated",
+  BATCH_NOT_ACTIVE: "batch_not_active",
   CODE_USED: "code_used",
   DUPLICATE_PLAYER_RESTRICTED: "duplicate_player_restricted",
   TYPE_MISMATCH: "type_mismatch",
@@ -537,6 +538,8 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       quantity: payload.quantity,
       durationDays: payload.durationDays,
       allowMultiActivation: payload.allowMultiActivation,
+      activateAt: payload.activateAt,
+      autoDeactivateAt: payload.autoDeactivateAt,
       deactivated: false,
       deactivatedAt: null,
       deactivatedBy: null,
@@ -774,7 +777,9 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       });
     }
 
-    if (batch.deactivated) {
+    const batchStatus = resolveCdkBatchStatus(batch);
+    if (batchStatus === "deactivated") {
+      const automaticallyExpired = !batch.deactivated && Boolean(batch.autoDeactivateAt);
       return logActivation({
         playerName,
         steamId,
@@ -783,7 +788,24 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         code,
         codeType: resolvedCodeType,
         result: ACTIVATION_RESULTS.BATCH_DEACTIVATED,
-        failureReason: "该批次已停用，无法继续激活。",
+        failureReason: automaticallyExpired
+          ? `该批次已于 ${formatCdkScheduleTime(batch.autoDeactivateAt)} 自动报销。`
+          : "该批次已停用，无法继续激活。",
+        grantedExpireAt: null,
+        matchedFutureRequirement: false,
+      });
+    }
+
+    if (batchStatus === "scheduled") {
+      return logActivation({
+        playerName,
+        steamId,
+        message,
+        batchId: batch.id,
+        code,
+        codeType: resolvedCodeType,
+        result: ACTIVATION_RESULTS.BATCH_NOT_ACTIVE,
+        failureReason: `该批次将于 ${formatCdkScheduleTime(batch.activateAt)} 后生效。`,
         grantedExpireAt: null,
         matchedFutureRequirement: false,
       });
@@ -1607,14 +1629,34 @@ function normalizeCreateCdkBatchInput(input = {}) {
     throw createReserveSlotError(400, "InvalidCdkDurationDays", "激活天数必须大于 0。");
   }
 
+  const activateAt = normalizeOptionalCdkTimestamp(input.activateAt, "生效时间");
+  const autoDeactivateAt = normalizeOptionalCdkTimestamp(input.autoDeactivateAt, "自动报销时间");
+  const effectiveActivateAtMs = activateAt ? Date.parse(activateAt) : Date.now();
+  const autoDeactivateAtMs = autoDeactivateAt ? Date.parse(autoDeactivateAt) : null;
+  if (autoDeactivateAtMs != null && autoDeactivateAtMs <= effectiveActivateAtMs) {
+    throw createReserveSlotError(400, "InvalidCdkAutoDeactivateAt", "自动报销时间必须晚于生效时间。");
+  }
+
   return {
     codeType,
     quantity,
     durationDays,
     allowMultiActivation: Boolean(input.allowMultiActivation),
+    activateAt,
+    autoDeactivateAt,
     minCurrentSessionSeconds: Math.max(0, Number(input.minCurrentSessionSeconds ?? 0) || 0),
     minServerSeconds: Math.max(0, Number(input.minServerSeconds ?? 0) || 0),
   };
+}
+
+function normalizeOptionalCdkTimestamp(value, label) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const timestampMs = Date.parse(text);
+  if (!Number.isFinite(timestampMs)) {
+    throw createReserveSlotError(400, "InvalidCdkScheduleTime", `${label}无效。`);
+  }
+  return new Date(timestampMs).toISOString();
 }
 
 function resolveCdkRequirementSuffix(payload = {}) {
@@ -1748,6 +1790,8 @@ function normalizeCdkBatch(batch) {
     quantity: Math.max(0, Number(batch.quantity ?? 0) || 0),
     durationDays: Math.max(0, Number(batch.durationDays ?? 0) || 0),
     allowMultiActivation: Boolean(batch.allowMultiActivation),
+    activateAt: optionalText(batch.activateAt),
+    autoDeactivateAt: optionalText(batch.autoDeactivateAt),
     deactivated: Boolean(batch.deactivated),
     deactivatedAt: optionalText(batch.deactivatedAt),
     deactivatedBy: optionalText(batch.deactivatedBy),
@@ -1839,22 +1883,41 @@ function buildSummary(store) {
   };
 }
 
+function resolveCdkBatchStatus(batch, nowMs = Date.now()) {
+  if (!batch || batch.deactivated) return "deactivated";
+  const autoDeactivateAtMs = batch.autoDeactivateAt ? Date.parse(batch.autoDeactivateAt) : NaN;
+  if (Number.isFinite(autoDeactivateAtMs) && autoDeactivateAtMs <= nowMs) return "deactivated";
+  const activateAtMs = batch.activateAt ? Date.parse(batch.activateAt) : NaN;
+  if (Number.isFinite(activateAtMs) && activateAtMs > nowMs) return "scheduled";
+  return "active";
+}
+
+function formatCdkScheduleTime(value) {
+  const timestampMs = Date.parse(String(value ?? ""));
+  if (!Number.isFinite(timestampMs)) return String(value ?? "未知时间");
+  return formatLocalDateTime(new Date(timestampMs));
+}
+
 function buildCdkSummary(store) {
   const batches = Array.isArray(store?.cdkBatches) ? store.cdkBatches : [];
   const codes = Array.isArray(store?.cdkCodes) ? store.cdkCodes : [];
   const activations = Array.isArray(store?.cdkActivations) ? store.cdkActivations : [];
-  const visibleBatches = batches.filter((item) => !item.deactivated);
-  const usedCodeCount = codes.filter((item) => item.status === "used").length;
-  const activeBatchCount = visibleBatches.length;
-  const deactivatedBatchCount = batches.filter((item) => item.deactivated).length;
+  const visibleBatches = batches.filter((item) => resolveCdkBatchStatus(item) !== "deactivated");
+  const visibleBatchIds = new Set(visibleBatches.map((item) => item.id));
+  const visibleCodes = codes.filter((item) => visibleBatchIds.has(item.batchId));
+  const usedCodeCount = visibleCodes.filter((item) => item.status === "used").length;
+  const activeBatchCount = visibleBatches.filter((item) => resolveCdkBatchStatus(item) === "active").length;
+  const scheduledBatchCount = visibleBatches.filter((item) => resolveCdkBatchStatus(item) === "scheduled").length;
+  const deactivatedBatchCount = batches.filter((item) => resolveCdkBatchStatus(item) === "deactivated").length;
 
   return {
     batchCount: visibleBatches.length,
     activeBatchCount,
+    scheduledBatchCount,
     deactivatedBatchCount,
-    codeCount: codes.length,
+    codeCount: visibleCodes.length,
     usedCodeCount,
-    remainingCodeCount: Math.max(0, codes.length - usedCodeCount),
+    remainingCodeCount: Math.max(0, visibleCodes.length - usedCodeCount),
     activationCount: activations.length,
     successCount: activations.filter((item) => item.result === ACTIVATION_RESULTS.SUCCESS).length,
     failureCount: activations.filter((item) => item.result !== ACTIVATION_RESULTS.SUCCESS).length,
@@ -1862,7 +1925,7 @@ function buildCdkSummary(store) {
 }
 
 function buildCdkBatchView(store) {
-  const batches = cloneValue((store?.cdkBatches ?? []).filter((batch) => !batch?.deactivated));
+  const batches = cloneValue((store?.cdkBatches ?? []).filter((batch) => resolveCdkBatchStatus(batch) !== "deactivated"));
   const codes = store?.cdkCodes ?? [];
   return batches.map((batch) => {
     const relatedCodes = codes.filter((item) => item.batchId === batch.id);
@@ -1873,7 +1936,7 @@ function buildCdkBatchView(store) {
       usedCount,
       remainingCount: Math.max(0, relatedCodes.length - usedCount),
       activationCount: (store?.cdkActivations ?? []).filter((item) => item.batchId === batch.id).length,
-      status: batch.deactivated ? "deactivated" : "active",
+      status: resolveCdkBatchStatus(batch),
     };
   });
 }
@@ -2268,7 +2331,9 @@ function buildActivationNotice(record) {
     case ACTIVATION_RESULTS.CODE_NOT_FOUND:
       return "[预留位 CDK] CDK 不存在。";
     case ACTIVATION_RESULTS.BATCH_DEACTIVATED:
-      return "[预留位 CDK] 该批次已停用，无法继续激活。";
+      return `[预留位 CDK] ${record.failureReason || "该批次已停用，无法继续激活。"}`;
+    case ACTIVATION_RESULTS.BATCH_NOT_ACTIVE:
+      return `[预留位 CDK] ${record.failureReason || "该批次尚未生效。"}`;
     case ACTIVATION_RESULTS.CODE_USED:
       return "[预留位 CDK] 该 CDK 已被使用。";
     case ACTIVATION_RESULTS.DUPLICATE_PLAYER_RESTRICTED:

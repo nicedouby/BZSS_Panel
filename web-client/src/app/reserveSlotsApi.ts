@@ -23,6 +23,8 @@ export interface ReserveSlotCdkBatch {
   quantity: number;
   durationDays: number;
   allowMultiActivation: boolean;
+  activateAt: string | null;
+  autoDeactivateAt: string | null;
   deactivated: boolean;
   deactivatedAt: string | null;
   deactivatedBy: string | null;
@@ -34,7 +36,7 @@ export interface ReserveSlotCdkBatch {
   usedCount: number;
   remainingCount: number;
   activationCount?: number;
-  status: "active" | "deactivated";
+  status: "active" | "scheduled" | "deactivated";
 }
 
 export interface ReserveSlotCdkActivationRecord {
@@ -85,6 +87,7 @@ export interface ReserveSlotsState extends ReserveSlotStore {
 export interface ReserveSlotsCdkSummary {
   batchCount: number;
   activeBatchCount: number;
+  scheduledBatchCount: number;
   deactivatedBatchCount: number;
   codeCount: number;
   usedCodeCount: number;
@@ -132,6 +135,8 @@ export interface CreateReserveSlotCdkBatchPayload {
   quantity: number;
   durationDays: number;
   allowMultiActivation: boolean;
+  activateAt?: string | null;
+  autoDeactivateAt?: string | null;
   minCurrentSessionSeconds?: number;
   minServerSeconds?: number;
   sourcePage?: string;

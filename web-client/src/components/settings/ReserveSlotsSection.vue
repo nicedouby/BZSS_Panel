@@ -323,20 +323,20 @@
 
       <section v-else-if="activeTab === 'batches'" class="reserve-tab-panel reserve-tab-panel-fixed">
         <div class="reserve-summary-grid">
-          <div class="reserve-summary-card">
-            <span>有效批次</span>
-            <strong>{{ cdkState?.summary.batchCount ?? 0 }}</strong>
-          </div>
           <div class="reserve-summary-card active">
+            <span>当前生效</span>
+            <strong>{{ cdkState?.summary.activeBatchCount ?? 0 }}</strong>
+          </div>
+          <div class="reserve-summary-card scheduled">
+            <span>待生效</span>
+            <strong>{{ cdkState?.summary.scheduledBatchCount ?? 0 }}</strong>
+          </div>
+          <div class="reserve-summary-card">
             <span>剩余 CDK</span>
             <strong>{{ cdkState?.summary.remainingCodeCount ?? 0 }}</strong>
           </div>
-          <div class="reserve-summary-card expired">
-            <span>已用 CDK</span>
-            <strong>{{ cdkState?.summary.usedCodeCount ?? 0 }}</strong>
-          </div>
           <div class="reserve-summary-card subtle">
-            <span>停用批次</span>
+            <span>已自动 / 手动报销</span>
             <strong>{{ cdkState?.summary.deactivatedBatchCount ?? 0 }}</strong>
           </div>
         </div>
@@ -364,14 +364,16 @@
                 v-for="batch in cdkBatches"
                 :key="batch.id"
                 class="cdk-batch-card compact"
-                :class="{ active: selectedBatchId === batch.id }"
+                :class="{ active: selectedBatchId === batch.id, scheduled: batch.status === 'scheduled' }"
                 @click="selectedBatchId = batch.id"
               >
                 <div class="cdk-batch-head">
                   <div>
                     <div class="cdk-batch-title-row">
                       <strong>{{ batch.codeType }}</strong>
-                      <span class="reserve-pill active">有效</span>
+                      <span class="reserve-pill" :class="batch.status === 'scheduled' ? 'scheduled' : 'active'">
+                        {{ batchStatusLabel(batch) }}
+                      </span>
                     </div>
                     <p class="cdk-batch-meta mono">{{ batch.id }}</p>
                   </div>
@@ -409,6 +411,9 @@
 
                 <div class="cdk-batch-details compact-details">
                   <span>同玩家：{{ batch.allowMultiActivation ? "允许多次" : "单次使用" }}</span>
+                  <span>生效时间：{{ batch.activateAt ? formatDate(batch.activateAt) : "立即生效" }}</span>
+                  <span>自动报销：{{ batch.autoDeactivateAt ? formatDate(batch.autoDeactivateAt) : "不自动报销" }}</span>
+                  <span class="batch-timing-hint">{{ batchTimingHint(batch) }}</span>
                   <span>创建时间：{{ formatDate(batch.createdAt) }}</span>
                   <span>创建人：{{ batch.createdBy || "system" }}</span>
                 </div>
@@ -428,37 +433,79 @@
               </div>
             </div>
 
-            <label class="reserve-field">
-              <span>CDK 类型</span>
-              <input v-model.trim="batchForm.codeType" class="reserve-input" type="text" placeholder="例如 VIP" required>
-            </label>
-            <label class="reserve-field">
-              <span>该批次数量</span>
-              <input v-model.number="batchForm.quantity" class="reserve-input" type="number" min="1" step="1" required>
-            </label>
-            <label class="reserve-field">
-              <span>激活天数</span>
-              <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
-            </label>
-            <label class="reserve-field">
-              <span>当前局门槛（秒）</span>
-              <input v-model.number="batchForm.minCurrentSessionSeconds" class="reserve-input" type="number" min="0" step="1">
-            </label>
-            <label class="reserve-field">
-              <span>服务器累计时长门槛（秒）</span>
-              <input v-model.number="batchForm.minServerSeconds" class="reserve-input" type="number" min="0" step="1">
-            </label>
-            <label class="checkbox-row">
-              <input v-model="batchForm.allowMultiActivation" type="checkbox">
-              <span>允许同一玩家多次使用该批次中的不同 CDK</span>
-            </label>
+            <div class="batch-form-grid">
+              <label class="reserve-field">
+                <span>CDK 类型</span>
+                <input v-model.trim="batchForm.codeType" class="reserve-input" type="text" placeholder="例如 VIP" required>
+              </label>
+              <label class="reserve-field">
+                <span>数量</span>
+                <input v-model.number="batchForm.quantity" class="reserve-input" type="number" min="1" step="1" required>
+              </label>
+              <label class="reserve-field">
+                <span>激活后预留位天数</span>
+                <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
+              </label>
+            </div>
+
+            <section class="batch-schedule-card">
+              <div class="batch-schedule-head">
+                <div>
+                  <strong>启用与自动报销</strong>
+                  <p>例如 13:00 生成、13:30 生效，则 13:30 前输入 CDK 不会消耗。</p>
+                </div>
+              </div>
+              <div class="batch-form-grid timing-grid">
+                <label class="reserve-field">
+                  <span>何时生效</span>
+                  <input v-model="batchForm.activateAt" class="reserve-input" type="datetime-local">
+                </label>
+                <label class="reserve-field">
+                  <span>何时自动报销</span>
+                  <input v-model="batchForm.autoDeactivateAt" class="reserve-input" type="datetime-local">
+                </label>
+              </div>
+              <div class="batch-quick-actions">
+                <span>生效：</span>
+                <button type="button" class="reserve-mini-btn" @click="setBatchActivationDelay(0)">立即</button>
+                <button type="button" class="reserve-mini-btn" @click="setBatchActivationDelay(30)">+30 分钟</button>
+                <button type="button" class="reserve-mini-btn" @click="setBatchActivationDelay(60)">+1 小时</button>
+              </div>
+              <div class="batch-quick-actions">
+                <span>自动报销：</span>
+                <button type="button" class="reserve-mini-btn" @click="setBatchAutoDeactivateDelay(0)">不自动</button>
+                <button type="button" class="reserve-mini-btn" @click="setBatchAutoDeactivateDelay(60)">生效后 +1 小时</button>
+                <button type="button" class="reserve-mini-btn" @click="setBatchAutoDeactivateDelay(360)">生效后 +6 小时</button>
+                <button type="button" class="reserve-mini-btn" @click="setBatchAutoDeactivateDelay(1440)">生效后 +24 小时</button>
+              </div>
+              <p class="reserve-helper" :class="{ error: !batchScheduleValid }">{{ batchSchedulePreview }}</p>
+            </section>
+
+            <details class="batch-advanced">
+              <summary>高级激活条件</summary>
+              <div class="batch-form-grid advanced-grid">
+                <label class="reserve-field">
+                  <span>当前局门槛（秒）</span>
+                  <input v-model.number="batchForm.minCurrentSessionSeconds" class="reserve-input" type="number" min="0" step="1">
+                </label>
+                <label class="reserve-field">
+                  <span>服务器累计时长门槛（秒）</span>
+                  <input v-model.number="batchForm.minServerSeconds" class="reserve-input" type="number" min="0" step="1">
+                </label>
+              </div>
+              <label class="checkbox-row">
+                <input v-model="batchForm.allowMultiActivation" type="checkbox">
+                <span>允许同一玩家多次使用该批次中的不同 CDK</span>
+              </label>
+            </details>
 
             <div class="reserve-save-preview">
               <span>批次预览</span>
               <strong>{{ batchForm.codeType || "CDK" }} / {{ Number(batchForm.quantity) || 0 }} 个 / {{ Number(batchForm.durationDays) || 0 }} 天</strong>
+              <small>{{ batchSchedulePreview }}</small>
             </div>
 
-            <button type="submit" class="reserve-btn primary full" :disabled="!canEdit || batchCreating">
+            <button type="submit" class="reserve-btn primary full" :disabled="!canEdit || batchCreating || !batchScheduleValid">
               {{ batchCreating ? "创建中..." : "创建批次" }}
             </button>
           </form>
@@ -814,7 +861,8 @@ const tabs = [
 const activationResultOptions = [
   { value: "success", label: "成功" },
   { value: "code_not_found", label: "码不存在" },
-  { value: "batch_deactivated", label: "预留位无效" },
+  { value: "batch_deactivated", label: "批次已报销" },
+  { value: "batch_not_active", label: "批次未到生效时间" },
   { value: "code_used", label: "码已使用" },
   { value: "duplicate_player_restricted", label: "同批次重复受限" },
   { value: "type_mismatch", label: "类型不匹配" },
@@ -898,6 +946,8 @@ const batchForm = reactive<CreateReserveSlotCdkBatchPayload>({
   quantity: 10,
   durationDays: 30,
   allowMultiActivation: false,
+  activateAt: "",
+  autoDeactivateAt: "",
   minCurrentSessionSeconds: 0,
   minServerSeconds: 0,
 });
@@ -971,6 +1021,24 @@ const canSubmit = computed(() => {
 });
 
 const selectedCustomDaysValid = computed(() => Number.isFinite(Number(selectedCustomDays.value)) && Number(selectedCustomDays.value) !== 0);
+
+const batchScheduleValid = computed(() => {
+  void nowTick.value;
+  const activateAtMs = parseBatchLocalTime(batchForm.activateAt);
+  const autoDeactivateAtMs = parseBatchLocalTime(batchForm.autoDeactivateAt);
+  if (batchForm.activateAt && activateAtMs == null) return false;
+  if (batchForm.autoDeactivateAt && autoDeactivateAtMs == null) return false;
+  if (autoDeactivateAtMs == null) return true;
+  const effectiveActivateAtMs = activateAtMs != null && activateAtMs > Date.now() ? activateAtMs : Date.now();
+  return autoDeactivateAtMs > effectiveActivateAtMs;
+});
+
+const batchSchedulePreview = computed(() => {
+  if (!batchScheduleValid.value) return "自动报销时间必须晚于实际生效时间。";
+  const activateText = batchForm.activateAt ? `生效 ${formatDate(normalizeBatchScheduleValue(batchForm.activateAt))}` : "立即生效";
+  const deactivateText = batchForm.autoDeactivateAt ? `自动报销 ${formatDate(normalizeBatchScheduleValue(batchForm.autoDeactivateAt))}` : "不自动报销";
+  return `${activateText} · ${deactivateText}`;
+});
 
 const filteredActivations = computed(() => {
   const batchId = activationFilters.batchId.trim();
@@ -1276,7 +1344,11 @@ async function submitBatchCreate() {
   error.value = null;
 
   try {
-    const result = await createReserveSlotCdkBatch(batchForm);
+    const result = await createReserveSlotCdkBatch({
+      ...batchForm,
+      activateAt: normalizeBatchScheduleValue(batchForm.activateAt),
+      autoDeactivateAt: normalizeBatchScheduleValue(batchForm.autoDeactivateAt),
+    });
     cdkState.value = result;
     selectedBatchId.value = result.createdBatchId ?? result.batches?.[0]?.id ?? "";
     activeTab.value = "batches";
@@ -1415,6 +1487,65 @@ function formatDate(value: string | null | undefined) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString();
+}
+
+function parseBatchLocalTime(value: string | null | undefined) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const parsed = new Date(text);
+  const timestampMs = parsed.getTime();
+  return Number.isFinite(timestampMs) ? timestampMs : null;
+}
+
+function normalizeBatchScheduleValue(value: string | null | undefined) {
+  const timestampMs = parseBatchLocalTime(value);
+  return timestampMs == null ? null : new Date(timestampMs).toISOString();
+}
+
+function setBatchActivationDelay(minutes: number) {
+  const normalizedMinutes = Math.max(0, Number(minutes) || 0);
+  batchForm.activateAt = normalizedMinutes <= 0
+    ? ""
+    : toDatetimeLocal(new Date(Date.now() + normalizedMinutes * 60_000));
+}
+
+function setBatchAutoDeactivateDelay(minutes: number) {
+  const normalizedMinutes = Math.max(0, Number(minutes) || 0);
+  if (normalizedMinutes <= 0) {
+    batchForm.autoDeactivateAt = "";
+    return;
+  }
+  const activateAtMs = parseBatchLocalTime(batchForm.activateAt);
+  const baseMs = activateAtMs != null && activateAtMs > Date.now() ? activateAtMs : Date.now();
+  batchForm.autoDeactivateAt = toDatetimeLocal(new Date(baseMs + normalizedMinutes * 60_000));
+}
+
+function batchStatusLabel(batch: ReserveSlotCdkBatch) {
+  return batch.status === "scheduled" ? "待生效" : "生效中";
+}
+
+function batchTimingHint(batch: ReserveSlotCdkBatch) {
+  const now = nowTick.value;
+  if (batch.status === "scheduled" && batch.activateAt) {
+    const target = Date.parse(batch.activateAt);
+    if (Number.isFinite(target)) return `距离生效 ${formatDurationShort(target - now)}`;
+  }
+  if (batch.autoDeactivateAt) {
+    const target = Date.parse(batch.autoDeactivateAt);
+    if (Number.isFinite(target)) return `距离自动报销 ${formatDurationShort(target - now)}`;
+  }
+  return "长期有效，直到手动报销";
+}
+
+function formatDurationShort(diffMs: number) {
+  const totalMinutes = Math.max(0, Math.ceil(Number(diffMs || 0) / 60_000));
+  if (totalMinutes < 60) return `${totalMinutes} 分钟`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours < 24) return minutes ? `${hours} 小时 ${minutes} 分钟` : `${hours} 小时`;
+  const days = Math.floor(hours / 24);
+  const remainHours = hours % 24;
+  return remainHours ? `${days} 天 ${remainHours} 小时` : `${days} 天`;
 }
 
 function addDays(date: Date, days: number) {
@@ -2264,4 +2395,94 @@ function fromDatetimeLocal(value: string) {
     grid-template-columns: 1fr;
   }
 }
+
+
+.reserve-summary-card.scheduled,
+.reserve-pill.scheduled {
+  border-color: rgba(245, 158, 11, 0.42);
+  background: rgba(245, 158, 11, 0.10);
+}
+
+.cdk-batch-card.scheduled {
+  border-style: dashed;
+}
+
+.batch-create-panel {
+  align-self: start;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.batch-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.batch-schedule-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.2));
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.batch-schedule-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.72;
+  line-height: 1.5;
+}
+
+.batch-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.batch-quick-actions > span {
+  min-width: 76px;
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+.batch-advanced {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.2));
+  border-radius: 10px;
+}
+
+.batch-advanced summary {
+  cursor: pointer;
+  font-weight: 650;
+  user-select: none;
+}
+
+.batch-advanced[open] summary {
+  margin-bottom: 10px;
+}
+
+.batch-timing-hint {
+  font-weight: 650;
+}
+
+.reserve-helper.error {
+  color: #ef4444;
+}
+
+.reserve-save-preview small {
+  display: block;
+  margin-top: 4px;
+  font-weight: 500;
+  opacity: 0.72;
+}
+
+@media (max-width: 1180px) {
+  .batch-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 </style>
