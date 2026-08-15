@@ -916,12 +916,13 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, sessions, steamProfile, containers] = await Promise.all([
+    const [aliases, ips, sessions, steamProfile, containers, tags] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSessionHistory(id, { limit: 20 }),
       this.getSteamProfile(id, player),
       this.getPlayerContainerSummary(id, player),
+      this.listPlayerTags(id),
     ]);
 
     return {
@@ -932,6 +933,7 @@ export class PlayerRepository {
       squadBrowserSessions: await this.listSquadBrowserSessions(id, { limit: 20 }),
       steamProfile,
       containers,
+      tags,
       summary: {
         gameSeconds: resolveEffectiveGameSeconds(player),
         steamGameSeconds: normalizeSeconds(player.steam_game_seconds ?? player.game_seconds ?? 0),
