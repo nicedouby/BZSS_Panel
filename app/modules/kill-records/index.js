@@ -101,6 +101,7 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
         serverId,
         startOffset,
         endOffset: replayCutoffOffset,
+        restoreSquadCreationOrder,
         readChunkBytes: moduleConfig.readChunkBytes,
         batchSize: moduleConfig.batchSize,
       },
@@ -137,6 +138,20 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       }
       return;
     }
+    if (message.type === "squadReplayComplete") {
+      if (restoreSquadCreationOrder) {
+        modules?.squadLifecycle?.finalizeReplay?.({
+          serverId,
+          scannedBytes: Number(message.scannedBytes) || 0,
+          totalBytes: Number(message.totalBytes) || 0,
+          sourceFile: replayStatus.sourcePath,
+          sourceFileId: replayStatus.sourceFileId,
+          replayCutoffOffset: replayStatus.replayCutoffOffset,
+          roundBoundaryOffset: Number(message.roundBoundaryOffset) || 0,
+        });
+      }
+      return;
+    }
     if (message.type === "progress") {
       replayStatus = { ...replayStatus, ...pickProgress(message), status: "running" };
       modules?.squadLifecycle?.updateReplayProgress?.({ ...pickProgress(message), status: "scanning" });
@@ -155,18 +170,6 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
         durationMs: Number(message.durationMs) || 0,
       };
       await store.saveState(replayStatus);
-      if (restoreSquadCreationOrder) {
-        modules?.squadLifecycle?.finalizeReplay?.({
-          serverId,
-          scannedBytes: replayStatus.scannedBytes,
-          totalBytes: replayStatus.totalBytes,
-          scannedLines: replayStatus.scannedLines,
-          sourceFile: replayStatus.sourcePath,
-          sourceFileId: replayStatus.sourceFileId,
-          replayCutoffOffset: replayStatus.replayCutoffOffset,
-          roundBoundaryOffset: Number(message.roundBoundaryOffset) || 0,
-        });
-      }
       return;
     }
     if (message.type === "sourceChanged") {
@@ -295,7 +298,7 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
         requiredPermission: "combat_manager.view",
         legacyRequiredPermissions: ["kill_manager.view"],
       });
-      if (moduleConfig.replayOnStart !== false) void startReplay();
+      if (moduleConfig.replayOnStart !== false || restoreSquadCreationOrder) void startReplay();
     },
     async stop() {
       if (worker) {

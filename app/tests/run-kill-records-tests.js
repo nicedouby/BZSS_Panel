@@ -15,8 +15,39 @@ async function main() {
   await testFixedStartupCutoff();
   await testUtf8AcrossChunks();
   await testWorkerKeepsOnlyCurrentRoundSquadCreates();
+  await testSquadReplayStartsWhenKillReplayIsDisabled();
   await testLiveReplayDedupeAndSafety();
   console.log("[run-kill-records-tests] OK");
+}
+
+async function testSquadReplayStartsWhenKillReplayIsDisabled() {
+  await withTemp(async (root) => {
+    const sourcePath = path.join(root, "SquadGame.log");
+    await fsp.writeFile(sourcePath, `${squadCreateLine(22, "机械化步兵", "Braovo")}\n`, "utf8");
+    const imported = [];
+    let finalized = 0;
+    const modules = { squadLifecycle: {
+      updateReplayProgress() {},
+      importReplayCreateBatch(records) { imported.push(...records); },
+      finalizeReplay() { finalized += 1; },
+    } };
+    const config = { get(key, fallback) {
+      if (key === "modules.killRecords") return { storeDirectory: path.join(root, "store"), sourcePath, replayOnStart: false };
+      if (key === "modules.squadLifecycle") return { replay: { enabled: true, restoreCreationOrder: true } };
+      return fallback;
+    } };
+    const core = { webStatus: { serverId: "BZSS_Main" }, webRegistry: { registerPage() {} }, logger: silentLogger() };
+    const instance = createKillRecordsModule({ core, modules, config, logger: silentLogger() });
+    await instance.start();
+    try {
+      await waitFor(() => instance.api.getReplayStatus().status === "completed");
+      assert.equal(imported.length, 1);
+      assert.equal(imported[0].squadId, 22);
+      assert.equal(imported[0].squadName, "机械化步兵");
+      assert.equal(imported[0].creatorName, "Braovo");
+      assert.equal(finalized, 1);
+    } finally { await instance.stop(); }
+  });
 }
 
 async function testWorkerKeepsOnlyCurrentRoundSquadCreates() {
@@ -32,6 +63,7 @@ async function testWorkerKeepsOnlyCurrentRoundSquadCreates() {
     const result = await runWorker(sourcePath, { readChunkBytes: 23, batchSize: 1 });
     assert.deepEqual(result.squadCreates.map((record) => record.squadId), [7, 2]);
     assert.equal(result.complete.squadCreatesFound, 2);
+    assert.ok(result.messageTypes.indexOf("squadReplayComplete") < result.messageTypes.indexOf("complete"));
     for (const record of result.squadCreates) {
       assert.equal(record.sourceMode, "replay");
       assert.equal(record.canTriggerActions, false);
@@ -110,7 +142,11 @@ async function testLiveReplayDedupeAndSafety() {
       weaponName: "BP_Rifle_C", isTeamKill: true, relation: { known: true, sameTeam: true }, rawLog,
     };
     const modules = { combatClean: { getState: () => ({ events: [liveRecord] }) } };
-    const config = { get(key, fallback) { return key === "modules.killRecords" ? { storeDirectory: root, replayOnStart: false } : fallback; } };
+    const config = { get(key, fallback) {
+      if (key === "modules.killRecords") return { storeDirectory: root, replayOnStart: false };
+      if (key === "modules.squadLifecycle") return { replay: { enabled: false } };
+      return fallback;
+    } };
     const core = {
       webStatus: { serverId: "BZSS_Main" },
       eventBus: { emitCoreEvent() { coreEvents += 1; }, emitModuleEvent() { moduleEvents += 1; } },
@@ -141,6 +177,7 @@ function runWorker(sourcePath, options = {}) {
     const sourceFileId = stat.ino ? `${stat.dev}:${stat.ino}` : `${stat.dev}:0:${Math.trunc(stat.ctimeMs)}`;
     const records = [];
     const squadCreates = [];
+    const messageTypes = [];
     let complete = null;
     const worker = new Worker(WORKER_PATH, { workerData: {
       sourcePath, sourceFileId, serverId: "BZSS_Main", startOffset: 0,
@@ -148,13 +185,14 @@ function runWorker(sourcePath, options = {}) {
       batchSize: options.batchSize ?? 10, progressBytes: 64,
     } });
     worker.on("message", (message) => {
+      messageTypes.push(message.type);
       if (message.type === "combatBatch" || message.type === "killBatch") records.push(...message.records);
       if (message.type === "squadCreateBatch") squadCreates.push(...message.records);
       if (message.type === "complete") complete = message;
       if (message.type === "error") reject(new Error(message.message));
     });
     worker.on("error", reject);
-    worker.on("exit", (code) => code === 0 ? resolve({ records, squadCreates, complete }) : reject(new Error(`worker exit ${code}`)));
+    worker.on("exit", (code) => code === 0 ? resolve({ records, squadCreates, complete, messageTypes }) : reject(new Error(`worker exit ${code}`)));
   });
 }
 
@@ -171,6 +209,14 @@ function squadCreateLine(squadId, squadName, leader) {
   return `[2026.08.14-08.01.00:001][2]LogSquad: ${leader} (Online IDs: EOS: eos-${squadId} steam: 7656119800000000${squadId}) has created Squad ${squadId} (Squad Name: ${squadName}) on United States Army`;
 }
 async function withTemp(callback) { const root = await fsp.mkdtemp(path.join(os.tmpdir(), "kill-records-")); try { await callback(root); } finally { await fsp.rm(root, { recursive: true, force: true }); } }
+async function waitFor(predicate, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Timed out waiting for replay completion");
+}
 function silentLogger() { return { debug() {}, info() {}, warn() {}, error() {}, child() { return this; } }; }
 
 main().catch((error) => { console.error(error); process.exit(1); });
