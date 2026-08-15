@@ -9,6 +9,7 @@ import { parseReplaySquadCreateLine } from "../modules/squad-lifecycle/log-adapt
 const READ_CHUNK_BYTES = Math.max(4096, Number(workerData?.readChunkBytes) || 4 * 1024 * 1024);
 const BATCH_SIZE = Math.max(1, Number(workerData?.batchSize) || 100);
 const PROGRESS_BYTES = Math.max(1024 * 1024, Number(workerData?.progressBytes) || 8 * 1024 * 1024);
+const BOUNDARY_OVERLAP_BYTES = 1024;
 
 void run().catch((error) => {
   parentPort?.postMessage({ type: "error", message: error?.message ?? String(error), stack: error?.stack ?? "", offset: currentOffset });
@@ -29,14 +30,31 @@ async function run() {
   let killsFound = 0;
   let woundsFound = 0;
   let damageFound = 0;
-  let squadCreates = [];
   let roundBoundaryOffset = 0;
+  let squadCreatesFound = 0;
   let nextProgressAt = currentOffset + PROGRESS_BYTES;
   let batch = [];
   const identities = new Map();
   const startedAt = Date.now();
 
   try {
+    if (workerData?.restoreSquadCreationOrder !== false) {
+      roundBoundaryOffset = await findLastRoundBoundaryOffset(handle, cutoff);
+      squadCreatesFound = await restoreCurrentRoundSquads(handle, {
+        sourcePath,
+        sourceFileId,
+        startOffset: roundBoundaryOffset,
+        cutoff,
+      });
+      parentPort?.postMessage({
+        type: "squadReplayComplete",
+        squadCreatesFound,
+        roundBoundaryOffset,
+        scannedBytes: Math.max(0, cutoff - roundBoundaryOffset),
+        totalBytes: Math.max(0, cutoff - roundBoundaryOffset),
+      });
+    }
+
     while (currentOffset < cutoff) {
       const latestStat = await fsp.stat(sourcePath);
       if (makeFileId(latestStat) !== sourceFileId || latestStat.size < cutoff) {
@@ -62,7 +80,6 @@ async function run() {
         if (!lineBytes.length) continue;
         scannedLines += 1;
         const line = lineBytes.toString("utf8");
-        collectSquadCreate(line, lineOffset);
         rememberIdentity(line, identities);
         if (!isLikelyCombatLine(line)) continue;
         const record = parseReplayCombatLine(line, {
@@ -89,7 +106,6 @@ async function run() {
     if (partial.length && partialOffset < cutoff) {
       scannedLines += 1;
       const line = partial.toString("utf8");
-      collectSquadCreate(line, partialOffset);
       rememberIdentity(line, identities);
       if (isLikelyCombatLine(line)) {
         const record = parseReplayCombatLine(line, {
@@ -107,7 +123,6 @@ async function run() {
       }
     }
     flushBatch();
-    flushSquadCreateBatches();
     parentPort?.postMessage({
       type: "complete",
       scannedBytes: Math.max(0, currentOffset - Number(workerData?.startOffset || 0)),
@@ -118,7 +133,7 @@ async function run() {
       damageFound,
       woundsFound,
       killsFound,
-      squadCreatesFound: squadCreates.length,
+      squadCreatesFound,
       roundBoundaryOffset,
       durationMs: Date.now() - startedAt,
     });
@@ -155,11 +170,73 @@ async function run() {
     else killsFound += 1;
   }
 
-  function collectSquadCreate(line, sourceOffset) {
-    if (isCurrentRoundBoundary(line)) {
-      squadCreates = [];
-      roundBoundaryOffset = sourceOffset;
+}
+
+async function findLastRoundBoundaryOffset(handle, cutoff) {
+  let end = cutoff;
+  let suffix = Buffer.alloc(0);
+  while (end > 0) {
+    const start = Math.max(0, end - READ_CHUNK_BYTES);
+    const length = end - start;
+    const buffer = Buffer.allocUnsafe(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    if (!bytesRead) break;
+    const chunk = buffer.subarray(0, bytesRead);
+    const blob = suffix.length ? Buffer.concat([chunk, suffix]) : chunk;
+    let cursor = 0;
+    let found = -1;
+    while (cursor < bytesRead) {
+      const newline = blob.indexOf(0x0a, cursor);
+      const lineEnd = newline < 0 ? blob.length : newline;
+      let lineBytes = blob.subarray(cursor, lineEnd);
+      if (lineBytes.at(-1) === 0x0d) lineBytes = lineBytes.subarray(0, -1);
+      if (isCurrentRoundBoundary(lineBytes.toString("utf8"))) found = start + cursor;
+      if (newline < 0) break;
+      cursor = newline + 1;
     }
+    if (found >= 0) return found;
+    suffix = Buffer.from(chunk.subarray(0, Math.min(BOUNDARY_OVERLAP_BYTES, chunk.length)));
+    end = start;
+  }
+  return 0;
+}
+
+async function restoreCurrentRoundSquads(handle, { sourcePath, sourceFileId, startOffset, cutoff }) {
+  let offset = startOffset;
+  let partial = Buffer.alloc(0);
+  let partialOffset = offset;
+  let batch = [];
+  let found = 0;
+
+  while (offset < cutoff) {
+    const length = Math.min(READ_CHUNK_BYTES, cutoff - offset);
+    const buffer = Buffer.allocUnsafe(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, offset);
+    if (!bytesRead) break;
+    const chunkStart = offset;
+    offset += bytesRead;
+    const blob = partial.length ? Buffer.concat([partial, buffer.subarray(0, bytesRead)]) : buffer.subarray(0, bytesRead);
+    const blobStart = partial.length ? partialOffset : chunkStart;
+    let cursor = 0;
+    while (true) {
+      const newline = blob.indexOf(0x0a, cursor);
+      if (newline < 0) break;
+      let lineBytes = blob.subarray(cursor, newline);
+      if (lineBytes.at(-1) === 0x0d) lineBytes = lineBytes.subarray(0, -1);
+      const lineOffset = blobStart + cursor;
+      cursor = newline + 1;
+      collect(lineBytes, lineOffset);
+    }
+    partial = cursor < blob.length ? Buffer.from(blob.subarray(cursor)) : Buffer.alloc(0);
+    partialOffset = blobStart + cursor;
+  }
+  if (partial.length && partialOffset < cutoff) collect(partial, partialOffset);
+  flush();
+  return found;
+
+  function collect(lineBytes, sourceOffset) {
+    if (!lineBytes.length) return;
+    const line = lineBytes.toString("utf8");
     if (!/LogSquad:/i.test(line) || !/has created Squad/i.test(line)) return;
     const record = parseReplaySquadCreateLine(line, {
       serverId: workerData?.serverId,
@@ -168,16 +245,16 @@ async function run() {
       sourceFileId,
       sourceOffset,
     });
-    if (record) squadCreates.push(record);
+    if (!record) return;
+    batch.push(record);
+    found += 1;
+    if (batch.length >= BATCH_SIZE) flush();
   }
 
-  function flushSquadCreateBatches() {
-    for (let index = 0; index < squadCreates.length; index += BATCH_SIZE) {
-      parentPort?.postMessage({
-        type: "squadCreateBatch",
-        records: squadCreates.slice(index, index + BATCH_SIZE),
-      });
-    }
+  function flush() {
+    if (!batch.length) return;
+    parentPort?.postMessage({ type: "squadCreateBatch", records: batch });
+    batch = [];
   }
 }
 
