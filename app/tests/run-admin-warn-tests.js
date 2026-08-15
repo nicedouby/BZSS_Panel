@@ -229,6 +229,42 @@ async function testWarnFailureIsRecorded() {
   await module.stop();
 }
 
+async function testTargetWarningsAreSingleCommands() {
+  const calls = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
+    },
+  });
+  await module.start();
+
+  await module.api.warnPlayer({ targetScope: "all", message: "server notice", sourceModule: "web.matchStatus" });
+  await module.api.warnPlayer({ targetScope: "team1", message: "team one notice", sourceModule: "web.matchStatus" });
+  await module.api.warnPlayer({ targetScope: "team2", message: "team two notice", sourceModule: "web.matchStatus" });
+
+  assert.deepEqual(calls.map((item) => item.command), [
+    'AdminWarn all "server notice"',
+    'AdminWarn team1 "team one notice"',
+    'AdminWarn team2 "team two notice"',
+  ]);
+  assert.equal(module.api.getRecent({ limit: 10 }).length, 3);
+  await module.stop();
+}
+
+async function testBatchWarningsCanSkipHistory() {
+  const { module } = createHarness();
+  await module.start();
+  await module.api.warnPlayer({
+    targetName: "PlayerA",
+    message: "batch warning",
+    sourceModule: "web.matchStatus.batch",
+    record: false,
+  });
+  assert.equal(module.api.getRecent({ limit: 10 }).length, 0);
+  await module.stop();
+}
+
 await testWarnSuccessAndSanitize();
 await testWarnByPlayerIdPreferred();
 await testWarnByNameFallbackForLegacyCallers();
@@ -236,5 +272,7 @@ await testRequirePlayerIdSkipsNameFallback();
 await testBroadcastSuccessAndKindFilter();
 await testWarnBackToBackStillSends();
 await testWarnFailureIsRecorded();
+await testTargetWarningsAreSingleCommands();
+await testBatchWarningsCanSkipHistory();
 
 console.log("broadcast module tests passed");
