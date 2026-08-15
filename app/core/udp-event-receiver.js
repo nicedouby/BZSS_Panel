@@ -46,7 +46,10 @@ export class UdpEventReceiver {
     this.packetLossMonitor = new UdpPacketLossMonitor({
       logger: this.logger,
       finalizeGraceMs: Number(config.packetStatsFinalizeGraceMs ?? 750),
-      historySize: Number(config.packetStatsHistorySize ?? 180),
+      historySize: Number(config.packetStatsHistorySize ?? 8640),
+      historyFilePath: String(config.packetStatsHistoryFile ?? "./data/logpost-packet-stats.jsonl"),
+      retentionMs: Math.max(1, Number(config.packetStatsRetentionHours ?? 24)) * 60 * 60 * 1000,
+      staleAfterMs: Math.max(15, Number(config.packetStatsStaleAfterSeconds ?? 30)) * 1000,
       onUpdate: () => this.publishDiagnostics(true),
     });
 
@@ -65,6 +68,12 @@ export class UdpEventReceiver {
 
   async start() {
     this.isStarting = true;
+
+    try {
+      await this.packetLossMonitor.initialize();
+    } catch (error) {
+      this.logger.warn?.(`LogPost packet history initialization failed; continuing without persisted history: ${error.message}`);
+    }
 
     await new Promise((resolve, reject) => {
       const onListening = () => {
@@ -99,6 +108,7 @@ export class UdpEventReceiver {
     await new Promise((resolve) => {
       try { this.socket.close(resolve); } catch { resolve(); }
     });
+    await this.packetLossMonitor.close();
     this.publishDiagnostics(true);
   }
 
