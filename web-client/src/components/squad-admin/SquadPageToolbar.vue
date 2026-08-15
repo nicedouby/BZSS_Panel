@@ -1,16 +1,7 @@
 <template>
   <div class="squad-page-toolbar">
     <div class="toolbar-row">
-      <div class="search-wrapper">
-        <span class="search-icon" aria-hidden="true">🔍</span>
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="squad-search-input"
-          :placeholder="t('match.searchPlaceholder')"
-          @input="$emit('search', searchQuery)"
-        >
-      </div>
+
 
       <div class="filter-chips" aria-label="Quick filters">
         <button
@@ -24,10 +15,6 @@
         >
           {{ filter.label }}
         </button>
-      </div>
-
-      <div v-if="showViewerPerspective" class="viewer-perspective-chip">
-        {{ viewerPerspectiveText }}
       </div>
 
       <div class="view-mode-toggle">
@@ -70,29 +57,11 @@
         </button>
         <button
           type="button"
-          class="refresh-button primary"
+          class="refresh-button warning-target"
           :disabled="!canRefresh || isRefreshing"
-          @click="$emit('refresh', 'all')"
+          @click="$emit('warn-all')"
         >
-          {{ refreshingType === 'all' ? t('common.refreshing') : t('match.refreshAll') }}
-        </button>
-        <button
-          type="button"
-          class="refresh-button secondary"
-          :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
-          :title="'智能刷新 Steam 时长（跳过30分钟内已刷新的玩家）'"
-          @click="$emit('refresh-playtime')"
-        >
-          智能刷新时长
-        </button>
-        <button
-          type="button"
-          class="refresh-button danger"
-          :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
-          :title="'强制刷新全部在线玩家的 Steam 时长'"
-          @click="$emit('refresh-playtime-force')"
-        >
-          强制刷新
+          AdminWarn All
         </button>
         <div ref="refreshMenuRoot" class="refresh-dropdown">
           <button
@@ -109,6 +78,24 @@
 
           <transition name="menu-fade">
             <div v-if="refreshMenuOpen" class="refresh-menu" role="menu">
+              <button
+                type="button"
+                class="menu-item"
+                role="menuitem"
+                :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+                @click="runPlaytimeRefresh(false)"
+              >
+                智能刷新时长
+              </button>
+              <button
+                type="button"
+                class="menu-item danger-item"
+                role="menuitem"
+                :disabled="!canRefresh || isRefreshing || refreshingPlaytime"
+                @click="runPlaytimeRefresh(true)"
+              >
+                强制刷新时长
+              </button>
               <button
                 type="button"
                 class="menu-item"
@@ -143,13 +130,10 @@ type RefreshType = "players" | "squads" | "all";
 type FilterMode = "all" | "no_leader" | "locked" | "alerts";
 
 const props = defineProps<{
-  searchQuery: string;
   filterMode: FilterMode;
   canRefresh: boolean;
   refreshingType: RefreshType | "";
   refreshingPlaytime?: boolean;
-  viewerPerspectiveText?: string;
-  showViewerPerspective?: boolean;
   serverStatusUpdatedAt?: number;
   playersUpdatedAt?: number;
   squadsUpdatedAt?: number;
@@ -158,11 +142,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  (event: "search", query: string): void;
   (event: "filter-change", mode: FilterMode): void;
   (event: "refresh", type: RefreshType): void;
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
+  (event: "warn-all"): void;
   (event: "toggle-multi-select"): void;
   (event: "view-mode-change", mode: "list" | "map"): void;
 }>();
@@ -174,7 +158,6 @@ const filters = [
   { value: "alerts", label: "Alerts" },
 ] as const;
 
-const searchQuery = ref(props.searchQuery);
 const isRefreshing = computed(() => Boolean(props.refreshingType));
 const refreshingPlaytime = computed(() => Boolean(props.refreshingPlaytime));
 const showViewerPerspective = computed(() => Boolean(props.showViewerPerspective));
@@ -182,13 +165,6 @@ const viewerPerspectiveText = computed(() => props.viewerPerspectiveText ?? "");
 const filterMode = computed(() => props.filterMode);
 const refreshMenuOpen = ref(false);
 const refreshMenuRoot = ref<HTMLElement | null>(null);
-
-watch(
-  () => props.searchQuery,
-  (newVal) => {
-    searchQuery.value = newVal;
-  },
-);
 
 watch(
   () => [props.refreshingType, props.refreshingPlaytime],
@@ -234,6 +210,11 @@ function removeWindowListeners() {
 
 function runRefresh(type: "players" | "squads") {
   emit("refresh", type);
+  closeRefreshMenu();
+}
+
+function runPlaytimeRefresh(force: boolean) {
+  emit(force ? "refresh-playtime-force" : "refresh-playtime");
   closeRefreshMenu();
 }
 
@@ -345,6 +326,15 @@ onBeforeUnmount(removeWindowListeners);
 .toggle-btn.active {
   border-color: rgba(245, 158, 11, 0.42);
   background: linear-gradient(180deg, rgba(245, 158, 11, 0.18), rgba(245, 158, 11, 0.08));
+}
+
+.refresh-button.warning-target {
+  border-color: rgba(245, 158, 11, 0.48);
+  color: #fcd34d;
+}
+
+.danger-item {
+  color: #fca5a5;
 }
 
 .refresh-button.primary {
