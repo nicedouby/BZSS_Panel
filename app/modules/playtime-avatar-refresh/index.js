@@ -4,6 +4,11 @@
 // Individual manual refresh jobs used to finish before the asynchronous Steam
 // avatar request had written its result into the player database. The browser
 // immediately reloaded the player row and therefore kept the old/missing avatar.
+//
+// Automatic refresh ownership is intentionally separated from the base module:
+// plugin.player_duration_slow_refresh owns the 10h playtime / 24h profile / 15d
+// inactivity policy. The base module's unconditional On_PlayerConnected refresh
+// is suppressed here so reconnects cannot bypass that persistent cache policy.
 
 import { createPlaytimeModule as createBasePlaytimeModule } from "../playtime/index.js";
 
@@ -11,16 +16,20 @@ const TERMINAL_JOB_STATUS = new Set(["completed", "failed"]);
 const DEFAULT_AVATAR_WAIT_MS = 8_000;
 const DEFAULT_AVATAR_POLL_MS = 200;
 const DEFAULT_JOB_WAIT_MS = 30_000;
+const AUTO_PLAYTIME_REFRESH_COOLDOWN_MS = 10 * 60 * 60_000;
+const AUTO_PROFILE_REFRESH_COOLDOWN_MS = 24 * 60 * 60_000;
+const AUTO_INACTIVE_PLAYER_CUTOFF_MS = 15 * 24 * 60 * 60_000;
 
 export function createPlaytimeModule(context) {
   return createPlaytimeAvatarRefreshModule(context, createBasePlaytimeModule);
 }
 
 export function createPlaytimeAvatarRefreshModule(context, createBaseModule = createBasePlaytimeModule) {
-  const baseModule = createBaseModule(context);
+  const settings = readSettings(context?.config);
+  const baseContext = createAutomaticRefreshGuardedContext(context, settings);
+  const baseModule = createBaseModule(baseContext);
   const baseApi = baseModule?.api ?? {};
   const trackedJobs = new Map();
-  const settings = readSettings(context?.config);
 
   function trackManualRefresh(job, payload = {}) {
     const jobId = text(job?.id);
@@ -56,6 +65,19 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
 
   const api = {
     ...baseApi,
+
+    getStatus() {
+      return {
+        ...(baseApi.getStatus?.() ?? {}),
+        automaticRefreshPolicy: {
+          owner: "plugin.player_duration_slow_refresh",
+          playtimeCooldownMs: AUTO_PLAYTIME_REFRESH_COOLDOWN_MS,
+          profileCooldownMs: AUTO_PROFILE_REFRESH_COOLDOWN_MS,
+          inactivePlayerCutoffMs: AUTO_INACTIVE_PLAYER_CUTOFF_MS,
+          baseConnectRefreshSuppressed: true,
+        },
+      };
+    },
 
     createLookupJob(payload = {}) {
       const job = baseApi.createLookupJob?.(payload);
@@ -95,11 +117,135 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
     ...baseModule,
     manifest: {
       ...(baseModule?.manifest ?? {}),
-      version: `${baseModule?.manifest?.version ?? "0.2.0"}-avatar-refresh`,
-      description: `${baseModule?.manifest?.description ?? "Steam playtime module."} Manual player refresh waits for Steam avatar persistence.`,
+      version: `${baseModule?.manifest?.version ?? "0.2.0"}-avatar-refresh-cache-policy`,
+      description: `${baseModule?.manifest?.description ?? "Steam playtime module."} Manual player refresh waits for Steam avatar persistence; automatic refresh is delegated to the cached slow-refresh scheduler.`,
     },
     api,
   };
+}
+
+function createAutomaticRefreshGuardedContext(context, settings) {
+  if (!context || typeof context !== "object") return context;
+
+  const originalCore = context.core ?? {};
+  const originalModules = context.modules ?? {};
+  const originalEventBus = originalCore.eventBus;
+  const originalPlayerDatabase = originalModules.playerDatabase;
+  const logger = context.logger ?? originalCore.logger ?? console;
+
+  return {
+    ...context,
+    core: {
+      ...originalCore,
+      eventBus: createPlaytimeEventBusGuard(originalEventBus, logger),
+    },
+    modules: {
+      ...originalModules,
+      playerDatabase: createBackfillPlayerDatabaseGuard(originalPlayerDatabase, settings, logger),
+    },
+  };
+}
+
+function createPlaytimeEventBusGuard(eventBus, logger) {
+  if (!eventBus || typeof eventBus.onCoreEvent !== "function") return eventBus;
+
+  return new Proxy(eventBus, {
+    get(target, property) {
+      if (property === "onCoreEvent") {
+        return (eventName, handler, ...args) => {
+          if (String(eventName) === "On_PlayerConnected") {
+            logger?.info?.(
+              "Playtime base On_PlayerConnected auto refresh suppressed; cached slow-refresh scheduler owns automatic Steam refresh.",
+              {
+                operation: "steamAutoRefreshPolicy",
+                data: {
+                  playtimeCooldownHours: AUTO_PLAYTIME_REFRESH_COOLDOWN_MS / 3_600_000,
+                  profileCooldownHours: AUTO_PROFILE_REFRESH_COOLDOWN_MS / 3_600_000,
+                  inactivePlayerDays: AUTO_INACTIVE_PLAYER_CUTOFF_MS / 86_400_000,
+                },
+              },
+            );
+            return () => {};
+          }
+          return target.onCoreEvent(eventName, handler, ...args);
+        };
+      }
+
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function createBackfillPlayerDatabaseGuard(playerDatabase, settings, logger) {
+  if (!playerDatabase || typeof playerDatabase.listPlayersWithSteamID !== "function") return playerDatabase;
+
+  return new Proxy(playerDatabase, {
+    get(target, property) {
+      if (property === "listPlayersWithSteamID") {
+        return async (options = {}) => {
+          const rows = await target.listPlayersWithSteamID(options);
+          if (!options?.missingAvatarOnly || !Array.isArray(rows) || rows.length === 0) {
+            return rows;
+          }
+
+          const activeRows = [];
+          let skippedInactive = 0;
+          for (const row of rows) {
+            const active = await isPlayerEligibleForAutomaticBackfill(
+              target,
+              row,
+              settings.inactivePlayerCutoffMs,
+            );
+            if (active) activeRows.push(row);
+            else skippedInactive += 1;
+          }
+
+          if (skippedInactive > 0) {
+            logger?.info?.(
+              `Steam avatar startup backfill skipped ${skippedInactive} inactive players older than ${Math.floor(settings.inactivePlayerCutoffMs / 86_400_000)} days.`,
+              {
+                operation: "steamAvatarBackfillPolicy",
+                data: {
+                  candidates: rows.length,
+                  eligible: activeRows.length,
+                  skippedInactive,
+                },
+              },
+            );
+          }
+          return activeRows;
+        };
+      }
+
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+async function isPlayerEligibleForAutomaticBackfill(playerDatabase, row, inactiveCutoffMs) {
+  const playerId = Number(row?.id);
+  if (!Number.isFinite(playerId)) return true;
+
+  // Session history is the primary presence signal because Steam refresh writes
+  // can update players.updated_at and aliases. A refresh must never make an old
+  // player look newly active and thereby keep itself alive forever.
+  try {
+    const sessions = await playerDatabase.listPlayerSessionHistory?.(playerId, { limit: 1, offset: 0 });
+    const joinedAt = timestamp(sessions?.[0]?.joined_at ?? sessions?.[0]?.joinedAt);
+    if (joinedAt) return Date.now() - joinedAt <= inactiveCutoffMs;
+  } catch {}
+
+  try {
+    const aliases = await playerDatabase.listPlayerAliases?.(playerId, { limit: 1, offset: 0 });
+    const seenAt = timestamp(aliases?.[0]?.seen_at ?? aliases?.[0]?.seenAt);
+    if (seenAt) return Date.now() - seenAt <= inactiveCutoffMs;
+  } catch {}
+
+  // No trustworthy historical presence record: keep the player eligible rather
+  // than incorrectly suppressing a newly migrated/current player.
+  return true;
 }
 
 async function finalizeTrackedJob({ record, baseApi, playerDatabase, settings }) {
@@ -211,12 +357,18 @@ function readSettings(config) {
     avatarPollMs: positiveInteger(value.manualAvatarPollMs, DEFAULT_AVATAR_POLL_MS),
     avatarPollResponseWaitMs: positiveInteger(value.manualAvatarPollResponseWaitMs, 3_000),
     jobWaitMs: positiveInteger(value.manualRefreshJobWaitMs, DEFAULT_JOB_WAIT_MS),
+    inactivePlayerCutoffMs: AUTO_INACTIVE_PLAYER_CUTOFF_MS,
   };
 }
 
 function normalizeSteamID(value) {
   const raw = text(value);
   return raw.match(/^\d{5,20}$/)?.[0] ?? raw.match(/\d{5,20}/)?.[0] ?? "";
+}
+
+function timestamp(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : 0;
 }
 
 function clampWaitMs(value, fallback) {
