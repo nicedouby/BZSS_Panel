@@ -7,6 +7,7 @@ import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js"
 import { createSquadRestrictionMonitorModule } from "../modules/squad-restriction-monitor/index.js";
 import { createSquadRestrictionEnforcementModule } from "../modules/squad-restriction-enforcement/index.js";
 import { createMatchStateModule } from "../modules/match-state/index.js";
+import { createMatchLifecycleModule } from "../modules/match-lifecycle/index.js";
 import { createMatchCacheModule } from "../modules/match-cache/index.js";
 import { createMatchPlayerPresenceModule } from "../modules/match-player-presence/index.js";
 import { createSquadManagementModule } from "../modules/squad-management/index.js";
@@ -87,6 +88,7 @@ export class ModuleManager {
       createMatchCacheModule,
       createMatchPlayerPresenceModule,
       createMatchStateModule,
+      createMatchLifecycleModule,
       createSquadManagementModule,
       createTeamBalanceModule,
       createSquadDisbandModule,
