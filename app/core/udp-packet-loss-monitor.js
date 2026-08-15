@@ -91,7 +91,10 @@ export class UdpPacketLossMonitor {
     }
 
     const state = this.getOrCreateSession(sessionId);
-    if (lastSeq < state.lastFinalizedSeq) {
+    if (
+      lastSeq < state.lastFinalizedSeq
+      || (statSeq > 0 && state.lastStatSeq > 0 && statSeq <= state.lastStatSeq)
+    ) {
       this.metrics.staleStatPackets += 1;
       return false;
     }
@@ -121,13 +124,16 @@ export class UdpPacketLossMonitor {
     const state = this.sessions.get(snapshot.sessionId);
     if (!state) return;
 
-    if (snapshot.lastSeq < state.lastFinalizedSeq) {
+    if (
+      snapshot.lastSeq < state.lastFinalizedSeq
+      || (snapshot.statSeq > 0 && state.lastStatSeq > 0 && snapshot.statSeq <= state.lastStatSeq)
+    ) {
       this.metrics.staleStatPackets += 1;
       return;
     }
 
     let startSeq = 0;
-    let endSeq = snapshot.lastSeq;
+    const endSeq = snapshot.lastSeq;
     if (state.lastFinalizedSeq > 0) {
       startSeq = state.lastFinalizedSeq + 1;
     } else if (snapshot.firstSeq > 0) {
@@ -160,9 +166,8 @@ export class UdpPacketLossMonitor {
     }
 
     const lossRate = expectedPackets > 0 ? lostPackets / expectedPackets : 0;
-    const previousWindowEndMs = state.lastWindowEndMs;
-    const effectiveWindowStartMs = previousWindowEndMs > 0
-      ? Math.min(snapshot.windowEndMs, previousWindowEndMs)
+    const effectiveWindowStartMs = state.lastWindowEndMs > 0
+      ? state.lastWindowEndMs
       : snapshot.windowStartMs;
 
     const point = {
