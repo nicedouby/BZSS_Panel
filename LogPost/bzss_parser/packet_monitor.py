@@ -3,37 +3,75 @@
 
 from __future__ import annotations
 
+import threading
 import time
-from collections import deque
-from typing import Dict, List
+from typing import Any, Dict
 
 
 class PacketMonitor:
-    def __init__(self, window_seconds: int = 10) -> None:
-        self.window_seconds = window_seconds
-        self.window_packets: deque[int] = deque()
-        self.total_sent = 0
-        self.history: deque[Dict[str, float]] = deque(maxlen=1440)
+    """Periodically reports the range of business UDP packets handed to the OS.
 
-    def record_send(self, seq: int) -> None:
-        now = int(time.time())
-        self.window_packets.append(now)
-        self.total_sent += 1
-        self._cleanup(now)
+    The statistics packet itself is deliberately sent through ``send_stat_event``
+    so it never advances the business PacketSeq counter.  The receiver can then
+    compare FirstSeq/LastSeq with the unique EVENT packets it actually observed.
+    """
 
-    def build_stat_event(self) -> Dict[str, str]:
-        now = int(time.time())
-        self._cleanup(now)
-        count = len(self.window_packets)
-        return {
+    def __init__(self, sender: Any, window_seconds: float = 10.0) -> None:
+        self.sender = sender
+        self.window_seconds = max(1.0, float(window_seconds or 10.0))
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._window_start_ms = int(time.time() * 1000)
+        self._last_reported_seq = 0
+        self._stat_seq = 0
+
+    def start(self) -> None:
+        if self._thread and self._thread.is_alive():
+            return
+        self._thread = threading.Thread(
+            target=self._run,
+            name="LogPostPacketMonitor",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+
+    def _run(self) -> None:
+        while not self._stop_event.wait(self.window_seconds):
+            try:
+                self.report_once()
+            except Exception as exc:
+                print(f"[WARN] UDP packet statistics report failed: {exc}")
+
+    def report_once(self) -> bool:
+        snapshot = self.sender.get_delivery_snapshot()
+        now_ms = int(time.time() * 1000)
+        last_seq = max(0, int(snapshot.get("packetSeq", 0) or 0))
+        total_sent = max(0, int(snapshot.get("totalSent", 0) or 0))
+        sent_packets = max(0, last_seq - self._last_reported_seq)
+        first_seq = self._last_reported_seq + 1 if sent_packets > 0 else 0
+        self._stat_seq += 1
+
+        event: Dict[str, Any] = {
+            "Version": "1",
             "Event": "LOGPOST_PACKET_STAT",
             "PacketType": "STAT",
+            "PacketSessionId": str(snapshot.get("packetSessionId", "")),
+            "StatSeq": str(self._stat_seq),
+            "WindowStartMs": str(self._window_start_ms),
+            "WindowEndMs": str(now_ms),
             "WindowSeconds": str(self.window_seconds),
-            "SentPackets": str(count),
-            "TotalSent": str(self.total_sent),
-            "Timestamp": str(now),
+            "FirstSeq": str(first_seq),
+            "LastSeq": str(last_seq),
+            "SentPackets": str(sent_packets),
+            "TotalSent": str(total_sent),
+            "Timestamp": str(time.time()),
         }
 
-    def _cleanup(self, now: int) -> None:
-        while self.window_packets and now - self.window_packets[0] > self.window_seconds:
-            self.window_packets.popleft()
+        sent = bool(self.sender.send_stat_event(event))
+        if sent:
+            self._last_reported_seq = last_seq
+            self._window_start_ms = now_ms
+        return sent
