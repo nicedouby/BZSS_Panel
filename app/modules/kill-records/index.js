@@ -11,7 +11,7 @@ import { dedupeKillRecords } from "./kill-record-dedupe.js";
 const MODULE_ID = "module.killRecords";
 const COMBAT_WORKER_PATH = new URL("../../workers/combat-replay-worker.js", import.meta.url);
 const SQUAD_WORKER_PATH = new URL("../../workers/squad-replay-worker.js", import.meta.url);
-const REPLAY_PARSER_VERSION = 3;
+const REPLAY_PARSER_VERSION = 4;
 
 export function createKillRecordsModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({ moduleId: MODULE_ID, source: MODULE_ID, channel: "module" }) ?? core.logger;
@@ -59,6 +59,8 @@ async function startReplay({ clear = false } = {}) {
     }
     const sourceFileId = makeFileId(stat);
     const previous = store.getStats().state ?? {};
+    const parserChanged = Number(previous.parserVersion) !== REPLAY_PARSER_VERSION;
+    if (parserChanged && Object.keys(previous).length) await store.clear();
     const previousOffset = Number(previous.completedOffset);
     const canResume = Number(previous.parserVersion) === REPLAY_PARSER_VERSION
       && previous.sourcePath === sourcePath
@@ -364,10 +366,22 @@ function createReplayStatus() {
     parserVersion: REPLAY_PARSER_VERSION,
     status: "idle",
     progress: 0,
+    combat: { status: "idle", startOffset: 0, cutoffOffset: 0, scannedLines: 0, damageCandidates: 0, woundCandidates: 0, killCandidates: 0, imported: 0, duplicates: 0 },
+    squad: { status: "idle", boundaryFound: false, roundBoundaryOffset: null, cutoffOffset: 0, squadCreatesFound: 0, accepted: 0, pendingTeamResolution: 0 },
     scannedBytes: 0,
     totalBytes: 0,
     scannedLines: 0,
     combatFound: 0,
+    combatCandidates: 0,
+    damageCandidates: 0,
+    woundCandidates: 0,
+    killCandidates: 0,
+    damageParsed: 0,
+    woundParsed: 0,
+    killParsed: 0,
+    damageRejected: 0,
+    woundRejected: 0,
+    killRejected: 0,
     damageFound: 0,
     woundsFound: 0,
     killsFound: 0,
@@ -394,6 +408,13 @@ function pickProgress(message) {
     damageFound: Math.max(0, Number(message.damageFound) || 0),
     woundsFound: Math.max(0, Number(message.woundsFound) || 0),
     killsFound: Math.max(0, Number(message.killsFound) || 0),
+    combatCandidates: Math.max(0, Number(message.combatCandidates ?? message.combatFound) || 0),
+    damageCandidates: Math.max(0, Number(message.damageCandidates ?? message.damageFound) || 0),
+    woundCandidates: Math.max(0, Number(message.woundCandidates ?? message.woundsFound) || 0),
+    killCandidates: Math.max(0, Number(message.killCandidates ?? message.killsFound) || 0),
+    damageParsed: Math.max(0, Number(message.damageParsed ?? message.damageFound) || 0),
+    woundParsed: Math.max(0, Number(message.woundParsed ?? message.woundsFound) || 0),
+    killParsed: Math.max(0, Number(message.killParsed ?? message.killsFound) || 0),
     completedOffset: Math.max(0, Number(message.completedOffset) || 0),
     progress: Number.isFinite(Number(message.percentage)) ? Number(message.percentage) : (totalBytes ? scannedBytes / totalBytes * 100 : 100),
   };
