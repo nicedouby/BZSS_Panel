@@ -3638,13 +3638,15 @@ export class WebServer {
     if (url.pathname === "/api/squad-lifecycle/current" && req.method === "GET") {
       const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       const lifecycle = this.modules.squadLifecycle?.getCurrent?.(serverId);
+      const replay = this.modules.squadLifecycle?.getReplayStatus?.() ?? null;
       return this.json(res, 200, {
-        current: lifecycle ?? {
+        current: lifecycle ? { ...lifecycle, replay } : {
           serverId,
           matchId: null,
           updatedAt: new Date().toISOString(),
           list: [],
           byKey: {},
+          replay,
         },
       });
     }
@@ -3687,7 +3689,10 @@ export class WebServer {
       return this.json(res, 200, {
         ok: true,
         data: {
-          lifecycle,
+          lifecycle: {
+            ...lifecycle,
+            replay: this.modules.squadLifecycle?.getReplayStatus?.() ?? null,
+          },
           guard,
           patrol,
           ruleChain,

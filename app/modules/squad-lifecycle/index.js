@@ -2,6 +2,7 @@
 
 import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
 import { createSquadLifecycleReducer } from "./reducer.js";
+import { validateReplaySquadCreate } from "./replay-validator.js";
 import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 import crypto from "node:crypto";
 import {
@@ -28,6 +29,10 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
   const reducer = createSquadLifecycleReducer({ config, logger: moduleLogger });
   const pendingCreateLogs = new Map();
+  const replayPendingCreates = new Map();
+  const replayRejected = [];
+  const stableCreateEventKeys = new Set();
+  let replayStatus = createReplayStatus();
   const recentCreateEventKeys = new Map();
   const unsubscribers = [];
 
@@ -40,6 +45,19 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       return pendingCreateLogs.size;
     },
 
+    getReplayStatus() {
+      return { ...replayStatus, pendingTeamResolution: replayPendingCreates.size };
+    },
+
+    getReplayRejected() {
+      return replayRejected.map((record) => ({ ...record }));
+    },
+
+    importReplayCreate,
+    importReplayCreateBatch,
+    updateReplayProgress,
+    finalizeReplay,
+
     getCurrentMatchId(serverId = core.webStatus.serverId) {
       return reducer.getCurrentMatchId(serverId);
     },
@@ -49,6 +67,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       if (!normalizedServerId) return;
       cleanupExpiredPending();
       clearPendingForServer(normalizedServerId);
+      clearReplayStateForServer(normalizedServerId);
     },
   };
 
@@ -86,11 +105,22 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
         const previousMatchId = reducer.getCurrentMatchId(serverId);
         if (previousMatchId && previousMatchId !== matchId) {
-          clearPendingForServer(serverId);
+          if (previousMatchId.startsWith(`synthetic:${serverId}:`)) {
+            reducer.reassignMatchId(serverId, previousMatchId, matchId);
+            for (const pending of pendingCreateLogs.values()) {
+              if (pending.serverId === serverId && pending.matchId === previousMatchId) pending.matchId = matchId;
+            }
+            for (const pending of replayPendingCreates.values()) {
+              if (pending.serverId === serverId && pending.matchId === previousMatchId) pending.matchId = matchId;
+            }
+          } else {
+            clearPendingForServer(serverId);
+          }
         }
 
         reducer.setCurrentMatchId(serverId, matchId);
         flushPendingForSnapshot(serverId, matchId, Array.isArray(event.squads) ? event.squads : []);
+        flushReplayPending(serverId, matchId);
         reducer.handleRconSquadSnapshot({
           serverId,
           matchId,
@@ -112,6 +142,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     async stop() {
       for (const unsubscriber of unsubscribers.splice(0)) unsubscriber();
       pendingCreateLogs.clear();
+      replayPendingCreates.clear();
+      replayRejected.splice(0);
+      stableCreateEventKeys.clear();
       recentCreateEventKeys.clear();
     },
   };
@@ -142,7 +175,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
     reducer.setCurrentMatchId(serverId, matchId);
     parsed.matchId = matchId;
 
-    if (isDuplicateCreateEvent(serverId, parsed)) {
+    if (isDuplicateCreateEvent(serverId, parsed) || hasStableCreateEvent(serverId, parsed)) {
       if (debugEnabled) {
         logWithFallback(moduleLogger, "info", "[SquadLifecycle] duplicate squad create event ignored", {
           operation: "squadLifecycle.createDuplicateIgnored",
@@ -205,6 +238,9 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       creatorEosId: parsed.creatorEosId,
       rawLog: parsed.rawLog,
       sourceEventId: parsed.sourceEventId,
+      sourceFile: parsed.sourceFile,
+      sourceFileId: parsed.sourceFileId,
+      sourceOffset: parsed.sourceOffset,
       sourceMode: parsed.sourceMode,
       canTriggerActions: parsed.canTriggerActions,
       parsedFromRawLogLine: Boolean(parsed.parsedFromRawLogLine),
@@ -370,6 +406,167 @@ export function createSquadLifecycleModule({ core, config, logger }) {
   function rememberCreateEvent(serverId, parsed) {
     const key = buildCreateEventDedupeKey(serverId, parsed);
     recentCreateEventKeys.set(key, Date.now());
+    rememberStableCreateEvent(serverId, parsed);
+  }
+
+  function importReplayCreate(record = {}) {
+    if (String(record.sourceMode ?? "").trim().toLowerCase() !== "replay") {
+      return { ok: false, code: "invalid_source_mode" };
+    }
+    if (record.canTriggerActions !== false) {
+      return { ok: false, code: "replay_actions_must_be_disabled" };
+    }
+
+    const serverId = String(record.serverId ?? core.webStatus.serverId ?? "").trim();
+    if (!serverId || record.squadId == null) return { ok: false, code: "missing_required_fields" };
+    const matchId = resolveCurrentMatchId(serverId, record) || buildSyntheticMatchId(serverId, record);
+    const normalized = {
+      ...record,
+      serverId,
+      matchId,
+      sourceMode: "replay",
+      isReplay: true,
+      canTriggerActions: false,
+      originalSquadName: String(record.originalSquadName ?? record.squadName ?? "").trim(),
+      sourceEventId: String(record.sourceEventId || buildReplayId(record)),
+    };
+    replayStatus.squadCreatesFound += 1;
+
+    if (hasStableCreateEvent(serverId, normalized)) {
+      replayStatus.duplicates += 1;
+      return { ok: true, status: "duplicate" };
+    }
+
+    const validation = validateReplaySquadCreate(normalized, config);
+    if (!validation.accepted) {
+      rememberStableCreateEvent(serverId, normalized);
+      const rejected = {
+        status: "rejected",
+        reason: "squad_name_policy",
+        squadName: normalized.squadName,
+        creatorName: normalized.creatorName,
+        eventTime: normalized.eventTime,
+        sourceOffset: normalized.sourceOffset,
+        rawLog: normalized.rawLog,
+        sourceMode: "replay",
+        canTriggerActions: false,
+        evaluation: validation.evaluation,
+      };
+      replayRejected.push(rejected);
+      if (replayRejected.length > 1000) replayRejected.splice(0, replayRejected.length - 1000);
+      replayStatus.rejectedPolicy += 1;
+      return { ok: true, status: "rejected", record: rejected };
+    }
+
+    if (normalized.teamId == null) {
+      normalized.teamId = getTeamIdByFactionName(serverId, normalized.factionName);
+    }
+    rememberStableCreateEvent(serverId, normalized);
+    if (normalized.teamId == null) {
+      replayPendingCreates.set(buildReplayId(normalized), normalized);
+      replayStatus.pendingTeamResolution = replayPendingCreates.size;
+      return { ok: true, status: "pending_team_resolution" };
+    }
+
+    reducer.setCurrentMatchId(serverId, matchId);
+    const imported = reducer.handleSquadCreateLogEvent(normalized);
+    replayStatus.accepted += 1;
+    return { ok: true, status: "accepted", record: imported };
+  }
+
+  function importReplayCreateBatch(records = []) {
+    const result = { found: 0, accepted: 0, rejectedPolicy: 0, duplicates: 0, pendingTeamResolution: 0 };
+    for (const record of Array.isArray(records) ? records : []) {
+      result.found += 1;
+      const imported = importReplayCreate(record);
+      if (imported.status === "accepted") result.accepted += 1;
+      else if (imported.status === "rejected") result.rejectedPolicy += 1;
+      else if (imported.status === "duplicate") result.duplicates += 1;
+      else if (imported.status === "pending_team_resolution") result.pendingTeamResolution += 1;
+    }
+    return result;
+  }
+
+  function flushReplayPending(serverId, matchId) {
+    for (const [replayId, pending] of [...replayPendingCreates.entries()]) {
+      if (pending.serverId !== serverId) continue;
+      const teamId = getTeamIdByFactionName(serverId, pending.factionName);
+      if (teamId == null) continue;
+      const normalized = { ...pending, matchId: matchId || pending.matchId, teamId };
+      reducer.setCurrentMatchId(serverId, normalized.matchId);
+      reducer.handleSquadCreateLogEvent(normalized);
+      replayPendingCreates.delete(replayId);
+      replayStatus.accepted += 1;
+    }
+    replayStatus.pendingTeamResolution = replayPendingCreates.size;
+    if (replayStatus.status === "completed") reducer.rebuildCreationOrder(serverId, matchId);
+    if (replayStatus.status === "resolving" && replayPendingCreates.size === 0) {
+      finalizeReplay({ ...replayStatus, serverId, error: "" });
+    }
+  }
+
+  function updateReplayProgress(progress = {}) {
+    replayStatus = {
+      ...replayStatus,
+      ...progress,
+      status: String(progress.status ?? replayStatus.status ?? "scanning"),
+      pendingTeamResolution: replayPendingCreates.size,
+    };
+    return api.getReplayStatus();
+  }
+
+  function finalizeReplay(details = {}) {
+    replayStatus.status = details.error ? "failed" : "rebuilding";
+    replayStatus.error = String(details.error ?? "");
+    const serverId = String(details.serverId ?? core.webStatus.serverId ?? "").trim();
+    const matchId = reducer.getCurrentMatchId(serverId);
+    const rebuilt = details.error ? { count: 0, matchId } : reducer.rebuildCreationOrder(serverId, matchId);
+    const awaitingTeamResolution = !details.error && replayPendingCreates.size > 0;
+    replayStatus = {
+      ...replayStatus,
+      ...details,
+      status: details.error ? "failed" : awaitingTeamResolution ? "resolving" : "completed",
+      progress: details.error ? replayStatus.progress : 100,
+      pendingTeamResolution: replayPendingCreates.size,
+      completedAt: awaitingTeamResolution ? "" : new Date().toISOString(),
+    };
+    if (!details.error && !awaitingTeamResolution) {
+      core.eventBus.emitModuleEvent("module.squadLifecycle", "replayImported", {
+        serverId,
+        matchId: rebuilt.matchId,
+        count: rebuilt.count,
+        sourceMode: "replay",
+        canTriggerActions: false,
+      });
+    }
+    return { ...rebuilt, replay: api.getReplayStatus() };
+  }
+
+  function rememberStableCreateEvent(serverId, parsed) {
+    for (const key of buildStableCreateEventKeys(serverId, parsed)) stableCreateEventKeys.add(key);
+  }
+
+  function hasStableCreateEvent(serverId, parsed) {
+    return buildStableCreateEventKeys(serverId, parsed).some((key) => stableCreateEventKeys.has(key));
+  }
+
+  function buildStableCreateEventKeys(serverId, parsed) {
+    const keys = [];
+    const fileId = String(parsed.sourceFileId ?? parsed.sourceFile ?? "").trim();
+    const offset = Number(parsed.sourceOffset);
+    if (fileId && Number.isFinite(offset) && offset >= 0) keys.push(`${serverId}:offset:${fileId}:${offset}`);
+    const rawHash = buildRawLogHash(parsed.rawLog);
+    if (rawHash) keys.push(`${serverId}:raw:${rawHash}`);
+    return keys;
+  }
+
+  function clearReplayStateForServer(serverId) {
+    for (const [key, pending] of [...replayPendingCreates.entries()]) {
+      if (pending.serverId === serverId) replayPendingCreates.delete(key);
+    }
+    replayRejected.splice(0);
+    stableCreateEventKeys.clear();
+    replayStatus = createReplayStatus();
   }
 
   function isDuplicateCreateEvent(serverId, parsed) {
@@ -602,4 +799,36 @@ function buildCreatorKey(source = {}) {
   if (eosId) return `eos:${eosId}`;
   if (name) return `name:${name}`;
   return "";
+}
+
+function buildReplayId(record = {}) {
+  const fileId = String(record.sourceFileId ?? record.sourceFile ?? "unknown").trim() || "unknown";
+  const offset = Number(record.sourceOffset);
+  if (Number.isFinite(offset) && offset >= 0) return `squadcreate:${fileId}:${offset}`;
+  const raw = String(record.rawLog ?? "").trim();
+  if (raw) return `squadcreate:raw:${crypto.createHash("sha1").update(raw).digest("hex")}`;
+  return `squadcreate:fallback:${[
+    record.eventTime,
+    record.creatorSteamId || record.creatorEosId || record.creatorName,
+    record.squadId,
+    normalizeSquadName(record.squadName),
+  ].join(":")}`;
+}
+
+function createReplayStatus() {
+  return {
+    status: "idle",
+    progress: 0,
+    scannedBytes: 0,
+    totalBytes: 0,
+    scannedLines: 0,
+    squadCreatesFound: 0,
+    accepted: 0,
+    rejectedPolicy: 0,
+    duplicates: 0,
+    pendingTeamResolution: 0,
+    startedAt: "",
+    completedAt: "",
+    error: "",
+  };
 }

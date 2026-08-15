@@ -32,6 +32,29 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     return state.currentMatchIdByServer.get(String(serverId ?? "").trim()) ?? "";
   }
 
+  function reassignMatchId(serverId, fromMatchId, toMatchId) {
+    const serverKey = String(serverId ?? "").trim();
+    const fromKey = String(fromMatchId ?? "").trim();
+    const toKey = String(toMatchId ?? "").trim();
+    if (!serverKey || !fromKey || !toKey || fromKey === toKey) return 0;
+    const affected = [...state.recordsByKey.values()].filter((record) => record.serverId === serverKey && record.matchId === fromKey);
+    for (const record of affected) {
+      state.recordsByKey.delete(record.key);
+      state.latestKeyBySlot.delete(record.slotKey);
+      state.generationBySlot.delete(record.slotKey);
+      const slotKey = buildSquadLifecycleSlotKey(serverKey, toKey, record.teamId, record.squadId);
+      const key = buildSquadLifecycleKey(serverKey, toKey, record.teamId, record.squadId, record.generation);
+      upsertRecord({ ...record, key, slotKey, matchId: toKey });
+    }
+    const previousOrder = Number(state.orderByMatchKey.get(`${serverKey}:${fromKey}`) ?? 0);
+    const currentOrder = Number(state.orderByMatchKey.get(`${serverKey}:${toKey}`) ?? 0);
+    state.orderByMatchKey.delete(`${serverKey}:${fromKey}`);
+    state.orderByMatchKey.set(`${serverKey}:${toKey}`, Math.max(previousOrder, currentOrder));
+    setCurrentMatchId(serverKey, toKey);
+    touchUpdatedAt();
+    return affected.length;
+  }
+
   function getNextOrder(serverId, matchId) {
     const key = `${String(serverId ?? "").trim()}:${String(matchId ?? "").trim()}`;
     const next = Number(state.orderByMatchKey.get(key) ?? 0) + 1;
@@ -70,8 +93,12 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     next.creatorEosId = String(logEvent.creatorEosId ?? "").trim();
     next.rawLog = String(logEvent.rawLog ?? "");
     next.sourceEventId = String(logEvent.sourceEventId ?? "");
+    next.sourceFile = String(logEvent.sourceFile ?? next.sourceFile ?? "");
+    next.sourceFileId = String(logEvent.sourceFileId ?? next.sourceFileId ?? "");
+    next.sourceOffset = normalizeOffset(logEvent.sourceOffset ?? next.sourceOffset);
     next.sourceMode = String(logEvent.sourceMode ?? next.sourceMode ?? "live").trim().toLowerCase() || "live";
     next.canTriggerActions = logEvent.canTriggerActions !== false;
+    next.replayAccepted = logEvent.sourceMode === "replay" ? true : next.replayAccepted;
     next.logConfirmedAt = logConfirmedAt;
 
     if (Number.isFinite(eventCreatedAtMs)) {
@@ -248,6 +275,29 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     return [...state.recordsByKey.values()];
   }
 
+  function rebuildCreationOrder(serverId, matchId) {
+    const serverKey = String(serverId ?? "").trim();
+    const matchKey = String(matchId ?? getCurrentMatchId(serverKey) ?? "").trim();
+    if (!serverKey || !matchKey) return { serverId: serverKey, matchId: matchKey, count: 0 };
+
+    const records = [...state.recordsByKey.values()]
+      .filter((record) => record.serverId === serverKey && record.matchId === matchKey && record.replayRejected !== true)
+      .sort((left, right) => {
+        const timeDiff = Number(left.createdAtMs ?? 0) - Number(right.createdAtMs ?? 0);
+        if (timeDiff) return timeDiff;
+        const offsetDiff = normalizeOffset(left.sourceOffset) - normalizeOffset(right.sourceOffset);
+        if (offsetDiff) return offsetDiff;
+        return Number(left.squadId ?? 0) - Number(right.squadId ?? 0);
+      });
+
+    records.forEach((record, index) => {
+      state.recordsByKey.set(record.key, formatLifecycleRecord({ ...record, order: index + 1 }));
+    });
+    state.orderByMatchKey.set(`${serverKey}:${matchKey}`, records.length);
+    touchUpdatedAt();
+    return { serverId: serverKey, matchId: matchKey, count: records.length };
+  }
+
   function touchUpdatedAt() {
     state.updatedAt = new Date().toISOString();
   }
@@ -293,12 +343,14 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
   return {
     setCurrentMatchId,
     getCurrentMatchId,
+    reassignMatchId,
     handleSquadCreateLogEvent,
     handleRconSquadSnapshot,
     clearMatch,
     clearServer,
     getCurrentSnapshot,
     getAllRecords,
+    rebuildCreationOrder,
   };
 }
 
@@ -319,6 +371,9 @@ function createBaseRecord(source, order, generation) {
     creatorEosId: String(source.creatorEosId ?? "").trim(),
     rawLog: String(source.rawLog ?? ""),
     sourceEventId: String(source.sourceEventId ?? ""),
+    sourceFile: String(source.sourceFile ?? ""),
+    sourceFileId: String(source.sourceFileId ?? ""),
+    sourceOffset: normalizeOffset(source.sourceOffset),
     sourceMode: String(source.sourceMode ?? "live").trim().toLowerCase() || "live",
     canTriggerActions: source.canTriggerActions !== false,
     slotKey: "",
@@ -329,7 +384,13 @@ function createBaseRecord(source, order, generation) {
     creationConfidence: "MEDIUM",
     logConfirmedAt: null,
     rconPromotedToLog: false,
+    replayAccepted: source.sourceMode === "replay" ? true : null,
   };
+}
+
+function normalizeOffset(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : Number.MAX_SAFE_INTEGER;
 }
 
 function parseTimestamp(value) {
