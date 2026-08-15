@@ -71,6 +71,9 @@ export function createAdminWarnModule({ core, config, logger }) {
     const normalizedKind = normalizeKind(kind);
     const sourceModule = String(req?.sourceModule ?? "unknown");
     const reason = String(req?.reason ?? defaultReasonForKind(normalizedKind));
+    const targetScope = normalizedKind === "warning" ? normalizeWarningTarget(req?.targetScope ?? req?.target) : "";
+    // Selection-based batch warnings deliberately avoid one history line per player.
+    const appendRecord = (entry) => req?.record === false ? { ...entry, persisted: false } : appendRecord(entry);
     const relatedEventId = optionalText(req?.relatedEventId);
     const actor = req?.actor ?? req?.viewer ?? null;
     const system = Boolean(req?.system);
@@ -80,11 +83,13 @@ export function createAdminWarnModule({ core, config, logger }) {
       ? sanitizeBroadcastMessage(req?.message)
       : sanitizeWarningMessage(req?.message);
 
-    const targetName = normalizedKind === "warning" ? String(req?.targetName ?? "").trim() : "";
-    const targetPlayerId = normalizedKind === "warning"
+    const targetName = normalizedKind === "warning"
+      ? (targetScope ? targetScope.toUpperCase() : String(req?.targetName ?? "").trim())
+      : "";
+    const targetPlayerId = normalizedKind === "warning" && !targetScope
       ? sanitizeTargetPlayerId(optionalText(req?.targetPlayerId ?? req?.targetPlayerID ?? req?.playerId ?? req?.playerID))
       : undefined;
-    const requireTargetPlayerId = normalizedKind === "warning"
+    const requireTargetPlayerId = normalizedKind === "warning" && !targetScope
       ? Boolean(req?.requireTargetPlayerId)
       : false;
     const targetEosId = normalizedKind === "warning" ? optionalText(req?.targetEosId) : undefined;
@@ -92,11 +97,12 @@ export function createAdminWarnModule({ core, config, logger }) {
     const commandText = buildCommandText(normalizedKind, {
       targetName,
       targetPlayerId,
+      targetScope,
       message,
     });
 
     if (!enabled) {
-      memoryStore.push({
+      appendRecord({
         ...actorRecord,
         id: makeRecordId("disabled"),
         kind: normalizedKind,
@@ -121,11 +127,11 @@ export function createAdminWarnModule({ core, config, logger }) {
       };
     }
 
-    if (!message || (normalizedKind === "warning" && !targetPlayerId && (!targetName || requireTargetPlayerId))) {
+    if (!message || (normalizedKind === "warning" && !targetScope && !targetPlayerId && (!targetName || requireTargetPlayerId))) {
       const skipReason = normalizedKind === "warning" && !targetPlayerId && requireTargetPlayerId
         ? "missing_target_player_id"
         : "invalid_request";
-      const record = memoryStore.push({
+      const record = appendRecord({
         ...actorRecord,
         id: makeRecordId("invalid"),
         kind: normalizedKind,
@@ -163,7 +169,7 @@ export function createAdminWarnModule({ core, config, logger }) {
 
       if (!result?.success) {
         const errorMessage = String(result?.message ?? "RCON command failed.");
-        memoryStore.push({
+        appendRecord({
           ...actorRecord,
           id: makeRecordId("failed"),
           kind: normalizedKind,
@@ -189,7 +195,7 @@ export function createAdminWarnModule({ core, config, logger }) {
         };
       }
 
-      memoryStore.push({
+      appendRecord({
         ...actorRecord,
         id: makeRecordId("ok"),
         kind: normalizedKind,
@@ -214,7 +220,7 @@ export function createAdminWarnModule({ core, config, logger }) {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      memoryStore.push({
+      appendRecord({
         ...actorRecord,
         id: makeRecordId("error"),
         kind: normalizedKind,
@@ -575,15 +581,24 @@ function normalizeDateKey(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
-function buildCommandText(kind, { targetName = "", targetPlayerId = "", message = "" } = {}) {
+function buildCommandText(kind, { targetName = "", targetPlayerId = "", targetScope = "", message = "" } = {}) {
   if (kind === "broadcast") {
     return `AdminBroadcast ${escapeCommandText(message)}`;
+  }
+  const scope = normalizeWarningTarget(targetScope);
+  if (scope) {
+    return `AdminWarn ${scope} "${escapeCommandText(message)}"`;
   }
   const id = sanitizeTargetPlayerId(targetPlayerId);
   if (id) {
     return `AdminWarnById ${id} "${escapeCommandText(message)}"`;
   }
   return `AdminWarn "${escapeCommandText(targetName)}" "${escapeCommandText(message)}"`;
+}
+
+function normalizeWarningTarget(value) {
+  const target = String(value ?? "").trim().toLowerCase();
+  return target === "all" || target === "team1" || target === "team2" ? target : "";
 }
 
 function sanitizeWarningMessage(message) {
