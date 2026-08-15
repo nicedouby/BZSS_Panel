@@ -91,7 +91,6 @@
               :key="team.teamId"
               :team="team"
               :can-edit-tickets="canEditTickets"
-              :can-warn="canRefresh"
               :search-query="teamSearchQueries[team.teamId === 1 ? 'team1' : 'team2']"
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
