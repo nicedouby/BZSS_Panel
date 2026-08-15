@@ -9,7 +9,8 @@ import { normalizeLiveCombat, normalizeLiveKill } from "./kill-record-normalizer
 import { dedupeKillRecords } from "./kill-record-dedupe.js";
 
 const MODULE_ID = "module.killRecords";
-const WORKER_PATH = new URL("../../workers/kill-replay-worker.js", import.meta.url);
+const COMBAT_WORKER_PATH = new URL("../../workers/combat-replay-worker.js", import.meta.url);
+const SQUAD_WORKER_PATH = new URL("../../workers/squad-replay-worker.js", import.meta.url);
 const REPLAY_PARSER_VERSION = 3;
 
 export function createKillRecordsModule({ core, modules, config, logger }) {
@@ -21,7 +22,8 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
   const serverId = String(moduleConfig.serverId ?? config?.get?.("serverId", "") ?? core.webStatus?.serverId ?? "BZSS_Main") || "BZSS_Main";
   const storeDirectory = path.resolve(moduleConfig.storeDirectory ?? `./data/kill-records/${safeSegment(serverId)}`);
   const store = new ReplayKillStore({ directory: storeDirectory, logger: moduleLogger });
-  let worker = null;
+  let combatWorker = null;
+  let squadWorker = null;
   let importQueue = Promise.resolve();
   let messageQueue = Promise.resolve();
   let replayStatus = createReplayStatus();
@@ -39,8 +41,8 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
     clearReplay,
   };
 
-  async function startReplay({ clear = false } = {}) {
-    if (worker) return { ok: false, code: "ReplayAlreadyRunning" };
+async function startReplay({ clear = false } = {}) {
+    if (combatWorker || squadWorker) return { ok: false, code: "ReplayAlreadyRunning" };
     if (clear) await store.clear();
     const sourcePath = await resolveSourcePath(moduleConfig);
     if (!sourcePath) {
@@ -48,141 +50,103 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       await store.saveState(replayStatus);
       return { ok: false, code: "SquadGameLogNotConfigured" };
     }
-
     let stat;
-    try {
-      stat = await fs.stat(sourcePath);
-    } catch (error) {
+    try { stat = await fs.stat(sourcePath); }
+    catch (error) {
       replayStatus = { ...createReplayStatus(), status: "failed", sourcePath, error: error?.message ?? String(error) };
       await store.saveState(replayStatus);
       return { ok: false, code: "SquadGameLogUnavailable", message: replayStatus.error };
     }
-
     const sourceFileId = makeFileId(stat);
     const previous = store.getStats().state ?? {};
+    const previousOffset = Number(previous.completedOffset);
     const canResume = Number(previous.parserVersion) === REPLAY_PARSER_VERSION
       && previous.sourcePath === sourcePath
       && previous.sourceFileId === sourceFileId
-      && Number(previous.completedOffset) >= 0
-      && Number(previous.completedOffset) <= stat.size;
-    // SquadLifecycle is intentionally in-memory, so restoring its current-round state
-    // requires a bounded scan from byte zero on every process start. Kill records are
-    // still deduped by their persistent store during that shared scan.
-    const startOffset = restoreSquadCreationOrder ? 0 : (canResume ? Number(previous.completedOffset) : 0);
-    const replayCutoffOffset = stat.size;
+      && Number.isSafeInteger(previousOffset)
+      && previousOffset >= 0 && previousOffset <= stat.size;
+    const combatStartOffset = canResume ? previousOffset : 0;
+    const cutoff = stat.size;
     const startedAt = new Date().toISOString();
     replayStatus = {
       ...createReplayStatus(),
-      status: "starting",
+      status: "running",
       parserVersion: REPLAY_PARSER_VERSION,
-      sourcePath,
-      sourceFileId,
-      startOffset,
-      replayCutoffOffset,
-      completedOffset: startOffset,
-      totalBytes: Math.max(0, replayCutoffOffset - startOffset),
+      sourcePath, sourceFileId,
+      startOffset: combatStartOffset,
+      replayCutoffOffset: cutoff,
+      completedOffset: combatStartOffset,
+      totalBytes: Math.max(0, cutoff - combatStartOffset),
       startedAt,
+      combat: { status: "running", startOffset: combatStartOffset, cutoffOffset: cutoff },
+      squad: { status: "locating_boundary", startOffset: 0, cutoffOffset: cutoff },
     };
     await store.saveState(replayStatus);
-    if (restoreSquadCreationOrder) {
-      modules?.squadLifecycle?.updateReplayProgress?.({
-        status: "scanning",
-        progress: 0,
-        scannedBytes: 0,
-        totalBytes: replayStatus.totalBytes,
-        startedAt,
-      });
-    }
-
-    worker = new Worker(WORKER_PATH, {
-      workerData: {
-        sourcePath,
-        sourceFileId,
-        serverId,
-        startOffset,
-        endOffset: replayCutoffOffset,
-        restoreSquadCreationOrder,
-        readChunkBytes: moduleConfig.readChunkBytes,
-        batchSize: moduleConfig.batchSize,
-      },
-    });
-    replayStatus.status = "running";
-
-    worker.on("message", (message) => {
-      messageQueue = messageQueue
-        .then(() => handleWorkerMessage(message))
-        .catch((error) => failReplay(error));
-    });
-    worker.on("error", (error) => {
-      void failReplay(error);
-    });
-    worker.on("exit", (code) => {
-      const exitedWorker = worker;
-      worker = null;
-      if (code !== 0 && replayStatus.status === "running") {
-        void failReplay(new Error(`Kill replay worker exited with code ${code}`));
-      }
-      if (exitedWorker) moduleLogger?.debug?.(`Kill replay worker exited (${code}).`);
-    });
+    modules?.squadLifecycle?.updateReplayProgress?.({ status: "locating_boundary", progress: 0, startedAt, sourceFile: sourcePath, sourceFileId, cutoffOffset: cutoff });
+    const commonData = { sourcePath, sourceFileId, serverId, endOffset: cutoff, readChunkBytes: moduleConfig.readChunkBytes, batchSize: moduleConfig.batchSize };
+    combatWorker = new Worker(COMBAT_WORKER_PATH, { workerData: { ...commonData, startOffset: combatStartOffset } });
+    squadWorker = new Worker(SQUAD_WORKER_PATH, { workerData: { ...commonData, startOffset: 0, matchId: modules?.squadLifecycle?.getCurrentMatchId?.(serverId) ?? "" } });
+    attachWorker(combatWorker, "combat");
+    attachWorker(squadWorker, "squad");
     return { ok: true, replay: clone(replayStatus) };
   }
 
-  async function handleWorkerMessage(message = {}) {
-    if (message.type === "combatBatch" || message.type === "killBatch") {
+  function attachWorker(instance, kind) {
+    instance.on("message", (message) => {
+      messageQueue = messageQueue.then(() => handleWorkerMessage(message, kind)).catch((error) => failReplay(error));
+    });
+    instance.on("error", (error) => { void failReplay(error); });
+    instance.on("exit", (code) => {
+      if (kind === "combat") combatWorker = null;
+      else squadWorker = null;
+      if (code !== 0 && replayStatus.status !== "failed") void failReplay(new Error(`${kind} replay worker exited with code ${code}`));
+      moduleLogger?.debug?.(`${kind} replay worker exited (${code}).`);
+    });
+  }
+
+  async function handleWorkerMessage(message = {}, kind = "combat") {
+    if (kind === "combat" && (message.type === "combatBatch" || message.type === "killBatch")) {
       await importReplayBatch(message.records);
       return;
     }
-    if (message.type === "squadCreateBatch") {
-      if (restoreSquadCreationOrder) {
-        modules?.squadLifecycle?.importReplayCreateBatch?.(message.records ?? []);
-      }
+    if (kind === "squad" && message.type === "squadCreateBatch") {
+      modules?.squadLifecycle?.importReplayCreateBatch?.(message.records ?? []);
       return;
     }
-    if (message.type === "squadReplayComplete") {
-      if (restoreSquadCreationOrder) {
-        modules?.squadLifecycle?.finalizeReplay?.({
-          serverId,
-          scannedBytes: Number(message.scannedBytes) || 0,
-          totalBytes: Number(message.totalBytes) || 0,
-          sourceFile: replayStatus.sourcePath,
-          sourceFileId: replayStatus.sourceFileId,
-          replayCutoffOffset: replayStatus.replayCutoffOffset,
-          roundBoundaryOffset: Number(message.roundBoundaryOffset) || 0,
-        });
-      }
-      return;
-    }
-    if (message.type === "progress") {
-      replayStatus = { ...replayStatus, ...pickProgress(message), status: "running" };
-      modules?.squadLifecycle?.updateReplayProgress?.({ ...pickProgress(message), status: "scanning" });
+    if (kind === "squad" && message.type === "progress") {
+      modules?.squadLifecycle?.updateReplayProgress?.({ ...message, status: "scanning" });
+      replayStatus = { ...replayStatus, squad: { ...(replayStatus.squad ?? {}), ...message, status: "scanning" } };
       await store.saveState(replayStatus);
       return;
     }
-    if (message.type === "complete") {
+    if (kind === "squad" && message.type === "complete") {
+      modules?.squadLifecycle?.finalizeReplay?.({
+        serverId, sourceFile: replayStatus.sourcePath, sourceFileId: replayStatus.sourceFileId,
+        replayCutoffOffset: replayStatus.replayCutoffOffset,
+        roundBoundaryOffset: message.roundBoundaryOffset ?? null,
+        scannedBytes: message.scannedBytes, totalBytes: message.totalBytes,
+      });
+      replayStatus = { ...replayStatus, squad: { ...(replayStatus.squad ?? {}), ...message, status: "completed" } };
+      await store.saveState(replayStatus);
+      return;
+    }
+    if (kind === "combat" && message.type === "progress") {
+      replayStatus = { ...replayStatus, ...pickProgress(message), status: "running", combat: { ...(replayStatus.combat ?? {}), ...pickProgress(message), status: "scanning" } };
+      await store.saveState(replayStatus);
+      return;
+    }
+    if (kind === "combat" && message.type === "complete") {
       await importQueue;
-      replayStatus = {
-        ...replayStatus,
-        ...pickProgress(message),
-        progress: 100,
-        completed: true,
-        status: "completed",
-        completedAt: new Date().toISOString(),
-        durationMs: Number(message.durationMs) || 0,
-      };
+      replayStatus = { ...replayStatus, ...pickProgress(message), progress: 100, completed: true, status: "completed", completedAt: new Date().toISOString(), durationMs: Number(message.durationMs) || 0, combat: { ...(replayStatus.combat ?? {}), ...message, status: "completed" } };
       await store.saveState(replayStatus);
       return;
     }
     if (message.type === "sourceChanged") {
-      replayStatus = { ...replayStatus, status: "source_changed", completed: false, completedOffset: Number(message.offset) || replayStatus.completedOffset };
+      replayStatus = { ...replayStatus, status: "source_changed", completed: false, error: `${kind} source changed during replay` };
       await store.saveState(replayStatus);
-      if (restoreSquadCreationOrder) {
-        modules?.squadLifecycle?.finalizeReplay?.({ serverId, error: "SquadGame.log changed during replay" });
-      }
       return;
     }
-    if (message.type === "error") {
-      await failReplay(new Error(String(message.message ?? "Kill replay worker failed")), message.offset);
-    }
+    if (message.type === "error") await failReplay(new Error(String(message.message ?? `${kind} replay failed`)), message.offset);
   }
 
   async function importReplayBatch(records = []) {
@@ -245,12 +209,12 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
   }
 
   async function restartReplay(options = {}) {
-    if (worker) return { ok: false, code: "ReplayAlreadyRunning" };
+    if (combatWorker || squadWorker) return { ok: false, code: "ReplayAlreadyRunning" };
     return startReplay({ clear: Boolean(options.clear) });
   }
 
   async function clearReplay() {
-    if (worker) return { ok: false, code: "ReplayAlreadyRunning" };
+    if (combatWorker || squadWorker) return { ok: false, code: "ReplayAlreadyRunning" };
     const cleared = await store.clear();
     replayStatus = createReplayStatus();
     return { ok: true, cleared };
@@ -301,12 +265,13 @@ export function createKillRecordsModule({ core, modules, config, logger }) {
       if (moduleConfig.replayOnStart !== false || restoreSquadCreationOrder) void startReplay();
     },
     async stop() {
-      if (worker) {
-        const running = worker;
-        worker = null;
-        replayStatus.status = "stopped";
-        await running.terminate();
-      }
+      const runningCombat = combatWorker;
+      const runningSquad = squadWorker;
+      combatWorker = null;
+      squadWorker = null;
+      replayStatus.status = "stopped";
+      if (runningCombat) await runningCombat.terminate();
+      if (runningSquad) await runningSquad.terminate();
       await importQueue;
       await messageQueue;
       await store.saveState(replayStatus);
