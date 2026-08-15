@@ -481,6 +481,8 @@
     "port": 30144,
     "password": "",
     "passwordFromEnv": "BZSS_RCON_PASSWORD",
+    "commandTimeoutMs": 15000,
+    "connectTimeoutMs": 5000,
     "allowMultipleConnections": false,
     "commandPoolSize": 4,
     "queryPoolSize": 1,

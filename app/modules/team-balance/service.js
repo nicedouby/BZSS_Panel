@@ -225,6 +225,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         operator,
         system,
         priority: request.priority,
+        maxQueueWaitMs: request.maxQueueWaitMs,
         batchId: request.batchId ?? "",
       });
 
@@ -235,6 +236,9 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         command,
         rconExecuted: response.executed,
         rconResponse: response.response,
+        queueLane: response.queueLane,
+        queuedMs: response.queuedMs,
+        executionMs: response.executionMs,
         steamId,
         playerName,
         source,
@@ -618,7 +622,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     return actionHistory.slice(0, limit);
   }
 
-  async function executeForceTeamChangeCommand({ command, source, reason, operator, system, priority = false, batchId = "" }) {
+  async function executeForceTeamChangeCommand({ command, source, reason, operator, system, priority = false, maxQueueWaitMs, batchId = "" }) {
     const requiredPermission = resolveRconPermission(command, { requiredPermission: "rcon.tb" });
     if (!system && !canSendRconCommand(operator, command, { requiredPermission })) {
       return {
@@ -638,6 +642,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
         actor: operator,
         requiredPermission,
         priority: requestPriority({ priority }),
+        maxQueueWaitMs,
         batchId,
       });
       return normalizeDispatchResponse(response);
@@ -811,6 +816,9 @@ function buildResult({
   command = "",
   rconExecuted = false,
   rconResponse = "",
+  queueLane = "",
+  queuedMs = 0,
+  executionMs = 0,
   steamId = "",
   playerName = "",
   source = DEFAULT_SOURCE,
@@ -834,6 +842,9 @@ function buildResult({
     command,
     rconExecuted: Boolean(rconExecuted),
     rconResponse,
+    queueLane,
+    queuedMs: Number(queuedMs) || 0,
+    executionMs: Number(executionMs) || 0,
   };
 }
 
@@ -937,7 +948,9 @@ function canSwitch(viewer, config = {}) {
 }
 
 function requestPriority(request) {
-  return request?.priority === "high" ? "high" : false;
+  return request?.priority === "interactive"
+    ? "interactive"
+    : request?.priority === "high" ? "high" : false;
 }
 
 function normalizeDispatchResponse(response) {
@@ -947,6 +960,9 @@ function normalizeDispatchResponse(response) {
       executed: Boolean(response.executed ?? response.rconExecuted ?? response.success ?? true),
       response: String(response.response ?? response.rconResponse ?? response.message ?? ""),
       error: String(response.error ?? response.message ?? ""),
+      queueLane: String(response.queueLane ?? ""),
+      queuedMs: Number(response.queuedMs ?? 0),
+      executionMs: Number(response.executionMs ?? 0),
     };
   }
 

@@ -43,6 +43,10 @@ export default class Rcon extends EventEmitter {
     this.commandTimeoutMs = Number.isFinite(parsedCommandTimeoutMs)
       ? Math.max(0, parsedCommandTimeoutMs)
       : 15000;
+    const parsedConnectTimeoutMs = Number(options.connectTimeoutMs);
+    this.connectTimeoutMs = Number.isFinite(parsedConnectTimeoutMs)
+      ? Math.max(0, parsedConnectTimeoutMs)
+      : 5000;
 
     this.logger = options.logger ?? console;
 
@@ -86,8 +90,22 @@ export default class Rcon extends EventEmitter {
     this._connectPromise = new Promise((resolve, reject) => {
       this._logInfo(`Connecting to ${this.host}:${this.port} ...`);
 
+      let settled = false;
+      let timeout = null;
+      const cleanup = () => {
+        clearTimeout(timeout);
+        this._socket?.removeListener("connect", onConnect);
+        this._socket?.removeListener("error", onError);
+      };
+      const fail = (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      };
       const onConnect = async () => {
-        this._socket.removeListener("error", onError);
+        if (settled) return;
+        cleanup();
         this.connected = true;
         this._logInfo(`Connected to ${this.host}:${this.port}`);
 
@@ -99,20 +117,31 @@ export default class Rcon extends EventEmitter {
             port: this.port,
             time: new Date().toISOString(),
           });
-          resolve();
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
         } catch (err) {
-          reject(err);
+          fail(err);
         }
       };
 
       const onError = (err) => {
-        this._socket.removeListener("connect", onConnect);
+        if (settled) return;
         this._logError(`Connection failed: ${err.message}`);
-        reject(err);
+        fail(err);
       };
 
       this._socket.once("connect", onConnect);
       this._socket.once("error", onError);
+      if (this.connectTimeoutMs > 0) {
+        timeout = setTimeout(() => {
+          const error = new Error(`RCON connection timed out after ${this.connectTimeoutMs}ms`);
+          this._logError(error.message);
+          try { this._socket?.destroy(error); } catch {}
+          fail(error);
+        }, this.connectTimeoutMs);
+      }
       this._socket.connect(this.port, this.host);
     }).finally(() => {
       this._connectPromise = null;

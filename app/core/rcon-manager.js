@@ -138,6 +138,7 @@ export class RconManager {
       password: resolveRconPassword(this.config, this.logger),
       autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
       commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+      connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
       logger: this.logger,
     });
 
@@ -150,6 +151,7 @@ export class RconManager {
           password: resolveRconPassword(this.config, this.logger),
           autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
           commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+          connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
           logger: this.logger,
         })
       : this.squadRcon;
@@ -379,6 +381,7 @@ export class RconManager {
         password: resolveRconPassword(this.config, this.logger),
         autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
         commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+        connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
         logger: this.logger,
       });
       lanes.push(createPoolLane(`${kind}-${i + 1}`, client));
@@ -448,7 +451,7 @@ export class RconManager {
       };
     }
 
-    const priority = isPriorityRequest(request);
+    const priority = normalizePriority(request);
     const bypassRateLimit = Boolean(request?.bypassRateLimit === true);
     if (this.getQueueSize() >= this.maxQueueSize) {
       return {
@@ -467,12 +470,17 @@ export class RconManager {
         bypassRateLimit,
         resolve,
         enqueuedAt,
+        maxQueueWaitMs: normalizeQueueWaitMs(request?.maxQueueWaitMs),
+        state: "queued",
+        expiryTimer: null,
       };
 
       const pool = this.resolveCommandPool(request, command);
       this.ensurePoolLanes(pool);
-      if (priority) pool.priorityQueue.push(item);
+      if (priority === "interactive") pool.interactiveQueue.push(item);
+      else if (priority === "high") pool.priorityQueue.push(item);
       else pool.queue.push(item);
+      this.armQueueExpiry(item, pool);
 
       this.status.queueSize = this.getQueueSize();
       this.webStatus.set("rconQueue", this.getQueueSize());
@@ -490,6 +498,20 @@ export class RconManager {
 
       this.pumpPool(pool);
     });
+  }
+
+  armQueueExpiry(item, pool) {
+    if (!item?.maxQueueWaitMs) return;
+    item.expiryTimer = setTimeout(() => {
+      if (item.state !== "queued") return;
+      item.state = "settled";
+      removeQueuedItem(pool, item);
+      const queuedMs = Date.now() - item.enqueuedAt;
+      item.resolve({ success: false, code: "RconQueueTimeout", message: "RCON command expired while waiting in queue.", rconExecuted: false, rconResponse: "", queuedMs });
+      this.status.queueSize = this.getQueueSize();
+      this.webStatus.set("rconQueue", this.getQueueSize());
+      this.pumpPool(pool);
+    }, item.maxQueueWaitMs);
   }
 
   resolveCommandPool(request, command) {
@@ -541,6 +563,12 @@ export class RconManager {
 
         const item = this.shiftPoolItem(pool);
         if (!item) break;
+        if (isQueueItemExpired(item) || item.state !== "queued") {
+          this.settleExpiredQueueItem(item);
+          continue;
+        }
+        item.state = "executing";
+        clearTimeout(item.expiryTimer);
 
         dispatched = true;
         lane.busy = true;
@@ -594,11 +622,39 @@ export class RconManager {
   }
 
   hasPoolQueue(pool) {
-    return pool.priorityQueue.length > 0 || pool.queue.length > 0;
+    return pool.interactiveQueue.length > 0 || pool.priorityQueue.length > 0 || pool.queue.length > 0;
   }
 
   shiftPoolItem(pool) {
-    return pool.priorityQueue.length > 0 ? pool.priorityQueue.shift() : pool.queue.shift();
+    // Strict FIFO inside each class. Periodically yield to lower classes so a
+    // continuous player-command stream cannot permanently starve maintenance.
+    pool.interactiveBurst ??= 0;
+    pool.highBurst ??= 0;
+    if (pool.interactiveQueue.length && (pool.interactiveBurst < 8 || !pool.priorityQueue.length)) {
+      pool.interactiveBurst += 1;
+      pool.highBurst = 0;
+      return pool.interactiveQueue.shift();
+    }
+    if (pool.priorityQueue.length && (pool.highBurst < 16 || !pool.queue.length)) {
+      pool.interactiveBurst = 0;
+      pool.highBurst += 1;
+      return pool.priorityQueue.shift();
+    }
+    if (pool.queue.length) {
+      pool.interactiveBurst = 0;
+      pool.highBurst = 0;
+      return pool.queue.shift();
+    }
+    if (pool.interactiveQueue.length) return pool.interactiveQueue.shift();
+    return pool.priorityQueue.shift();
+  }
+
+  settleExpiredQueueItem(item) {
+    if (!item || item.state === "settled") return;
+    clearTimeout(item.expiryTimer);
+    item.state = "settled";
+    const queuedMs = Date.now() - item.enqueuedAt;
+    item.resolve({ success: false, code: "RconQueueTimeout", message: "RCON command expired while waiting in queue.", rconExecuted: false, rconResponse: "", queuedMs });
   }
 
   pickReadyLane(pool) {
@@ -643,7 +699,7 @@ export class RconManager {
 
   resolveItemCooldownMs(item) {
     if (item?.bypassRateLimit) return 0;
-    return item?.priority ? this.priorityMinIntervalMs : this.minIntervalMs;
+    return item?.priority !== "normal" ? this.priorityMinIntervalMs : this.minIntervalMs;
   }
 
   async executeQueuedItem(item, client, { lane = "default", updateLastCommandTime = () => {} } = {}) {
@@ -699,6 +755,7 @@ export class RconManager {
         queuedMs,
         executionMs,
       };
+      item.state = "settled";
       item.resolve(result);
       return result;
     } catch (error) {
@@ -732,6 +789,7 @@ export class RconManager {
         queuedMs,
         executionMs,
       };
+      item.state = "settled";
       item.resolve(result);
       return result;
     }
@@ -947,6 +1005,7 @@ export class RconManager {
       busy: pool.lanes.filter((lane) => lane.busy).length,
       queueSize: getPoolQueueSize(pool),
       priorityQueueSize: pool.priorityQueue.length,
+      interactiveQueueSize: pool.interactiveQueue.length,
       normalQueueSize: pool.queue.length,
       nextReadyAt,
       nextReadyInMs: nextReadyAt ? Math.max(0, nextReadyAt - now) : 0,
@@ -1027,6 +1086,9 @@ function createRconPool(name) {
     lanes: [],
     queue: [],
     priorityQueue: [],
+    interactiveQueue: [],
+    interactiveBurst: 0,
+    highBurst: 0,
     timer: null,
     pumping: false,
   };
@@ -1046,7 +1108,29 @@ function createPoolLane(id, client) {
 }
 
 function getPoolQueueSize(pool) {
-  return Number(pool?.queue?.length ?? 0) + Number(pool?.priorityQueue?.length ?? 0);
+  return Number(pool?.queue?.length ?? 0) + Number(pool?.priorityQueue?.length ?? 0) + Number(pool?.interactiveQueue?.length ?? 0);
+}
+
+function normalizePriority(request = {}) {
+  return String(request?.priority ?? "").toLowerCase() === "interactive"
+    ? "interactive"
+    : isPriorityRequest(request) ? "high" : "normal";
+}
+
+function normalizeQueueWaitMs(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function isQueueItemExpired(item, now = Date.now()) {
+  return Number(item?.maxQueueWaitMs) > 0 && now - Number(item?.enqueuedAt ?? now) >= Number(item.maxQueueWaitMs);
+}
+
+function removeQueuedItem(pool, item) {
+  for (const queue of [pool?.interactiveQueue, pool?.priorityQueue, pool?.queue]) {
+    const index = queue?.indexOf(item) ?? -1;
+    if (index >= 0) queue.splice(index, 1);
+  }
 }
 
 function compareLaneIdleOrder(a, b) {
