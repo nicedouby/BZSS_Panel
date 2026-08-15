@@ -5,26 +5,28 @@ export async function renderPage({ root, api, apiFetch }) {
     <section class="page kill-page-shell combat-page-shell">
       <div class="page-title-row"><div><div class="page-title">击杀记录</div><div class="page-subtitle">查询当前对局实时及历史回溯的击杀记录</div></div><button id="kill-records-replay">重新回溯</button></div>
       <section class="combat-stat-grid">
-        ${card("回溯状态", "kr-status")}${card("回溯进度", "kr-progress")}${card("历史击杀", "kr-replay")}${card("实时击杀", "kr-live")}${card("TK", "kr-tk")}${card("最后更新", "kr-updated")}
+        ${card("回溯状态", "kr-status")}${card("回溯进度", "kr-progress")}${card("历史伤害", "kr-damage")}${card("历史击倒", "kr-wound")}${card("历史击杀", "kr-replay")}${card("实时击杀", "kr-live")}${card("TK", "kr-tk")}${card("最后更新", "kr-updated")}
       </section>
-      <section class="card combat-toolbar-card"><div class="console-actions combat-toolbar"><select id="kr-source"><option value="all">全部来源</option><option value="live">实时</option><option value="replay">回溯</option></select><select id="kr-type"><option value="all">全部类型</option><option value="kill">击杀</option><option value="tk">TK</option></select><input id="kr-search" class="console-search" placeholder="玩家 / Steam64 / EOS / 武器"><button id="kr-refresh">刷新</button></div></section>
+      <section class="card combat-toolbar-card"><div class="console-actions combat-toolbar"><select id="kr-source"><option value="all">全部来源</option><option value="live">实时</option><option value="replay">回溯</option></select><select id="kr-type"><option value="all">全部类型</option><option value="damage">伤害</option><option value="wound">击倒</option><option value="kill">击杀</option><option value="tk">TK</option></select><input id="kr-search" class="console-search" placeholder="玩家 / Steam64 / EOS / 武器"><button id="kr-refresh">刷新</button></div></section>
       <div class="card kill-table-card combat-table-card"><div class="kill-table-wrap combat-table-wrap"><table><thead><tr><th>时间</th><th>来源</th><th>类型</th><th>击杀者</th><th>Team</th><th>被击杀者</th><th>Team</th><th>武器</th><th>详情</th></tr></thead><tbody id="kr-body"></tbody></table></div></div>
     </section>`;
   const state = { source: "all", type: "all", search: "" };
-  const els = Object.fromEntries(["status", "progress", "replay", "live", "tk", "updated", "body", "source", "type", "search"].map((key) => [key, root.querySelector(`#kr-${key}`)]));
+  const els = Object.fromEntries(["status", "progress", "damage", "wound", "replay", "live", "tk", "updated", "body", "source", "type", "search"].map((key) => [key, root.querySelector(`#kr-${key}`)]));
   let timer;
   async function load() {
     const params = new URLSearchParams({ ...state, limit: "200" });
-    const [data, status] = await Promise.all([api(`/api/kill-records?${params}`), api("/api/kill-records/status")]);
+    const [data, status] = await Promise.all([api(`/api/combat-records?${params}`), api("/api/kill-records/status")]);
     const overview = data.overview ?? {};
     const replay = status.replay ?? {};
     els.status.textContent = replay.status ?? "-";
     els.progress.textContent = `${Number(replay.progress ?? 0).toFixed(1)}%`;
-    els.replay.textContent = overview.replayCount ?? 0;
+    els.damage.textContent = overview.replayDamage ?? 0;
+    els.wound.textContent = overview.replayWound ?? 0;
+    els.replay.textContent = overview.replayKills ?? overview.replayCount ?? 0;
     els.live.textContent = overview.liveCount ?? 0;
     els.tk.textContent = overview.teamKills ?? 0;
     els.updated.textContent = formatTime(overview.lastUpdatedAt);
-    els.body.innerHTML = (data.records ?? []).map((record) => `<tr><td>${esc(formatTime(record.time))}</td><td>${record.source === "live" ? "实时" : "回溯"}</td><td>${record.isTeamKill ? "TK" : "击杀"}</td><td>${esc(record.attacker?.name || "未知")}</td><td>${esc(record.attacker?.teamID ?? "-")}</td><td>${esc(record.victim?.name || "未知")}</td><td>${esc(record.victim?.teamID ?? "-")}</td><td>${esc(record.weapon || "-")}</td><td><button data-detail="${esc(record.id)}">查看</button></td></tr>`).join("") || `<tr><td colspan="9">暂无记录</td></tr>`;
+    els.body.innerHTML = (data.records ?? []).map((record) => `<tr><td>${esc(formatTime(record.time))}</td><td>${record.source === "live" ? "实时" : "回溯"}</td><td>${record.type === "damage" ? "伤害" : record.type === "wound" ? "击倒" : record.isTeamKill ? "TK" : "击杀"}</td><td>${esc(record.attacker?.name || "未知")}</td><td>${esc(record.attacker?.teamID ?? "-")}</td><td>${esc(record.victim?.name || "未知")}</td><td>${esc(record.victim?.teamID ?? "-")}</td><td>${esc(record.weapon || "-")}</td><td><button data-detail="${esc(record.id)}">查看</button></td></tr>`).join("") || `<tr><td colspan="9">暂无记录</td></tr>`;
   }
   els.source.addEventListener("change", () => { state.source = els.source.value; void load(); });
   els.type.addEventListener("change", () => { state.type = els.type.value; void load(); });
