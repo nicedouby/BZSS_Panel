@@ -1,7 +1,6 @@
 <template>
   <div class="squad-admin-layout">
     <SquadPageToolbar
-      :filter-mode="pageState.filterMode"
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
       :refreshing-playtime="refreshingPlaytime"
@@ -10,8 +9,7 @@
       :squads-updated-at="squadsUpdatedAt"
       :multi-select-mode="multiSelectMode"
       :view-mode="viewMode"
-      @filter-change="pageState.filterMode = $event"
-      @warn-all="handleTargetWarn('all')"
+      @warn-target="handleTargetWarn"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
@@ -91,7 +89,7 @@
               :key="team.teamId"
               :team="team"
               :can-edit-tickets="canEditTickets"
-              :search-query="teamSearchQueries[team.teamId === 1 ? 'team1' : 'team2']"
+              :search-query="teamSearchQueries[teamSearchKey(team.teamId)]"
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
               :health-lookup="healthLookup"
@@ -102,7 +100,7 @@
               @toggle-player-check="togglePlayerCheck"
               @edit-tickets="openTicketEditor"
               @warn-team="handleTeamWarn"
-              @search="teamSearchQueries[team.teamId === 1 ? 'team1' : 'team2'] = $event"
+              @search="teamSearchQueries[teamSearchKey(team.teamId)] = $event"
               @select-squad="handleSquadClick"
             />
           </div>
@@ -297,7 +295,6 @@ import {
   adaptPlayerDetail,
   buildCombatStatsLookupFromTacticalPlayers,
   buildSquadLifecycleLookup,
-  filterTeamsBySearch,
   compareSquadMembers,
 } from "../utils/squad-admin-adapter";
 import { 获取战斗群旗帜, getFactionFromTeamId, getFlagUrl } from "../shared/faction-assets/faction-data";
@@ -737,11 +734,49 @@ const rawTeams = computed(() => {
   });
 });
 
+function teamSearchKey(teamId: unknown): "team1" | "team2" {
+  return Number(teamId) === 1 ? "team1" : "team2";
+}
+
+function playerMatchesSearch(player: PlayerRowViewModel, query: string): boolean {
+  const terms = String(query ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const raw = player.raw && typeof player.raw === "object" ? player.raw as Record<string, any> : {};
+  const text = [
+    player.playerId,
+    player.name,
+    player.steamId,
+    player.steam64,
+    player.eosId,
+    raw.steamID,
+    raw.steamId,
+    raw.eosID,
+    raw.eosId,
+    raw.playerName,
+  ].map((value) => String(value ?? "").toLowerCase()).join(" ");
+  return terms.every((term) => text.includes(term));
+}
+
+function filterTeamByPlayerSearch(team: TeamViewModel, query: string): TeamViewModel {
+  if (!String(query ?? "").trim()) return team;
+  const squads = team.squads
+    .map((squad) => {
+      const leader = squad.leader && playerMatchesSearch(squad.leader, query) ? squad.leader : null;
+      const members = squad.members.filter((player) => playerMatchesSearch(player, query));
+      if (!leader && members.length === 0) return null;
+      return { ...squad, leader, members, memberCount: Number(Boolean(leader)) + members.length };
+    })
+    .filter((squad): squad is SquadViewModel => squad !== null);
+  return {
+    ...team,
+    squads,
+    playerCount: squads.reduce((total, squad) => total + Number(Boolean(squad.leader)) + squad.members.length, 0),
+  };
+}
+
 const viewModels = computed(() => {
-  const filteredTeams = filterTeamsByMode(rawTeams.value, pageState.filterMode);
-  const searchedTeams = filteredTeams.map((team) => {
-    const query = team.teamId === 1 ? teamSearchQueries.team1 : teamSearchQueries.team2;
-    return filterTeamsBySearch([team], query)[0] ?? { ...team, squads: [] };
+  const searchedTeams = rawTeams.value.map((team) => {
+    return filterTeamByPlayerSearch(team, teamSearchQueries[teamSearchKey(team.teamId)]);
   });
   const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
