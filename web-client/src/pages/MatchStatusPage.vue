@@ -8,7 +8,6 @@
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       :multi-select-mode="multiSelectMode"
-      :view-mode="viewMode"
       @warn-target="handleTargetWarn"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
@@ -746,7 +745,7 @@ function playerMatchesSearch(player: PlayerRowViewModel, query: string): boolean
     player.playerId,
     player.name,
     player.steamId,
-    player.steam64,
+    (player as any).steam64,
     player.eosId,
     raw.steamID,
     raw.steamId,
