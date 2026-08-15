@@ -12,7 +12,13 @@
         <!-- Title Row -->
         <div class="team-header-top-row">
           <h2 class="team-title-line">
-            <span class="team-id-badge">TEAM {{ team.teamId }}</span>
+            <button
+              type="button"
+              class="team-id-badge team-warn-trigger"
+              :disabled="!canWarn"
+              :title="`向 TEAM ${team.teamId} 发送 AdminWarn`"
+              @click="$emit('warn-team', team.teamId)"
+            >TEAM {{ team.teamId }}</button>
             <span class="team-name" :title="team.teamName">{{ team.teamName }}</span>
           </h2>
 
@@ -75,6 +81,17 @@
       </div>
     </header>
 
+    <label class="team-search-wrapper">
+      <span class="team-search-icon" aria-hidden="true">⌕</span>
+      <input
+        :value="searchQuery"
+        type="search"
+        class="team-search-input"
+        :placeholder="`搜索 TEAM ${team.teamId} 玩家或小队`"
+        @input="$emit('search', ($event.target as HTMLInputElement).value)"
+      />
+    </label>
+
     <div class="squad-list">
       <SquadCard
         v-for="squad in team.squads"
@@ -111,6 +128,8 @@ const props = defineProps<{
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
   canEditTickets?: boolean;
+  canWarn?: boolean;
+  searchQuery?: string;
 }>();
 
 defineEmits<{
@@ -118,6 +137,8 @@ defineEmits<{
   (event: "toggle-player-check", payload: { player: PlayerRowViewModel; event: MouseEvent }): void;
   (event: "select-squad", squad: SquadViewModel): void;
   (event: "edit-tickets", team: TeamViewModel): void;
+  (event: "warn-team", teamId: number): void;
+  (event: "search", query: string): void;
 }>();
 
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
@@ -216,6 +237,46 @@ const teamAveragePingText = computed(() => {
 
 <style scoped>
 /* ─── 队伍列主容器 ───────────────────────────────────────────────────────── */
+.team-search-wrapper {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.team-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.team-search-input {
+  width: 100%;
+  height: 28px;
+  padding: 0 9px 0 28px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.34);
+  color: var(--color-text-primary);
+  font-size: 11px;
+  outline: none;
+}
+
+.team-search-input:focus {
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+.team-warn-trigger {
+  cursor: pointer;
+}
+
+.team-warn-trigger:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+}
+
 .team-column {
   display: flex;
   flex-direction: column;
