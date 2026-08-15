@@ -1047,6 +1047,36 @@ export class PlayerRepository {
     return { items: items.slice(0, limit), hasMore: items.length > limit, offset, limit };
   }
 
+  async listPlayerTags(playerId, tagType = null) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const type = cleanText(tagType);
+    const sql = type
+      ? "SELECT tag_type, tag_value, created_at, updated_at FROM player_tags WHERE player_id = ? AND tag_type = ? ORDER BY tag_value COLLATE NOCASE ASC"
+      : "SELECT tag_type, tag_value, created_at, updated_at FROM player_tags WHERE player_id = ? ORDER BY tag_type ASC, tag_value COLLATE NOCASE ASC";
+    return type ? this.db.all(sql, id, type) : this.db.all(sql, id);
+  }
+
+  async replacePlayerTags(playerId, tagType, tagValues = []) {
+    const id = Number(playerId);
+    const type = cleanText(tagType);
+    if (!Number.isFinite(id) || !type) return null;
+    const player = await this.getPlayerById(id);
+    if (!player) return null;
+    const values = [...new Set((Array.isArray(tagValues) ? tagValues : [])
+      .map((value) => cleanText(value))
+      .filter(Boolean))];
+    const ts = now();
+    await this.db.run("DELETE FROM player_tags WHERE player_id = ? AND tag_type = ?", id, type);
+    for (const value of values) {
+      await this.db.run(
+        "INSERT INTO player_tags (player_id, tag_type, tag_value, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+        id, type, value, ts, ts,
+      );
+    }
+    return this.getPlayerDetail(id);
+  }
+
   async setPermissionGroup(playerId, permissionGroup) {
     await this.db.run(
       "UPDATE players SET permission_group = ?, updated_at = ? WHERE id = ?",
