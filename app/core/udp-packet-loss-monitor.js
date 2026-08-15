@@ -1,8 +1,14 @@
 // -*- coding: utf-8 -*-
 
-const DEFAULT_HISTORY_SIZE = 180;
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const DEFAULT_HISTORY_SIZE = 8640;
 const DEFAULT_FINALIZE_GRACE_MS = 750;
 const DEFAULT_MAX_TRACKED_SESSIONS = 4;
+const DEFAULT_RETENTION_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_COMPACT_INTERVAL_MS = 10 * 60 * 1000;
+const DEFAULT_STALE_AFTER_MS = 30 * 1000;
 
 /**
  * Compares LogPost EVENT PacketSeq values against periodic STAT snapshots.
@@ -18,18 +24,26 @@ export class UdpPacketLossMonitor {
     historySize = DEFAULT_HISTORY_SIZE,
     finalizeGraceMs = DEFAULT_FINALIZE_GRACE_MS,
     maxTrackedSessions = DEFAULT_MAX_TRACKED_SESSIONS,
+    historyFilePath = "./data/logpost-packet-stats.jsonl",
+    retentionMs = DEFAULT_RETENTION_MS,
+    staleAfterMs = DEFAULT_STALE_AFTER_MS,
   } = {}) {
     this.logger = logger;
     this.onUpdate = onUpdate;
-    this.historySize = Math.max(30, Number(historySize) || DEFAULT_HISTORY_SIZE);
+    this.historySize = Math.max(120, Number(historySize) || DEFAULT_HISTORY_SIZE);
     this.finalizeGraceMs = Math.max(0, Number(finalizeGraceMs) || DEFAULT_FINALIZE_GRACE_MS);
     this.maxTrackedSessions = Math.max(2, Number(maxTrackedSessions) || DEFAULT_MAX_TRACKED_SESSIONS);
+    this.historyFilePath = path.resolve(process.cwd(), String(historyFilePath || "./data/logpost-packet-stats.jsonl"));
+    this.retentionMs = Math.max(60 * 60 * 1000, Number(retentionMs) || DEFAULT_RETENTION_MS);
+    this.staleAfterMs = Math.max(15_000, Number(staleAfterMs) || DEFAULT_STALE_AFTER_MS);
 
     this.sessions = new Map();
     this.pendingTimers = new Set();
     this.history = [];
     this.current = null;
     this.lastUpdatedAt = "";
+    this.lastCompactionAt = 0;
+    this.persistChain = Promise.resolve();
     this.metrics = {
       businessPacketsObserved: 0,
       uniqueBusinessPacketsObserved: 0,
@@ -39,10 +53,57 @@ export class UdpPacketLossMonitor {
       staleStatPackets: 0,
       latePacketsAfterFinalize: 0,
       finalizedWindows: 0,
+      persistedWindowsLoaded: 0,
+      persistenceErrors: 0,
       totalExpectedPackets: 0,
       totalReceivedPackets: 0,
       totalLostPackets: 0,
     };
+  }
+
+  async initialize() {
+    await fs.mkdir(path.dirname(this.historyFilePath), { recursive: true });
+    let text = "";
+    try {
+      text = await fs.readFile(this.historyFilePath, "utf8");
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        this.metrics.persistenceErrors += 1;
+        this.logger?.warn?.(`Unable to read LogPost packet history: ${error.message}`);
+      }
+    }
+
+    const cutoff = Date.now() - this.retentionMs;
+    const loaded = [];
+    for (const line of String(text || "").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (Number(row?.windowEndMs || 0) >= cutoff) loaded.push(row);
+      } catch {
+        this.metrics.persistenceErrors += 1;
+      }
+    }
+
+    this.history = loaded.slice(-this.historySize);
+    this.current = this.history.at(-1) ?? null;
+    this.lastUpdatedAt = String(this.current?.finalizedAt ?? "");
+    this.metrics.persistedWindowsLoaded = this.history.length;
+    this.metrics.finalizedWindows = this.history.length;
+    this.metrics.totalExpectedPackets = sumField(this.history, "sentPackets");
+    this.metrics.totalReceivedPackets = sumField(this.history, "receivedPackets");
+    this.metrics.totalLostPackets = sumField(this.history, "lostPackets");
+    this.lastCompactionAt = Date.now();
+
+    // Rewrite on startup so an old file never grows without bound.
+    await this.compactPersistedHistory();
+    this.onUpdate?.();
+  }
+
+  async close() {
+    for (const timer of this.pendingTimers) clearTimeout(timer);
+    this.pendingTimers.clear();
+    await this.persistChain.catch(() => {});
   }
 
   recordEvent(rawEvent = {}) {
@@ -142,7 +203,6 @@ export class UdpPacketLossMonitor {
       startSeq = Math.max(1, endSeq - snapshot.reportedSent + 1);
     }
 
-    // A zero-traffic report is still useful for showing that telemetry is alive.
     const expectedPackets = startSeq > 0 && endSeq >= startSeq
       ? endSeq - startSeq + 1
       : 0;
@@ -191,9 +251,10 @@ export class UdpPacketLossMonitor {
     this.current = point;
     this.lastUpdatedAt = point.finalizedAt;
     this.history.push(point);
-    if (this.history.length > this.historySize) {
-      this.history.splice(0, this.history.length - this.historySize);
-    }
+    const cutoff = Date.now() - this.retentionMs;
+    this.history = this.history
+      .filter((row) => Number(row?.windowEndMs || 0) >= cutoff)
+      .slice(-this.historySize);
 
     this.metrics.finalizedWindows += 1;
     this.metrics.totalExpectedPackets += expectedPackets;
@@ -205,11 +266,11 @@ export class UdpPacketLossMonitor {
     state.lastStatSeq = Math.max(state.lastStatSeq, snapshot.statSeq);
     state.lastStatAt = Date.now();
 
-    // Everything through the finalized high-water mark is no longer needed.
     for (const seq of state.receivedSeqs) {
       if (seq <= state.lastFinalizedSeq) state.receivedSeqs.delete(seq);
     }
     this.touchSession(snapshot.sessionId, state);
+    this.persistPoint(point);
 
     if (lostPackets > 0) {
       this.logger?.warn?.(
@@ -217,6 +278,32 @@ export class UdpPacketLossMonitor {
       );
     }
     this.onUpdate?.();
+  }
+
+  persistPoint(point) {
+    this.persistChain = this.persistChain
+      .then(async () => {
+        await fs.mkdir(path.dirname(this.historyFilePath), { recursive: true });
+        await fs.appendFile(this.historyFilePath, `${JSON.stringify(point)}\n`, "utf8");
+        if (Date.now() - this.lastCompactionAt >= DEFAULT_COMPACT_INTERVAL_MS) {
+          await this.compactPersistedHistory();
+        }
+      })
+      .catch((error) => {
+        this.metrics.persistenceErrors += 1;
+        this.logger?.warn?.(`Unable to persist LogPost packet history: ${error.message}`);
+      });
+  }
+
+  async compactPersistedHistory() {
+    const cutoff = Date.now() - this.retentionMs;
+    const rows = this.history
+      .filter((row) => Number(row?.windowEndMs || 0) >= cutoff)
+      .slice(-this.historySize);
+    const text = rows.length ? `${rows.map((row) => JSON.stringify(row)).join("\n")}\n` : "";
+    await fs.mkdir(path.dirname(this.historyFilePath), { recursive: true });
+    await fs.writeFile(this.historyFilePath, text, "utf8");
+    this.lastCompactionAt = Date.now();
   }
 
   getState() {
@@ -228,7 +315,7 @@ export class UdpPacketLossMonitor {
     const lifetimeLossRate = lifetimeExpected > 0 ? lifetimeLost / lifetimeExpected : 0;
 
     return {
-      status: lossStatus(this.current?.lossRate ?? null),
+      status: lossStatus(this.current, this.staleAfterMs),
       current: this.current ? { ...this.current } : null,
       oneMinute,
       fiveMinutes,
@@ -240,7 +327,7 @@ export class UdpPacketLossMonitor {
         lossRatePercent: lifetimeLossRate * 100,
       },
       lastUpdatedAt: this.lastUpdatedAt,
-      history: this.history.slice(-60),
+      history: this.history.slice(-120),
       metrics: { ...this.metrics },
       sessions: [...this.sessions.entries()].map(([sessionId, state]) => ({
         sessionId,
@@ -251,6 +338,8 @@ export class UdpPacketLossMonitor {
         lastStatAt: state.lastStatAt ? new Date(state.lastStatAt).toISOString() : "",
       })),
       finalizeGraceMs: this.finalizeGraceMs,
+      retentionHours: this.retentionMs / 3_600_000,
+      historyFilePath: this.historyFilePath,
     };
   }
 
@@ -303,11 +392,18 @@ function aggregateHistory(history, cutoffMs) {
   };
 }
 
-function lossStatus(lossRate) {
-  if (lossRate == null) return "waiting";
+function lossStatus(current, staleAfterMs) {
+  if (!current) return "waiting";
+  const windowEndMs = Number(current.windowEndMs || 0);
+  if (!windowEndMs || Date.now() - windowEndMs > staleAfterMs) return "stale";
+  const lossRate = Number(current.lossRate || 0);
   if (lossRate >= 0.05) return "critical";
   if (lossRate >= 0.01) return "warning";
   return "healthy";
+}
+
+function sumField(rows, field) {
+  return rows.reduce((sum, row) => sum + Number(row?.[field] || 0), 0);
 }
 
 function toPositiveInteger(value) {
