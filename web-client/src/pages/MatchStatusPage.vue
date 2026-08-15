@@ -1,20 +1,17 @@
 <template>
   <div class="squad-admin-layout">
     <SquadPageToolbar
-      :search-query="pageState.searchQuery"
       :filter-mode="pageState.filterMode"
       :can-refresh="canRefresh"
       :refreshing-type="refreshingType"
       :refreshing-playtime="refreshingPlaytime"
-      :viewer-perspective-text="viewerPerspectiveText"
-      :show-viewer-perspective="ui.showTeamPerspectiveHint"
       :server-status-updated-at="serverStatusUpdatedAt"
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       :multi-select-mode="multiSelectMode"
       :view-mode="viewMode"
-      @search="pageState.searchQuery = $event"
       @filter-change="pageState.filterMode = $event"
+      @warn-all="handleTargetWarn('all')"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
@@ -94,6 +91,8 @@
               :key="team.teamId"
               :team="team"
               :can-edit-tickets="canEditTickets"
+              :can-warn="canRefresh"
+              :search-query="teamSearchQueries[team.teamId === 1 ? 'team1' : 'team2']"
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
               :health-lookup="healthLookup"
@@ -103,6 +102,8 @@
               @select-player="selectPlayer"
               @toggle-player-check="togglePlayerCheck"
               @edit-tickets="openTicketEditor"
+              @warn-team="handleTeamWarn"
+              @search="teamSearchQueries[team.teamId === 1 ? 'team1' : 'team2'] = $event"
               @select-squad="handleSquadClick"
             />
           </div>
@@ -291,7 +292,7 @@ import {
   getForceTeamChangeBatch,
   cancelForceTeamChangeBatch,
 } from "../app/teamBalanceApi";
-import { warnPlayer, kickPlayer } from "../app/squadManagementApi";
+import { warnPlayer, warnTarget, kickPlayer } from "../app/squadManagementApi";
 import {
   adaptTeam,
   adaptPlayerDetail,
@@ -497,6 +498,8 @@ const mobileTabItems = computed(() => [
   { value: "map" as const, label: "地图" },
   { value: "batch" as const, label: "批量", badge: multiSelectMode.value ? selectedPlayers.value.length : null },
 ]);
+
+const teamSearchQueries = reactive({ team1: "", team2: "" });
 
 const pageState = reactive<PageState>({
   searchQuery: "",
@@ -736,8 +739,11 @@ const rawTeams = computed(() => {
 });
 
 const viewModels = computed(() => {
-  const searchedTeams = filterTeamsBySearch(rawTeams.value, pageState.searchQuery);
-  const filteredTeams = filterTeamsByMode(searchedTeams, pageState.filterMode);
+  const filteredTeams = filterTeamsByMode(rawTeams.value, pageState.filterMode);
+  const searchedTeams = filteredTeams.map((team) => {
+    const query = team.teamId === 1 ? teamSearchQueries.team1 : teamSearchQueries.team2;
+    return filterTeamsBySearch([team], query)[0] ?? { ...team, squads: [] };
+  });
   const viewerTeamId = viewerAutoSwapEnabled.value ? findAdminTeamId(rawTeams.value, viewerSteam64.value) : null;
   return {
     teams: sortTeamsForAdminPerspective(filteredTeams, viewerTeamId).map((team) => attachTacticalStateInfoToTeam(team, tacticalPlayerLookup.value)),
@@ -1315,6 +1321,33 @@ function closePlayerDetail() {
   battlePlayerRefreshToken += 1;
 }
 
+function handleTeamWarn(teamId: number) {
+  void handleTargetWarn(teamId === 2 ? "team2" : "team1");
+}
+
+async function handleTargetWarn(targetScope: "all" | "team1" | "team2") {
+  const label = targetScope === "all" ? "全体玩家" : targetScope === "team1" ? "TEAM 1" : "TEAM 2";
+  const message = await ui.openWarnPrompt({
+    title: `AdminWarn ${label}`,
+    targetName: label,
+    defaultMessage: "请遵守服务器规则",
+  });
+  if (message === null || !message.trim()) return;
+
+  try {
+    const result = await warnTarget({
+      targetScope,
+      message: message.trim(),
+      reason: "manual_target_warn",
+      sourceModule: "web.matchStatus",
+    });
+    if (!result?.success) throw new Error(result?.errorMessage || "RCON command failed");
+    ui.pushToast({ title: "警告已发送", message: `已向${label}发送警告`, tone: "ok" });
+  } catch (error) {
+    ui.pushToast({ title: "警告发送失败", message: renderApiError(error, "RCON command failed"), tone: "error" });
+  }
+}
+
 async function handleBatchWarn() {
   if (selectedPlayers.value.length === 0) return;
   const message = await ui.openWarnPrompt({
@@ -1344,6 +1377,7 @@ async function handleBatchWarn() {
           message: message.trim() || "Admin Warning",
           reason: "manual_warn",
           sourceModule: "web.squadAdmin",
+          record: false,
         });
         if (res.success) {
           successCount++;
