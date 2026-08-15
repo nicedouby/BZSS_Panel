@@ -3899,6 +3899,44 @@ export class WebServer {
       }
     }
 
+    if (url.pathname === "/api/admin-warns/warn-target" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const api = this.modules.adminWarn;
+      if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
+      const body = await this.readJsonBody(req);
+      const targetScope = String(body?.targetScope ?? "").trim().toLowerCase();
+      if (!["all", "team1", "team2"].includes(targetScope)) {
+        return this.json(res, 400, { error: "InvalidWarningTarget" });
+      }
+      try {
+        const targetName = targetScope === "all" ? "ALL" : targetScope.toUpperCase();
+        const auditContext = {
+          action: AUDIT_ACTIONS.PLAYER_WARN,
+          category: AUDIT_CATEGORIES.PLAYER_MANAGEMENT,
+          actor: user,
+          request: req,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+          serverId: body.serverId ?? this.getCurrentServerId(""),
+          target: { type: targetScope === "all" ? "server" : "team", id: targetScope, name: targetName },
+          parameters: { message: body.message ?? "", targetScope },
+          resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
+        };
+        const result = await this.executeAudited(auditContext, ({ requestId }) => api.warnPlayer({
+          ...body,
+          targetScope,
+          targetName,
+          origin: "web",
+          actor: user,
+          sourcePage: body.sourcePage ?? AUDIT_SOURCE_PAGES.SQUAD_MANAGEMENT,
+          requestId,
+          system: false,
+        }));
+        return this.json(res, result?.code === "Forbidden" ? 403 : result.success ? 200 : 400, result);
+      } catch (err) {
+        return this.json(res, 500, { error: "InternalError", message: err.message });
+      }
+    }
+
     if (url.pathname === "/api/admin-warns/broadcast" && req.method === "POST") {
       const api = this.modules.adminWarn;
       if (!api) return this.json(res, 404, { error: "ModuleNotFound" });
