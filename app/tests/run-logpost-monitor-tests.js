@@ -32,6 +32,30 @@ function testIndependentTransportStreamsDoNotCrossTriggerGaps() {
   assert.equal(warnings.length, 0);
 }
 
+function testFileBridgeSparseSequenceIsObservationalOnly() {
+  const warnings = [];
+  const debugMessages = [];
+  const monitor = new LogPostMonitor({
+    logger: {
+      warn(message) { warnings.push(message); },
+      debug(message) { debugMessages.push(message); },
+    },
+  });
+
+  monitor.inspectEvent(createEvent({ seq: 100, transportSource: "file-bridge" }));
+  const gap = monitor.inspectEvent(createEvent({ seq: 120, transportSource: "file-bridge" }));
+
+  const state = monitor.getState();
+  assert.equal(gap, null);
+  assert.equal(state.metrics.eventGapCount, 0);
+  assert.equal(state.metrics.missingEventCount, 0);
+  assert.equal(state.metrics.observationalEventGapCount, 1);
+  assert.equal(state.metrics.observationalMissingEventCount, 19);
+  assert.equal(state.recentEventGaps.length, 0);
+  assert.equal(warnings.length, 0);
+  assert.equal(debugMessages.length, 1);
+}
+
 function testBackwardUdpPacketIsNotReportedAsGap() {
   const monitor = new LogPostMonitor({ logger: { warn() {}, debug() {} } });
 
@@ -60,6 +84,7 @@ function testLargeBackwardJumpResetsBaselineWithoutGapStorm() {
 }
 
 testIndependentTransportStreamsDoNotCrossTriggerGaps();
+testFileBridgeSparseSequenceIsObservationalOnly();
 testBackwardUdpPacketIsNotReportedAsGap();
 testLargeBackwardJumpResetsBaselineWithoutGapStorm();
 
