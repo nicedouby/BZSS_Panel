@@ -182,6 +182,27 @@ async function testTracksBoundedIncrementalTicketHistoryAndReset() {
   assert.equal(reset.resetReason, "test");
 }
 
+async function testTrackedSourcesStayBoundedAcrossProcessRestarts() {
+  const { module } = createModule({ maxTrackedSources: 2 });
+
+  for (let pid = 3001; pid <= 3006; pid += 1) {
+    module.api.ingestSample(module.api.normalizeMessage({
+      type: "ticket_sample",
+      project_dir: "C:\\server",
+      exe: "SquadGameServer.exe",
+      pid,
+      timestamp: 1760000000 + pid,
+      ok: true,
+      t1: 300,
+      t2: 300,
+    }, { address: "192.168.0.60", port: 50000 + pid }));
+  }
+
+  const state = module.api.getState();
+  assert.equal(state.sources.length, 2);
+  assert.equal(state.resourceLimits.maxTrackedSources, 2);
+}
+
 async function testWriteTicketsUsesCommandPort() {
   const commandServer = await createFakeCommandServer((payload) => ({
     ok: true,
@@ -322,6 +343,7 @@ async function run() {
   await testTracksLatestTicketSample();
   await testFlagsTicketIncreaseAndAcquisitionFailure();
   await testTracksBoundedIncrementalTicketHistoryAndReset();
+  await testTrackedSourcesStayBoundedAcrossProcessRestarts();
   await testWriteTicketsUsesCommandPort();
   await testWriteTicketsFallsBackToRemoteAddress();
   await testConfiguredCommandHostOverridesSenderAddress();
