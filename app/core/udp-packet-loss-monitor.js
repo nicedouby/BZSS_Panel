@@ -9,6 +9,8 @@ const DEFAULT_MAX_TRACKED_SESSIONS = 4;
 const DEFAULT_RETENTION_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_COMPACT_INTERVAL_MS = 10 * 60 * 1000;
 const DEFAULT_STALE_AFTER_MS = 30 * 1000;
+const DEFAULT_MAX_BUFFERED_PACKETS_PER_SESSION = 100_000;
+const MAX_BUFFERED_PACKETS_PER_SESSION = 1_000_000;
 
 /**
  * Compares LogPost EVENT PacketSeq values against periodic STAT snapshots.
@@ -24,6 +26,7 @@ export class UdpPacketLossMonitor {
     historySize = DEFAULT_HISTORY_SIZE,
     finalizeGraceMs = DEFAULT_FINALIZE_GRACE_MS,
     maxTrackedSessions = DEFAULT_MAX_TRACKED_SESSIONS,
+    maxBufferedPacketsPerSession = DEFAULT_MAX_BUFFERED_PACKETS_PER_SESSION,
     historyFilePath = "./data/logpost-packet-stats.jsonl",
     retentionMs = DEFAULT_RETENTION_MS,
     staleAfterMs = DEFAULT_STALE_AFTER_MS,
@@ -33,12 +36,19 @@ export class UdpPacketLossMonitor {
     this.historySize = Math.max(120, Number(historySize) || DEFAULT_HISTORY_SIZE);
     this.finalizeGraceMs = Math.max(0, Number(finalizeGraceMs) || DEFAULT_FINALIZE_GRACE_MS);
     this.maxTrackedSessions = Math.max(2, Number(maxTrackedSessions) || DEFAULT_MAX_TRACKED_SESSIONS);
+    this.maxBufferedPacketsPerSession = Math.max(
+      3,
+      Math.min(
+        MAX_BUFFERED_PACKETS_PER_SESSION,
+        Number(maxBufferedPacketsPerSession) || DEFAULT_MAX_BUFFERED_PACKETS_PER_SESSION,
+      ),
+    );
     this.historyFilePath = path.resolve(process.cwd(), String(historyFilePath || "./data/logpost-packet-stats.jsonl"));
     this.retentionMs = Math.max(60 * 60 * 1000, Number(retentionMs) || DEFAULT_RETENTION_MS);
     this.staleAfterMs = Math.max(15_000, Number(staleAfterMs) || DEFAULT_STALE_AFTER_MS);
 
     this.sessions = new Map();
-    this.pendingTimers = new Set();
+    this.pendingFinalizations = new Map();
     this.history = [];
     this.current = null;
     this.lastUpdatedAt = "";
@@ -58,6 +68,9 @@ export class UdpPacketLossMonitor {
       totalExpectedPackets: 0,
       totalReceivedPackets: 0,
       totalLostPackets: 0,
+      bufferPrunes: 0,
+      bufferedPacketsDiscarded: 0,
+      coalescedStatPackets: 0,
     };
   }
 
@@ -101,8 +114,8 @@ export class UdpPacketLossMonitor {
   }
 
   async close() {
-    for (const timer of this.pendingTimers) clearTimeout(timer);
-    this.pendingTimers.clear();
+    for (const pending of this.pendingFinalizations.values()) clearTimeout(pending.timer);
+    this.pendingFinalizations.clear();
     await this.persistChain.catch(() => {});
   }
 
@@ -128,6 +141,9 @@ export class UdpPacketLossMonitor {
 
     state.receivedSeqs.add(seq);
     state.highestReceivedSeq = Math.max(state.highestReceivedSeq, seq);
+    if (state.receivedSeqs.size > this.maxBufferedPacketsPerSession) {
+      this.pruneSessionBuffer(sessionId, state, seq);
+    }
     state.lastEventAt = Date.now();
     this.metrics.uniqueBusinessPacketsObserved += 1;
     this.touchSession(sessionId, state);
@@ -172,12 +188,28 @@ export class UdpPacketLossMonitor {
       receivedAtMs: Date.now(),
     };
 
+    const pending = this.pendingFinalizations.get(sessionId);
+    if (pending) {
+      if (
+        snapshot.statSeq > 0
+        && pending.snapshot.statSeq > 0
+        && snapshot.statSeq <= pending.snapshot.statSeq
+      ) {
+        this.metrics.staleStatPackets += 1;
+        return false;
+      }
+      clearTimeout(pending.timer);
+      this.metrics.coalescedStatPackets += 1;
+    }
+
     const timer = setTimeout(() => {
-      this.pendingTimers.delete(timer);
+      const active = this.pendingFinalizations.get(sessionId);
+      if (!active || active.timer !== timer) return;
+      this.pendingFinalizations.delete(sessionId);
       this.finalizeStat(snapshot);
     }, this.finalizeGraceMs);
     timer.unref?.();
-    this.pendingTimers.add(timer);
+    this.pendingFinalizations.set(sessionId, { timer, snapshot });
     return true;
   }
 
@@ -338,6 +370,8 @@ export class UdpPacketLossMonitor {
         lastStatAt: state.lastStatAt ? new Date(state.lastStatAt).toISOString() : "",
       })),
       finalizeGraceMs: this.finalizeGraceMs,
+      pendingFinalizations: this.pendingFinalizations.size,
+      maxBufferedPacketsPerSession: this.maxBufferedPacketsPerSession,
       retentionHours: this.retentionMs / 3_600_000,
       historyFilePath: this.historyFilePath,
     };
@@ -354,6 +388,7 @@ export class UdpPacketLossMonitor {
       lastStatSeq: 0,
       lastEventAt: 0,
       lastStatAt: 0,
+      lastBufferPruneLogAt: 0,
     };
     this.sessions.set(sessionId, state);
     this.pruneSessions();
@@ -366,11 +401,42 @@ export class UdpPacketLossMonitor {
     this.pruneSessions();
   }
 
+  pruneSessionBuffer(sessionId, state, newestSeq) {
+    const retainCount = Math.max(1, Math.floor(this.maxBufferedPacketsPerSession * 0.75));
+    const pruneThrough = Math.max(state.lastFinalizedSeq, newestSeq - retainCount);
+    let discarded = 0;
+    for (const bufferedSeq of state.receivedSeqs) {
+      if (bufferedSeq <= pruneThrough) {
+        state.receivedSeqs.delete(bufferedSeq);
+        discarded += 1;
+      }
+    }
+    state.lastFinalizedSeq = Math.max(state.lastFinalizedSeq, pruneThrough);
+    this.metrics.bufferPrunes += 1;
+    this.metrics.bufferedPacketsDiscarded += discarded;
+
+    const now = Date.now();
+    if (now - state.lastBufferPruneLogAt >= 60_000) {
+      state.lastBufferPruneLogAt = now;
+      this.logger?.warn?.(
+        `LogPost packet sequence buffer reached its safety limit for session=${sessionId}; discarded=${discarded} resumeAfterSeq=${state.lastFinalizedSeq}`,
+      );
+    }
+  }
+
+  deletePendingFinalization(sessionId) {
+    const pending = this.pendingFinalizations.get(sessionId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingFinalizations.delete(sessionId);
+  }
+
   pruneSessions() {
     while (this.sessions.size > this.maxTrackedSessions) {
       const oldestKey = this.sessions.keys().next().value;
       if (!oldestKey) break;
       this.sessions.delete(oldestKey);
+      this.deletePendingFinalization(oldestKey);
     }
   }
 }
