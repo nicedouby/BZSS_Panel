@@ -8,7 +8,9 @@
       :players-updated-at="playersUpdatedAt"
       :squads-updated-at="squadsUpdatedAt"
       :multi-select-mode="multiSelectMode"
+      :can-online-reserve-grant="canRefresh"
       @warn-target="handleTargetWarn"
+      @open-online-reserve-grant="onlineReserveGrantOpen = true"
       @refresh="handleToolbarRefresh"
       @refresh-playtime="refreshOnlinePlaytime"
       @refresh-playtime-force="refreshOnlinePlaytime(true)"
@@ -275,6 +277,12 @@
         </div>
       </StickyActionBar>
     </transition>
+
+    <OnlineReserveGrantDialog
+      :open="onlineReserveGrantOpen"
+      @close="onlineReserveGrantOpen = false"
+      @success="handleOnlineReserveGrantSuccess"
+    />
   </div>
 </template>
 
@@ -311,6 +319,7 @@ import { 获取战斗群旗帜, getFactionFromTeamId, getFlagUrl } from "../shar
 import DataState from "../components/common/DataState.vue";
 import ErrorBlock from "../components/common/ErrorBlock.vue";
 import SquadPageToolbar from "../components/squad-admin/SquadPageToolbar.vue";
+import OnlineReserveGrantDialog from "../components/squad-admin/OnlineReserveGrantDialog.vue";
 import TeamColumn from "../components/squad-admin/TeamColumn.vue";
 import MatchChatPanel from "../components/match/MatchChatPanel.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
@@ -336,6 +345,7 @@ import type {
   SquadViewModel,
 } from "../types/squad-admin.types";
 import type { RuntimePlayer } from "../stores/player.store";
+import type { OnlineReserveGrantResult } from "../app/reserveSlotsApi";
 
 interface PlaytimeJobProgressEvent {
   at?: number | string | null;
@@ -517,6 +527,7 @@ const pageState = reactive<PageState>({
 });
 
 const canRefresh = computed(() => Boolean(auth.user?.isSuperAdmin));
+const onlineReserveGrantOpen = ref(false);
 const refreshingType = computed(() => {
   if (refreshingPlayers.value) return "players";
   if (refreshingSquads.value) return "squads";
@@ -1377,6 +1388,17 @@ function closePlayerDetail() {
 
 function handleTeamWarn(teamId: number) {
   void handleTargetWarn(teamId === 2 ? "team2" : "team1");
+}
+
+function handleOnlineReserveGrantSuccess(result: OnlineReserveGrantResult) {
+  onlineReserveGrantOpen.value = false;
+  ui.pushToast({
+    title: "预留位批量激活完成",
+    message: result.warningFailureCount > 0
+      ? `已为 ${result.grantedCount} 名玩家激活；${result.warningFailureCount} 条游戏内警告发送失败。`
+      : `已为 ${result.grantedCount} 名玩家各激活 ${result.durationDays} 天预留位。`,
+    tone: result.warningFailureCount > 0 ? "warn" : "ok",
+  });
 }
 
 async function handleTargetWarn(targetScope: "all" | "team1" | "team2") {
