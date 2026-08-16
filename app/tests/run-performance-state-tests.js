@@ -36,8 +36,9 @@ async function testPerformanceMonitor() {
   const monitor = new PerformanceMonitor({ config, logger: mockLogger });
   monitor.start();
 
-  // Wait to allow sampling
+  // Wait to allow a meaningful utilization delta, then force a second sample.
   await new Promise((resolve) => setTimeout(resolve, 350));
+  monitor.sample();
   monitor.stop();
 
   const snapshot = monitor.getSnapshot();
@@ -46,6 +47,11 @@ async function testPerformanceMonitor() {
   assert.ok(snapshot.latest, "Should have latest snapshot");
   assert.ok(snapshot.latest.memory.rss > 0, "RSS should be positive");
   assert.ok(snapshot.latest.eventLoop, "Should have eventLoop latency stats");
+  assert.ok(Number.isFinite(snapshot.latest.eventLoop.utilization), "Should expose event loop utilization");
+  assert.ok(snapshot.latest.eventLoop.utilization >= 0 && snapshot.latest.eventLoop.utilization <= 1, "Event loop utilization should be a ratio");
+  assert.ok(Number.isFinite(snapshot.latest.eventLoop.utilizationPercent), "Should expose event loop utilization percent");
+  assert.ok(Number.isFinite(snapshot.latest.eventLoop.activeMs), "Should expose active event loop time");
+  assert.ok(Number.isFinite(snapshot.latest.eventLoop.idleMs), "Should expose idle event loop time");
 
   monitor.recordOperation("eventBus:On_BzssCorePlayerChunk", 18.5);
   monitor.recordOperation("eventBus:On_BzssCorePlayerChunk", 6.5);
