@@ -101,6 +101,14 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       return withReserveWriteLock(() => upsertReserveSlotMember(input));
     },
 
+    async previewOnlineGrant(input = {}) {
+      return withReserveWriteLock(() => previewOnlineReserveGrant(input));
+    },
+
+    async grantOnlinePlayers(input = {}, context = {}) {
+      return withReserveWriteLock(() => grantOnlineReservePlayers(input, context));
+    },
+
     async deleteMember(input = {}) {
       return withReserveWriteLock(() => deleteReserveSlotMember(input));
     },
@@ -431,6 +439,277 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       message: "预留位时间已更新。",
       savedMember: memberForWrite,
     });
+  }
+
+  async function previewOnlineReserveGrant(input = {}) {
+    const durationDays = normalizeOnlineGrantDays(input.durationDays);
+    const roster = buildOnlineGrantRoster();
+    return {
+      ok: true,
+      canGrant: roster.players.length > 0 && roster.missingIdentityCount === 0,
+      durationDays,
+      playerCount: roster.players.length,
+      activePlayerCount: roster.activePlayerCount,
+      missingIdentityCount: roster.missingIdentityCount,
+      duplicateIdentityCount: roster.duplicateIdentityCount,
+      players: roster.players.map((player) => ({
+        steamId: player.steamId,
+        playerId: player.playerId,
+        name: player.name,
+      })),
+      rosterToken: roster.rosterToken,
+      generatedAt: new Date().toISOString(),
+      message: roster.missingIdentityCount > 0
+        ? "在线名单中存在无法识别 Steam64 的玩家，已禁止批量发放。"
+        : roster.players.length > 0
+          ? "在线名单快照已生成，请确认后执行。"
+          : "当前没有可发放预留位的在线玩家。",
+    };
+  }
+
+  async function grantOnlineReservePlayers(input = {}, context = {}) {
+    const durationDays = normalizeOnlineGrantDays(input.durationDays);
+    const requestId = normalizeOnlineGrantRequestId(input.requestId);
+    await loadStoreFromDisk({ repair: true });
+
+    const existingOperation = (runtime.store.onlineGrantOperations ?? [])
+      .find((item) => item.requestId === requestId) ?? null;
+    if (existingOperation) {
+      if (Number(existingOperation.durationDays) !== durationDays) {
+        throw createReserveSlotError(409, "OnlineGrantRequestConflict", "该请求编号已用于另一组发放参数。");
+      }
+      return resumeOnlineGrantOperation(existingOperation, { replayed: true });
+    }
+
+    if (input.confirmed !== true) {
+      throw createReserveSlotError(400, "OnlineGrantConfirmationRequired", "必须明确确认后才能批量发放预留位。");
+    }
+
+    const roster = buildOnlineGrantRoster();
+    const submittedRosterToken = String(input.rosterToken ?? "").trim();
+    if (!submittedRosterToken || submittedRosterToken !== roster.rosterToken) {
+      throw createReserveSlotError(409, "OnlineGrantRosterChanged", "在线玩家名单已经变化，请重新预览并确认。");
+    }
+    if (roster.missingIdentityCount > 0) {
+      throw createReserveSlotError(409, "OnlineGrantMissingSteamId", "在线名单中存在无法识别 Steam64 的玩家，未执行任何发放。");
+    }
+    if (roster.players.length <= 0) {
+      throw createReserveSlotError(409, "OnlineGrantEmptyRoster", "当前没有可发放预留位的在线玩家。");
+    }
+
+    refreshConfigFromRuntime();
+    const adminFilePath = runtime.config.adminFilePath;
+    if (!adminFilePath) {
+      throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
+    }
+    const resolvedAdminFilePath = resolveConfigPath(adminFilePath, "");
+    let adminContent = "";
+    try {
+      adminContent = await fs.readFile(resolvedAdminFilePath, "utf8");
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw createReserveSlotError(404, "AdminFileNotFound", "管理员配置文件不存在。");
+      }
+      throw error;
+    }
+
+    const preparedAt = new Date().toISOString();
+    const parsedCurrent = parseReserveSlotsFromAdminFileContent(adminContent, {
+      adminFilePath,
+      importedAt: preparedAt,
+      logger: moduleLogger,
+      runtimeState: core?.runtimeState,
+    });
+    const currentBySteamId = new Map((parsedCurrent.members ?? []).map((member) => [member.steamId, member]));
+    const reason = `对局在线玩家批量激活 ${durationDays} 天`;
+    const plannedPlayers = roster.players.map((player) => {
+      const existingMember = currentBySteamId.get(player.steamId) ?? null;
+      const expireAt = formatLocalDateTime(addDays(pickGrantBaseDate(existingMember?.expireAt ?? null), durationDays));
+      return {
+        steamId: player.steamId,
+        playerId: player.playerId,
+        name: player.name,
+        group: existingMember?.group || DEFAULT_RESERVE_GROUP,
+        expireAt,
+        remainingDays: formatRemainingReserveDays(expireAt) ?? durationDays,
+        reason,
+        warningStatus: "pending",
+        warningError: "",
+      };
+    });
+
+    const operation = normalizeOnlineGrantOperation({
+      requestId,
+      status: "prepared",
+      durationDays,
+      rosterToken: roster.rosterToken,
+      activePlayerCount: roster.activePlayerCount,
+      createdAt: preparedAt,
+      createdBy: normalizeActorName(context.actor),
+      players: plannedPlayers,
+      warningSuccessCount: 0,
+      warningFailureCount: 0,
+    });
+    const preparedStore = mergeStoreWithCdkData(runtime.store, parsedCurrent);
+    preparedStore.onlineGrantOperations = [
+      ...(preparedStore.onlineGrantOperations ?? []).filter((item) => item.requestId !== requestId).slice(-49),
+      operation,
+    ];
+    runtime.store = preparedStore;
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+
+    return resumeOnlineGrantOperation(operation, { replayed: false });
+  }
+
+  async function resumeOnlineGrantOperation(operation, { replayed = false } = {}) {
+    let current = operation;
+    if (current.status === "prepared") {
+      current = await commitPreparedOnlineGrantOperation(current);
+    }
+    if (current.status === "notifying") {
+      current = await notifyOnlineGrantOperation(current);
+    }
+    if (current.status !== "completed") {
+      throw createReserveSlotError(500, "OnlineGrantIncomplete", "批量预留位操作处于未知状态，请检查操作记录。");
+    }
+    return buildOnlineGrantResult(current, { replayed });
+  }
+
+  async function commitPreparedOnlineGrantOperation(operation) {
+    refreshConfigFromRuntime();
+    const adminFilePath = runtime.config.adminFilePath;
+    if (!adminFilePath) {
+      throw createReserveSlotError(400, "AdminFileNotConfigured", "管理员配置文件未配置。");
+    }
+    const resolvedAdminFilePath = resolveConfigPath(adminFilePath, "");
+    let content = "";
+    try {
+      content = await fs.readFile(resolvedAdminFilePath, "utf8");
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        throw createReserveSlotError(404, "AdminFileNotFound", "管理员配置文件不存在。");
+      }
+      throw error;
+    }
+
+    let nextContent = content;
+    for (const player of operation.players ?? []) {
+      nextContent = upsertReserveSlotInAdminFileContent(nextContent, {
+        steamId: player.steamId,
+        group: player.group,
+        expireAt: player.expireAt,
+        name: player.name,
+        reason: player.reason,
+      });
+    }
+    if (nextContent !== content) {
+      await writeTextFileAtomic(resolvedAdminFilePath, nextContent);
+    }
+
+    const importedAt = new Date().toISOString();
+    const parsed = parseReserveSlotsFromAdminFileContent(nextContent, {
+      adminFilePath,
+      importedAt,
+      logger: moduleLogger,
+      runtimeState: core?.runtimeState,
+    });
+    parsed.source.adminFilePath = adminFilePath;
+    parsed.source.lastImportedAt = importedAt;
+    parsed.members = await enrichMembersWithLinkedNames(parsed.members, {
+      playerDatabase: modules?.playerDatabase,
+      runtimeState: core?.runtimeState,
+    });
+
+    const nextStore = mergeStoreWithCdkData(runtime.store, parsed);
+    const nextOperation = {
+      ...operation,
+      status: "notifying",
+      committedAt: importedAt,
+    };
+    nextStore.onlineGrantOperations = replaceOnlineGrantOperation(nextStore.onlineGrantOperations, nextOperation);
+    runtime.store = nextStore;
+    runtime.loadedAt = importedAt;
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    moduleLogger?.info?.(`[ReserveSlots] online batch committed: requestId=${operation.requestId} players=${operation.players.length} days=${operation.durationDays}`);
+    return nextOperation;
+  }
+
+  async function notifyOnlineGrantOperation(operation) {
+    let nextOperation = normalizeOnlineGrantOperation(operation);
+    for (let index = 0; index < nextOperation.players.length; index += 1) {
+      const player = nextOperation.players[index];
+      if (player.warningStatus !== "pending") continue;
+      const message = `已为你激活 ${nextOperation.durationDays} 天预留位，当前还剩 ${player.remainingDays} 天预留位。`;
+      let warningStatus = "failed";
+      let warningError = "";
+      try {
+        if (typeof modules?.adminWarn?.warnPlayer !== "function") {
+          throw new Error("adminWarn.warnPlayer is unavailable.");
+        }
+        const warning = await modules.adminWarn.warnPlayer({
+          targetName: player.name,
+          targetPlayerId: player.playerId ?? undefined,
+          targetSteamId: player.steamId,
+          message,
+          reason: "online_reserve_grant_success",
+          sourceModule: MODULE_ID,
+          actor: { username: nextOperation.createdBy },
+          record: false,
+        });
+        if (!warning?.success) {
+          throw new Error(warning?.errorMessage || warning?.skipReason || "RCON warning failed.");
+        }
+        warningStatus = "success";
+      } catch (error) {
+        warningError = error?.message ?? String(error);
+      }
+
+      nextOperation.players[index] = {
+        ...player,
+        warningStatus,
+        warningError,
+      };
+      nextOperation.warningSuccessCount = nextOperation.players.filter((item) => item.warningStatus === "success").length;
+      nextOperation.warningFailureCount = nextOperation.players.filter((item) => item.warningStatus === "failed").length;
+      runtime.store.onlineGrantOperations = replaceOnlineGrantOperation(runtime.store.onlineGrantOperations, nextOperation);
+      await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    }
+
+    nextOperation = {
+      ...nextOperation,
+      status: "completed",
+      completedAt: new Date().toISOString(),
+    };
+    runtime.store.onlineGrantOperations = replaceOnlineGrantOperation(runtime.store.onlineGrantOperations, nextOperation);
+    await persistStore(runtime.resolvedLocalReserveFilePath, runtime.store);
+    return nextOperation;
+  }
+
+  function buildOnlineGrantResult(operation, { replayed = false } = {}) {
+    return {
+      ok: true,
+      success: true,
+      replayed,
+      requestId: operation.requestId,
+      durationDays: operation.durationDays,
+      playerCount: operation.players.length,
+      grantedCount: operation.players.length,
+      warningSuccessCount: operation.warningSuccessCount,
+      warningFailureCount: operation.warningFailureCount,
+      completedAt: operation.completedAt,
+      players: operation.players.map((player) => ({
+        steamId: player.steamId,
+        playerId: player.playerId,
+        name: player.name,
+        expireAt: player.expireAt,
+        remainingDays: player.remainingDays,
+        warningStatus: player.warningStatus,
+        warningError: player.warningError,
+      })),
+      message: operation.warningFailureCount > 0
+        ? `已为 ${operation.players.length} 名玩家激活预留位；${operation.warningFailureCount} 条游戏内通知发送失败。`
+        : `已为 ${operation.players.length} 名玩家激活 ${operation.durationDays} 天预留位。`,
+    };
   }
 
   async function deleteReserveSlotMember(input = {}) {
@@ -1712,6 +1991,9 @@ function normalizeStore(raw, { adminFilePath = "" } = {}) {
   const cdkBatches = Array.isArray(raw?.cdkBatches) ? raw.cdkBatches.map(normalizeCdkBatch).filter(Boolean) : [];
   const cdkCodes = Array.isArray(raw?.cdkCodes) ? raw.cdkCodes.map(normalizeCdkCode).filter(Boolean) : [];
   const cdkActivations = Array.isArray(raw?.cdkActivations) ? raw.cdkActivations.map(normalizeCdkActivation).filter(Boolean) : [];
+  const onlineGrantOperations = Array.isArray(raw?.onlineGrantOperations)
+    ? raw.onlineGrantOperations.map(normalizeOnlineGrantOperation).filter(Boolean).slice(-50)
+    : [];
 
   return {
     version: Number(raw?.version ?? DEFAULT_STORE_VERSION) || DEFAULT_STORE_VERSION,
@@ -1724,6 +2006,111 @@ function normalizeStore(raw, { adminFilePath = "" } = {}) {
     cdkBatches,
     cdkCodes,
     cdkActivations,
+    onlineGrantOperations,
+  };
+}
+
+function normalizeOnlineGrantOperation(operation) {
+  if (!operation || typeof operation !== "object" || Array.isArray(operation)) return null;
+  const requestId = String(operation.requestId ?? "").trim();
+  const durationDays = Number(operation.durationDays ?? 0);
+  if (!requestId || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 30) return null;
+  const players = (Array.isArray(operation.players) ? operation.players : [])
+    .map((player) => {
+      const steamId = String(player?.steamId ?? "").trim();
+      if (!STEAM64_RE.test(steamId)) return null;
+      return {
+        steamId,
+        playerId: optionalText(player?.playerId),
+        name: String(player?.name ?? "").trim() || "Unknown Player",
+        group: String(player?.group ?? DEFAULT_RESERVE_GROUP).trim() || DEFAULT_RESERVE_GROUP,
+        expireAt: String(player?.expireAt ?? "").trim(),
+        remainingDays: Math.max(0, Number(player?.remainingDays ?? 0) || 0),
+        reason: String(player?.reason ?? "").trim(),
+        warningStatus: ["pending", "success", "failed"].includes(player?.warningStatus) ? player.warningStatus : "pending",
+        warningError: String(player?.warningError ?? "").trim(),
+      };
+    })
+    .filter(Boolean);
+  return {
+    requestId,
+    status: ["prepared", "notifying", "completed"].includes(operation.status) ? operation.status : "prepared",
+    durationDays,
+    rosterToken: String(operation.rosterToken ?? "").trim(),
+    activePlayerCount: Math.max(0, Number(operation.activePlayerCount ?? players.length) || 0),
+    createdAt: optionalText(operation.createdAt),
+    createdBy: String(operation.createdBy ?? "system").trim() || "system",
+    committedAt: optionalText(operation.committedAt),
+    completedAt: optionalText(operation.completedAt),
+    warningSuccessCount: Math.max(0, Number(operation.warningSuccessCount ?? 0) || 0),
+    warningFailureCount: Math.max(0, Number(operation.warningFailureCount ?? 0) || 0),
+    players,
+  };
+}
+
+function replaceOnlineGrantOperation(operations, nextOperation) {
+  const normalized = normalizeOnlineGrantOperation(nextOperation);
+  if (!normalized) return Array.isArray(operations) ? operations : [];
+  return [
+    ...(Array.isArray(operations) ? operations : []).filter((item) => item?.requestId !== normalized.requestId).slice(-49),
+    normalized,
+  ];
+}
+
+function normalizeOnlineGrantDays(value) {
+  const durationDays = Number(value);
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 30) {
+    throw createReserveSlotError(400, "InvalidOnlineGrantDuration", "批量激活天数必须是 1 到 30 之间的整数。");
+  }
+  return durationDays;
+}
+
+function normalizeOnlineGrantRequestId(value) {
+  const requestId = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(requestId)) {
+    throw createReserveSlotError(400, "InvalidOnlineGrantRequestId", "批量激活请求编号无效。");
+  }
+  return requestId;
+}
+
+function buildOnlineGrantRoster() {
+  const snapshot = core?.runtimeState?.getPlayers?.() ?? {};
+  const activePlayers = Array.isArray(snapshot?.active) ? snapshot.active : [];
+  const players = [];
+  const missingIdentities = [];
+  const seenSteamIds = new Set();
+  let duplicateIdentityCount = 0;
+
+  for (let index = 0; index < activePlayers.length; index += 1) {
+    const source = activePlayers[index] ?? {};
+    const steamId = String(source.steamId ?? source.steamID ?? source.steam64 ?? source.steam64ID ?? "").trim();
+    const playerIdValue = source.playerId ?? source.playerID ?? source.id ?? null;
+    const playerId = playerIdValue == null ? null : String(playerIdValue).trim() || null;
+    const name = String(source.name ?? source.playerName ?? source.player_name ?? "").trim() || "Unknown Player";
+    if (!STEAM64_RE.test(steamId)) {
+      missingIdentities.push({ index, playerId, name });
+      continue;
+    }
+    if (seenSteamIds.has(steamId)) {
+      duplicateIdentityCount += 1;
+      continue;
+    }
+    seenSteamIds.add(steamId);
+    players.push({ steamId, playerId, name });
+  }
+
+  players.sort((left, right) => left.steamId.localeCompare(right.steamId));
+  const rosterIdentity = {
+    activePlayerCount: activePlayers.length,
+    players: players.map((player) => [player.steamId, player.playerId ?? ""]),
+    missing: missingIdentities.map((player) => [player.playerId ?? "", player.name]),
+  };
+  return {
+    players,
+    activePlayerCount: activePlayers.length,
+    missingIdentityCount: missingIdentities.length,
+    duplicateIdentityCount,
+    rosterToken: crypto.createHash("sha256").update(JSON.stringify(rosterIdentity)).digest("hex"),
   };
 }
 
@@ -1854,6 +2241,7 @@ function createEmptyStore(adminFilePath = "") {
     cdkBatches: [],
     cdkCodes: [],
     cdkActivations: [],
+    onlineGrantOperations: [],
   };
 }
 
@@ -1863,6 +2251,7 @@ function mergeStoreWithCdkData(previousStore, nextBaseStore) {
     cdkBatches: cloneValue(previousStore?.cdkBatches ?? []),
     cdkCodes: cloneValue(previousStore?.cdkCodes ?? []),
     cdkActivations: cloneValue(previousStore?.cdkActivations ?? []),
+    onlineGrantOperations: cloneValue(previousStore?.onlineGrantOperations ?? []),
   }, {
     adminFilePath: nextBaseStore?.source?.adminFilePath ?? "",
   });
