@@ -443,10 +443,12 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
   async function previewOnlineReserveGrant(input = {}) {
     const durationDays = normalizeOnlineGrantDays(input.durationDays);
-    const roster = buildOnlineGrantRoster(core?.runtimeState);
+    const roster = buildCurrentOnlineGrantRoster();
     return {
       ok: true,
-      canGrant: roster.players.length > 0 && roster.missingIdentityCount === 0,
+      canGrant: roster.players.length > 0
+        && roster.missingIdentityCount === 0
+        && roster.duplicateIdentityCount === 0,
       durationDays,
       playerCount: roster.players.length,
       activePlayerCount: roster.activePlayerCount,
@@ -461,6 +463,8 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       generatedAt: new Date().toISOString(),
       message: roster.missingIdentityCount > 0
         ? "在线名单中存在无法识别 Steam64 的玩家，已禁止批量发放。"
+        : roster.duplicateIdentityCount > 0
+          ? "在线名单中存在重复 Steam64，已禁止批量发放。"
         : roster.players.length > 0
           ? "在线名单快照已生成，请确认后执行。"
           : "当前没有可发放预留位的在线玩家。",
@@ -485,13 +489,16 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       throw createReserveSlotError(400, "OnlineGrantConfirmationRequired", "必须明确确认后才能批量发放预留位。");
     }
 
-    const roster = buildOnlineGrantRoster(core?.runtimeState);
+    const roster = buildCurrentOnlineGrantRoster();
     const submittedRosterToken = String(input.rosterToken ?? "").trim();
     if (!submittedRosterToken || submittedRosterToken !== roster.rosterToken) {
       throw createReserveSlotError(409, "OnlineGrantRosterChanged", "在线玩家名单已经变化，请重新预览并确认。");
     }
     if (roster.missingIdentityCount > 0) {
       throw createReserveSlotError(409, "OnlineGrantMissingSteamId", "在线名单中存在无法识别 Steam64 的玩家，未执行任何发放。");
+    }
+    if (roster.duplicateIdentityCount > 0) {
+      throw createReserveSlotError(409, "OnlineGrantDuplicateSteamId", "在线名单中存在重复 Steam64，未执行任何发放。");
     }
     if (roster.players.length <= 0) {
       throw createReserveSlotError(409, "OnlineGrantEmptyRoster", "当前没有可发放预留位的在线玩家。");
@@ -710,6 +717,25 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
         ? `已为 ${operation.players.length} 名玩家激活预留位；${operation.warningFailureCount} 条游戏内通知发送失败。`
         : `已为 ${operation.players.length} 名玩家激活 ${operation.durationDays} 天预留位。`,
     };
+  }
+
+  function buildCurrentOnlineGrantRoster() {
+    let squadPlayers = [];
+    const squadApi = modules?.squadManagement;
+    try {
+      const snapshot = typeof squadApi?.getCurrent === "function"
+        ? squadApi.getCurrent()
+        : typeof squadApi?.getState === "function"
+          ? squadApi.getState()
+          : null;
+      if (Array.isArray(snapshot?.players)) squadPlayers = snapshot.players;
+    } catch (error) {
+      moduleLogger?.warn?.(`[ReserveSlots] failed to read squad roster: ${error?.message ?? String(error)}`);
+    }
+
+    const runtimeSnapshot = core?.runtimeState?.getPlayers?.() ?? {};
+    const runtimePlayers = Array.isArray(runtimeSnapshot?.active) ? runtimeSnapshot.active : [];
+    return buildOnlineGrantRoster(squadPlayers.length > 0 ? squadPlayers : runtimePlayers);
   }
 
   async function deleteReserveSlotMember(input = {}) {
@@ -2073,16 +2099,15 @@ function normalizeOnlineGrantRequestId(value) {
   return requestId;
 }
 
-function buildOnlineGrantRoster(runtimeState) {
-  const snapshot = runtimeState?.getPlayers?.() ?? {};
-  const activePlayers = Array.isArray(snapshot?.active) ? snapshot.active : [];
+function buildOnlineGrantRoster(activePlayers = []) {
+  const normalizedActivePlayers = Array.isArray(activePlayers) ? activePlayers : [];
   const players = [];
   const missingIdentities = [];
   const seenSteamIds = new Set();
   let duplicateIdentityCount = 0;
 
-  for (let index = 0; index < activePlayers.length; index += 1) {
-    const source = activePlayers[index] ?? {};
+  for (let index = 0; index < normalizedActivePlayers.length; index += 1) {
+    const source = normalizedActivePlayers[index] ?? {};
     const steamId = String(source.steamId ?? source.steamID ?? source.steam64 ?? source.steam64ID ?? "").trim();
     const playerIdValue = source.playerId ?? source.playerID ?? source.id ?? null;
     const playerId = playerIdValue == null ? null : String(playerIdValue).trim() || null;
@@ -2101,13 +2126,13 @@ function buildOnlineGrantRoster(runtimeState) {
 
   players.sort((left, right) => left.steamId.localeCompare(right.steamId));
   const rosterIdentity = {
-    activePlayerCount: activePlayers.length,
+    activePlayerCount: normalizedActivePlayers.length,
     players: players.map((player) => [player.steamId, player.playerId ?? ""]),
     missing: missingIdentities.map((player) => [player.playerId ?? "", player.name]),
   };
   return {
     players,
-    activePlayerCount: activePlayers.length,
+    activePlayerCount: normalizedActivePlayers.length,
     missingIdentityCount: missingIdentities.length,
     duplicateIdentityCount,
     rosterToken: crypto.createHash("sha256").update(JSON.stringify(rosterIdentity)).digest("hex"),
