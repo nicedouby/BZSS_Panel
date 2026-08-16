@@ -19,10 +19,10 @@ const LEVEL_WEIGHT = {
 };
 
 const DEFAULT_LABELS = {
-  debug: "DEBUG",
-  info: "INFO",
-  warn: "WARN",
-  error: "ERROR",
+  debug: "调试",
+  info: "信息",
+  warn: "警告",
+  error: "错误",
 };
 
 const LEVEL_COLORS = {
@@ -132,7 +132,7 @@ export class Logger {
       time: new Date().toISOString(),
       level: normalizedLevel,
       label: String(mergedContext.label || DEFAULT_LABELS[normalizedLevel] || normalizedLevel).toUpperCase(),
-      message: String(renderedMessage ?? ""),
+      message: translateRuntimeMessage(renderedMessage),
       stream: String(mergedContext.stream ?? "app"),
       channel: String(mergedContext.channel ?? "app"),
       scope: deriveScope(mergedContext),
@@ -182,6 +182,35 @@ export class Logger {
   color(text, code) {
     return this.useColor ? `${code}${text}${ANSI.reset}` : text;
   }
+}
+
+function translateRuntimeMessage(message) {
+  const source = String(message ?? "");
+  const replacements = [
+    [/\\bstarting\\.\\.?/gi, "正在启动。"],
+    [/\\bstarted\\.\\.?/gi, "已启动。"],
+    [/\\bstopping\\.\\.?/gi, "正在停止。"],
+    [/\\bstopped\\.\\.?/gi, "已停止。"],
+    [/\\bshutdown requested\\.?/gi, "收到停止请求。"],
+    [/\\bfailed\\b/gi, "失败"],
+    [/\\berror\\b/gi, "错误"],
+    [/\\bwarning\\b/gi, "警告"],
+    [/\\bconnected\\b/gi, "已连接"],
+    [/\\bdisconnected\\b/gi, "已断开连接"],
+    [/\\blistening\\b/gi, "正在监听"],
+    [/\\bloaded\\b/gi, "已加载"],
+    [/\\bloading\\b/gi, "正在加载"],
+    [/\\benabled\\b/gi, "已启用"],
+    [/\\bdisabled\\b/gi, "已禁用"],
+    [/\\bskipped\\b/gi, "已跳过"],
+    [/\\bnot found\\b/gi, "未找到"],
+    [/\\btimeout\\b/gi, "超时"],
+    [/\\bretrying\\b/gi, "正在重试"],
+    [/\\bcompleted\\b/gi, "已完成"],
+    [/\\brequest\\b/gi, "请求"],
+    [/\\bresponse\\b/gi, "响应"],
+  ];
+  return replacements.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), source);
 }
 
 function writeConsole(logger, entry) {
