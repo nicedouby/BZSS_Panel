@@ -275,11 +275,11 @@ export function createPlugin(context = {}) {
 
     const delaySeconds = Math.round(target.intervalMs / 1000);
     if (target.player) {
-      log.info(
+      log.debug(
         `Player duration slow refresh: source=${sourceLabel(target.source)} eligible=${target.eligibleCount}/${target.totalCount} next=${delaySeconds}s target=${target.player.name} steam=${target.player.steamID}`,
       );
     } else {
-      log.info(
+      log.debug(
         `Player duration slow refresh: source=${sourceLabel(target.source)} eligible=0/${target.totalCount} next=${delaySeconds}s`,
       );
     }
@@ -314,7 +314,7 @@ export function createPlugin(context = {}) {
         const sessionSeenAt = normalizeTimestamp(sessions?.[0]?.joined_at ?? sessions?.[0]?.joinedAt);
         if (sessionSeenAt) return sessionSeenAt;
       } catch (error) {
-        log.warn(`读取玩家会话时间失败：player=${playerId} error=${error?.message || error}`);
+        log.debug(`读取玩家会话时间失败：player=${playerId} error=${error?.message || error}`);
       }
     }
 
@@ -327,7 +327,7 @@ export function createPlugin(context = {}) {
         const aliasSeenAt = normalizeTimestamp(aliases?.[0]?.seen_at ?? aliases?.[0]?.seenAt);
         if (aliasSeenAt) return aliasSeenAt;
       } catch (error) {
-        log.warn(`读取玩家别名时间失败：player=${playerId} error=${error?.message || error}`);
+        log.debug(`读取玩家别名时间失败：player=${playerId} error=${error?.message || error}`);
       }
     }
 
@@ -373,7 +373,7 @@ export function createPlugin(context = {}) {
         state: profileState,
       };
     } catch (error) {
-      log.warn(`读取 Steam 资料缓存时间失败：player=${playerId} error=${error?.message || error}`);
+      log.debug(`读取 Steam 资料缓存时间失败：player=${playerId} error=${error?.message || error}`);
       return {
         due: false,
         lastSuccessAt: 0,
@@ -689,7 +689,7 @@ export function createPlugin(context = {}) {
           state.lastErrorAt = Date.now();
           state.totalFailed += 1;
           state.databaseStableLoops = 0;
-          log.error(`玩家 Steam 信息慢速刷新循环失败：${error?.stack || error}`);
+          log.error(`玩家 Steam 信息慢速刷新循环失败：${error?.message || error}`);
           if (!state.stopRequested) {
             const failureDelayMs = pickInterval(
               FAILURE_REFRESH_INTERVALS_MS,
@@ -705,7 +705,7 @@ export function createPlugin(context = {}) {
       state.currentPlayerId = null;
       state.currentSteamID = null;
       state.currentSource = null;
-      log.info("玩家 Steam 信息慢速刷新插件已停止");
+      log.debug("玩家 Steam 信息慢速刷新插件已停止");
     }
   }
 
