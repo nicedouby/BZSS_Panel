@@ -15,15 +15,27 @@
     <span v-if="winnerLabel" class="match-lifecycle-winner">{{ winnerLabel }}</span>
     <span v-if="!connected" class="match-lifecycle-stale">RCON 已断开 · 保留最后状态</span>
     <span class="match-lifecycle-spacer"></span>
+    <span
+      class="main-thread-chip"
+      :data-tone="mainThreadTone"
+      :title="mainThreadTitle"
+      aria-label="Panel main thread performance"
+    >
+      <span class="main-thread-name">MAIN</span>
+      <strong>{{ mainThreadUtilizationLabel }}</strong>
+      <span class="main-thread-delay">P95 {{ mainThreadP95Label }}</span>
+    </span>
     <span v-if="phaseTimeLabel" class="match-lifecycle-time">{{ phaseTimeLabel }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { useSystemStatus } from "../../app/runtimeSync";
 import { useServerStore } from "../../stores/server.store";
 
 const server = useServerStore();
+const systemStatus = useSystemStatus();
 
 const lifecycle = computed<Record<string, any>>(() => {
   const snapshot = server.snapshot ?? {};
@@ -74,6 +86,43 @@ const phaseTimeLabel = computed(() => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 });
 
+const mainThread = computed<Record<string, any>>(() => (
+  (systemStatus.value as any)?.system?.performance?.latest?.eventLoop ?? {}
+));
+const mainThreadUtilization = computed(() => finiteNumber(mainThread.value.utilization));
+const mainThreadMean = computed(() => finiteNumber(mainThread.value.mean));
+const mainThreadP95 = computed(() => finiteNumber(mainThread.value.p95));
+const mainThreadP99 = computed(() => finiteNumber(mainThread.value.p99));
+const mainThreadMax = computed(() => finiteNumber(mainThread.value.max));
+
+const mainThreadUtilizationLabel = computed(() => {
+  const value = mainThreadUtilization.value;
+  if (value == null) return "--";
+  const percent = Math.max(0, Math.min(1, value)) * 100;
+  return `${percent.toFixed(percent >= 10 ? 0 : 1)}%`;
+});
+
+const mainThreadP95Label = computed(() => formatMilliseconds(mainThreadP95.value));
+
+const mainThreadTone = computed(() => {
+  const utilization = mainThreadUtilization.value;
+  const p99 = mainThreadP99.value;
+  const max = mainThreadMax.value;
+  if (utilization == null && p99 == null && max == null) return "waiting";
+  if ((utilization ?? 0) >= 0.9 || (p99 ?? 0) >= 100 || (max ?? 0) >= 250) return "critical";
+  if ((utilization ?? 0) >= 0.7 || (p99 ?? 0) >= 50 || (max ?? 0) >= 100) return "warning";
+  return "healthy";
+});
+
+const mainThreadTitle = computed(() => {
+  const utilization = mainThreadUtilizationLabel.value;
+  const mean = formatMilliseconds(mainThreadMean.value);
+  const p95 = formatMilliseconds(mainThreadP95.value);
+  const p99 = formatMilliseconds(mainThreadP99.value);
+  const max = formatMilliseconds(mainThreadMax.value);
+  return `Panel 主线程（Node.js Event Loop） · Busy ${utilization} · Mean ${mean} · P95 ${p95} · P99 ${p99} · Max ${max}`;
+});
+
 const detailTitle = computed(() => {
   const parts = [
     stateLabel.value,
@@ -85,6 +134,18 @@ const detailTitle = computed(() => {
   ].filter(Boolean);
   return parts.join(" · ");
 });
+
+function finiteNumber(value: unknown): number | null {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatMilliseconds(value: number | null) {
+  if (value == null) return "--";
+  if (value >= 100) return `${value.toFixed(0)}ms`;
+  if (value >= 10) return `${value.toFixed(1)}ms`;
+  return `${value.toFixed(2)}ms`;
+}
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -111,7 +172,8 @@ function clean(value: unknown) {
 .match-lifecycle-identity,
 .match-lifecycle-winner,
 .match-lifecycle-stale,
-.match-lifecycle-time {
+.match-lifecycle-time,
+.main-thread-chip {
   white-space: nowrap;
 }
 
@@ -174,6 +236,60 @@ function clean(value: unknown) {
   min-width: 4px;
 }
 
+.main-thread-chip {
+  flex: 0 0 auto;
+  min-height: 21px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.07);
+  color: #cbd5e1;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+
+.main-thread-name {
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.main-thread-chip strong {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.main-thread-delay {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.main-thread-chip[data-tone="healthy"] {
+  border-color: rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.08);
+  color: #bbf7d0;
+}
+
+.main-thread-chip[data-tone="warning"] {
+  border-color: rgba(234, 179, 8, 0.38);
+  background: rgba(234, 179, 8, 0.1);
+  color: #fde68a;
+}
+
+.main-thread-chip[data-tone="critical"] {
+  border-color: rgba(248, 113, 113, 0.46);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fecaca;
+}
+
+.main-thread-chip[data-tone="waiting"] {
+  opacity: 0.72;
+}
+
 .match-lifecycle-time {
   flex: 0 0 auto;
   color: var(--color-text-muted, #94a3b8);
@@ -187,8 +303,13 @@ function clean(value: unknown) {
   }
 
   .match-lifecycle-winner,
-  .match-lifecycle-time {
+  .match-lifecycle-time,
+  .main-thread-delay {
     display: none;
+  }
+
+  .main-thread-chip {
+    padding-inline: 7px;
   }
 }
 </style>
