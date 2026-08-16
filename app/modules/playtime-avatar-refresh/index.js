@@ -16,6 +16,10 @@ const TERMINAL_JOB_STATUS = new Set(["completed", "failed"]);
 const DEFAULT_AVATAR_WAIT_MS = 8_000;
 const DEFAULT_AVATAR_POLL_MS = 200;
 const DEFAULT_JOB_WAIT_MS = 30_000;
+const DEFAULT_TRACKED_JOB_LIMIT = 256;
+const MAX_TRACKED_JOB_LIMIT = 2_048;
+const DEFAULT_TRACKED_JOB_RETENTION_MS = 10 * 60_000;
+const MAX_TRACKED_JOB_RETENTION_MS = 60 * 60_000;
 const AUTO_PLAYTIME_REFRESH_COOLDOWN_MS = 10 * 60 * 60_000;
 const AUTO_PROFILE_REFRESH_COOLDOWN_MS = 24 * 60 * 60_000;
 const AUTO_INACTIVE_PLAYER_CUTOFF_MS = 15 * 24 * 60 * 60_000;
@@ -31,6 +35,30 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
   const baseApi = baseModule?.api ?? {};
   const trackedJobs = new Map();
 
+  function pruneTrackedJobs(now = Date.now()) {
+    for (const [jobId, record] of trackedJobs) {
+      if (
+        record.settledAt > 0
+        && now - record.settledAt >= settings.trackedJobRetentionMs
+      ) {
+        trackedJobs.delete(jobId);
+      }
+    }
+
+    while (trackedJobs.size > settings.trackedJobLimit) {
+      let evictionId = "";
+      for (const [jobId, record] of trackedJobs) {
+        if (record.settledAt > 0) {
+          evictionId = jobId;
+          break;
+        }
+        if (!evictionId) evictionId = jobId;
+      }
+      if (!evictionId) break;
+      trackedJobs.delete(evictionId);
+    }
+  }
+
   function trackManualRefresh(job, payload = {}) {
     const jobId = text(job?.id);
     const steamID = normalizeSteamID(payload?.steamID ?? payload?.steamId ?? payload?.steam64);
@@ -39,6 +67,8 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
     const record = {
       jobId,
       steamID,
+      createdAt: Date.now(),
+      settledAt: 0,
       result: null,
       promise: null,
     };
@@ -58,8 +88,12 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
         error: { message: error?.message ?? String(error) },
       };
       return record.result;
+    }).finally(() => {
+      record.settledAt = Date.now();
+      pruneTrackedJobs(record.settledAt);
     });
     trackedJobs.set(jobId, record);
+    pruneTrackedJobs();
     return job;
   }
 
@@ -75,6 +109,9 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
           profileCooldownMs: AUTO_PROFILE_REFRESH_COOLDOWN_MS,
           inactivePlayerCutoffMs: AUTO_INACTIVE_PLAYER_CUTOFF_MS,
           baseConnectRefreshSuppressed: true,
+          trackedManualJobs: trackedJobs.size,
+          trackedManualJobLimit: settings.trackedJobLimit,
+          trackedManualJobRetentionMs: settings.trackedJobRetentionMs,
         },
       };
     },
@@ -90,6 +127,7 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
     },
 
     getJob(jobId) {
+      pruneTrackedJobs();
       const id = text(jobId);
       const baseJob = baseApi.getJob?.(id) ?? null;
       const tracked = trackedJobs.get(id);
@@ -100,6 +138,7 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
     },
 
     async waitForJob(jobId, waitMs) {
+      pruneTrackedJobs();
       const id = text(jobId);
       const baseJob = await baseApi.waitForJob?.(id, waitMs) ?? null;
       const tracked = trackedJobs.get(id);
@@ -121,6 +160,13 @@ export function createPlaytimeAvatarRefreshModule(context, createBaseModule = cr
       description: `${baseModule?.manifest?.description ?? "Steam playtime module."} Manual player refresh waits for Steam avatar persistence; automatic refresh is delegated to the cached slow-refresh scheduler.`,
     },
     api,
+    async stop() {
+      try {
+        await baseModule?.stop?.();
+      } finally {
+        trackedJobs.clear();
+      }
+    },
   };
 }
 
@@ -357,6 +403,16 @@ function readSettings(config) {
     avatarPollMs: positiveInteger(value.manualAvatarPollMs, DEFAULT_AVATAR_POLL_MS),
     avatarPollResponseWaitMs: positiveInteger(value.manualAvatarPollResponseWaitMs, 3_000),
     jobWaitMs: positiveInteger(value.manualRefreshJobWaitMs, DEFAULT_JOB_WAIT_MS),
+    trackedJobLimit: boundedPositiveInteger(
+      value.manualTrackedJobLimit,
+      DEFAULT_TRACKED_JOB_LIMIT,
+      MAX_TRACKED_JOB_LIMIT,
+    ),
+    trackedJobRetentionMs: boundedPositiveInteger(
+      value.manualTrackedJobRetentionMs,
+      DEFAULT_TRACKED_JOB_RETENTION_MS,
+      MAX_TRACKED_JOB_RETENTION_MS,
+    ),
     inactivePlayerCutoffMs: AUTO_INACTIVE_PLAYER_CUTOFF_MS,
   };
 }
@@ -380,6 +436,10 @@ function clampWaitMs(value, fallback) {
 function positiveInteger(value, fallback) {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? Math.floor(numeric) : fallback;
+}
+
+function boundedPositiveInteger(value, fallback, maximum) {
+  return Math.min(positiveInteger(value, fallback), maximum);
 }
 
 function text(value) {
