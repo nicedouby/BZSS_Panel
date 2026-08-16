@@ -6,7 +6,16 @@
   "udp": {
     "host": "0.0.0.0",
     "port": 12345,
-    "maxMessageBytes": 65535
+    "maxMessageBytes": 65535,
+    "recvBufferBytes": 8388608,
+    "ingressWorker": {
+      "enabled": true,
+      "batchMaxEvents": 128,
+      "batchMaxDelayMs": 5,
+      "maxInFlightBatches": 4,
+      "maxQueueEvents": 100000,
+      "fallbackToMainThread": false
+    }
   },
   "web": {
     "enabled": true,
