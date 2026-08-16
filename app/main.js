@@ -372,6 +372,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("[FATAL]", error);
+  console.error("[致命错误]", error);
   process.exit(1);
 });
