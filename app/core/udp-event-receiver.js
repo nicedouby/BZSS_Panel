@@ -182,6 +182,17 @@ export class UdpEventReceiver {
       address: transportMeta.remoteAddress ?? "",
       port: Number(transportMeta.remotePort ?? 0),
     };
+
+    // Event Seq belongs to the parser's complete output stream. Inspect it before
+    // cross-transport EventId de-duplication and before the player-chunk fast path;
+    // otherwise valid events consumed by those branches look like packet loss.
+    const gapEvent = this.logPostMonitor?.inspectEvent?.(
+      buildLogPostMonitorEvent(rawEvent, remoteInfo),
+    ) ?? null;
+    if (gapEvent) {
+      this.eventBus.emitCoreEvent(gapEvent.eventName, gapEvent);
+    }
+
     const eventId = String(rawEvent?.EventId ?? "").trim();
     if (eventId && this.eventBus?.hasRecentCoreEventId?.(eventId)) {
       this.metrics.duplicateEventsDropped += 1;
@@ -224,10 +235,6 @@ export class UdpEventReceiver {
       },
     });
 
-    const gapEvent = this.logPostMonitor?.inspectEvent?.(event) ?? null;
-    if (gapEvent) {
-      this.eventBus.emitCoreEvent(gapEvent.eventName, gapEvent);
-    }
     this.eventBus.emitCoreEvent(event.eventName, event);
     this.publishDiagnostics();
   }
@@ -267,6 +274,24 @@ function wrapUdpStartupError(error, host, port) {
   }
 
   return error;
+}
+
+function buildLogPostMonitorEvent(rawEvent, remoteInfo) {
+  return {
+    eventId: String(rawEvent?.EventId ?? ""),
+    eventName: String(rawEvent?.Event ?? ""),
+    serverId: String(rawEvent?.ServerID ?? ""),
+    sessionId: String(rawEvent?.SessionID ?? ""),
+    seq: String(rawEvent?.Seq ?? ""),
+    sourceSeq: String(rawEvent?.SourceSeq ?? ""),
+    sourceMode: String(rawEvent?.SourceMode ?? "live"),
+    canTriggerActions: parseBooleanLike(rawEvent?.CanTriggerActions ?? true),
+    time: String(rawEvent?.Time ?? ""),
+    rawEvent,
+    transportSource: "udp",
+    udpRemoteAddress: remoteInfo.address,
+    udpRemotePort: remoteInfo.port,
+  };
 }
 
 function buildBzssCorePlayerChunkEvent(rawEvent, remoteInfo) {
