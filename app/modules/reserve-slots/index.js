@@ -443,7 +443,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
   async function previewOnlineReserveGrant(input = {}) {
     const durationDays = normalizeOnlineGrantDays(input.durationDays);
-    const roster = buildOnlineGrantRoster();
+    const roster = buildOnlineGrantRoster(core?.runtimeState);
     return {
       ok: true,
       canGrant: roster.players.length > 0 && roster.missingIdentityCount === 0,
@@ -485,7 +485,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       throw createReserveSlotError(400, "OnlineGrantConfirmationRequired", "必须明确确认后才能批量发放预留位。");
     }
 
-    const roster = buildOnlineGrantRoster();
+    const roster = buildOnlineGrantRoster(core?.runtimeState);
     const submittedRosterToken = String(input.rosterToken ?? "").trim();
     if (!submittedRosterToken || submittedRosterToken !== roster.rosterToken) {
       throw createReserveSlotError(409, "OnlineGrantRosterChanged", "在线玩家名单已经变化，请重新预览并确认。");
@@ -2073,8 +2073,8 @@ function normalizeOnlineGrantRequestId(value) {
   return requestId;
 }
 
-function buildOnlineGrantRoster() {
-  const snapshot = core?.runtimeState?.getPlayers?.() ?? {};
+function buildOnlineGrantRoster(runtimeState) {
+  const snapshot = runtimeState?.getPlayers?.() ?? {};
   const activePlayers = Array.isArray(snapshot?.active) ? snapshot.active : [];
   const players = [];
   const missingIdentities = [];
