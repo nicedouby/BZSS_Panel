@@ -58,7 +58,7 @@ class UdpSender:
             try:
                 self.sock.sendto(payload, (self.host, self.port))
             except OSError as exc:
-                print(f"[WARN] UDP send failed: {exc}")
+                print(f"[警告] UDP 发送失败：{exc}")
                 return False
 
             self.packet_seq = candidate_seq
@@ -83,7 +83,7 @@ class UdpSender:
             try:
                 self.sock.sendto(payload, (self.host, self.port))
             except OSError as exc:
-                print(f"[WARN] UDP statistics send failed: {exc}")
+                print(f"[警告] UDP 统计信息发送失败：{exc}")
                 return False
 
             self.total_stat_sent += 1
@@ -116,6 +116,6 @@ class UdpSender:
             payload = to_json_line(event).encode("utf-8")
 
         if len(payload) > self.max_payload_bytes:
-            print(f"[WARN] UDP payload still too large. Event skipped. Event={event.get('Event')}")
+            print(f"[警告] UDP 数据包仍然过大，已跳过事件：Event={event.get('Event')}")
             return None
         return payload
