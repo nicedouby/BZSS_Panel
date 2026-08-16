@@ -29,6 +29,8 @@ export class LogPostMonitor {
       ignoredReplayEvents: 0,
       eventGapCount: 0,
       missingEventCount: 0,
+      observationalEventGapCount: 0,
+      observationalMissingEventCount: 0,
       duplicateEventCount: 0,
       outOfOrderEventCount: 0,
       sequenceResetCount: 0,
@@ -97,36 +99,49 @@ export class LogPostMonitor {
       } else {
         if (stream.lastEventSeq > 0 && currentEventSeq > stream.lastEventSeq + 1) {
           const missingEventCount = currentEventSeq - stream.lastEventSeq - 1;
-          gapEvent = {
-            eventName: "LOGPOST_EVENT_GAP_DETECTED",
-            layer: "core",
-            source: "core.logPostMonitor",
-            time: new Date().toISOString(),
-            serverId,
-            sessionId,
-            seq: String(currentEventSeq),
-            sourceSeq: currentSourceSeq > 0 ? currentSourceSeq : "",
-            payload: {
-              streamKey,
-              transportSource,
-              expectedEventSeq: stream.lastEventSeq + 1,
-              actualEventSeq: currentEventSeq,
-              lastEventSeq: stream.lastEventSeq,
-              missingEventCount,
-              currentEventId: String(event?.eventId ?? ""),
-              previousEventId: stream.lastEventId,
-              sourceMode,
-            },
-          };
 
-          this.metrics.eventGapCount += 1;
-          this.metrics.missingEventCount += missingEventCount;
-          this.recentEventGaps.unshift(gapEvent);
-          trimArray(this.recentEventGaps, this.maxRecentGaps);
+          // FileBridge reaches this monitor after cross-transport EventId de-duplication
+          // and intentionally skips some high-volume telemetry paths. Its Event Seq view
+          // is therefore sparse by design and cannot prove transport loss. Preserve the
+          // observation for diagnostics without emitting a false loss event/WARN.
+          if (transportSource === "file-bridge") {
+            this.metrics.observationalEventGapCount += 1;
+            this.metrics.observationalMissingEventCount += missingEventCount;
+            this.logger?.debug?.(
+              `LogPost observational event seq gap stream=${streamKey} expected=${stream.lastEventSeq + 1} actual=${currentEventSeq} missing=${missingEventCount}`,
+            );
+          } else {
+            gapEvent = {
+              eventName: "LOGPOST_EVENT_GAP_DETECTED",
+              layer: "core",
+              source: "core.logPostMonitor",
+              time: new Date().toISOString(),
+              serverId,
+              sessionId,
+              seq: String(currentEventSeq),
+              sourceSeq: currentSourceSeq > 0 ? currentSourceSeq : "",
+              payload: {
+                streamKey,
+                transportSource,
+                expectedEventSeq: stream.lastEventSeq + 1,
+                actualEventSeq: currentEventSeq,
+                lastEventSeq: stream.lastEventSeq,
+                missingEventCount,
+                currentEventId: String(event?.eventId ?? ""),
+                previousEventId: stream.lastEventId,
+                sourceMode,
+              },
+            };
 
-          this.logger?.warn?.(
-            `LogPost event seq gap detected stream=${streamKey} expected=${stream.lastEventSeq + 1} actual=${currentEventSeq} missing=${missingEventCount}`,
-          );
+            this.metrics.eventGapCount += 1;
+            this.metrics.missingEventCount += missingEventCount;
+            this.recentEventGaps.unshift(gapEvent);
+            trimArray(this.recentEventGaps, this.maxRecentGaps);
+
+            this.logger?.warn?.(
+              `LogPost event seq gap detected stream=${streamKey} expected=${stream.lastEventSeq + 1} actual=${currentEventSeq} missing=${missingEventCount}`,
+            );
+          }
         }
 
         stream.lastEventSeq = currentEventSeq;
