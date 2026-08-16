@@ -43,7 +43,7 @@ class PacketMonitor:
             try:
                 self.report_once()
             except Exception as exc:
-                print(f"[WARN] UDP packet statistics report failed: {exc}")
+                print(f"[警告] UDP 数据包统计报告失败：{exc}")
 
     def report_once(self) -> bool:
         snapshot = self.sender.get_delivery_snapshot()
