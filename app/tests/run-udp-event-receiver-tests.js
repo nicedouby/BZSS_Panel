@@ -210,6 +210,52 @@ function testMissingStatCannotHideBusinessPacketGap() {
   assert.equal(state.current.lostPackets, 1);
 }
 
+function testPacketSequenceBufferStaysBoundedWithoutStats() {
+  const monitor = new UdpPacketLossMonitor({
+    finalizeGraceMs: 0,
+    maxBufferedPacketsPerSession: 4,
+  });
+  monitor.persistPoint = () => {};
+
+  for (let seq = 1; seq <= 20; seq += 1) {
+    monitor.recordEvent(businessPacket("sender-a", seq));
+  }
+
+  const state = monitor.getState();
+  assert.ok(state.sessions[0].bufferedPackets <= 4);
+  assert.ok(state.metrics.bufferPrunes > 0);
+  assert.ok(state.metrics.bufferedPacketsDiscarded > 0);
+  assert.equal(state.maxBufferedPacketsPerSession, 4);
+}
+
+async function testPendingStatTimersAreCoalescedPerSession() {
+  const monitor = new UdpPacketLossMonitor({ finalizeGraceMs: 60_000 });
+  monitor.persistPoint = () => {};
+
+  monitor.recordStat({
+    PacketType: "STAT",
+    PacketSessionId: "sender-a",
+    StatSeq: "1",
+    FirstSeq: "1",
+    LastSeq: "1",
+    SentPackets: "1",
+  });
+  monitor.recordStat({
+    PacketType: "STAT",
+    PacketSessionId: "sender-a",
+    StatSeq: "2",
+    FirstSeq: "2",
+    LastSeq: "2",
+    SentPackets: "1",
+  });
+
+  const state = monitor.getState();
+  assert.equal(state.pendingFinalizations, 1);
+  assert.equal(state.metrics.coalescedStatPackets, 1);
+  await monitor.close();
+  assert.equal(monitor.getState().pendingFinalizations, 0);
+}
+
 function testSenderRestartUsesIndependentSession() {
   const monitor = createLossMonitor();
   monitor.recordEvent(businessPacket("sender-a", 1));
@@ -231,6 +277,8 @@ testRegularEventStillUsesPipeline();
 testStatPacketNeverEntersBusinessPipeline();
 testLossCalculationUsesUniquePacketSequence();
 testMissingStatCannotHideBusinessPacketGap();
+testPacketSequenceBufferStaysBoundedWithoutStats();
+await testPendingStatTimersAreCoalescedPerSession();
 testSenderRestartUsesIndependentSession();
 
 console.log("run-udp-event-receiver-tests: ok");
