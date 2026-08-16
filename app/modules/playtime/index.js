@@ -1169,7 +1169,6 @@ class SteamGameDurationService {
       return [];
     }
 
-    console.log(`[SteamAvatar] Info: Start fetching summaries for ${validIds.length} players: ${validIds.join(", ")}`);
 
     const chunks = [];
     for (let i = 0; i < validIds.length; i += 100) {
@@ -1190,9 +1189,7 @@ class SteamGameDurationService {
         });
 
         if (attempt > 1) {
-          console.log(`[SteamAvatar] Retrying (${attempt}/${maxAttempts}): ${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/`);
         } else {
-          console.log(`[SteamAvatar] Fetching: ${this.apiBaseUrl}/ISteamUser/GetPlayerSummaries/v0002/ for chunk of ${chunk.length} IDs.`);
         }
 
         try {
@@ -1200,12 +1197,10 @@ class SteamGameDurationService {
           const data = await this._requestSteamJson(url);
           const players = data?.response?.players;
           if (Array.isArray(players)) {
-            console.log(`[SteamAvatar] Success: Found ${players.length} player profiles from Steam API.`);
             results.push(...players);
             chunkSuccess = true;
             break;
           } else {
-            console.log(`[SteamAvatar] Warning: data.response.players is not an array. Response body:`, JSON.stringify(data));
             chunkSuccess = true;
             break;
           }
@@ -1225,9 +1220,6 @@ class SteamGameDurationService {
         const isNetworkError = this._isRetryableSteamError(lastChunkError);
         const errorMessage = lastChunkError.cause ? `${lastChunkError.message} (cause: ${lastChunkError.cause.message || lastChunkError.cause})` : lastChunkError.message;
         
-        if (isNetworkError) {
-        } else {
-        }
         this.logger?.warn(`Steam 玩家资料获取失败：重试=${maxAttempts} 原因=${errorMessage}`, { operation: "steamAvatarLookupFailed" });
       }
     }
