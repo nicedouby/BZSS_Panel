@@ -536,11 +536,97 @@ async function testStoreFileRepair() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testOnlineGrantIsAtomicIdempotentAndWarnsPlayers() {
+  const module = await setupReserveModule();
+  const active = [
+    { steamId: "76561198377609640", playerId: 11, name: "Alpha" },
+    { steamID: "76561198377609641", playerID: 12, playerName: "Bravo" },
+  ];
+  module.harness.core.runtimeState.getPlayers = () => ({ active });
+
+  const preview = await module.reserveModule.api.previewOnlineGrant({ durationDays: 3 });
+  assert.equal(preview.canGrant, true);
+  assert.equal(preview.playerCount, 2);
+  assert.equal(preview.missingIdentityCount, 0);
+  assert.equal(preview.rosterToken.length, 64);
+
+  const input = {
+    durationDays: 3,
+    requestId: "online_grant_test_00000001",
+    rosterToken: preview.rosterToken,
+    confirmed: true,
+  };
+  const granted = await module.reserveModule.api.grantOnlinePlayers(input, {
+    actor: { username: "admin" },
+  });
+  assert.equal(granted.grantedCount, 2);
+  assert.equal(granted.warningSuccessCount, 2);
+  assert.equal(granted.warningFailureCount, 0);
+  assert.equal(granted.replayed, false);
+  assert.equal(module.harness.warns.length, 2);
+  assert.match(module.harness.warns[0].message, /已为你激活 3 天预留位，当前还剩 \d+ 天预留位/);
+
+  const firstAdminContent = await fs.readFile(module.adminFilePath, "utf8");
+  assert.equal((firstAdminContent.match(/Admin=76561198377609640:BZSSVIP/g) ?? []).length, 1);
+  assert.equal((firstAdminContent.match(/Admin=76561198377609641:BZSSVIP/g) ?? []).length, 1);
+
+  const replayed = await module.reserveModule.api.grantOnlinePlayers(input, {
+    actor: { username: "admin" },
+  });
+  const secondAdminContent = await fs.readFile(module.adminFilePath, "utf8");
+  assert.equal(replayed.replayed, true);
+  assert.equal(secondAdminContent, firstAdminContent);
+  assert.equal(module.harness.warns.length, 2);
+
+  await assert.rejects(
+    () => module.reserveModule.api.previewOnlineGrant({ durationDays: 31 }),
+    (error) => error?.code === "InvalidOnlineGrantDuration",
+  );
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
+async function testOnlineGrantRejectsChangedOrIncompleteRoster() {
+  const module = await setupReserveModule();
+  let active = [
+    { steamId: "76561198377609640", playerId: 11, name: "Alpha" },
+  ];
+  module.harness.core.runtimeState.getPlayers = () => ({ active });
+  const preview = await module.reserveModule.api.previewOnlineGrant({ durationDays: 1 });
+
+  active = [
+    ...active,
+    { steamId: "76561198377609641", playerId: 12, name: "Bravo" },
+  ];
+  await assert.rejects(
+    () => module.reserveModule.api.grantOnlinePlayers({
+      durationDays: 1,
+      requestId: "online_grant_test_00000002",
+      rosterToken: preview.rosterToken,
+      confirmed: true,
+    }),
+    (error) => error?.code === "OnlineGrantRosterChanged",
+  );
+  const unchangedContent = await fs.readFile(module.adminFilePath, "utf8");
+  assert.doesNotMatch(unchangedContent, /Admin=76561198377609640/);
+
+  active = [{ playerId: 99, name: "Missing Steam" }];
+  const blocked = await module.reserveModule.api.previewOnlineGrant({ durationDays: 1 });
+  assert.equal(blocked.canGrant, false);
+  assert.equal(blocked.missingIdentityCount, 1);
+
+  await module.reserveModule.stop();
+  await fs.rm(module.tempDir, { recursive: true, force: true });
+}
+
 async function main() {
   await testParserHandlesAdminBlock();
   await testStoreFileRepair();
   await testUpsertAndShortenUsesCurrentExpiry();
   await testWarmupReasonUsesDatabaseNameWhenMissing();
+  await testOnlineGrantIsAtomicIdempotentAndWarnsPlayers();
+  await testOnlineGrantRejectsChangedOrIncompleteRoster();
   await testExpiredCleanupRemovesExpiredMembers();
   await testChatActivationRespectsEnabledFlag();
   await testCdkBatchActivationScheduleAndAutoDeactivation();
