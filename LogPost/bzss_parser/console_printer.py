@@ -19,6 +19,16 @@ ANSI_CYAN = "\033[96m"
 ANSI_BLUE = "\033[94m"
 
 
+EVENT_LABELS = {
+    "On_PlayerDamaged": "玩家受伤",
+    "On_PlayerWounded": "玩家被击倒",
+    "On_PlayerDied": "玩家死亡",
+    "On_ServerTickRateUpdated": "服务器帧率更新",
+    "On_PlayerSpawnRequested": "玩家请求重生",
+    "On_SquadCreated": "小队已创建",
+}
+
+
 EVENT_COLORS = {
     "On_PlayerDamaged": ANSI_YELLOW,
     "On_PlayerWounded": ANSI_RED,
@@ -62,7 +72,8 @@ class ConsolePrinter:
         log_time = event.get("LogTime", "")
         color = EVENT_COLORS.get(event_name, ANSI_BLUE)
 
-        prefix = f"[EVENT] {event_name} #{seq}"
+        event_label = EVENT_LABELS.get(event_name, event_name)
+        prefix = f"[事件] {event_label} ({event_name}) #{seq}"
         if self.show_log_time and log_time:
             prefix += f" @{log_time}"
 
@@ -130,24 +141,24 @@ class ConsolePrinter:
             return
 
         if self.use_color:
-            print(f"{ANSI_CYAN}[INFO]{ANSI_RESET} {message}")
+            print(f"{ANSI_CYAN}[信息]{ANSI_RESET} {message}")
         else:
-            print(f"[INFO] {message}")
+            print(f"[信息] {message}")
 
     def warn(self, message: str) -> None:
         if not self.enabled:
             return
 
         if self.use_color:
-            print(f"{ANSI_YELLOW}[WARN]{ANSI_RESET} {message}")
+            print(f"{ANSI_YELLOW}[警告]{ANSI_RESET} {message}")
         else:
-            print(f"[WARN] {message}")
+            print(f"[警告] {message}")
 
     def error(self, message: str) -> None:
         if not self.enabled:
             return
 
         if self.use_color:
-            print(f"{ANSI_RED}[ERROR]{ANSI_RESET} {message}")
+            print(f"{ANSI_RED}[错误]{ANSI_RESET} {message}")
         else:
-            print(f"[ERROR] {message}")
+            print(f"[错误] {message}")
