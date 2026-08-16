@@ -57,6 +57,16 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "ticket-curve",
+    path: "/ticket-curve",
+    component: () => import("../pages/TicketCurvePage.vue"),
+    title: "双方票数曲线",
+    category: "core",
+    refreshPolicy: "polling",
+    nav: { section: "opsLive", label: "票数曲线", icon: "📉", order: 12 },
+    ...workspacePage,
+  },
+  {
     name: "tactical-map",
     path: "/tactical-map",
     component: () => import("../pages/TacticalMapPage.vue"),

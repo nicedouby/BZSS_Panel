@@ -4488,6 +4488,23 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/remote-telemetry/ticket-history" && req.method === "GET") {
+      const api = this.modules.remoteTelemetry;
+      if (!api?.getTicketHistory) {
+        return this.json(res, 404, {
+          error: "RemoteTelemetryUnavailable",
+          message: "Remote telemetry ticket history is not available.",
+        });
+      }
+
+      const sinceMs = Number(url.searchParams.get("since") ?? 0);
+      const limit = Number(url.searchParams.get("limit") ?? 0);
+      return this.json(res, 200, {
+        ok: true,
+        ...api.getTicketHistory({ sinceMs, limit }),
+      });
+    }
+
     if (url.pathname === "/api/remote-telemetry/write-tickets" && req.method === "POST") {
       const hasPerm = this.core.authManager?.hasPermission
         ? this.core.authManager.hasPermission(user, "rcon.settickets")

@@ -6,6 +6,8 @@ const DEFAULT_SAMPLE_INTERVAL_MS = 2_000;
 const DEFAULT_TIMEOUT_MULTIPLIER = 3;
 const DEFAULT_FREEZE_SAMPLE_THRESHOLD = 15;
 const DEFAULT_RECENT_SAMPLE_LIMIT = 50;
+const DEFAULT_TICKET_HISTORY_LIMIT = 7_200;
+const MAX_TICKET_HISTORY_LIMIT = 20_000;
 const DEFAULT_COMMAND_PORT = 12765;
 const DEFAULT_COMMAND_TIMEOUT_MS = 3_000;
 
@@ -24,14 +26,25 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
   const receiverTimeoutMs = normalizePositiveInteger(moduleConfig.receiverTimeoutMs, sampleIntervalMs * timeoutMultiplier);
   const freezeSampleThreshold = normalizePositiveInteger(moduleConfig.freezeSampleThreshold, DEFAULT_FREEZE_SAMPLE_THRESHOLD);
   const recentSampleLimit = normalizePositiveInteger(moduleConfig.recentSampleLimit, DEFAULT_RECENT_SAMPLE_LIMIT);
+  const ticketHistoryLimit = Math.min(
+    normalizePositiveInteger(moduleConfig.ticketHistoryLimit, DEFAULT_TICKET_HISTORY_LIMIT),
+    MAX_TICKET_HISTORY_LIMIT,
+  );
   const commandHost = normalizeText(moduleConfig.commandHost);
   const commandPort = normalizePositiveInteger(moduleConfig.commandPort, DEFAULT_COMMAND_PORT);
   const commandTimeoutMs = normalizePositiveInteger(moduleConfig.commandTimeoutMs, DEFAULT_COMMAND_TIMEOUT_MS);
 
   const sources = new Map();
   const recentSamples = [];
+  const ticketHistory = [];
   const sockets = new Set();
 
+  let ticketHistoryRevision = 1;
+  let ticketHistoryStartedAt = "";
+  let ticketHistoryResetAt = new Date().toISOString();
+  let ticketHistoryResetReason = "startup";
+  let activeTicketSourceKey = "";
+  let roundResetUnsubscribe = null;
   let started = false;
   let listening = false;
   let startedAt = "";
@@ -200,7 +213,109 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
       recentSamples.splice(0, recentSamples.length - recentSampleLimit);
     }
 
+    recordTicketHistorySample(sample);
     emitUpdated();
+  }
+
+  function recordTicketHistorySample(sample) {
+    if (!sample?.ok || !isFiniteTicket(sample.tickets?.team1) || !isFiniteTicket(sample.tickets?.team2)) {
+      return;
+    }
+
+    const now = Date.now();
+    if (activeTicketSourceKey && activeTicketSourceKey !== sample.sourceKey) {
+      const activeSource = sources.get(activeTicketSourceKey);
+      const activeLastSeenMs = Date.parse(activeSource?.lastMessageAt || "");
+      const activeTimeoutMs = Math.max(
+        receiverTimeoutMs,
+        normalizePositiveInteger(activeSource?.sampleIntervalMs, sampleIntervalMs) * timeoutMultiplier,
+      );
+      if (Number.isFinite(activeLastSeenMs) && now - activeLastSeenMs <= activeTimeoutMs) {
+        return;
+      }
+    }
+
+    activeTicketSourceKey = sample.sourceKey;
+    const previousPoint = ticketHistory.at(-1) ?? null;
+    const nextIdentity = normalizeText(sample.layer) || normalizeText(sample.map);
+    const previousIdentity = normalizeText(previousPoint?.layer) || normalizeText(previousPoint?.map);
+    const bothTeamsReset = previousPoint
+      && Number(sample.tickets.team1) >= Number(previousPoint.team1) + 25
+      && Number(sample.tickets.team2) >= Number(previousPoint.team2) + 25;
+
+    if ((nextIdentity && previousIdentity && nextIdentity !== previousIdentity) || bothTeamsReset) {
+      resetTicketHistory(nextIdentity && previousIdentity && nextIdentity !== previousIdentity
+        ? "layer_changed"
+        : "ticket_reset_detected");
+      activeTicketSourceKey = sample.sourceKey;
+    }
+
+    const timestampMs = Date.parse(sample.receivedAt || "");
+    const point = {
+      timestamp: sample.receivedAt,
+      timestampMs: Number.isFinite(timestampMs) ? timestampMs : now,
+      receivedAt: sample.receivedAt,
+      team1: Number(sample.tickets.team1),
+      team2: Number(sample.tickets.team2),
+      layer: normalizeText(sample.layer),
+      map: normalizeText(sample.map),
+      matchState: normalizeText(sample.matchState),
+    };
+
+    const lastPoint = ticketHistory.at(-1);
+    if (lastPoint && point.timestampMs <= lastPoint.timestampMs) {
+      point.timestampMs = lastPoint.timestampMs + 1;
+      point.timestamp = new Date(point.timestampMs).toISOString();
+    }
+
+    if (!ticketHistoryStartedAt) ticketHistoryStartedAt = point.receivedAt || point.timestamp;
+    ticketHistory.push(point);
+    if (ticketHistory.length > ticketHistoryLimit) {
+      ticketHistory.splice(0, ticketHistory.length - ticketHistoryLimit);
+      ticketHistoryStartedAt = ticketHistory[0]?.receivedAt || ticketHistory[0]?.timestamp || "";
+    }
+  }
+
+  function resetTicketHistory(reason = "manual") {
+    ticketHistory.splice(0, ticketHistory.length);
+    ticketHistoryRevision += 1;
+    ticketHistoryStartedAt = "";
+    ticketHistoryResetAt = new Date().toISOString();
+    ticketHistoryResetReason = normalizeText(reason) || "manual";
+    activeTicketSourceKey = "";
+  }
+
+  function getTicketHistory(options = {}) {
+    const sinceMs = Number(options.sinceMs ?? options.since ?? 0);
+    const requestedLimit = normalizePositiveInteger(options.limit, ticketHistoryLimit);
+    const limit = Math.min(requestedLimit, ticketHistoryLimit);
+    const filtered = Number.isFinite(sinceMs) && sinceMs > 0
+      ? ticketHistory.filter((point) => point.timestampMs > sinceMs)
+      : ticketHistory;
+    const points = filtered.length > limit ? filtered.slice(-limit) : filtered.slice();
+    const activeSource = activeTicketSourceKey ? sources.get(activeTicketSourceKey) : null;
+    const source = activeSource ? summarizeSource(activeSource) : getCurrentSourceSummary();
+    const latestPoint = ticketHistory.at(-1) ?? null;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      revision: ticketHistoryRevision,
+      resetAt: ticketHistoryResetAt,
+      resetReason: ticketHistoryResetReason,
+      startedAt: ticketHistoryStartedAt,
+      sampleIntervalMs: normalizePositiveInteger(source?.sampleIntervalMs, sampleIntervalMs),
+      maxPoints: ticketHistoryLimit,
+      source: source ? {
+        sourceKey: source.sourceKey,
+        online: Boolean(source.online),
+        lastMessageAt: source.lastMessageAt,
+      } : null,
+      currentTickets: {
+        team1: latestPoint?.team1 ?? source?.latest?.tickets?.team1 ?? null,
+        team2: latestPoint?.team2 ?? source?.latest?.tickets?.team2 ?? null,
+      },
+      points: points.map((point) => ({ ...point })),
+    };
   }
 
   function getCurrentSourceSummary(now = Date.now()) {
@@ -587,6 +702,8 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
   api: {
     getState,
     getCurrentSourceSummary,
+    getTicketHistory,
+    resetTicketHistory,
     ingestSample,
     normalizeMessage,
     getCommandTarget,
@@ -595,9 +712,18 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
     adjustTickets,
   },
     async start() {
+      if (enabled && !roundResetUnsubscribe) {
+        roundResetUnsubscribe = core.eventBus?.onCoreEvent?.("round.world_bring_up", () => {
+          resetTicketHistory("round_world_bring_up");
+        }) ?? null;
+      }
       await startServer();
     },
     async stop() {
+      if (typeof roundResetUnsubscribe === "function") {
+        roundResetUnsubscribe();
+      }
+      roundResetUnsubscribe = null;
       await stopServer();
     },
   };

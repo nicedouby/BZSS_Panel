@@ -146,6 +146,42 @@ async function testFlagsTicketIncreaseAndAcquisitionFailure() {
   assert.equal(state.currentSource.lastError, "SquadGameServer.exe not found in current directory");
 }
 
+async function testTracksBoundedIncrementalTicketHistoryAndReset() {
+  const { module } = createModule({ ticketHistoryLimit: 2 });
+  const remoteInfo = { address: "192.168.0.52", port: 50129 };
+  const makeSample = (timestamp, t1, t2) => module.api.normalizeMessage({
+    type: "ticket_sample",
+    project_dir: "C:\\server",
+    exe: "SquadGameServer.exe",
+    pid: 3010,
+    timestamp,
+    ok: true,
+    t1,
+    t2,
+    layer: "Narva_RAAS_v1",
+  }, remoteInfo);
+
+  module.api.ingestSample(makeSample(1760000000, 320, 287));
+  module.api.ingestSample(makeSample(1760000002, 319, 287));
+  module.api.ingestSample(makeSample(1760000004, 318, 286));
+
+  const history = module.api.getTicketHistory();
+  assert.equal(history.points.length, 2);
+  assert.deepEqual(history.points.map((point) => [point.team1, point.team2]), [[319, 287], [318, 286]]);
+  assert.equal(history.currentTickets.team1, 318);
+
+  const incremental = module.api.getTicketHistory({ sinceMs: history.points[0].timestampMs });
+  assert.equal(incremental.points.length, 1);
+  assert.equal(incremental.points[0].team1, 318);
+
+  const revision = history.revision;
+  module.api.resetTicketHistory("test");
+  const reset = module.api.getTicketHistory();
+  assert.equal(reset.points.length, 0);
+  assert.equal(reset.revision, revision + 1);
+  assert.equal(reset.resetReason, "test");
+}
+
 async function testWriteTicketsUsesCommandPort() {
   const commandServer = await createFakeCommandServer((payload) => ({
     ok: true,
@@ -285,6 +321,7 @@ async function testAdjustTicketsSupportsClampAndDelta() {
 async function run() {
   await testTracksLatestTicketSample();
   await testFlagsTicketIncreaseAndAcquisitionFailure();
+  await testTracksBoundedIncrementalTicketHistoryAndReset();
   await testWriteTicketsUsesCommandPort();
   await testWriteTicketsFallsBackToRemoteAddress();
   await testConfiguredCommandHostOverridesSenderAddress();
