@@ -103,6 +103,49 @@ async function testManualAvatarPersistenceCompatibility() {
   assert.equal(lookupCompleted.result.avatarPersisted, true);
 }
 
+async function testTrackedManualJobsStayBounded() {
+  const module = createPlaytimeAvatarRefreshModule({
+    modules: {
+      playerDatabase: {
+        async getCachedPlayer({ steamID }) {
+          return {
+            id: Number(steamID.slice(-2)),
+            steam_id: steamID,
+            steam_avatar: `https://avatars.steamstatic.com/${steamID}_medium.jpg`,
+          };
+        },
+      },
+    },
+    config: {
+      get(key) {
+        if (key === "modules.playtime") {
+          return {
+            manualAvatarWaitMs: 10,
+            manualAvatarPollMs: 1,
+            manualAvatarPollResponseWaitMs: 50,
+            manualRefreshJobWaitMs: 50,
+            manualTrackedJobLimit: 2,
+          };
+        }
+        return {};
+      },
+    },
+  }, createBaseModuleFactory());
+
+  for (let index = 1; index <= 6; index += 1) {
+    const steamID = `765611980000001${String(index).padStart(2, "0")}`;
+    const job = await module.api.refreshPlayer({ steamID });
+    const result = await module.api.waitForJob(job.id, 100);
+    assert.equal(result.status, "completed");
+  }
+
+  assert.equal(module.api.getStatus().automaticRefreshPolicy.trackedManualJobs, 2);
+  assert.equal(module.api.getStatus().automaticRefreshPolicy.trackedManualJobLimit, 2);
+
+  await module.stop();
+  assert.equal(module.api.getStatus().automaticRefreshPolicy.trackedManualJobs, 0);
+}
+
 async function testBaseBackfillStillProcessesEligibleRows() {
   let missingAvatarQueries = 0;
   const persistedAvatars = [];
@@ -267,6 +310,7 @@ async function testAutomaticRefreshOwnershipAndInactiveBackfillGuard() {
 }
 
 await testManualAvatarPersistenceCompatibility();
+await testTrackedManualJobsStayBounded();
 await testBaseBackfillStillProcessesEligibleRows();
 await testAutomaticRefreshOwnershipAndInactiveBackfillGuard();
 
