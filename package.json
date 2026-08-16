@@ -22,6 +22,7 @@
     "test:kill-records": "node app/tests/run-kill-records-tests.js",
     "test:logpost-recovery": "node app/tests/run-logpost-recovery-tests.js && node app/tests/run-logpost-file-bridge-tests.js",
     "test:logpost-throughput": "node app/tests/run-logpost-throughput-tests.js",
+    "test:udp-worker": "node app/tests/run-logpost-udp-worker-tests.js",
     "test:victim-damage-display": "node app/tests/run-victim-damage-display-tests.js",
     "test:chat-interaction-help-broadcast": "node app/tests/run-chat-interaction-help-broadcast-tests.js",
     "test:squad-leader-impeachment": "node app/tests/run-squad-leader-impeachment-tests.js",

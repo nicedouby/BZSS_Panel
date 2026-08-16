@@ -34,6 +34,7 @@ import { WebRegistry } from "./core/web-registry.js";
 import { WebStatus } from "./core/web-status.js";
 import { RconManager } from "./core/rcon-manager.js";
 import { UdpEventReceiver } from "./core/udp-event-receiver.js";
+import { LogPostUdpIngressBridge } from "./core/logpost-udp-ingress-bridge.js";
 import { LanOptimizedWebServer } from "./core/lan-optimized-web-server.js";
 import { PythonLogParserManager } from "./core/python-log-parser-manager.js";
 import { ModuleManager } from "./core/module-manager.js";
@@ -153,14 +154,22 @@ async function main() {
     runtimeState.recordEvent("rcon", entry);
   });
 
+  const udpConfig = configManager.get("udp", {}) ?? {};
+  const udpWorkerEnabled = udpConfig.ingressWorker?.enabled !== false;
   const udpReceiver = new UdpEventReceiver({
-    config: configManager.get("udp", {}),
+    config: { ...udpConfig, legacySocket: !udpWorkerEnabled },
     logger: logger.child({ moduleId: "core.udpEventReceiver", source: "core.udpEventReceiver" }),
     eventBus,
     webStatus,
     eventPipeline,
     logPostMonitor,
   });
+  const logPostUdpIngressBridge = udpWorkerEnabled ? new LogPostUdpIngressBridge({
+    config: udpConfig,
+    logger: logger.child({ moduleId: "core.logPostUdpIngressBridge", source: "core.logPostUdpIngressBridge" }),
+    webStatus,
+    receiver: udpReceiver,
+  }) : null;
   const logPostFileBridge = new LogPostFileBridge({
     config: configManager.get("logPostFileBridge", {}),
     logger: logger.child({ moduleId: "core.logPostFileBridge", source: "core.logPostFileBridge" }),
@@ -168,6 +177,7 @@ async function main() {
     eventPipeline,
     webStatus,
     logPostMonitor,
+    logPostUdpIngressBridge,
     fileIO: fileIOManager,
     performanceMonitor,
   });
@@ -287,7 +297,11 @@ async function main() {
     return null;
   });
   await rconManager.start();
-  await udpReceiver.start();
+  if (logPostUdpIngressBridge) {
+    await logPostUdpIngressBridge.start();
+  } else {
+    await udpReceiver.start();
+  }
   await pluginManager.loadPlugins();
   // FileBridge may replay recent durable events during start. Start it only
   // after plugins have subscribed, otherwise recovery events such as squad
@@ -333,7 +347,11 @@ async function main() {
     await moduleManager.stopAll();
     rawLogDerivedEvents?.stop?.();
     await logPostFileBridge.stop();
-    await udpReceiver.stop();
+    if (logPostUdpIngressBridge) {
+      await logPostUdpIngressBridge.stop();
+    } else {
+      await udpReceiver.stop();
+    }
     await rconManager.stop();
     runtimeState.stop();
     performanceMonitor.stop();

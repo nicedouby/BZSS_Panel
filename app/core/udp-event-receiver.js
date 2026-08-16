@@ -24,7 +24,8 @@ export class UdpEventReceiver {
     this.webStatus = webStatus;
     this.eventPipeline = eventPipeline;
     this.logPostMonitor = logPostMonitor;
-    this.socket = dgram.createSocket("udp4");
+    this.legacySocketEnabled = config.legacySocket !== false;
+    this.socket = this.legacySocketEnabled ? dgram.createSocket("udp4") : null;
     this.isStarting = false;
     this.lastDiagnosticsPublishAt = 0;
     this.metrics = {
@@ -43,7 +44,7 @@ export class UdpEventReceiver {
       lastPacketBytes: 0,
       lastRemote: "",
     };
-    this.packetLossMonitor = new UdpPacketLossMonitor({
+    this.packetLossMonitor = this.legacySocketEnabled ? new UdpPacketLossMonitor({
       logger: this.logger,
       finalizeGraceMs: Number(config.packetStatsFinalizeGraceMs ?? 750),
       historySize: Number(config.packetStatsHistorySize ?? 8640),
@@ -51,10 +52,10 @@ export class UdpEventReceiver {
       retentionMs: Math.max(1, Number(config.packetStatsRetentionHours ?? 24)) * 60 * 60 * 1000,
       staleAfterMs: Math.max(15, Number(config.packetStatsStaleAfterSeconds ?? 30)) * 1000,
       onUpdate: () => this.publishDiagnostics(true),
-    });
+    }) : null;
 
-    this.socket.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
-    this.socket.on("error", (error) => {
+    this.socket?.on("message", (buffer, remoteInfo) => this.handleMessage(buffer, remoteInfo));
+    this.socket?.on("error", (error) => {
       this.metrics.socketErrors += 1;
       this.publishDiagnostics(true);
       if (this.isStarting) return;
@@ -67,6 +68,7 @@ export class UdpEventReceiver {
   }
 
   async start() {
+    if (!this.legacySocketEnabled) return;
     this.isStarting = true;
 
     try {
@@ -103,12 +105,13 @@ export class UdpEventReceiver {
   }
 
   async stop() {
+    if (!this.legacySocketEnabled) return;
     this.webStatus.set("udpReceiver", "stopped");
 
     await new Promise((resolve) => {
       try { this.socket.close(resolve); } catch { resolve(); }
     });
-    await this.packetLossMonitor.close();
+    await this.packetLossMonitor?.close();
     this.publishDiagnostics(true);
   }
 
@@ -155,14 +158,30 @@ export class UdpEventReceiver {
 
     const packetType = String(rawEvent?.PacketType ?? "").trim().toUpperCase();
     if (packetType === "EVENT") {
-      this.packetLossMonitor.recordEvent(rawEvent);
+      this.packetLossMonitor?.recordEvent(rawEvent);
     }
     if (packetType === "STAT" || rawEvent.Event === PACKET_STAT_EVENT_NAME) {
-      this.packetLossMonitor.recordStat(rawEvent);
+      this.packetLossMonitor?.recordStat(rawEvent);
       this.publishDiagnostics();
       return;
     }
 
+    this.handleParsedEvent(rawEvent, {
+      receivedAtMs: Date.now(),
+      remoteAddress: remoteInfo.address,
+      remotePort: remoteInfo.port,
+    });
+  }
+
+  /**
+   * Main-thread business half of UDP ingress. The Worker has already parsed,
+   * size-checked and sequence-accounted the packet before this method runs.
+   */
+  handleParsedEvent(rawEvent, transportMeta = {}) {
+    const remoteInfo = {
+      address: transportMeta.remoteAddress ?? "",
+      port: Number(transportMeta.remotePort ?? 0),
+    };
     const eventId = String(rawEvent?.EventId ?? "").trim();
     if (eventId && this.eventBus?.hasRecentCoreEventId?.(eventId)) {
       this.metrics.duplicateEventsDropped += 1;
@@ -220,7 +239,8 @@ export class UdpEventReceiver {
       port: this.port,
       maxMessageBytes: this.maxMessageBytes,
       status: this.webStatus?.state?.udpReceiver ?? "unknown",
-      packetLoss: this.packetLossMonitor.getState(),
+      packetLoss: this.packetLossMonitor?.getState?.() ?? null,
+      legacySocketEnabled: this.legacySocketEnabled,
     };
   }
 

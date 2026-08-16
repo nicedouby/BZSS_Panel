@@ -86,6 +86,40 @@
       </article>
     </section>
 
+    <section class="aggregate-grid">
+      <article class="panel aggregate-card" :class="{ danger: numberValue(udp?.queueOverflowEvents) > 0 }">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">UDP TRANSPORT</p>
+            <h2>Worker 接收状态</h2>
+          </div>
+          <strong :class="lossTone(current?.lossRate)">{{ formatLoss(current?.lossRate) }}</strong>
+        </div>
+        <div class="aggregate-values">
+          <span>接收缓冲 <b>{{ formatBytes(udp?.actualRecvBufferBytes) }}</b></span>
+          <span>Worker 队列 <b>{{ formatInteger(udp?.queueDepth) }}</b></span>
+          <span>队列峰值 <b>{{ formatInteger(udp?.queueHighWaterMark) }}</b></span>
+          <span>溢出记录 <b>{{ formatInteger(udp?.queueOverflowEvents) }}</b></span>
+        </div>
+      </article>
+
+      <article class="panel aggregate-card" :class="{ danger: numberValue(udp?.oldestQueuedEventAgeMs) > 1000 }">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">MAIN CONSUMER</p>
+            <h2>主线程消费积压</h2>
+          </div>
+          <strong>{{ formatDuration(udp?.oldestQueuedEventAgeMs) }}</strong>
+        </div>
+        <div class="aggregate-values">
+          <span>在途 batch <b>{{ formatInteger(udp?.inFlightBatches) }}</b></span>
+          <span>主线程 batch <b>{{ formatInteger(udp?.mainQueueDepth) }}</b></span>
+          <span>已转发事件 <b>{{ formatInteger(udp?.eventsForwarded) }}</b></span>
+          <span>已确认 batch <b>{{ formatInteger(udp?.batchesAcked) }}</b></span>
+        </div>
+      </article>
+    </section>
+
     <section class="panel trend-panel">
       <div class="section-title">
         <div>
@@ -143,6 +177,8 @@
       </div>
       <dl>
         <div><dt>UDP 监听</dt><dd>{{ udp?.host ?? "--" }}:{{ udp?.port ?? "--" }}</dd></div>
+        <div><dt>Worker 状态</dt><dd>{{ udp?.workerStatus ?? "--" }}</dd></div>
+        <div><dt>请求/实际缓冲</dt><dd>{{ formatBytes(udp?.requestedRecvBufferBytes) }} / {{ formatBytes(udp?.actualRecvBufferBytes) }}</dd></div>
         <div><dt>UDP 总收包</dt><dd>{{ formatInteger(udp?.packetsReceived) }}</dd></div>
         <div><dt>业务包观测</dt><dd>{{ formatInteger(monitor?.metrics?.businessPacketsObserved) }}</dd></div>
         <div><dt>统计包观测</dt><dd>{{ formatInteger(monitor?.metrics?.statPacketsObserved) }}</dd></div>
@@ -230,6 +266,19 @@ function formatInteger(value: unknown) {
 function formatLoss(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? `${(number * 100).toFixed(number >= 0.01 ? 2 : 3)}%` : "--";
+}
+
+function formatBytes(value: unknown) {
+  const bytes = numberValue(value);
+  if (!bytes) return "--";
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KiB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function formatDuration(value: unknown) {
+  const ms = numberValue(value);
+  if (!ms) return "0 ms";
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
 }
 
 function lossTone(value: unknown) {
