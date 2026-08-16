@@ -3,6 +3,7 @@
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import {
@@ -77,6 +78,64 @@ export class LanOptimizedWebServer extends WebServer {
     }, {
       "Set-Cookie": result.cookie,
     });
+  }
+
+  /**
+   * Large JSON is not automatically slow JSON. The base implementation used
+   * `large || slow` for WARN, which made healthy 400-600 KB snapshots emit a
+   * warning every second even when JSON.stringify completed in ~2 ms.
+   *
+   * Keep the size telemetry, but only WARN when serialization itself is slow.
+   */
+  json(res, status, obj, extraHeaders = {}) {
+    const start = performance.now();
+    const req = res?.req ?? null;
+    let pretty = false;
+    let urlObj = null;
+
+    if (req) {
+      try {
+        urlObj = new URL(req.url ?? "/", `http://${req.headers?.host ?? "localhost"}`);
+        pretty = urlObj.searchParams.has("pretty");
+      } catch {}
+    }
+
+    const data = pretty ? JSON.stringify(obj, null, 2) : JSON.stringify(obj);
+    const durationMs = performance.now() - start;
+    const sizeBytes = Buffer.byteLength(data);
+
+    if (urlObj?.pathname === "/api/snapshot/all") {
+      this.lastSnapshotSizeBytes = sizeBytes;
+    }
+
+    const performanceConfig = this.core?.config?.get?.("performance") ?? {};
+    const largeJsonBytes = performanceConfig.largeJsonBytes ?? 262144;
+    const slowJsonMs = performanceConfig.slowJsonMs ?? 50;
+
+    // Retain one bounded diagnostic sample for genuinely large responses without
+    // turning response size alone into an operational warning.
+    if (sizeBytes > largeJsonBytes) {
+      this.lastLargeJsonResponse = {
+        url: req?.url ?? "unknown",
+        sizeBytes,
+        durationMs,
+        at: new Date().toISOString(),
+      };
+    }
+
+    if (durationMs > slowJsonMs) {
+      this.logger?.warn?.(
+        `[slow-json] url=${req?.url ?? "unknown"} sizeBytes=${sizeBytes} durationMs=${durationMs.toFixed(2)}ms`,
+      );
+    }
+
+    res.writeHead(status, {
+      ...BASE_SECURITY_HEADERS,
+      "Content-Type": "application/json; charset=utf-8",
+      "Content-Length": sizeBytes,
+      ...extraHeaders,
+    });
+    res.end(data);
   }
 
   async serveStatic(url, req, res) {
