@@ -2,7 +2,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { monitorEventLoopDelay } from "node:perf_hooks";
+import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 
 const execFileAsync = promisify(execFile);
 
@@ -29,6 +29,7 @@ export class PerformanceMonitor {
     this.sampleTimer = null;
     this.logTimer = null;
     this.histogram = null;
+    this.lastEventLoopUtilization = null;
     this.lastNetworkTotals = null;
     this.lastNetworkSampleAt = null;
     this.lastNetworkMetrics = null;
@@ -65,6 +66,7 @@ export class PerformanceMonitor {
       }
     }
 
+    this.lastEventLoopUtilization = null;
     this.logger?.info("PerformanceMonitor started.");
 
     // Sample metrics periodically
@@ -92,6 +94,7 @@ export class PerformanceMonitor {
         this.histogram.reset();
       } catch {}
     }
+    this.lastEventLoopUtilization = null;
     this.logger?.info("PerformanceMonitor stopped.");
   }
 
@@ -112,6 +115,16 @@ export class PerformanceMonitor {
           }
         : { mean: 0, p95: 0, p99: 0, max: 0 };
 
+      const currentEventLoopUtilization = performance.eventLoopUtilization();
+      const eventLoopUtilization = this.lastEventLoopUtilization
+        ? performance.eventLoopUtilization(currentEventLoopUtilization, this.lastEventLoopUtilization)
+        : null;
+      this.lastEventLoopUtilization = currentEventLoopUtilization;
+
+      const utilization = eventLoopUtilization && Number.isFinite(eventLoopUtilization.utilization)
+        ? Math.min(1, Math.max(0, eventLoopUtilization.utilization))
+        : null;
+
       // Reset histogram for the next interval
       if (this.histogram) {
         this.histogram.reset();
@@ -127,7 +140,17 @@ export class PerformanceMonitor {
           arrayBuffers: memory.arrayBuffers || 0,
         },
         network,
-        eventLoop: eventLoopDelayMs,
+        eventLoop: {
+          ...eventLoopDelayMs,
+          utilization,
+          utilizationPercent: utilization == null ? null : utilization * 100,
+          activeMs: eventLoopUtilization && Number.isFinite(eventLoopUtilization.active)
+            ? Math.max(0, eventLoopUtilization.active)
+            : null,
+          idleMs: eventLoopUtilization && Number.isFinite(eventLoopUtilization.idle)
+            ? Math.max(0, eventLoopUtilization.idle)
+            : null,
+        },
       });
 
       if (this.history.length > this.maxHistoryPoints) {
@@ -141,6 +164,9 @@ export class PerformanceMonitor {
   logReport() {
     if (this.history.length === 0) return;
     const latest = this.history[this.history.length - 1];
+    const utilizationLabel = Number.isFinite(latest.eventLoop.utilizationPercent)
+      ? `${latest.eventLoop.utilizationPercent.toFixed(1)}%`
+      : "--";
     
     this.logger?.info(
       `[perf-metrics] RSS=${(latest.memory.rss / 1024 / 1024).toFixed(2)}MB ` +
@@ -152,6 +178,7 @@ export class PerformanceMonitor {
           + `NetOut=${this.#formatBytesPerSecond(latest.network.bytesOutPerSec)} `
           + `NetTotal=${this.#formatBytesPerSecond(latest.network.bytesTotalPerSec)} `
         : "") +
+      `EventLoopUtil=${utilizationLabel} ` +
       `EventLoopMean=${latest.eventLoop.mean.toFixed(2)}ms ` +
       `EventLoopP95=${latest.eventLoop.p95.toFixed(2)}ms ` +
       `EventLoopP99=${latest.eventLoop.p99.toFixed(2)}ms ` +
