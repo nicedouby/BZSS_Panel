@@ -1155,7 +1155,6 @@ class SteamGameDurationService {
     if (!this.fetchAvatarsEnabled) return [];
     if (!this.apiKey) {
       this.logger?.warn("fetchSteamPlayerSummaries: No Steam API Key configured.");
-      console.log("[SteamAvatar] Warning: Steam API key is not configured.");
       return [];
     }
     const ids = Array.isArray(steamIDs) ? steamIDs : [steamIDs];
@@ -1167,7 +1166,6 @@ class SteamGameDurationService {
       }
     }).filter(Boolean);
     if (validIds.length === 0) {
-      console.log("[SteamAvatar] Info: No valid Steam IDs to query.");
       return [];
     }
 
@@ -1216,7 +1214,6 @@ class SteamGameDurationService {
           const canRetry = attempt < maxAttempts && this._isRetryableSteamError(error);
           
           if (canRetry) {
-            console.log(`[SteamAvatar] Attempt ${attempt} failed: ${error.message}. Retrying in ${this.retryDelayMs * attempt}ms...`);
             await delay(this.retryDelayMs * attempt);
           } else {
             break;
@@ -1229,11 +1226,9 @@ class SteamGameDurationService {
         const errorMessage = lastChunkError.cause ? `${lastChunkError.message} (cause: ${lastChunkError.cause.message || lastChunkError.cause})` : lastChunkError.message;
         
         if (isNetworkError) {
-          console.log(`[SteamAvatar] Network error fetching summaries after ${maxAttempts} attempts: ${errorMessage}`);
         } else {
-          console.error(`[SteamAvatar] Error fetching player summaries after ${maxAttempts} attempts:`, lastChunkError);
         }
-        this.logger?.warn(`Failed to fetch Steam player summaries after ${maxAttempts} attempts: ${errorMessage}`);
+        this.logger?.warn(`Steam 玩家资料获取失败：重试=${maxAttempts} 原因=${errorMessage}`, { operation: "steamAvatarLookupFailed" });
       }
     }
     return results;
@@ -1253,7 +1248,6 @@ class SteamGameDurationService {
     }).filter(Boolean))];
     if (validIds.length === 0) return { ok: true, requested: 0, updated: 0 };
 
-    console.log(`[SteamAvatar] Info: Requesting fetch and cache for Steam IDs: ${validIds.join(", ")}`);
 
     try {
       let summaries = await this.fetchSteamPlayerSummaries(validIds);
@@ -1270,13 +1264,11 @@ class SteamGameDurationService {
         }
       }
 
-      console.log(`[SteamAvatar] Info: Retrieved ${summaries.length} summaries. Writing to player-database...`);
       let updated = 0;
       for (const summary of summaries) {
         const steamID = summary.steamid;
         const avatar = summary.avatarmedium || summary.avatar || summary.avatarfull;
         if (steamID && avatar) {
-          console.log(`[SteamAvatar] Saving: ID=${steamID} -> URL=${avatar}`);
           const saved = await this.playerDatabase?.updateSteamAvatarBySteamID?.(steamID, avatar, {
             personaName: summary.personaname || summary.realname || null,
             profileUrl: summary.profileurl || null,
@@ -1287,13 +1279,15 @@ class SteamGameDurationService {
           });
           if (saved) updated += 1;
         } else {
-          console.log(`[SteamAvatar] Warning: Missing steamid or avatar in summary:`, JSON.stringify(summary));
         }
       }
+      this.logger?.info?.(`Steam 头像刷新完成：请求=${validIds.length} 返回=${summaries.length} 更新=${updated}`, {
+        operation: "steamAvatarRefresh",
+        data: { requested: validIds.length, received: summaries.length, updated },
+      });
       return { ok: true, requested: validIds.length, received: summaries.length, updated };
     } catch (error) {
-      console.error(`[SteamAvatar] Cache execution error:`, error);
-      this.logger?.warn(`Failed to fetch and cache Steam avatars: ${error.message}`);
+      this.logger?.warn(`Steam 头像刷新失败：${error.message}`, { operation: "steamAvatarRefreshFailed" });
       return { ok: false, requested: validIds.length, updated: 0, error: error?.message || String(error) };
     }
   }
@@ -1368,7 +1362,7 @@ class SteamGameDurationService {
     job.status = "running";
     job.startedAt = now();
     this._notifyJobWaiters(job);
-    this.logger?.info(`Steam playtime job started: ${job.type}`, {
+    this.logger?.debug?.(`Steam 时长任务开始：${job.type}`, {
       operation: "playtimeJobStart",
       data: { jobId: job.id, input: job.input },
     });
@@ -1377,7 +1371,7 @@ class SteamGameDurationService {
       job.result = await runner();
       job.status = "completed";
       job.finishedAt = now();
-      this.logger?.info(`Steam playtime job completed: ${job.type}`, {
+      this.logger?.debug?.(`Steam 时长任务完成：${job.type}`, {
         operation: "playtimeJobComplete",
         data: { jobId: job.id, result: summarizeJobResult(job.result) },
       });
@@ -1391,7 +1385,7 @@ class SteamGameDurationService {
         status: "failed",
         message: job.error.message,
       });
-      this.logger?.warn(`Steam playtime job failed: ${job.type} ${job.error.message}`, {
+      this.logger?.warn(`Steam 时长任务失败：${job.type} ${job.error.message}`, {
         operation: "playtimeJobFailed",
         data: { jobId: job.id },
       });
