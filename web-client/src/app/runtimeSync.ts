@@ -19,10 +19,21 @@ interface RuntimeSystemStatus {
     memory?: { rss?: number };
     performance?: {
       latest?: {
+        timestamp?: number;
         network?: {
           bytesInPerSec?: number | null;
           bytesOutPerSec?: number | null;
           bytesTotalPerSec?: number | null;
+        } | null;
+        eventLoop?: {
+          mean?: number | null;
+          p95?: number | null;
+          p99?: number | null;
+          max?: number | null;
+          utilization?: number | null;
+          utilizationPercent?: number | null;
+          activeMs?: number | null;
+          idleMs?: number | null;
         } | null;
       } | null;
     } | null;
@@ -42,9 +53,13 @@ const runtimeSyncState = reactive({
 });
 
 let timer: number | null = null;
+let systemStatusTimer: number | null = null;
 let visibilityListenerAttached = false;
 let activeSnapshotController: AbortController | null = null;
+let activeSystemStatusController: AbortController | null = null;
 let snapshotRequestVersion = 0;
+let systemStatusRequestVersion = 0;
+let systemStatusInFlight = false;
 
 function isPageHidden() {
   return typeof document !== "undefined" && document.hidden;
@@ -54,6 +69,13 @@ function isPageHidden() {
 // starting must never be able to leave it permanently in the "in flight"
 // state, otherwise every page that depends on it remains on its loading view.
 const SNAPSHOT_REQUEST_TIMEOUT_MS = 7_000;
+
+// System telemetry must remain readable while the shared snapshot is slow or
+// timing out.  The old implementation only refreshed /api/system/status after
+// a successful /api/snapshot/all request, which made MAIN/P95 freeze exactly
+// when the panel was overloaded.  Keep a small, independent polling loop.
+const SYSTEM_STATUS_REQUEST_TIMEOUT_MS = 4_000;
+const SYSTEM_STATUS_REFRESH_MS = 2_000;
 
 export function setRuntimeSyncRefreshPolicy(policy: unknown) {
   runtimeSyncState.refreshPolicy = normalizeRefreshPolicy(policy);
@@ -65,14 +87,20 @@ export function startRuntimeSync() {
   runtimeSyncState.started = true;
   attachVisibilityListener();
   void fetchSnapshot({ scheduleNext: true, immediate: true });
+  void fetchSharedSystemStatus({ scheduleNext: true, immediate: true });
 }
 export function stopRuntimeSync() {
   runtimeSyncState.started = false;
   runtimeSyncState.inFlight = false;
+  systemStatusInFlight = false;
   snapshotRequestVersion += 1;
+  systemStatusRequestVersion += 1;
   activeSnapshotController?.abort("runtime-sync-stopped");
   activeSnapshotController = null;
+  activeSystemStatusController?.abort("runtime-sync-stopped");
+  activeSystemStatusController = null;
   clearRuntimeTimer();
+  clearSystemStatusTimer();
   detachVisibilityListener();
 }
 
@@ -97,11 +125,18 @@ function handleVisibilityChange() {
 
   if (isPageHidden()) {
     clearRuntimeTimer();
+    clearSystemStatusTimer();
     if (activeSnapshotController) {
       snapshotRequestVersion += 1;
       activeSnapshotController.abort("runtime-sync-hidden");
       activeSnapshotController = null;
       runtimeSyncState.inFlight = false;
+    }
+    if (activeSystemStatusController) {
+      systemStatusRequestVersion += 1;
+      activeSystemStatusController.abort("runtime-sync-hidden");
+      activeSystemStatusController = null;
+      systemStatusInFlight = false;
     }
     return;
   }
@@ -109,7 +144,9 @@ function handleVisibilityChange() {
   // Do one coalesced refresh after returning to the tab; do not replay
   // refreshes that would have happened while the page was hidden.
   clearRuntimeTimer();
+  clearSystemStatusTimer();
   void fetchSnapshot({ scheduleNext: true, immediate: true });
+  void fetchSharedSystemStatus({ scheduleNext: true, immediate: true });
 }
 
 function attachVisibilityListener() {
@@ -130,6 +167,12 @@ function clearRuntimeTimer() {
   timer = null;
 }
 
+function clearSystemStatusTimer() {
+  if (systemStatusTimer == null) return;
+  window.clearTimeout(systemStatusTimer);
+  systemStatusTimer = null;
+}
+
 function scheduleRuntimeSync() {
   if (!runtimeSyncState.started || runtimeSyncState.inFlight || isPageHidden()) return;
 
@@ -139,6 +182,16 @@ function scheduleRuntimeSync() {
     timer = null;
     void fetchSnapshot({ scheduleNext: true, immediate: true });
   }, delay);
+}
+
+function scheduleSystemStatusSync() {
+  if (!runtimeSyncState.started || systemStatusInFlight || isPageHidden()) return;
+
+  clearSystemStatusTimer();
+  systemStatusTimer = window.setTimeout(() => {
+    systemStatusTimer = null;
+    void fetchSharedSystemStatus({ scheduleNext: true, immediate: true });
+  }, SYSTEM_STATUS_REFRESH_MS);
 }
 
 function resolveRuntimeSyncDelay() {
@@ -208,7 +261,13 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
     const normalized = markRaw(normalizeRuntimeSnapshot(data));
     snapshot.value = normalized;
     applySnapshotToStores(normalized);
-    await fetchSharedSystemStatus(controller);
+
+    // Manual one-shot synchronization still includes system status so callers
+    // retain the old syncOnce() contract. Recurring telemetry is handled by an
+    // independent loop and therefore cannot be stalled by this snapshot path.
+    if (!options.scheduleNext) {
+      await fetchSharedSystemStatus({ scheduleNext: false, immediate: true });
+    }
 
     runtimeSyncState.lastSuccessAt = Date.now();
     runtimeSyncState.lastError = null;
@@ -235,7 +294,17 @@ async function fetchSnapshot(options: { scheduleNext: boolean; immediate?: boole
   }
 }
 
-async function fetchSharedSystemStatus(controller: AbortController) {
+async function fetchSharedSystemStatus(options: { scheduleNext: boolean; immediate?: boolean }) {
+  if (!runtimeSyncState.started || systemStatusInFlight || isPageHidden()) return;
+  if (options.immediate) clearSystemStatusTimer();
+
+  const requestVersion = ++systemStatusRequestVersion;
+  const controller = new AbortController();
+  activeSystemStatusController = controller;
+  const timeoutId = window.setTimeout(() => controller.abort("timeout"), SYSTEM_STATUS_REQUEST_TIMEOUT_MS);
+  const isCurrentRequest = () => requestVersion === systemStatusRequestVersion;
+
+  systemStatusInFlight = true;
   try {
     const response = await fetch("/api/system/status", {
       credentials: "same-origin",
@@ -244,10 +313,19 @@ async function fetchSharedSystemStatus(controller: AbortController) {
       },
       signal: controller.signal,
     });
-    if (!response.ok || controller.signal.aborted) return;
+    if (!isCurrentRequest() || !runtimeSyncState.started || !response.ok || controller.signal.aborted) return;
     systemStatus.value = await response.json() as RuntimeSystemStatus;
   } catch {
     // System metrics are auxiliary; keep the last known value on failure.
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (isCurrentRequest()) {
+      activeSystemStatusController = null;
+      systemStatusInFlight = false;
+      if (options.scheduleNext && runtimeSyncState.started) {
+        scheduleSystemStatusSync();
+      }
+    }
   }
 }
 
