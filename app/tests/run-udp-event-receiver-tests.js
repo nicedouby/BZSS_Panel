@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { UdpEventReceiver } from "../core/udp-event-receiver.js";
 import { UdpPacketLossMonitor } from "../core/udp-packet-loss-monitor.js";
 
-function createHarness() {
+function createHarness({ duplicateEventIds = [] } = {}) {
   const emitted = [];
+  const duplicateSet = new Set(duplicateEventIds);
   let pipelineCalls = 0;
   let inspectCalls = 0;
 
@@ -23,6 +24,9 @@ function createHarness() {
       debug() {},
     },
     eventBus: {
+      hasRecentCoreEventId(eventId) {
+        return duplicateSet.has(eventId);
+      },
       emitCoreEvent(eventName, event) {
         emitted.push({ eventName, event });
       },
@@ -67,7 +71,7 @@ function remote(port = 10000) {
   return { address: "127.0.0.1", port };
 }
 
-function testChunkFastPath() {
+function testChunkFastPathStillUpdatesSequenceMonitor() {
   const { receiver, emitted, counts } = createHarness();
   const rawEvent = {
     Event: "On_BzssCorePlayerChunk",
@@ -88,7 +92,7 @@ function testChunkFastPath() {
   receiver.handleMessage(Buffer.from(JSON.stringify(rawEvent), "utf8"), remote());
 
   assert.equal(counts.pipelineCalls, 0);
-  assert.equal(counts.inspectCalls, 0);
+  assert.equal(counts.inspectCalls, 1);
   assert.equal(emitted.length, 1);
   assert.equal(emitted[0].eventName, "On_BzssCorePlayerChunk");
   assert.equal(emitted[0].event.seq, "17");
@@ -119,6 +123,26 @@ function testRegularEventStillUsesPipeline() {
   assert.equal(emitted[1].eventName, "On_RawLogLine");
 }
 
+function testCrossTransportDuplicateStillUpdatesSequenceMonitor() {
+  const { receiver, emitted, counts } = createHarness({ duplicateEventIds: ["evt-duplicate"] });
+  const rawEvent = {
+    Event: "On_TestEvent",
+    EventId: "evt-duplicate",
+    ServerID: "BZSS_Main",
+    SessionID: "session-1",
+    Seq: "19",
+    SourceSeq: "7",
+    Time: "2026-07-09T10:00:02.000Z",
+  };
+
+  receiver.handleMessage(Buffer.from(JSON.stringify(rawEvent), "utf8"), remote(10002));
+
+  assert.equal(counts.inspectCalls, 1);
+  assert.equal(counts.pipelineCalls, 0);
+  assert.equal(emitted.length, 0);
+  assert.equal(receiver.getDiagnostics().duplicateEventsDropped, 1);
+}
+
 function testStatPacketNeverEntersBusinessPipeline() {
   const { receiver, emitted, counts } = createHarness();
   const stat = {
@@ -134,7 +158,7 @@ function testStatPacketNeverEntersBusinessPipeline() {
     TotalSent: "3",
   };
 
-  receiver.handleMessage(Buffer.from(JSON.stringify(stat), "utf8"), remote(10002));
+  receiver.handleMessage(Buffer.from(JSON.stringify(stat), "utf8"), remote(10003));
 
   assert.equal(counts.pipelineCalls, 0);
   assert.equal(counts.inspectCalls, 0);
@@ -195,7 +219,7 @@ function testMissingStatCannotHideBusinessPacketGap() {
   monitor.recordEvent(businessPacket("sender-a", 2));
   monitor.finalizeStat(statSnapshot("sender-a", 1, 1, 2, 2));
 
-  // Pretend the next STAT packet was lost.  The following STAT says only two
+  // Pretend the next STAT packet was lost. The following STAT says only two
   // packets were sent in its immediate window, but the receiver must span from
   // the last finalized high-water mark and therefore evaluate seq 3..5.
   monitor.recordEvent(businessPacket("sender-a", 3));
@@ -272,8 +296,9 @@ function testSenderRestartUsesIndependentSession() {
   assert.equal(state.sessions.length, 2);
 }
 
-testChunkFastPath();
+testChunkFastPathStillUpdatesSequenceMonitor();
 testRegularEventStillUsesPipeline();
+testCrossTransportDuplicateStillUpdatesSequenceMonitor();
 testStatPacketNeverEntersBusinessPipeline();
 testLossCalculationUsesUniquePacketSequence();
 testMissingStatCannotHideBusinessPacketGap();
