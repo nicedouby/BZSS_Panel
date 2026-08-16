@@ -616,6 +616,14 @@ async function testOnlineGrantRejectsChangedOrIncompleteRoster() {
   assert.equal(blocked.canGrant, false);
   assert.equal(blocked.missingIdentityCount, 1);
 
+  active = [
+    { steamId: "76561198377609640", playerId: 11, name: "Alpha" },
+    { steamId: "76561198377609640", playerId: 12, name: "Duplicate Alpha" },
+  ];
+  const duplicated = await module.reserveModule.api.previewOnlineGrant({ durationDays: 1 });
+  assert.equal(duplicated.canGrant, false);
+  assert.equal(duplicated.duplicateIdentityCount, 1);
+
   await module.reserveModule.stop();
   await fs.rm(module.tempDir, { recursive: true, force: true });
 }
