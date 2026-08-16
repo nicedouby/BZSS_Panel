@@ -279,6 +279,11 @@ export interface BzssCoreRawDataResponse {
   lastError: string;
 }
 
+const PLAYER_INFO_LIST_CACHE_MS = 3000;
+let playerInfoListCache: BzssCorePlayerInfoResponse | null = null;
+let playerInfoListCacheAt = 0;
+let playerInfoListInFlight: Promise<BzssCorePlayerInfoResponse> | null = null;
+
 export function normalizeBzssCoreFobInfo(fob: BzssCoreFobInfo): BzssCoreFobInfo {
   const fobSize = String(fob?.fobSize ?? fob?.size ?? "").trim();
   const instigatorName = String(fob?.instigatorName ?? fob?.instigator ?? "").trim();
@@ -304,6 +309,12 @@ function normalizeBzssCoreFobPayload<T extends { fobs?: BzssCoreFobInfo[] }>(pay
     ...payload,
     fobs: payload.fobs.map(normalizeBzssCoreFobInfo),
   };
+}
+
+function rememberPlayerInfoList(response: BzssCorePlayerInfoResponse) {
+  playerInfoListCache = response;
+  playerInfoListCacheAt = Date.now();
+  return response;
 }
 
 export async function executeBzssCoreCommand(input: {
@@ -347,9 +358,23 @@ export async function fetchBzssCorePlayerInfo(input: { name?: string }) {
   return normalizeBzssCoreFobPayload(response);
 }
 
-export async function fetchBzssCorePlayerInfoList() {
-  const response = await apiGet<BzssCorePlayerInfoResponse>("/api/bzss-core/player-info?all=1");
-  return normalizeBzssCoreFobPayload(response);
+export async function fetchBzssCorePlayerInfoList(input: { force?: boolean } = {}) {
+  const now = Date.now();
+  if (!input.force && playerInfoListCache && now - playerInfoListCacheAt < PLAYER_INFO_LIST_CACHE_MS) {
+    return playerInfoListCache;
+  }
+
+  // Coalesce concurrent callers so multiple mounted pages cannot serialize and
+  // transfer the same ~500 KB snapshot at the same instant.
+  if (playerInfoListInFlight) return playerInfoListInFlight;
+
+  playerInfoListInFlight = apiGet<BzssCorePlayerInfoResponse>("/api/bzss-core/player-info?all=1")
+    .then((response) => rememberPlayerInfoList(normalizeBzssCoreFobPayload(response)))
+    .finally(() => {
+      playerInfoListInFlight = null;
+    });
+
+  return playerInfoListInFlight;
 }
 
 export async function fetchBzssCoreRawData() {
@@ -370,7 +395,9 @@ export function streamBzssCorePlayerInfoList(
 
   eventSource.onmessage = (event) => {
     try {
-      const data = normalizeBzssCoreFobPayload(JSON.parse(event.data) as BzssCorePlayerInfoResponse);
+      const data = rememberPlayerInfoList(
+        normalizeBzssCoreFobPayload(JSON.parse(event.data) as BzssCorePlayerInfoResponse),
+      );
       onMessage(data);
     } catch (err) {
       if (onError) onError(err, eventSource);
