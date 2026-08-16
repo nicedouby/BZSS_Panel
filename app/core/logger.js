@@ -174,7 +174,7 @@ export class Logger {
         subscription.listener(entry);
       } catch (error) {
         const message = error?.stack ?? error?.message ?? String(error);
-        console.error(`[LOGGER] subscriber failed: ${message}`);
+        console.error(`[日志] 订阅器处理失败：${message}`);
       }
     }
   }
