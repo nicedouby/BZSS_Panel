@@ -202,30 +202,29 @@ function translateLabel(label) {
 function translateRuntimeMessage(message) {
   const source = String(message ?? "");
   const replacements = [
-    [/\bstarting\\.\\.?/gi, "正在启动。"],
-    [/\bstarted\\.\\.?/gi, "已启动。"],
-    [/\bstopping\\.\\.?/gi, "正在停止。"],
-    [/\bstopped\\.\\.?/gi, "已停止。"],
-    [/\bshutdown requested\\.?/gi, "收到停止请求。"],
-    [/\bfailed\\b/gi, "失败"],
-    [/\berror\\b/gi, "错误"],
-    [/\bwarning\\b/gi, "警告"],
-    [/\bconnected\\b/gi, "已连接"],
-    [/\bdisconnected\\b/gi, "已断开连接"],
-    [/\blistening\\b/gi, "正在监听"],
-    [/\bloaded\\b/gi, "已加载"],
-    [/\bloading\\b/gi, "正在加载"],
-    [/\benabled\\b/gi, "已启用"],
-    [/\bdisabled\\b/gi, "已禁用"],
-    [/\bskipped\\b/gi, "已跳过"],
-    [/\bnot found\\b/gi, "未找到"],
-    [/\btimeout\\b/gi, "超时"],
-    [/\bretrying\\b/gi, "正在重试"],
-    [/\bcompleted\\b/gi, "已完成"],
-    [/\brequest\\b/gi, "请求"],
-    [/\bresponse\\b/gi, "响应"],
-  ];
-  return replacements.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), source);
+    [/\bstarting\b/gi, "正在启动"],
+    [/\bstarted\b/gi, "已启动"],
+    [/\bstopping\b/gi, "正在停止"],
+    [/\bstopped\b/gi, "已停止"],
+    [/\bshutdown requested\b/gi, "收到停止请求"],
+    [/\bfailed\b/gi, "失败"],
+    [/\berror\b/gi, "错误"],
+    [/\bwarning\b/gi, "警告"],
+    [/\bconnected\b/gi, "已连接"],
+    [/\bdisconnected\b/gi, "已断开连接"],
+    [/\blistening\b/gi, "正在监听"],
+    [/\bloaded\b/gi, "已加载"],
+    [/\bloading\b/gi, "正在加载"],
+    [/\benabled\b/gi, "已启用"],
+    [/\bdisabled\b/gi, "已禁用"],
+    [/\bskipped\b/gi, "已跳过"],
+    [/\bnot found\b/gi, "未找到"],
+    [/\btimeout\b/gi, "超时"],
+    [/\bretrying\b/gi, "正在重试"],
+    [/\bcompleted\b/gi, "已完成"],
+    [/\brequest\b/gi, "请求"],
+    [/\bresponse\b/gi, "响应"],
+  ];  return replacements.reduce((text, [pattern, replacement]) => text.replace(pattern, replacement), source);
 }
 
 function writeConsole(logger, entry) {
