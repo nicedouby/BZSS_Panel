@@ -10,6 +10,12 @@ const DEFAULT_TICKET_HISTORY_LIMIT = 7_200;
 const MAX_TICKET_HISTORY_LIMIT = 20_000;
 const DEFAULT_COMMAND_PORT = 12765;
 const DEFAULT_COMMAND_TIMEOUT_MS = 3_000;
+const DEFAULT_MAX_TRACKED_SOURCES = 32;
+const MAX_TRACKED_SOURCES = 256;
+const DEFAULT_MAX_CONNECTIONS = 64;
+const MAX_CONNECTIONS = 512;
+const DEFAULT_MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
+const MAX_SOCKET_BUFFER_BYTES = 8 * 1024 * 1024;
 
 export function createRemoteTelemetryModule({ core, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -33,6 +39,18 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
   const commandHost = normalizeText(moduleConfig.commandHost);
   const commandPort = normalizePositiveInteger(moduleConfig.commandPort, DEFAULT_COMMAND_PORT);
   const commandTimeoutMs = normalizePositiveInteger(moduleConfig.commandTimeoutMs, DEFAULT_COMMAND_TIMEOUT_MS);
+  const maxTrackedSources = Math.min(
+    normalizePositiveInteger(moduleConfig.maxTrackedSources, DEFAULT_MAX_TRACKED_SOURCES),
+    MAX_TRACKED_SOURCES,
+  );
+  const maxConnections = Math.min(
+    normalizePositiveInteger(moduleConfig.maxConnections, DEFAULT_MAX_CONNECTIONS),
+    MAX_CONNECTIONS,
+  );
+  const maxSocketBufferBytes = Math.min(
+    normalizePositiveInteger(moduleConfig.maxSocketBufferBytes, DEFAULT_MAX_SOCKET_BUFFER_BYTES),
+    MAX_SOCKET_BUFFER_BYTES,
+  );
 
   const sources = new Map();
   const recentSamples = [];
@@ -78,8 +96,23 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
         lastError: "",
         anomalyFlags: [],
       });
+      pruneSources(sourceKey);
     }
     return sources.get(sourceKey);
+  }
+
+  function pruneSources(protectedSourceKey = "") {
+    while (sources.size > maxTrackedSources) {
+      let evictionKey = "";
+      for (const key of sources.keys()) {
+        if (key !== protectedSourceKey && key !== activeTicketSourceKey) {
+          evictionKey = key;
+          break;
+        }
+      }
+      if (!evictionKey) break;
+      sources.delete(evictionKey);
+    }
   }
 
   function normalizeMessage(rawPayload, remoteInfo = {}) {
@@ -389,6 +422,12 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
       currentSample: currentSource?.latest ?? null,
       sources: sourceSummaries,
       recentSamples: recentSamples.slice().reverse(),
+      resourceLimits: {
+        maxTrackedSources,
+        maxConnections,
+        maxSocketBufferBytes,
+        openConnections: sockets.size,
+      },
       command: {
         host: commandHost || null,
         port: commandPort,
@@ -579,8 +618,18 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
   }
 
   function handleSocket(socket) {
+    if (sockets.size >= maxConnections) {
+      lastError = `Remote telemetry connection limit reached (${maxConnections}).`;
+      moduleLogger.warn?.(`[RemoteTelemetry] rejected connection: ${lastError}`, {
+        operation: "remoteTelemetry.connectionLimit",
+      });
+      socket.destroy();
+      return;
+    }
+
     sockets.add(socket);
     let buffer = "";
+    let oversized = false;
     const remoteInfo = {
       address: normalizeText(socket.remoteAddress),
       port: normalizeNullableInteger(socket.remotePort),
@@ -589,11 +638,37 @@ export function createRemoteTelemetryModule({ core, config, logger }) {
     socket.setEncoding("utf8");
     if (typeof socket.setNoDelay === "function") socket.setNoDelay(true);
 
+    function rejectOversizedPayload() {
+      if (oversized) return;
+      oversized = true;
+      totalParseErrors += 1;
+      lastError = `Remote telemetry payload exceeded ${maxSocketBufferBytes} bytes.`;
+      moduleLogger.warn?.(`[RemoteTelemetry] rejected oversized payload: ${lastError}`, {
+        operation: "remoteTelemetry.payloadTooLarge",
+        data: {
+          remoteAddress: remoteInfo.address,
+          remotePort: remoteInfo.port,
+          bufferedBytes: Buffer.byteLength(buffer, "utf8"),
+        },
+      });
+      buffer = "";
+      socket.destroy();
+    }
+
     socket.on("data", (chunk) => {
       buffer += String(chunk ?? "");
       while (true) {
         const lineBreak = buffer.indexOf("\n");
-        if (lineBreak < 0) break;
+        if (lineBreak < 0) {
+          if (Buffer.byteLength(buffer, "utf8") > maxSocketBufferBytes) {
+            rejectOversizedPayload();
+          }
+          break;
+        }
+        if (Buffer.byteLength(buffer.slice(0, lineBreak), "utf8") > maxSocketBufferBytes) {
+          rejectOversizedPayload();
+          return;
+        }
         const line = buffer.slice(0, lineBreak).replace(/\r$/, "");
         buffer = buffer.slice(lineBreak + 1);
         if (!line.trim()) continue;
