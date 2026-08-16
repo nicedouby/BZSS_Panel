@@ -64,6 +64,15 @@
               </button>
               <button
                 type="button"
+                class="menu-item reserve-grant-item"
+                role="menuitem"
+                :disabled="!canOnlineReserveGrant || isRefreshing || refreshingPlaytime"
+                @click="openOnlineReserveGrant"
+              >
+                为在线玩家激活预留位
+              </button>
+              <button
+                type="button"
                 class="menu-item"
                 role="menuitem"
                 :disabled="!canRefresh || isRefreshing"
@@ -102,6 +111,7 @@ const props = defineProps<{
   playersUpdatedAt?: number;
   squadsUpdatedAt?: number;
   multiSelectMode?: boolean;
+  canOnlineReserveGrant?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -110,6 +120,7 @@ const emit = defineEmits<{
   (event: "refresh-playtime"): void;
   (event: "refresh-playtime-force"): void;
   (event: "warn-all"): void;
+  (event: "open-online-reserve-grant"): void;
   (event: "toggle-multi-select"): void;
   (event: "view-mode-change", mode: "list" | "map"): void;
 }>();
@@ -159,6 +170,11 @@ function onWindowKeyDown(event: KeyboardEvent) {
 function removeWindowListeners() {
   window.removeEventListener("pointerdown", onWindowPointerDown);
   window.removeEventListener("keydown", onWindowKeyDown);
+}
+
+function openOnlineReserveGrant() {
+  emit("open-online-reserve-grant");
+  closeRefreshMenu();
 }
 
 function runRefresh(type: "players" | "squads") {
@@ -284,6 +300,11 @@ onBeforeUnmount(removeWindowListeners);
 
 .danger-item {
   color: #fca5a5;
+}
+
+.reserve-grant-item {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.28);
 }
 
 .refresh-button.primary {
