@@ -558,6 +558,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { usePlayerStore } from "../../stores/player.store";
 import { t } from "../../i18n";
 import { hasPermission } from "../../shared/rcon-permissions.js";
+import { isInputElement } from "../../utils/keyboard";
 
 const props = withDefaults(
   defineProps<{
@@ -978,6 +979,7 @@ function close() {
 }
 
 function handleEscape(e: KeyboardEvent) {
+  if (isInputElement(e.target)) return;
   if (e.key === "Escape" && props.open) {
     close();
   }

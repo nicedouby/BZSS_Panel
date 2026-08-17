@@ -124,6 +124,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { isInputElement } from "../../utils/keyboard";
 
 type ToolbarPanel = "layers" | "tools" | "help";
 
@@ -197,6 +198,7 @@ function onDocumentPointerDown(event: PointerEvent) {
 }
 
 function onDocumentKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape" && activePanel.value) {
     event.stopPropagation();
     closePanel();

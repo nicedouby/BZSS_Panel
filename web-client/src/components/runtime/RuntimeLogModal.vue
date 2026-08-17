@@ -58,6 +58,7 @@ import LogVirtualList from "../console/LogVirtualList.vue";
 import type { ConsoleLine } from "../../composables/useConsoleLines";
 import { apiGet } from "../../app/apiClient";
 import { canAutoRefreshNow } from "../../composables/useAutoRefreshGate";
+import { isInputElement } from "../../utils/keyboard";
 
 interface RuntimeLogTarget {
   id: string;
@@ -162,6 +163,7 @@ function stopAutoRefresh() {
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape" && props.open) {
     emit("close");
   }

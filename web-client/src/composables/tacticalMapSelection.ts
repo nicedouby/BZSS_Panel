@@ -3,6 +3,7 @@ import { executeBzssCoreCommand } from "../app/bzssCoreApi";
 import { useAuthStore } from "../stores/auth.store";
 import { useServerStore } from "../stores/server.store";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
+import { isInputElement } from "../utils/keyboard";
 
 export type TacticalMapCurrentSelection =
   | {
@@ -664,6 +665,7 @@ export function ensureTacticalMapSelectionController() {
   }, true);
 
   document.addEventListener("keydown", (event) => {
+    if (isInputElement(event.target)) return;
     if (event.key !== "Escape" || !killModeEnabled.value) return;
     setTacticalMapKillMode(false);
   }, true);

@@ -135,6 +135,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
 import { killPlayer } from "../../app/squadManagementApi";
+import { isInputElement } from "../../utils/keyboard";
 
 const props = defineProps<{
   player: BzssCoreTrackedPlayerInfo;
@@ -228,6 +229,7 @@ function syncMenuPosition() {
 }
 
 function onDocumentKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape") emit("close");
 }
 

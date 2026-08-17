@@ -379,6 +379,7 @@ import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { hasPermission } from "../../shared/rcon-permissions.js";
 import { usePlayerStore } from "../../stores/player.store";
+import { isInputElement } from "../../utils/keyboard";
 
 type DialogMode = "weather" | "time" | "raw" | "vehicle" | "forb-ress" | "automatic-heal";
 
@@ -646,6 +647,7 @@ function onWindowPointerDown(event: PointerEvent) {
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key !== "Escape") return;
   if (dialogOpen.value) closeDialog();
   else closeMenu();

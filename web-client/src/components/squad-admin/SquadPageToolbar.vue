@@ -91,6 +91,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { t } from "../../i18n";
+import { isInputElement } from "../../utils/keyboard";
 
 type RefreshType = "players" | "squads" | "all";
 
@@ -151,6 +152,7 @@ function onWindowPointerDown(event: PointerEvent) {
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape") {
     closeRefreshMenu();
   }

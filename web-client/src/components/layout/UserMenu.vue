@@ -246,6 +246,7 @@ import { useUiStore, type UiTheme } from "../../stores/ui.store";
 import { UI_THEME_OPTIONS } from "../../theme/uiThemes";
 import { t } from "../../i18n";
 import { canSendRconCommand, hasPermission as hasSharedPermission } from "../../shared/rcon-permissions.js";
+import { isInputElement } from "../../utils/keyboard";
 
 const emit = defineEmits<{
   (event: "open-plugin-center"): void;
@@ -422,6 +423,7 @@ function onWindowPointerDown(event: PointerEvent) {
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape") {
     closeMenu();
   }

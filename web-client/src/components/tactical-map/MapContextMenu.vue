@@ -238,6 +238,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { isInputElement } from "../../utils/keyboard";
 
 const props = defineProps<{
   x: number;
@@ -330,6 +331,7 @@ function syncMenuPosition() {
 }
 
 function onDocumentKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key !== "Escape") return;
 
   if (showLayerRing.value) {

@@ -57,6 +57,7 @@ import type { PluginManifest } from "./plugin.types";
 import { fetchPlugins, setPluginEnabled, updatePluginConfig } from "./plugin.api";
 import PluginCard from "./PluginCard.vue";
 import PluginSettingsDrawer from "./PluginSettingsDrawer.vue";
+import { isInputElement } from "../../utils/keyboard";
 import "./plugin-center.css";
 
 const props = defineProps<{
@@ -158,6 +159,7 @@ function replacePlugin(updated: PluginManifest) {
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape" && props.open) {
     handleClose();
   }

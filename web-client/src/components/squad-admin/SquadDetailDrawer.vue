@@ -148,6 +148,7 @@ import { useUiStore } from "../../stores/ui.store";
 import { warnPlayer, disbandSquad } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import { t } from "../../i18n";
+import { isInputElement } from "../../utils/keyboard";
 
 const props = defineProps<{
   squad: SquadViewModel | null;
@@ -233,6 +234,7 @@ function natureTone(nature: SquadViewModel["squadNature"]): "ok" | "warn" | "idl
 }
 
 function handleEscape(e: KeyboardEvent) {
+  if (isInputElement(e.target)) return;
   if (e.key === "Escape" && props.open) {
     close();
   }

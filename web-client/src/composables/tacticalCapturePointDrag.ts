@@ -4,6 +4,7 @@ import {
   getDefaultTacticalMapKey,
   resolveTacticalMapKey,
 } from "../shared/tactical-map-data";
+import { isInputElement } from "../utils/keyboard";
 
 type MapBounds = {
   minX: number;
@@ -379,6 +380,7 @@ function cancelDragEvent(event: PointerEvent) {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key !== "Escape" || !activeDrag) return;
   event.preventDefault();
   event.stopPropagation();

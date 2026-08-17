@@ -117,6 +117,7 @@ import { echarts, type EChartsOption } from "../utils/echarts";
 import { canAutoRefreshNow } from "../composables/useAutoRefreshGate";
 import { readChartThemeTokens } from "../theme/chartTheme";
 import { useUiStore } from "../stores/ui.store";
+import { isInputElement } from "../utils/keyboard";
 
 interface SystemStatus {
   ok: boolean;
@@ -432,6 +433,7 @@ function formatRate(bytesPerSec?: number | null) {
 }
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape" && hasSelection.value) {
     closeLogWindow();
   }

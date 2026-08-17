@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, watch } from "vue";
+import { computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import AppLayout from "./components/layout/AppLayout.vue";
 import LoginPage from "./pages/LoginPage.vue";
@@ -35,6 +35,12 @@ import { setRuntimeSyncRefreshPolicy, startRuntimeSync, stopRuntimeSync } from "
 import { t } from "./i18n";
 import { useAuthStore } from "./stores/auth.store";
 import { useUiStore } from "./stores/ui.store";
+import { attachGlobalKeyboardProtections } from "./utils/keyboard";
+
+let removeKeyboardProtections: (() => void) | null = null;
+onMounted(() => {
+  removeKeyboardProtections = attachGlobalKeyboardProtections();
+});
 
 const RUNTIME_START_DELAY_MS = 180;
 
@@ -117,6 +123,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  if (removeKeyboardProtections) removeKeyboardProtections();
   cancelDeferredRuntimeStart();
   stopPageFrameworkPreload();
 });

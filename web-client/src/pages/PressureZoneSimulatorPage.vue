@@ -178,6 +178,7 @@ import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { TACTICAL_MAP_CONFIGS, TACTICAL_MAP_LIST, type TacticalMapConfig } from "../shared/tactical-map-data";
 import { fetchDynamicPressureZoneBaseConfig, saveDynamicPressureZoneProfile, simulateDynamicPressureZone, type PressureZoneState } from "../app/dynamicPressureZoneApi";
+import { isInputElement } from "../utils/keyboard";
 
 interface ObjectiveModel { uid: string; name: string; x: number; y: number; owner: number }
 type DragState = { type: "main" | "objective"; id: number | string; pointerId: number; startX: number; startY: number; moved: boolean };
@@ -369,7 +370,7 @@ function resetView() {
   camera.x.value = (element.clientWidth - 1000 * nextZoom) / 2;
   camera.y.value = (element.clientHeight - 1000 * nextZoom) / 2;
 }
-function onKeydown(event: KeyboardEvent) { if (event.key === "Escape") { addMode.value = false; dragging.value = null; } }
+function onKeydown(event: KeyboardEvent) { if (isInputElement(event.target)) return; if (event.key === "Escape") { addMode.value = false; dragging.value = null; } }
 
 watch(model, scheduleSimulation, { deep: true });
 onMounted(async () => {

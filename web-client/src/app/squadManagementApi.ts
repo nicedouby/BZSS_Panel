@@ -296,22 +296,41 @@ export function warnTarget(payload: {
 }
 
 export function adjustTickets(payload: {
-  teamId: number;
-  deltaText: string;
+  teamId?: number;
+  deltaText?: string;
+  team?: number;
+  addT1?: number;
+  addT2?: number;
+  t1?: number;
+  t2?: number;
   reason?: string;
   source?: string;
 }) {
-  const team = Number(payload.teamId) === 2 ? 2 : 1;
-  const delta = parseInt(payload.deltaText, 10);
-  if (isNaN(delta)) {
-    return Promise.resolve({ ok: false, message: "Invalid delta value" });
-  }
-  return apiPost<any>("/api/remote-telemetry/adjust-tickets", {
-    team,
-    delta,
+  const team = payload.team !== undefined
+    ? payload.team
+    : (payload.teamId !== undefined ? (Number(payload.teamId) === 2 ? 2 : 1) : undefined);
+
+  const delta = payload.deltaText !== undefined
+    ? parseInt(payload.deltaText, 10)
+    : undefined;
+
+  const body: any = {
     reason: payload.reason,
     sourcePage: payload.source,
-  });
+  };
+
+  if (team !== undefined && delta !== undefined && !isNaN(delta)) {
+    body.team = team;
+    body.delta = delta;
+  } else {
+    if (payload.team !== undefined) body.team = payload.team;
+    if (payload.addT1 !== undefined) body.addT1 = payload.addT1;
+    if (payload.addT2 !== undefined) body.addT2 = payload.addT2;
+    if (payload.t1 !== undefined) body.t1 = payload.t1;
+    if (payload.t2 !== undefined) body.t2 = payload.t2;
+  }
+
+  return apiPost<any>("/api/remote-telemetry/adjust-tickets", body);
 }
 
 export async function killPlayer(payload: {

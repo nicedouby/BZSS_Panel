@@ -186,6 +186,7 @@ import { useSettingsStore } from "../../stores/settings.store";
 import { t } from "../../i18n";
 import type { ExposedSetting } from "../../app/settingsApi";
 import { hasPermission as hasSharedPermission } from "../../shared/rcon-permissions.js";
+import { isInputElement } from "../../utils/keyboard";
 
 interface SettingsGroup {
   id: string;
@@ -272,6 +273,7 @@ onBeforeUnmount(() => {
 });
 
 function onWindowKeyDown(event: KeyboardEvent) {
+  if (isInputElement(event.target)) return;
   if (event.key === "Escape") {
     settings.closeDrawer();
   }

@@ -316,6 +316,7 @@ import { useUiStore } from "../../stores/ui.store";
 import { warnTarget, adjustTickets } from "../../app/squadManagementApi";
 import StatusBadge from "../common/StatusBadge.vue";
 import { getFlagUrl, 获取战斗群旗帜, getUnitIconUrlByTeamName } from "../../shared/faction-assets/faction-data";
+import { isInputElement } from "../../utils/keyboard";
 
 const props = defineProps<{
   team: TeamViewModel | null;
@@ -421,6 +422,7 @@ function close() {
 }
 
 function handleEscape(e: KeyboardEvent) {
+  if (isInputElement(e.target)) return;
   if (e.key === "Escape" && props.open) {
     close();
   }
