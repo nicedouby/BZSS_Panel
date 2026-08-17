@@ -7,9 +7,9 @@ const HANDLED_TTL_MS = 60_000;
 const MAX_HANDLED_EVENTS = 2_000;
 
 const DEFAULT_CONFIG = {
-  enabled: true,
+  enabled: false,
   damageEnabled: false,
-  woundEnabled: true,
+  woundEnabled: false,
   deathEnabled: false,
   ignoreGiveUp: true,
   requirePlayerId: true,
@@ -39,8 +39,10 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     // 全局策略：所有实时战斗反馈永久关闭，旧配置或页面不能重新启用。
     return {
       ...merged,
+      // 全局策略：关闭所有击杀、被击杀、被击倒及伤害反馈警告。
+      enabled: false,
       damageEnabled: false,
-      woundEnabled: true,
+      woundEnabled: false,
       deathEnabled: false,
     };
   }
@@ -191,7 +193,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     }
     const type = normalizeText(record?.type).toLocaleLowerCase();
     if (type !== "damage" && type !== "wound" && type !== "death") return skip("unsupported_type");
-    // 普通伤害与击杀实时警告永久关闭；击倒仅向受害者发送警告。
+    // 所有实时战斗反馈均已关闭；保留事件处理接口仅用于兼容旧调用方。
     if (type === "damage") return skip("damage_display_disabled");
     if (type === "death") return skip("death_display_disabled");
     if (hasFriendlyFire(record)) return skip("friendly_fire");

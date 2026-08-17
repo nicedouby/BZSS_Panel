@@ -2,17 +2,28 @@ import assert from "node:assert/strict";
 
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 
-function createHarness({ dispatchCommand, moduleConfig } = {}) {
+function createHarness({ dispatchCommand, moduleConfig, players = [] } = {}) {
   const module = createAdminWarnModule({
     core: {
       logger: { info() {}, warn() {}, error() {} },
       webRegistry: { registerPage() {} },
+      webStatus: { serverId: "test-server" },
       rconManager: {
         async dispatchCommand(request) {
           if (typeof dispatchCommand === "function") {
             return dispatchCommand(request);
           }
           return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
+        },
+      },
+    },
+    modules: {
+      playerState: {
+        getOnlinePlayers() {
+          return players;
+        },
+        getState() {
+          return { serverId: "test-server", players };
         },
       },
     },
@@ -229,9 +240,16 @@ async function testWarnFailureIsRecorded() {
   await module.stop();
 }
 
-async function testTargetWarningsAreSingleCommands() {
+async function testTargetWarningsUseRealPlayerIds() {
   const calls = [];
+  const players = [
+    { playerID: "101", name: "T1-A", teamID: "1" },
+    { playerID: "102", name: "T1-B", teamID: "1" },
+    { playerID: "201", name: "T2-A", teamID: "2" },
+    { playerID: "invalid", name: "No-Rcon-Id", teamID: "1" },
+  ];
   const { module } = createHarness({
+    players,
     async dispatchCommand(request) {
       calls.push(request);
       return { success: true, message: "ok", rconExecuted: true, rconResponse: "" };
@@ -239,16 +257,59 @@ async function testTargetWarningsAreSingleCommands() {
   });
   await module.start();
 
-  await module.api.warnPlayer({ targetScope: "all", message: "server notice", sourceModule: "web.matchStatus" });
-  await module.api.warnPlayer({ targetScope: "team1", message: "team one notice", sourceModule: "web.matchStatus" });
-  await module.api.warnPlayer({ targetScope: "team2", message: "team two notice", sourceModule: "web.matchStatus" });
+  const allResult = await module.api.warnPlayer({ targetScope: "all", message: "server notice", sourceModule: "web.matchStatus" });
+  const team1Result = await module.api.warnPlayer({ targetScope: "team1", message: "team one notice", sourceModule: "web.matchStatus" });
+  const team2Result = await module.api.warnPlayer({ targetScope: "team2", message: "team two notice", sourceModule: "web.matchStatus" });
 
   assert.deepEqual(calls.map((item) => item.command), [
-    'AdminWarn all "server notice"',
-    'AdminWarn team1 "team one notice"',
-    'AdminWarn team2 "team two notice"',
+    'AdminWarnById 101 "server notice"',
+    'AdminWarnById 102 "server notice"',
+    'AdminWarnById 201 "server notice"',
+    'AdminWarnById 101 "team one notice"',
+    'AdminWarnById 102 "team one notice"',
+    'AdminWarnById 201 "team two notice"',
   ]);
+  assert.deepEqual(
+    [allResult.targetCount, allResult.sentCount, team1Result.targetCount, team1Result.sentCount, team2Result.targetCount, team2Result.sentCount],
+    [3, 3, 2, 2, 1, 1],
+  );
   assert.equal(module.api.getRecent({ limit: 10 }).length, 3);
+  await module.stop();
+}
+
+async function testTargetWarningReportsPartialFailure() {
+  const players = [
+    { playerID: "101", name: "T1-A", teamID: "1" },
+    { playerID: "102", name: "T1-B", teamID: "1" },
+  ];
+  const { module } = createHarness({
+    players,
+    async dispatchCommand(request) {
+      if (request.command.startsWith("AdminWarnById 102 ")) {
+        return { success: false, message: "socket closed" };
+      }
+      return { success: true, message: "ok" };
+    },
+  });
+  await module.start();
+
+  const result = await module.api.warnPlayer({
+    targetScope: "team1",
+    message: "team one notice",
+    sourceModule: "web.matchStatus",
+  });
+
+  assert.equal(result.success, false);
+  assert.equal(result.targetCount, 2);
+  assert.equal(result.sentCount, 1);
+  assert.equal(result.failedCount, 1);
+  assert.match(result.errorMessage, /102:socket closed/);
+
+  const failed = module.api.getRecent({ success: false, skipped: false });
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].targetScope, "team1");
+  assert.equal(failed[0].sentCount, 1);
+  assert.equal(failed[0].failedCount, 1);
   await module.stop();
 }
 
@@ -272,7 +333,8 @@ await testRequirePlayerIdSkipsNameFallback();
 await testBroadcastSuccessAndKindFilter();
 await testWarnBackToBackStillSends();
 await testWarnFailureIsRecorded();
-await testTargetWarningsAreSingleCommands();
+await testTargetWarningsUseRealPlayerIds();
+await testTargetWarningReportsPartialFailure();
 await testBatchWarningsCanSkipHistory();
 
 console.log("broadcast module tests passed");

@@ -1084,9 +1084,9 @@
       "broadcastOnApology": true
     },
     "enemyCombatFeedback": {
-      "enabled": true,
+      "enabled": false,
       "damageEnabled": false,
-      "woundEnabled": true,
+      "woundEnabled": false,
       "deathEnabled": false
     },
     "victimDamageDisplay": {

@@ -1,0 +1,129 @@
+/* AdminWarn toolbar layout hotfix.
+ * Keep the command bar in normal toolbar flow and prevent it from crowding
+ * or stacking over unrelated match-status content.
+ */
+
+.squad-page-toolbar {
+  z-index: 30 !important;
+  padding: 6px 12px !important;
+}
+
+.squad-page-toolbar .toolbar-row {
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  z-index: 30 !important;
+}
+
+.squad-page-toolbar .admin-warn-control {
+  flex: 0 1 560px !important;
+  min-width: 260px !important;
+  max-width: 560px !important;
+  gap: 4px !important;
+  padding: 2px 4px !important;
+}
+
+.squad-page-toolbar .rcon-status-badge {
+  display: none !important;
+}
+
+.squad-page-toolbar .warn-input-group {
+  min-width: 120px !important;
+}
+
+.squad-page-toolbar .warn-hero-input {
+  min-width: 80px !important;
+}
+
+.squad-page-toolbar .warn-history-trigger-btn {
+  padding: 0 6px !important;
+}
+
+.squad-page-toolbar .warn-history-trigger-btn .history-label,
+.squad-page-toolbar .warn-send-btn .key-hint {
+  display: none !important;
+}
+
+.squad-page-toolbar .warn-send-btn {
+  padding: 0 9px !important;
+}
+
+.squad-page-toolbar .toolbar-spacer {
+  min-width: 0 !important;
+}
+
+.squad-page-toolbar .refresh-controls {
+  flex: 0 0 auto !important;
+  flex-wrap: nowrap !important;
+  z-index: 31 !important;
+}
+
+.squad-page-toolbar .channel-dropdown-menu,
+.squad-page-toolbar .history-dropdown-panel,
+.squad-page-toolbar .refresh-menu {
+  z-index: 60 !important;
+}
+
+.squad-page-toolbar .history-dropdown-panel {
+  width: min(340px, calc(100vw - 32px)) !important;
+  max-height: min(420px, calc(100vh - 140px)) !important;
+}
+
+@media (max-width: 1100px) {
+  .squad-page-toolbar .toolbar-row {
+    flex-wrap: wrap !important;
+  }
+
+  .squad-page-toolbar .admin-warn-control {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .squad-page-toolbar .toolbar-spacer {
+    display: none !important;
+  }
+
+  .squad-page-toolbar .refresh-controls {
+    width: auto !important;
+    margin-left: auto !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .squad-page-toolbar {
+    padding: 6px 8px !important;
+  }
+
+  .squad-page-toolbar .admin-warn-control {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .squad-page-toolbar .channel-trigger-btn {
+    padding: 0 6px !important;
+  }
+
+  .squad-page-toolbar .channel-name {
+    max-width: 70px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .squad-page-toolbar .warn-send-btn .send-text {
+    display: none !important;
+  }
+
+  .squad-page-toolbar .history-dropdown-panel {
+    width: min(280px, calc(100vw - 20px)) !important;
+    right: 0 !important;
+  }
+
+  .squad-page-toolbar .channel-dropdown-menu {
+    width: min(220px, calc(100vw - 20px)) !important;
+  }
+
+  .squad-page-toolbar .refresh-controls {
+    width: 100% !important;
+    margin-left: 0 !important;
+  }
+}
