@@ -292,7 +292,7 @@ export function warnTarget(payload: {
   reason?: string;
   sourceModule?: string;
 }) {
-  return apiPost<any>("/api/admin-warns/warn-target", payload);
+  return apiPost<any>("/api/admin-warns/warn-target", payload, {}, { timeoutMs: 30_000 });
 }
 
 export function adjustTickets(payload: {
