@@ -2,8 +2,14 @@
   <div class="squad-page-toolbar">
     <div class="toolbar-row">
 
-      <!-- Cyberpunk Interactive AdminWarn Control Bar -->
-      <div class="admin-warn-control" :data-channel="selectedChannel" aria-label="AdminWarn Control Bar">
+      <!-- Hardcore Cyberpunk Tactical AdminWarn Command Bar -->
+      <div class="admin-warn-control" :data-channel="selectedChannel" aria-label="AdminWarn Command Bar">
+        <!-- Live RCON Status Tag -->
+        <div class="rcon-status-badge">
+          <span class="pulse-led" :class="selectedChannel" />
+          <span class="rcon-text">RCON</span>
+        </div>
+
         <!-- Channel Selector Dropdown -->
         <div ref="channelMenuRoot" class="warn-channel-selector">
           <button
@@ -12,17 +18,18 @@
             :class="selectedChannel"
             :disabled="!canRefresh || isRefreshing"
             @click.stop="toggleChannelMenu"
-            :title="`当前频道: ${currentChannelInfo.fullLabel} (${currentChannelInfo.badgeText})`"
+            :title="`目标频道: ${currentChannelInfo.fullLabel} (${currentChannelInfo.badgeText})`"
           >
-            <span class="channel-dot" />
-            <span class="channel-icon">{{ currentChannelInfo.icon }}</span>
+            <span class="channel-icon-wrap" v-html="currentChannelInfo.svgIcon" />
             <span class="channel-name">{{ currentChannelInfo.label }}</span>
-            <span class="channel-caret">▾</span>
+            <svg class="caret-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           </button>
 
           <transition name="menu-fade">
             <div v-if="channelMenuOpen" class="channel-dropdown-menu" role="menu">
-              <div class="menu-header-label">选择警告目标频道</div>
+              <div class="menu-header-label">// TARGET CHANNEL SELECT</div>
               <button
                 v-for="(ch, key) in CHANNELS"
                 :key="key"
@@ -31,10 +38,12 @@
                 :class="[key, { active: selectedChannel === key }]"
                 @click="selectChannel(key)"
               >
-                <span class="opt-dot" />
-                <span class="opt-icon">{{ ch.icon }}</span>
+                <span class="opt-icon" v-html="ch.svgIcon" />
                 <div class="opt-info">
-                  <span class="opt-name">{{ ch.label }}</span>
+                  <div class="opt-top">
+                    <span class="opt-name">{{ ch.label }}</span>
+                    <span class="opt-code">{{ ch.code }}</span>
+                  </div>
                   <span class="opt-sub">{{ ch.badgeText }}</span>
                 </div>
                 <span v-if="selectedChannel === key" class="opt-check">✓</span>
@@ -43,18 +52,16 @@
           </transition>
         </div>
 
-        <!-- Input Field with History/Preset button & Clear button -->
+        <!-- Cyber Hero Input Field -->
         <div class="warn-input-group" :class="{ 'has-focus': isInputFocused, 'has-content': warnInputText.trim().length > 0 }">
-          <span class="input-channel-tag" :class="selectedChannel">
-            {{ currentChannelInfo.label }}
-          </span>
+          <span class="input-prompt-symbol">&gt;</span>
 
           <input
             ref="warnInputRef"
             v-model="warnInputText"
             type="text"
             class="warn-hero-input"
-            :placeholder="`输入 AdminWarn 消息 (${currentChannelInfo.badgeText})...`"
+            :placeholder="`// 键入 ${currentChannelInfo.fullLabel} AdminWarn 消息...`"
             :disabled="!canRefresh || isRefreshing"
             @focus="isInputFocused = true"
             @blur="isInputFocused = false"
@@ -71,7 +78,7 @@
             ✕
           </button>
 
-          <!-- History / Presets Dropdown Toggle -->
+          <!-- Terminal Logs & Presets Dropdown Toggle -->
           <div ref="historyMenuRoot" class="warn-history-wrapper">
             <button
               type="button"
@@ -80,8 +87,11 @@
               title="警告历史与常用模版"
               @click.stop="toggleHistoryMenu"
             >
-              <span class="history-icon">📜</span>
-              <span class="history-label">记录</span>
+              <svg class="history-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="4 17 10 11 4 5" />
+                <line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+              <span class="history-label">LOGS</span>
               <span v-if="historyRecords.length > 0" class="history-count">{{ historyRecords.length }}</span>
             </button>
 
@@ -90,16 +100,17 @@
                 <!-- Presets Section -->
                 <div class="panel-section">
                   <div class="section-title">
-                    <span>⚡ 快捷模版 (点击填入)</span>
+                    <span>// PRESET COMMAND TEMPLATES</span>
                   </div>
                   <div class="preset-chips">
                     <button
-                      v-for="preset in PRESET_TEMPLATES"
+                      v-for="(preset, idx) in PRESET_TEMPLATES"
                       :key="preset.text"
                       type="button"
                       class="preset-chip"
                       @click="applyPreset(preset)"
                     >
+                      <span class="chip-code">SYS-0{{ idx + 1 }}</span>
                       <span class="chip-target" :class="preset.target || selectedChannel">
                         {{ preset.target ? getChannelBadge(preset.target) : getChannelBadge(selectedChannel) }}
                       </span>
@@ -111,19 +122,19 @@
                 <!-- History Records Section -->
                 <div class="panel-section history-section">
                   <div class="section-title">
-                    <span>📜 最近发送记录</span>
+                    <span>// RECENT DISPATCH STREAM</span>
                     <button
                       v-if="historyRecords.length > 0"
                       type="button"
                       class="clear-history-btn"
                       @click="clearHistory"
                     >
-                      清空记录
+                      CLEAR LOGS
                     </button>
                   </div>
 
                   <div v-if="historyRecords.length === 0" class="empty-history">
-                    暂无发送记录
+                    NO RECENT RCON DISPATCH LOGS
                   </div>
                   <div v-else class="history-list">
                     <button
@@ -146,7 +157,7 @@
           </div>
         </div>
 
-        <!-- Send Action Button -->
+        <!-- Cyber Dispatch Button -->
         <button
           type="button"
           class="warn-send-btn"
@@ -155,8 +166,11 @@
           @click="handleSendWarn"
           :title="warnInputText.trim() ? `发送警告至 ${currentChannelInfo.fullLabel}` : `打开 ${currentChannelInfo.fullLabel} 警告窗口`"
         >
-          <span class="send-icon">⚡</span>
-          <span class="send-text">发送</span>
+          <svg class="send-svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+          </svg>
+          <span class="send-text">DISPATCH</span>
+          <span class="key-hint">↵</span>
         </button>
       </div>
 
@@ -247,25 +261,28 @@ type RefreshType = "players" | "squads" | "all";
 
 const CHANNELS = {
   all: {
-    label: "All",
+    label: "ALL",
     fullLabel: "全体玩家",
-    badgeText: "全服广播",
+    badgeText: "GLOBAL BROADCAST",
+    code: "[BROADCAST]",
     color: "#f59e0b",
-    icon: "📢",
+    svgIcon: `<svg class="tech-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>`,
   },
   team1: {
     label: "TEAM 1",
     fullLabel: "阵营 1",
-    badgeText: "蓝方广播",
+    badgeText: "ALPHA TEAM 1",
+    code: "[TEAM_01]",
     color: "#38bdf8",
-    icon: "🛡️",
+    svgIcon: `<svg class="tech-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v8m-4-4h8"/></svg>`,
   },
   team2: {
     label: "TEAM 2",
     fullLabel: "阵营 2",
-    badgeText: "红方广播",
+    badgeText: "BRAVO TEAM 2",
+    code: "[TEAM_02]",
     color: "#f97316",
-    icon: "⚔️",
+    svgIcon: `<svg class="tech-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3"/><circle cx="12" cy="12" r="3"/></svg>`,
   },
 } as const;
 
@@ -395,9 +412,9 @@ function getChannelBadge(target: ChannelType) {
 function formatTimeAgo(timestamp: number): string {
   const diff = Math.floor((Date.now() - timestamp) / 1000);
   if (diff < 60) return "刚刚";
-  if (diff < 3600) return `${Math.floor(diff / 60)}分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}小时前`;
-  return `${Math.floor(diff / 86400)}天前`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h前`;
+  return `${Math.floor(diff / 86400)}d前`;
 }
 
 function selectChannel(ch: ChannelType) {
@@ -560,16 +577,19 @@ onBeforeUnmount(removeWindowListeners);
 
 <style scoped>
 .squad-page-toolbar {
+  position: relative;
+  z-index: 1000;
+  overflow: visible;
   display: grid;
   gap: 10px;
   padding: 10px 16px;
-  border-bottom: 1px solid var(--color-border-default);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.2);
   background:
-    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.08), transparent 26%),
-    radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.08), transparent 24%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
-    var(--color-bg-card);
-  backdrop-filter: blur(10px);
+    radial-gradient(circle at 10% -20%, rgba(56, 189, 248, 0.12), transparent 40%),
+    radial-gradient(circle at 90% -20%, rgba(245, 158, 11, 0.1), transparent 40%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(8, 12, 20, 0.98));
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
 .toolbar-row {
@@ -578,38 +598,81 @@ onBeforeUnmount(removeWindowListeners);
   gap: 10px;
   flex-wrap: wrap;
   min-width: 0;
+  position: relative;
+  z-index: 1000;
 }
 
-/* Cyberpunk AdminWarn Control Bar */
+/* Hardcore Cyberpunk Tactical AdminWarn Bar */
 .admin-warn-control {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 1 1 auto;
-  min-width: 320px;
-  max-width: 680px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid var(--color-border-soft);
-  border-radius: 999px;
-  padding: 3px 4px 3px 6px;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  min-width: 340px;
+  max-width: 720px;
+  background: rgba(6, 10, 18, 0.78);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  border-radius: 8px;
+  padding: 4px 6px;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6), 0 2px 10px rgba(0, 0, 0, 0.3);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   backdrop-filter: blur(12px);
+  position: relative;
 }
 
 .admin-warn-control[data-channel="all"]:focus-within {
-  border-color: rgba(245, 158, 11, 0.6);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 14px rgba(245, 158, 11, 0.22);
+  border-color: rgba(245, 158, 11, 0.65);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6), 0 0 16px rgba(245, 158, 11, 0.25);
 }
 
 .admin-warn-control[data-channel="team1"]:focus-within {
-  border-color: rgba(56, 189, 248, 0.6);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 14px rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.65);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6), 0 0 16px rgba(56, 189, 248, 0.25);
 }
 
 .admin-warn-control[data-channel="team2"]:focus-within {
-  border-color: rgba(249, 115, 22, 0.6);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 14px rgba(249, 115, 22, 0.22);
+  border-color: rgba(249, 115, 22, 0.65);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6), 0 0 16px rgba(249, 115, 22, 0.25);
+}
+
+/* Live RCON Badge */
+.rcon-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 0 4px;
+  height: 28px;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  letter-spacing: 1px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pulse-led {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: ledPulse 2s infinite ease-in-out;
+}
+
+@keyframes ledPulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+
+.pulse-led.all { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+.pulse-led.team1 { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; }
+.pulse-led.team2 { background: #f97316; box-shadow: 0 0 8px #f97316; }
+
+/* SVG Icon Helper */
+:deep(.tech-svg-icon) {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 /* Channel Selector Trigger */
@@ -622,12 +685,13 @@ onBeforeUnmount(removeWindowListeners);
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 10px 0 8px;
-  border-radius: 999px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
   border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--color-text-primary);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -635,41 +699,30 @@ onBeforeUnmount(removeWindowListeners);
 }
 
 .channel-trigger-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .channel-trigger-btn.all {
-  border-color: rgba(245, 158, 11, 0.5);
+  border-color: rgba(245, 158, 11, 0.45);
   color: #fcd34d;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.16), rgba(245, 158, 11, 0.06));
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .channel-trigger-btn.team1 {
-  border-color: rgba(56, 189, 248, 0.5);
+  border-color: rgba(56, 189, 248, 0.45);
   color: #7dd3fc;
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(56, 189, 248, 0.06));
+  background: rgba(56, 189, 248, 0.1);
 }
 
 .channel-trigger-btn.team2 {
-  border-color: rgba(249, 115, 22, 0.5);
+  border-color: rgba(249, 115, 22, 0.45);
   color: #fdba74;
-  background: linear-gradient(135deg, rgba(249, 115, 22, 0.16), rgba(249, 115, 22, 0.06));
+  background: rgba(249, 115, 22, 0.1);
 }
 
-.channel-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  box-shadow: 0 0 6px currentColor;
-}
-.channel-trigger-btn.all .channel-dot { background: #f59e0b; }
-.channel-trigger-btn.team1 .channel-dot { background: #38bdf8; }
-.channel-trigger-btn.team2 .channel-dot { background: #f97316; }
-
-.channel-icon {
-  font-size: 13px;
-  line-height: 1;
+.channel-icon-wrap {
+  display: flex;
+  align-items: center;
 }
 
 .channel-name {
@@ -677,8 +730,9 @@ onBeforeUnmount(removeWindowListeners);
   letter-spacing: 0.5px;
 }
 
-.channel-caret {
-  font-size: 10px;
+.caret-svg {
+  width: 12px;
+  height: 12px;
   opacity: 0.7;
 }
 
@@ -686,37 +740,37 @@ onBeforeUnmount(removeWindowListeners);
 .channel-dropdown-menu {
   position: absolute;
   left: 0;
-  top: calc(100% + 8px);
-  z-index: 30;
-  width: 180px;
-  padding: 6px;
-  border-radius: 14px;
-  border: 1px solid var(--color-border-default);
-  background: rgba(10, 15, 24, 0.96);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(16px);
+  top: calc(100% + 10px);
+  z-index: 9999;
+  width: 220px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(6, 10, 18, 0.98);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75), 0 0 20px rgba(56, 189, 248, 0.15);
+  backdrop-filter: blur(24px);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .menu-header-label {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 10px;
-  font-weight: 700;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 4px 8px 2px;
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.7);
+  letter-spacing: 1px;
+  padding: 4px 6px 2px;
 }
 
 .channel-option-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
   border: 1px solid transparent;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   color: var(--color-text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -725,36 +779,32 @@ onBeforeUnmount(removeWindowListeners);
 }
 
 .channel-option-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.07);
   color: var(--color-text-primary);
 }
 
 .channel-option-item.all.active {
-  border-color: rgba(245, 158, 11, 0.4);
-  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.15);
   color: #fcd34d;
 }
 
 .channel-option-item.team1.active {
-  border-color: rgba(56, 189, 248, 0.4);
-  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.15);
   color: #7dd3fc;
 }
 
 .channel-option-item.team2.active {
-  border-color: rgba(249, 115, 22, 0.4);
-  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.5);
+  background: rgba(249, 115, 22, 0.15);
   color: #fdba74;
 }
 
-.opt-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+.opt-icon {
+  display: flex;
+  align-items: center;
 }
-.channel-option-item.all .opt-dot { background: #f59e0b; }
-.channel-option-item.team1 .opt-dot { background: #38bdf8; }
-.channel-option-item.team2 .opt-dot { background: #f97316; }
 
 .opt-info {
   display: flex;
@@ -762,8 +812,21 @@ onBeforeUnmount(removeWindowListeners);
   flex: 1;
 }
 
+.opt-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .opt-name {
-  font-weight: 700;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+
+.opt-code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  opacity: 0.6;
 }
 
 .opt-sub {
@@ -773,7 +836,7 @@ onBeforeUnmount(removeWindowListeners);
 
 .opt-check {
   font-weight: 900;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Input Group */
@@ -786,64 +849,48 @@ onBeforeUnmount(removeWindowListeners);
   gap: 4px;
 }
 
-.input-channel-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+.input-prompt-symbol {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 14px;
+  font-weight: 900;
+  color: rgba(56, 189, 248, 0.7);
   user-select: none;
-  flex-shrink: 0;
-}
-
-.input-channel-tag.all {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fcd34d;
-}
-
-.input-channel-tag.team1 {
-  background: rgba(56, 189, 248, 0.2);
-  color: #7dd3fc;
-}
-
-.input-channel-tag.team2 {
-  background: rgba(249, 115, 22, 0.2);
-  color: #fdba74;
+  margin-right: 2px;
 }
 
 .warn-hero-input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 32px;
+  height: 30px;
   padding: 0 4px;
   border: none;
   background: transparent;
-  color: var(--color-text-primary);
+  color: #f8fafc;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
   outline: none;
 }
 
 .warn-hero-input::placeholder {
-  color: rgba(148, 163, 184, 0.55);
+  color: rgba(148, 163, 184, 0.45);
+  font-size: 12px;
 }
 
 .warn-clear-btn {
   border: none;
   background: transparent;
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   padding: 4px 6px;
-  border-radius: 50%;
+  border-radius: 4px;
   line-height: 1;
   transition: color 0.15s ease;
 }
 
 .warn-clear-btn:hover {
   color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
 }
 
 /* History Dropdown Wrapper & Trigger */
@@ -855,42 +902,45 @@ onBeforeUnmount(removeWindowListeners);
 .warn-history-trigger-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 28px;
+  gap: 5px;
+  height: 26px;
   padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--color-text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
 }
 
 .warn-history-trigger-btn:hover,
 .warn-history-trigger-btn.active {
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--color-text-primary);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(56, 189, 248, 0.12);
+  color: #7dd3fc;
+  border-color: rgba(56, 189, 248, 0.4);
 }
 
-.history-icon {
-  font-size: 12px;
+.history-svg {
+  width: 12px;
+  height: 12px;
 }
 
 .history-label {
   white-space: nowrap;
+  letter-spacing: 0.5px;
 }
 
 .history-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 3px;
   background: rgba(56, 189, 248, 0.25);
   color: #7dd3fc;
   font-size: 10px;
@@ -901,20 +951,20 @@ onBeforeUnmount(removeWindowListeners);
 .history-dropdown-panel {
   position: absolute;
   right: 0;
-  top: calc(100% + 8px);
-  z-index: 35;
-  width: 320px;
-  max-height: 380px;
+  top: calc(100% + 10px);
+  z-index: 9999;
+  width: 360px;
+  max-height: 420px;
   overflow-y: auto;
-  padding: 10px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border-default);
-  background: rgba(10, 15, 24, 0.97);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(20px);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(6, 10, 18, 0.98);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85), 0 0 24px rgba(56, 189, 248, 0.15);
+  backdrop-filter: blur(24px);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .panel-section {
@@ -927,23 +977,26 @@ onBeforeUnmount(removeWindowListeners);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--color-text-muted);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.7);
+  letter-spacing: 0.5px;
 }
 
 .clear-history-btn {
   border: none;
   background: transparent;
   color: #ef4444;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 10px;
+  font-weight: 700;
   cursor: pointer;
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: 3px;
 }
-
 .clear-history-btn:hover {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.18);
 }
 
 .preset-chips {
@@ -955,9 +1008,9 @@ onBeforeUnmount(removeWindowListeners);
 .preset-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.025);
   color: var(--color-text-secondary);
@@ -969,16 +1022,26 @@ onBeforeUnmount(removeWindowListeners);
 
 .preset-chip:hover {
   background: rgba(56, 189, 248, 0.12);
-  border-color: rgba(56, 189, 248, 0.3);
-  color: var(--color-text-primary);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #f8fafc;
+}
+
+.chip-code {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(56, 189, 248, 0.8);
+  flex-shrink: 0;
 }
 
 .chip-target {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 9px;
   font-weight: 800;
   padding: 1px 4px;
   border-radius: 3px;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 .chip-target.all { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
 .chip-target.team1 { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; }
@@ -992,10 +1055,12 @@ onBeforeUnmount(removeWindowListeners);
 }
 
 .empty-history {
-  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
   color: var(--color-text-muted);
   text-align: center;
-  padding: 12px 0;
+  padding: 14px 0;
+  letter-spacing: 0.5px;
 }
 
 .history-list {
@@ -1007,9 +1072,9 @@ onBeforeUnmount(removeWindowListeners);
 .history-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  border-radius: 8px;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
   border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.02);
   color: var(--color-text-secondary);
@@ -1021,10 +1086,11 @@ onBeforeUnmount(removeWindowListeners);
 
 .history-item:hover {
   background: rgba(255, 255, 255, 0.07);
-  color: var(--color-text-primary);
+  color: #f8fafc;
 }
 
 .history-target-badge {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 9px;
   font-weight: 800;
   padding: 1px 4px;
@@ -1041,53 +1107,58 @@ onBeforeUnmount(removeWindowListeners);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
 }
 
 .history-time {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 10px;
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
-/* Send Button */
+/* Dispatch Button */
 .warn-send-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 999px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
   border: 1px solid transparent;
   color: #ffffff;
-  font-size: 12px;
-  font-weight: 800;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 900;
   cursor: pointer;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
   transition: all 0.18s ease;
   flex-shrink: 0;
+  text-transform: uppercase;
 }
 
 .warn-send-btn:hover {
   transform: translateY(-1px);
-  filter: brightness(1.15);
+  filter: brightness(1.2);
 }
 
 .warn-send-btn.all {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  border-color: rgba(245, 158, 11, 0.6);
+  background: linear-gradient(135deg, #d97706, #b45309);
+  border-color: rgba(245, 158, 11, 0.7);
   box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
 }
 
 .warn-send-btn.team1 {
-  background: linear-gradient(135deg, #0284c7, #2563eb);
-  border-color: rgba(56, 189, 248, 0.6);
+  background: linear-gradient(135deg, #0284c7, #1d4ed8);
+  border-color: rgba(56, 189, 248, 0.7);
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.35);
 }
 
 .warn-send-btn.team2 {
-  background: linear-gradient(135deg, #ea580c, #dc2626);
-  border-color: rgba(249, 115, 22, 0.6);
+  background: linear-gradient(135deg, #ea580c, #b91c1c);
+  border-color: rgba(249, 115, 22, 0.7);
   box-shadow: 0 0 12px rgba(249, 115, 22, 0.35);
 }
 
@@ -1098,8 +1169,14 @@ onBeforeUnmount(removeWindowListeners);
   box-shadow: none;
 }
 
-.send-icon {
-  font-size: 12px;
+.send-svg {
+  width: 12px;
+  height: 12px;
+}
+
+.key-hint {
+  font-size: 10px;
+  opacity: 0.7;
 }
 
 /* Standard Toolbar Refresh Controls */
@@ -1108,6 +1185,8 @@ onBeforeUnmount(removeWindowListeners);
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 1000;
 }
 
 .refresh-button,
@@ -1115,13 +1194,13 @@ onBeforeUnmount(removeWindowListeners);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--color-border-default);
   background: rgba(255, 255, 255, 0.03);
   color: var(--color-text-secondary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
@@ -1154,13 +1233,14 @@ onBeforeUnmount(removeWindowListeners);
 .ts-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 30px;
   padding: 0 10px;
-  border-radius: 999px;
+  border-radius: 6px;
   border: 1px solid var(--color-border-soft);
   background: rgba(255, 255, 255, 0.025);
   color: var(--color-text-muted);
-  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -1190,15 +1270,15 @@ onBeforeUnmount(removeWindowListeners);
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  z-index: 20;
+  z-index: 9999;
   min-width: 160px;
   display: grid;
   gap: 6px;
   padding: 8px;
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--color-border-default);
-  background: rgba(8, 12, 18, 0.96);
-  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.28);
+  background: rgba(6, 10, 18, 0.98);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
 }
 
 .menu-item {
@@ -1239,7 +1319,7 @@ onBeforeUnmount(removeWindowListeners);
 
   .history-dropdown-panel {
     width: 280px;
-    right: -40px;
+    right: -20px;
   }
 
   .refresh-controls {
@@ -1249,9 +1329,9 @@ onBeforeUnmount(removeWindowListeners);
 
   .refresh-button,
   .menu-item {
-    min-height: 32px;
+    min-height: 30px;
     padding: 0 10px;
-    font-size: 12px;
+    font-size: 11px;
   }
 }
 </style>
