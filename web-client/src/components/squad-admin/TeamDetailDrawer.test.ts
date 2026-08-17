@@ -106,7 +106,7 @@ describe("TeamDetailDrawer", () => {
       },
     });
 
-    const squadCard = document.body.querySelector(".squad-card-item") as HTMLElement | null;
+    const squadCard = document.body.querySelector(".squad-mini-item") as HTMLElement | null;
     expect(squadCard).toBeTruthy();
     squadCard?.click();
 
