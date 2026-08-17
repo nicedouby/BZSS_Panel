@@ -10,7 +10,7 @@ const DEFAULT_DATA_DIRECTORY = "./data/admin-warns";
 const DAILY_HISTORY_VERSION = 2;
 const REVERSE_READ_CHUNK_BYTES = 64 * 1024;
 
-export function createAdminWarnModule({ core, config, logger }) {
+export function createAdminWarnModule({ core, modules, config, logger }) {
   const moduleLogger =
     logger ??
     core.createLogger?.({
@@ -94,10 +94,9 @@ export function createAdminWarnModule({ core, config, logger }) {
       : false;
     const targetEosId = normalizedKind === "warning" ? optionalText(req?.targetEosId) : undefined;
     const targetSteamId = normalizedKind === "warning" ? optionalText(req?.targetSteamId) : undefined;
-    const commandText = buildCommandText(normalizedKind, {
+    const commandText = targetScope ? "" : buildCommandText(normalizedKind, {
       targetName,
       targetPlayerId,
-      targetScope,
       message,
     });
 
@@ -154,6 +153,22 @@ export function createAdminWarnModule({ core, config, logger }) {
         skipped: true,
         skipReason: record.skipReason,
       };
+    }
+
+    if (normalizedKind === "warning" && targetScope) {
+      return sendScopedWarning({
+        req,
+        targetScope,
+        targetName,
+        message,
+        sourceModule,
+        reason,
+        relatedEventId,
+        actor,
+        system,
+        actorRecord,
+        appendRecord,
+      });
     }
 
     try {
@@ -250,12 +265,156 @@ export function createAdminWarnModule({ core, config, logger }) {
     }
   }
 
+  async function sendScopedWarning({
+    req,
+    targetScope,
+    targetName,
+    message,
+    sourceModule,
+    reason,
+    relatedEventId,
+    actor,
+    system,
+    actorRecord,
+    appendRecord,
+  }) {
+    const serverId = String(
+      req?.serverId
+        ?? core.webStatus?.serverId
+        ?? core.webStatus?.getSnapshot?.()?.serverId
+        ?? "",
+    ).trim();
+    const onlinePlayers = resolveOnlinePlayers(modules?.playerState, serverId);
+    const expectedTeamId = targetScope === "team1" ? "1" : targetScope === "team2" ? "2" : "";
+    const seenIds = new Set();
+    const targets = [];
+
+    for (const player of onlinePlayers) {
+      const playerId = sanitizeTargetPlayerId(player?.playerID ?? player?.playerId);
+      if (!playerId || seenIds.has(playerId)) continue;
+      const teamId = String(player?.teamID ?? player?.teamId ?? "").trim();
+      if (expectedTeamId && teamId !== expectedTeamId) continue;
+      seenIds.add(playerId);
+      targets.push({
+        playerId,
+        name: String(player?.name ?? "").trim(),
+        teamId,
+      });
+    }
+
+    if (targets.length === 0) {
+      const skipReason = "no_online_targets";
+      appendRecord({
+        ...actorRecord,
+        id: makeRecordId("empty-target"),
+        kind: "warning",
+        createdAt: Date.now(),
+        sourceModule,
+        reason: skipReason,
+        targetName,
+        message,
+        commandText: "",
+        success: false,
+        skipped: true,
+        skipReason,
+        relatedEventId,
+        targetScope,
+        targetCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+      });
+      return {
+        success: false,
+        skipped: true,
+        skipReason,
+        targetScope,
+        targetCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+      };
+    }
+
+    const results = await Promise.all(targets.map(async (target) => {
+      const command = `AdminWarnById ${target.playerId} "${escapeCommandText(message)}"`;
+      try {
+        const result = await core.rconManager.dispatchCommand({
+          command,
+          requestedBy: "module.adminWarn",
+          reason,
+          sourceEventId: relatedEventId,
+          priority: "high",
+          actor,
+          system,
+        });
+        return {
+          ...target,
+          command,
+          success: Boolean(result?.success),
+          errorMessage: result?.success ? "" : String(result?.message ?? "RCON command failed."),
+        };
+      } catch (error) {
+        return {
+          ...target,
+          command,
+          success: false,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }));
+
+    const sentCount = results.filter((item) => item.success).length;
+    const failures = results.filter((item) => !item.success);
+    const failedCount = failures.length;
+    const success = sentCount > 0 && failedCount === 0;
+    const errorMessage = failedCount > 0
+      ? `${failedCount}/${targets.length} scoped AdminWarn commands failed: ${failures.slice(0, 3).map((item) => `${item.playerId}:${item.errorMessage}`).join("; ")}`
+      : "";
+    const commandSummary = `AdminWarnById batch:${targetScope} ${sentCount}/${targets.length}`;
+
+    appendRecord({
+      ...actorRecord,
+      id: makeRecordId(success ? "scope-ok" : "scope-failed"),
+      kind: "warning",
+      createdAt: Date.now(),
+      sourceModule,
+      reason: success ? reason : `${reason}_failed`,
+      targetName,
+      message,
+      commandText: commandSummary,
+      success,
+      skipped: false,
+      errorMessage: errorMessage || undefined,
+      relatedEventId,
+      targetScope,
+      targetCount: targets.length,
+      sentCount,
+      failedCount,
+    });
+
+    if (!success) {
+      moduleLogger?.warn?.(
+        `[BroadcastModule] scoped warning ${targetScope} sent=${sentCount} failed=${failedCount} serverId=${serverId || "unknown"}`,
+      );
+    }
+
+    return {
+      success,
+      skipped: false,
+      targetScope,
+      targetCount: targets.length,
+      sentCount,
+      failedCount,
+      commandText: commandSummary,
+      errorMessage: errorMessage || undefined,
+    };
+  }
+
   return {
     manifest: {
       id: "module.adminWarn",
       name: "广播模块",
       kind: "module",
-      version: "0.3.0",
+      version: "0.3.1",
       description: "统一的警告和广播执行模块。记录按天永久追加保存，页面按需读取最近记录，避免启动时加载全部历史。",
     },
     apiName: "adminWarn",
@@ -581,13 +740,9 @@ function normalizeDateKey(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
-function buildCommandText(kind, { targetName = "", targetPlayerId = "", targetScope = "", message = "" } = {}) {
+function buildCommandText(kind, { targetName = "", targetPlayerId = "", message = "" } = {}) {
   if (kind === "broadcast") {
     return `AdminBroadcast ${escapeCommandText(message)}`;
-  }
-  const scope = normalizeWarningTarget(targetScope);
-  if (scope) {
-    return `AdminWarn ${scope} "${escapeCommandText(message)}"`;
   }
   const id = sanitizeTargetPlayerId(targetPlayerId);
   if (id) {
@@ -599,6 +754,23 @@ function buildCommandText(kind, { targetName = "", targetPlayerId = "", targetSc
 function normalizeWarningTarget(value) {
   const target = String(value ?? "").trim().toLowerCase();
   return target === "all" || target === "team1" || target === "team2" ? target : "";
+}
+
+function resolveOnlinePlayers(playerState, serverId) {
+  const direct = playerState?.getOnlinePlayers?.(serverId);
+  if (Array.isArray(direct) && direct.length > 0) return direct;
+
+  const state = playerState?.getState?.(serverId);
+  if (Array.isArray(state?.players) && state.players.length > 0) return state.players;
+
+  if (!serverId) {
+    const allState = playerState?.getState?.();
+    if (allState?.byServer && typeof allState.byServer === "object") {
+      return Object.values(allState.byServer)
+        .flatMap((entry) => Array.isArray(entry?.players) ? entry.players : []);
+    }
+  }
+  return [];
 }
 
 function sanitizeWarningMessage(message) {
