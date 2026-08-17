@@ -1379,24 +1379,28 @@ function handleTeamWarn(teamId: number) {
   void handleTargetWarn(teamId === 2 ? "team2" : "team1");
 }
 
-async function handleTargetWarn(targetScope: "all" | "team1" | "team2") {
+async function handleTargetWarn(targetScope: "all" | "team1" | "team2", messageOverride?: string) {
   const label = targetScope === "all" ? "全体玩家" : targetScope === "team1" ? "TEAM 1" : "TEAM 2";
-  const message = await ui.openWarnPrompt({
-    title: `AdminWarn ${label}`,
-    targetName: label,
-    defaultMessage: "请遵守服务器规则",
-  });
-  if (message === null || !message.trim()) return;
+  let message: string | null = messageOverride ?? null;
+  if (message === null) {
+    message = await ui.openWarnPrompt({
+      title: `AdminWarn ${label}`,
+      targetName: label,
+      defaultMessage: "请遵守服务器规则",
+    });
+  }
+  if (!message || !message.trim()) return;
+  const content = message.trim();
 
   try {
     const result = await warnTarget({
       targetScope,
-      message: message.trim(),
+      message: content,
       reason: "manual_target_warn",
       sourceModule: "web.matchStatus",
     });
     if (!result?.success) throw new Error(result?.errorMessage || "RCON command failed");
-    ui.pushToast({ title: "警告已发送", message: `已向${label}发送警告`, tone: "ok" });
+    ui.pushToast({ title: "警告已发送", message: `已向${label}发送警告: ${content}`, tone: "ok" });
   } catch (error) {
     ui.pushToast({ title: "警告发送失败", message: renderApiError(error, "RCON command failed"), tone: "error" });
   }
