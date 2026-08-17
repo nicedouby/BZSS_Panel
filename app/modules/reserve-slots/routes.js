@@ -147,6 +147,52 @@ export async function handleReserveSlotsRoutes({
     return true;
   }
 
+  if (url.pathname === "/api/reserve-slots/online-grant/preview" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+    const body = await readJsonBody(req);
+    json(200, await reserveSlots.previewOnlineGrant(body ?? {}));
+    return true;
+  }
+
+  if (url.pathname === "/api/reserve-slots/online-grant/execute" && req.method === "POST") {
+    if (!core.authManager?.hasEverything?.(user)) {
+      json(403, {
+        error: "Forbidden",
+        message: "SuperAdmin permission is required.",
+      });
+      return true;
+    }
+    const body = await readJsonBody(req);
+    const auditContext = {
+      action: AUDIT_ACTIONS.RESERVE_SLOT_MANAGEMENT,
+      category: AUDIT_CATEGORIES.RESERVE_SLOT_MANAGEMENT,
+      actor: user,
+      request: req,
+      sourcePage: body?.sourcePage ?? AUDIT_SOURCE_PAGES.RESERVE_SLOT_MANAGEMENT,
+      target: {
+        type: "online_players",
+        id: body?.rosterToken ?? "",
+        name: "当前对局在线玩家",
+      },
+      parameters: {
+        operation: "grant_online_players",
+        requestId: body?.requestId ?? "",
+        durationDays: body?.durationDays ?? 0,
+        rosterToken: body?.rosterToken ?? "",
+        confirmed: body?.confirmed === true,
+      },
+    };
+    const result = await executeAudited(core, auditContext, () => reserveSlots.grantOnlinePlayers(body ?? {}, { actor: user }));
+    json(200, result);
+    return true;
+  }
+
   const reserveMemberDeleteMatch = url.pathname.match(/^\/api\/reserve-slots\/members\/([^/]+)$/);
   if (reserveMemberDeleteMatch && req.method === "DELETE") {
     if (!core.authManager?.hasEverything?.(user)) {

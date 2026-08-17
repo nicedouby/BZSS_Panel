@@ -281,3 +281,66 @@ export async function importReserveSlotsCsv(csvText: string) {
 
   return body as ReserveSlotsState & { success: boolean; message?: string };
 }
+
+export interface OnlineReserveGrantPlayer {
+  steamId: string;
+  playerId: string | number | null;
+  name: string;
+  expireAt?: string;
+  remainingDays?: number;
+  warningStatus?: "pending" | "success" | "failed";
+  warningError?: string;
+}
+
+export interface OnlineReserveGrantPreview {
+  ok: true;
+  canGrant: boolean;
+  durationDays: number;
+  playerCount: number;
+  activePlayerCount: number;
+  missingIdentityCount: number;
+  duplicateIdentityCount: number;
+  players: OnlineReserveGrantPlayer[];
+  rosterToken: string;
+  generatedAt: string;
+  message: string;
+}
+
+export interface OnlineReserveGrantResult {
+  ok: true;
+  success: true;
+  replayed: boolean;
+  requestId: string;
+  durationDays: number;
+  playerCount: number;
+  grantedCount: number;
+  warningSuccessCount: number;
+  warningFailureCount: number;
+  completedAt: string | null;
+  players: OnlineReserveGrantPlayer[];
+  message: string;
+}
+
+export async function previewOnlineReserveGrant(durationDays: number) {
+  return request<OnlineReserveGrantPreview>("/api/reserve-slots/online-grant/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ durationDays }),
+  });
+}
+
+export async function executeOnlineReserveGrant(payload: {
+  durationDays: number;
+  rosterToken: string;
+  requestId: string;
+  confirmed: true;
+}) {
+  return request<OnlineReserveGrantResult>("/api/reserve-slots/online-grant/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...payload,
+      sourcePage: "match_status_more_online_reserve_grant",
+    }),
+  });
+}
