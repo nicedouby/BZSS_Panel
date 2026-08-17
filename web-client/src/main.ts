@@ -11,6 +11,7 @@ import "./styles/squad-admin.css";
 import "./styles/simple-plugin-page.css";
 import "./styles/simple-plugin-page-density.css";
 import "./styles/logpost-diagnostics-fixed.css";
+import "./styles/admin-warn-toolbar-fix.css";
 
 import { renderFatalBootError, isResizeObserverError } from "./app/bootError";
 
