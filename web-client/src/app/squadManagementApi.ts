@@ -295,6 +295,25 @@ export function warnTarget(payload: {
   return apiPost<any>("/api/admin-warns/warn-target", payload);
 }
 
+export function adjustTickets(payload: {
+  teamId: number;
+  deltaText: string;
+  reason?: string;
+  source?: string;
+}) {
+  const team = Number(payload.teamId) === 2 ? 2 : 1;
+  const delta = parseInt(payload.deltaText, 10);
+  if (isNaN(delta)) {
+    return Promise.resolve({ ok: false, message: "Invalid delta value" });
+  }
+  return apiPost<any>("/api/remote-telemetry/adjust-tickets", {
+    team,
+    delta,
+    reason: payload.reason,
+    sourcePage: payload.source,
+  });
+}
+
 export async function killPlayer(payload: {
   serverId?: string;
   targetPlayerId?: string | number | null;
