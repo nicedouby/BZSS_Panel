@@ -304,10 +304,25 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
             if payload_size != 1:
                 continue
 
+            if value_offset < len(data):
+                raw_value = data[value_offset]
+                if raw_value in (0, 1):
+                    return BoolProperty(
+                        property_start=name_offset,
+                        size_offset=size_offset,
+                        value_offset=value_offset,
+                        value_end=value_offset + 1,
+                        value=raw_value == 1,
+                    )
+
             # Compatibility migration for the broken writer shipped previously:
             # it wrote size=1 without the required one-byte payload. In that
             # case value_offset is already the beginning of the next property.
-            if value_offset >= len(data) or looks_like_property_start(data, value_offset):
+            known_boundary = any(
+                data.startswith(write_fstring(candidate), value_offset)
+                for candidate in (*CORE_BOOL_NAMES, "None")
+            )
+            if value_offset >= len(data) or known_boundary or looks_like_property_start(data, value_offset):
                 return BoolProperty(
                     property_start=name_offset,
                     size_offset=size_offset,
@@ -317,17 +332,7 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
                     missing_payload=True,
                 )
 
-            raw_value = data[value_offset]
-            if raw_value not in (0, 1):
-                continue
-
-            return BoolProperty(
-                property_start=name_offset,
-                size_offset=size_offset,
-                value_offset=value_offset,
-                value_end=value_offset + 1,
-                value=raw_value == 1,
-            )
+            continue
         except (SaveGameError, UnicodeError, struct.error):
             continue
 
