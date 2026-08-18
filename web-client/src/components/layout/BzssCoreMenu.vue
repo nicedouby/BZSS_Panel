@@ -26,6 +26,15 @@
         <button type="button" class="bzss-core-item" role="menuitem" :disabled="busy" @click="setLocalVoip(false)">
           Local VOIP · Disable
         </button>
+        <div class="core-variable-controls" aria-label="BZSS-Core SaveGame variables">
+          <div v-for="item in managedCoreVariables" :key="item.key" class="core-variable-row">
+            <span>{{ item.label }} · {{ coreVariableLabel(item.key) }}</span>
+            <span class="core-variable-actions">
+              <button type="button" :disabled="busy || coreVariableBusy" @click="setCoreVariable(item.key, true)">启用</button>
+              <button type="button" :disabled="busy || coreVariableBusy" @click="setCoreVariable(item.key, false)">关闭</button>
+            </span>
+          </div>
+        </div>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('time')">
           Time
         </button>
@@ -373,12 +382,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
+import { executeBzssCoreCommand, type BzssCoreBoolKey } from "../../app/bzssCoreApi";
 import { t } from "../../i18n";
 import { useAuthStore } from "../../stores/auth.store";
 import { useUiStore } from "../../stores/ui.store";
 import { hasPermission } from "../../shared/rcon-permissions.js";
 import { usePlayerStore } from "../../stores/player.store";
+import { useBzssCoreStore } from "../../stores/bzss-core.store";
 import { isInputElement } from "../../utils/keyboard";
 
 type DialogMode = "weather" | "time" | "raw" | "vehicle" | "forb-ress" | "automatic-heal";
@@ -455,11 +465,17 @@ const vehicleCategories = {
 const auth = useAuthStore();
 const ui = useUiStore();
 const playerStore = usePlayerStore();
+const bzssCore = useBzssCoreStore();
 const rootEl = ref<HTMLElement | null>(null);
 const menuOpen = ref(false);
 const dialogOpen = ref(false);
 const dialogMode = ref<DialogMode>("weather");
 const busy = ref(false);
+const coreVariableBusy = ref(false);
+const managedCoreVariables: Array<{ key: BzssCoreBoolKey; label: string }> = [
+  { key: "OutputBZSSObj", label: "OutputBZSSObj" },
+  { key: "CheckingNoob", label: "CheckingNoob" },
+];
 const selectedWeather = ref(10);
 const weatherParameter = ref("10");
 const forbRessTeamId = ref<"1" | "2" | "both">("1");
@@ -624,6 +640,7 @@ function toggleMenu() {
   }
 
   menuOpen.value = !menuOpen.value;
+  if (menuOpen.value) void bzssCore.refreshVariables();
   if (menuOpen.value || dialogOpen.value) addWindowListeners();
   else removeWindowListeners();
 }
@@ -758,6 +775,39 @@ async function submitForbRessCommand() {
     });
   } finally {
     busy.value = false;
+  }
+}
+
+function coreVariableLabel(key: BzssCoreBoolKey) {
+  const state = bzssCore.variableStates[key];
+  if (state.pending) return state.desired ? "尝试启用" : "尝试关闭";
+  if (state.error) return "错误";
+  if (state.actual === true) return "已启用";
+  if (state.actual === false) return "未启用";
+  return "未知";
+}
+
+async function setCoreVariable(key: BzssCoreBoolKey, value: boolean) {
+  if (coreVariableBusy.value) return;
+  coreVariableBusy.value = true;
+  try {
+    await bzssCore.setVariable(key, value);
+    ui.pushToast({
+      title: key,
+      message: value ? "启用值已写入，等待 Core 回读确认。" : "关闭值已写入，等待 Core 回读确认。",
+      tone: "ok",
+      durationMs: 4200,
+    });
+    closeMenu();
+  } catch (error: any) {
+    ui.pushToast({
+      title: t("common.error"),
+      message: error?.message || `${key} 写入失败。`,
+      tone: "error",
+      durationMs: 7000,
+    });
+  } finally {
+    coreVariableBusy.value = false;
   }
 }
 
@@ -993,6 +1043,36 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   background: var(--color-bg-card);
   box-shadow: var(--shadow-lg);
+}
+
+.core-variable-controls {
+  margin: 4px 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--color-border-default);
+}
+.core-variable-row {
+  display: grid;
+  gap: 4px;
+  padding: 5px 0;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+.core-variable-actions {
+  display: flex;
+  gap: 4px;
+}
+.core-variable-actions button {
+  flex: 1;
+  min-height: 24px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.core-variable-actions button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .bzss-core-item {
