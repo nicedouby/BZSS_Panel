@@ -7,6 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { BzssCoreCommandService } from "./bzss-core-command-service.js";
+import { BZSS_CORE_BOOL_KEYS } from "./bzss-core-variable-state-service.js";
 import { DeveloperToolsService } from "./developer-tools-service.js";
 
 const requestStorage = new AsyncLocalStorage();
@@ -83,6 +84,7 @@ export class WebServer {
     this.logger = logger;
     this.core = core;
     this.modules = modules;
+    this.bzssCoreVariableStateService = core.bzssCoreVariableStateService;
     this.bzssCoreCommandService = core.bzssCoreCommandService ?? new BzssCoreCommandService({
       config: core.config,
       logger,
@@ -2236,6 +2238,39 @@ export class WebServer {
         },
         source: "compat",
       });
+    }
+
+    if (url.pathname === "/api/bzss-core/variables" && req.method === "GET") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, { error: "Forbidden", message: "bzss_core.use permission is required." });
+      }
+      if (!this.bzssCoreVariableStateService) {
+        return this.json(res, 503, { error: "BzssCoreVariableStateUnavailable" });
+      }
+      return this.json(res, 200, await this.bzssCoreVariableStateService.read());
+    }
+
+    if (url.pathname === "/api/bzss-core/variables" && req.method === "PATCH") {
+      if (!this.canUseBzssCoreTool(user)) {
+        return this.json(res, 403, { error: "Forbidden", message: "bzss_core.use permission is required." });
+      }
+      if (!this.bzssCoreVariableStateService) {
+        return this.json(res, 503, { error: "BzssCoreVariableStateUnavailable" });
+      }
+      const body = await this.readJsonBody(req);
+      const key = String(body?.key ?? "").trim();
+      const value = body?.value;
+      if (!BZSS_CORE_BOOL_KEYS.includes(key) || typeof value !== "boolean") {
+        return this.json(res, 400, {
+          error: "InvalidBzssCoreVariable",
+          message: "key must be one of the supported Bool variables and value must be boolean.",
+        });
+      }
+      try {
+        return this.json(res, 200, await this.bzssCoreVariableStateService.write(key, value));
+      } catch (error) {
+        return this.json(res, 400, { error: "BzssCoreVariableWriteFailed", message: error?.message ?? String(error) });
+      }
     }
 
     if (url.pathname === "/api/bzss-core/execute" && req.method === "POST") {
