@@ -246,10 +246,11 @@ CORE_BOOL_NAMES = ("LocalVOIPEnable", "OutputBZSSObj", "CheckingNoob")
 class BoolProperty:
     property_start: int
     size_offset: int
+    tag_flags_offset: int
     value_offset: int
     value_end: int
     value: bool | None
-    missing_payload: bool = False
+    malformed_legacy_size: bool = False
 
 
 def looks_like_property_start(data: bytes, offset: int) -> bool:
@@ -265,16 +266,23 @@ def looks_like_property_start(data: bytes, offset: int) -> bool:
         return False
 
 
-def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
-    """Find UE5 tagged BoolProperty.
+def is_known_property_boundary(data: bytes, offset: int) -> bool:
+    return any(
+        data.startswith(write_fstring(candidate), offset)
+        for candidate in (*CORE_BOOL_NAMES, "None")
+    )
 
-    Layout:
-      FString Name
-      TypeNode("BoolProperty")
-      int32 payload_size  # 0 for false, 1 for true
-      uint8 tag_flags
-      byte[16] property_guid  # only when tag_flags & 0x02
-      uint8 payload       # only present when payload_size == 1
+
+def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
+    """Find an UE5 tagged BoolProperty.
+
+    BoolProperty consumes no normal payload. Its value is stored in bit 0 of
+    tag_flags while payload_size remains zero:
+      false = size 0, flags 0x10
+      true  = size 0, flags 0x11
+
+    payload_size=1 is accepted only as a migration source for the two broken
+    writer revisions that were briefly shipped.
     """
     name_bytes = write_fstring(name)
     search_at = 0
@@ -295,67 +303,56 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
             if payload_size not in (0, 1):
                 continue
 
-            cursor = size_offset + 4
-            if cursor >= len(data):
+            tag_flags_offset = size_offset + 4
+            if tag_flags_offset >= len(data):
                 continue
-            tag_flags = data[cursor]
-            cursor += 1
+            tag_flags = data[tag_flags_offset]
+
+            value_offset = tag_flags_offset + 1
             if tag_flags & 0x02:
-                cursor += 16
-            if cursor > len(data):
+                value_offset += 16
+            if value_offset > len(data):
                 continue
-            value_offset = cursor
 
             if payload_size == 0:
                 return BoolProperty(
                     property_start=name_offset,
                     size_offset=size_offset,
+                    tag_flags_offset=tag_flags_offset,
                     value_offset=value_offset,
                     value_end=value_offset,
-                    value=False,
+                    value=bool(tag_flags & 0x01),
                 )
 
-            if value_offset < len(data):
-                raw_value = data[value_offset]
-                if raw_value in (0, 1):
-                    return BoolProperty(
-                        property_start=name_offset,
-                        size_offset=size_offset,
-                        value_offset=value_offset,
-                        value_end=value_offset + 1,
-                        value=raw_value == 1,
-                    )
+            # Broken revision A: size=1 but no payload.
+            # Broken revision B: size=1 followed by an unnecessary 0/1 byte.
+            if value_offset < len(data) and data[value_offset] in (0, 1):
+                value_end = value_offset + 1
+            elif value_offset >= len(data) or is_known_property_boundary(data, value_offset) or looks_like_property_start(data, value_offset):
+                value_end = value_offset
+            else:
+                continue
 
-            # Compatibility migration for the broken writer shipped previously:
-            # it wrote size=1 without the required one-byte payload. In that
-            # case value_offset is already the beginning of the next property.
-            known_boundary = any(
-                data.startswith(write_fstring(candidate), value_offset)
-                for candidate in (*CORE_BOOL_NAMES, "None")
+            return BoolProperty(
+                property_start=name_offset,
+                size_offset=size_offset,
+                tag_flags_offset=tag_flags_offset,
+                value_offset=value_offset,
+                value_end=value_end,
+                value=None,
+                malformed_legacy_size=True,
             )
-            if value_offset >= len(data) or known_boundary or looks_like_property_start(data, value_offset):
-                return BoolProperty(
-                    property_start=name_offset,
-                    size_offset=size_offset,
-                    value_offset=value_offset,
-                    value_end=value_offset,
-                    value=None,
-                    missing_payload=True,
-                )
-
-            continue
         except (SaveGameError, UnicodeError, struct.error):
             continue
 
 
 def build_bool_property(name: str, value: bool) -> bytes:
-    payload = b"\x01" if value else b""
+    tag_flags = 0x10 | (0x01 if value else 0x00)
     return (
         write_fstring(name)
         + write_type_node("BoolProperty")
-        + struct.pack("<i", len(payload))
-        + b"\x10"
-        + payload
+        + struct.pack("<i", 0)
+        + bytes((tag_flags,))
     )
 
 
@@ -371,7 +368,7 @@ def decode_core_bools(data: bytes) -> tuple[dict[str, bool | None], tuple[str, .
             variables[name] = None
             continue
         variables[name] = prop.value
-        if prop.missing_payload:
+        if prop.malformed_legacy_size:
             malformed.append(name)
 
     return variables, tuple(malformed)
@@ -379,28 +376,29 @@ def decode_core_bools(data: bytes) -> tuple[dict[str, bool | None], tuple[str, .
 
 def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
     prop = find_bool_property(data, name)
-    encoded_property = build_bool_property(name, value)
-
     if prop is None:
-        # UE may omit class-default properties. Add only the requested field.
         insert_at = terminal_none_offset(data)
+        encoded_property = build_bool_property(name, value)
         return data[:insert_at] + encoded_property + data[insert_at:]
 
-    payload = b"\x01" if value else b""
+    metadata = bytearray(data[prop.tag_flags_offset:prop.value_offset])
+    if not metadata:
+        raise SaveGameError(f"BoolProperty 缺少 tag_flags：{name}")
+    metadata[0] = (metadata[0] & 0xFE) | (0x01 if value else 0x00)
+
     return (
         data[:prop.size_offset]
-        + struct.pack("<i", len(payload))
-        + data[prop.size_offset + 4:prop.value_offset]
-        + payload
+        + struct.pack("<i", 0)
+        + bytes(metadata)
         + data[prop.value_end:]
     )
 
 
-def repair_missing_bool_payloads(data: bytes) -> tuple[bytes, tuple[str, ...]]:
+def repair_legacy_bool_layouts(data: bytes) -> tuple[bytes, tuple[str, ...]]:
     _variables, malformed = decode_core_bools(data)
     repaired = data
     for name in malformed:
-        # size=1 from the broken release represented an attempted true write.
+        # Both broken revisions represented an attempted true write.
         repaired = patch_core_bool(repaired, name, True)
     return repaired, malformed
 
@@ -414,12 +412,12 @@ def read_core_bools(save_path: Path) -> dict[str, bool | None]:
     if not malformed:
         return variables
 
-    # One-time atomic migration for SAV files written by the broken release.
+    # One-time atomic migration for SAV files written by either broken release.
     lock_path = save_path.with_name(save_path.name + ".writer.lock")
     lock_fd = acquire_lock(lock_path)
     try:
         latest = save_path.read_bytes()
-        repaired, repaired_names = repair_missing_bool_payloads(latest)
+        repaired, repaired_names = repair_legacy_bool_layouts(latest)
         if repaired_names:
             atomic_replace(save_path, repaired)
         variables, remaining = decode_core_bools(repaired)
@@ -441,7 +439,7 @@ def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool |
     lock_fd = acquire_lock(lock_path)
     try:
         original = save_path.read_bytes()
-        repaired, _repaired_names = repair_missing_bool_payloads(original)
+        repaired, _repaired_names = repair_legacy_bool_layouts(original)
         patched = patch_core_bool(repaired, name, value)
         atomic_replace(save_path, patched)
 
