@@ -119,6 +119,12 @@ export class BzssCoreCommandService {
       if (!rawCommand) return invalid("MissingBzssCoreCommand", "Raw command is required.");
       if (/\r|\n/.test(rawCommand)) return invalid("InvalidBzssCoreCommand", "Raw command must be a single line.");
       const match = rawCommand.match(/^([A-Za-z]+):(.*)$/);
+      if (match?.[1] === "EnableLocalVOIP") {
+        return invalid(
+          "UnsupportedBzssCoreDirective",
+          "EnableLocalVOIP has been replaced by PATCH /api/bzss-core/variables.",
+        );
+      }
       if (match?.[1] === "CreateVehicle") {
         const validation = this.validateCreateVehicleParameter(match[2]);
         if (!validation.ok) return validation;
