@@ -4,8 +4,14 @@ import {
   fetchBzssCorePlayerInfoList,
   fetchBzssCoreRawData,
   streamBzssCorePlayerInfoList,
+  fetchBzssCoreVariables,
+  setBzssCoreVariable,
+  BZSS_CORE_BOOL_KEYS,
   type BzssCorePlayerInfoResponse,
   type BzssCoreRawDataResponse,
+  type BzssCoreBoolKey,
+  type BzssCoreVariableSnapshot,
+  type BzssCoreVariableState,
 } from "../app/bzssCoreApi";
 
 export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
@@ -56,7 +62,81 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
   const rawLoading = ref(false);
   const rawError = ref("");
 
+  const coreVariables = ref<BzssCoreVariableSnapshot | null>(null);
+  const variableStates = ref<Record<BzssCoreBoolKey, BzssCoreVariableState>>(
+    Object.fromEntries(BZSS_CORE_BOOL_KEYS.map((key) => [key, {
+      actual: null,
+      desired: null,
+      pending: false,
+      error: null,
+      updatedAt: null,
+    }])) as Record<BzssCoreBoolKey, BzssCoreVariableState>,
+  );
+  const variablesLoading = ref(false);
+  const variablesError = ref("");
+  let variablesTimer: number | null = null;
+  let variablesRefreshInFlight: Promise<void> | null = null;
+
   let closeStream: (() => void) | null = null;
+
+  function applyVariableSnapshot(data: BzssCoreVariableSnapshot) {
+    coreVariables.value = data;
+    variablesError.value = data.error ?? "";
+    for (const key of BZSS_CORE_BOOL_KEYS) {
+      const state = variableStates.value[key];
+      const actual = data.online ? data.variables[key] : null;
+      state.actual = actual;
+      state.updatedAt = data.online && actual !== null ? data.updatedAt : state.updatedAt;
+      if (state.pending && state.desired === actual) {
+        state.pending = false;
+        state.desired = null;
+      }
+    }
+  }
+
+  async function refreshVariables() {
+    if (variablesRefreshInFlight) return variablesRefreshInFlight;
+    variablesLoading.value = true;
+    variablesRefreshInFlight = fetchBzssCoreVariables()
+      .then(applyVariableSnapshot)
+      .catch((err: any) => {
+        variablesError.value = err?.message ?? "BZSS-Core 状态读取失败";
+        for (const key of BZSS_CORE_BOOL_KEYS) variableStates.value[key].actual = null;
+      })
+      .finally(() => {
+        variablesLoading.value = false;
+        variablesRefreshInFlight = null;
+      });
+    return variablesRefreshInFlight;
+  }
+
+  async function setVariable(key: BzssCoreBoolKey, desired: boolean) {
+    const state = variableStates.value[key];
+    state.desired = desired;
+    state.pending = true;
+    state.error = null;
+    try {
+      const result = await setBzssCoreVariable(key, desired);
+      applyVariableSnapshot(result);
+    } catch (err: any) {
+      state.pending = false;
+      state.error = err?.message ?? "BZSS-Core 写入失败";
+      throw err;
+    }
+  }
+
+  function startVariablePolling() {
+    if (variablesTimer !== null) return;
+    void refreshVariables();
+    variablesTimer = window.setInterval(() => void refreshVariables(), 5000);
+    window.addEventListener("focus", refreshVariables);
+  }
+
+  function stopVariablePolling() {
+    if (variablesTimer !== null) window.clearInterval(variablesTimer);
+    variablesTimer = null;
+    window.removeEventListener("focus", refreshVariables);
+  }
 
   function updatePlayers(data: BzssCorePlayerInfoResponse) {
     players.value = buildBzssCorePlayers(data);
@@ -123,6 +203,14 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
     rawData,
     rawLoading,
     rawError,
+    coreVariables,
+    variableStates,
+    variablesLoading,
+    variablesError,
+    refreshVariables,
+    setVariable,
+    startVariablePolling,
+    stopVariablePolling,
     streamActive: computed(() => closeStream !== null),
     fetchSnapshot,
     fetchRaw,
