@@ -18,7 +18,7 @@ export class BzssCoreVariableStateService {
   }
 
   getPaths() {
-    const scriptPath = String(this.config?.get?.("bzssCore.modifyScriptPath")
+    const configuredScriptPath = String(this.config?.get?.("bzssCore.modifyScriptPath")
       ?? this.config?.get?.("bzssCore.modifySaveGamePath")
       ?? "").trim();
     const saveGamePath = String(this.config?.get?.("bzssCore.remoteSaveGamePath")
@@ -26,7 +26,11 @@ export class BzssCoreVariableStateService {
       ?? "").trim();
 
     return {
-      scriptPath: path.isAbsolute(scriptPath) ? scriptPath : path.resolve(process.cwd(), scriptPath),
+      scriptPath: configuredScriptPath
+        ? (path.isAbsolute(configuredScriptPath)
+          ? configuredScriptPath
+          : path.resolve(process.cwd(), configuredScriptPath))
+        : "",
       saveGamePath,
     };
   }
@@ -102,9 +106,18 @@ export class BzssCoreVariableStateService {
 
     // Serialize writes so two UI clicks cannot overwrite each other's SAV.
     const previous = this.reconcilePromise ?? Promise.resolve();
-    const current = previous.catch(() => {}).then(run);
-    this.reconcilePromise = current.finally(() => {
-      if (this.reconcilePromise === current) this.reconcilePromise = null;
+    const current = previous.then(run, run);
+
+    // Keep the queue tail resolved even when the caller receives a write error.
+    // A rejected finally() chain here would become an unhandled rejection and
+    // can terminate Node when --unhandled-rejections=strict is active.
+    const queueTail = current.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.reconcilePromise = queueTail;
+    void queueTail.then(() => {
+      if (this.reconcilePromise === queueTail) this.reconcilePromise = null;
     });
     return current;
   }
