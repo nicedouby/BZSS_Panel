@@ -272,6 +272,8 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
       FString Name
       TypeNode("BoolProperty")
       int32 payload_size  # 0 for false, 1 for true
+      uint8 tag_flags
+      byte[16] property_guid  # only when tag_flags & 0x02
       uint8 payload       # only present when payload_size == 1
     """
     name_bytes = write_fstring(name)
@@ -290,7 +292,19 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
                 continue
 
             payload_size = read_i32(data, size_offset)
-            value_offset = size_offset + 4
+            if payload_size not in (0, 1):
+                continue
+
+            cursor = size_offset + 4
+            if cursor >= len(data):
+                continue
+            tag_flags = data[cursor]
+            cursor += 1
+            if tag_flags & 0x02:
+                cursor += 16
+            if cursor > len(data):
+                continue
+            value_offset = cursor
 
             if payload_size == 0:
                 return BoolProperty(
@@ -300,9 +314,6 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
                     value_end=value_offset,
                     value=False,
                 )
-
-            if payload_size != 1:
-                continue
 
             if value_offset < len(data):
                 raw_value = data[value_offset]
@@ -343,6 +354,7 @@ def build_bool_property(name: str, value: bool) -> bytes:
         write_fstring(name)
         + write_type_node("BoolProperty")
         + struct.pack("<i", len(payload))
+        + b"\x10"
         + payload
     )
 
@@ -374,9 +386,12 @@ def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
         insert_at = terminal_none_offset(data)
         return data[:insert_at] + encoded_property + data[insert_at:]
 
+    payload = b"\x01" if value else b""
     return (
-        data[:prop.property_start]
-        + encoded_property
+        data[:prop.size_offset]
+        + struct.pack("<i", len(payload))
+        + data[prop.size_offset + 4:prop.value_offset]
+        + payload
         + data[prop.value_end:]
     )
 
