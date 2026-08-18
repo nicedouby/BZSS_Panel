@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import struct
 import sys
@@ -237,6 +238,88 @@ def patch_first_empty_or_append(data: bytes, message: str) -> tuple[bytes, int, 
     return patched, target_index, False
 
 
+
+CORE_BOOL_NAMES = ("LocalVOIPEnable", "OutputBZSSObj", "CheckingNoob")
+
+
+def find_bool_property(data: bytes, name: str) -> tuple[int, int, int, int] | None:
+    name_bytes = write_fstring(name)
+    search_at = 0
+    while True:
+        name_offset = data.find(name_bytes, search_at)
+        if name_offset < 0:
+            return None
+        search_at = name_offset + 1
+        try:
+            type_offset = name_offset + len(name_bytes)
+            type_value = read_fstring(data, type_offset)
+            if type_value.text != "BoolProperty":
+                continue
+            size_offset = type_offset + type_value.size
+            property_size = read_i32(data, size_offset)
+            value_offset = size_offset + 8
+            value_end = value_offset + property_size
+            if property_size < 0 or value_end > len(data):
+                continue
+            return name_offset, size_offset, value_offset, value_end
+        except (SaveGameError, UnicodeError, struct.error):
+            continue
+
+
+def read_core_bools(save_path: Path) -> dict[str, bool]:
+    data = save_path.read_bytes()
+    if not data.startswith(b"GVAS"):
+        raise SaveGameError("文件不是 GVAS SaveGame")
+    variables: dict[str, bool] = {}
+    for name in CORE_BOOL_NAMES:
+        prop = find_bool_property(data, name)
+        if prop is None:
+            raise SaveGameError(f"找不到 BoolProperty：{name}")
+        _property_start, _size_offset, value_offset, value_end = prop
+        property_size = value_end - value_offset
+        if property_size == 0:
+            variables[name] = False
+        elif property_size == 1:
+            variables[name] = data[value_offset] != 0
+        else:
+            raise SaveGameError(f"BoolProperty {name} 的长度异常：{property_size}")
+    return variables
+
+
+def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
+    prop = find_bool_property(data, name)
+    if prop is None:
+        raise SaveGameError(f"找不到 BoolProperty：{name}")
+    property_start, size_offset, value_offset, value_end = prop
+    payload = b"\\x01" if value else b""
+    patched_property = (
+        data[property_start:size_offset]
+        + struct.pack("<i", len(payload))
+        + data[size_offset + 4:value_offset]
+        + payload
+    )
+    return data[:property_start] + patched_property + data[value_end:]
+
+
+def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool]:
+    if not save_path.is_file():
+        raise SaveGameError(f"SaveGame 文件不存在：{save_path}")
+    if name not in CORE_BOOL_NAMES:
+        raise SaveGameError(f"不支持的 BoolProperty：{name}")
+    lock_path = save_path.with_name(save_path.name + ".writer.lock")
+    lock_fd = acquire_lock(lock_path)
+    try:
+        original = save_path.read_bytes()
+        patched = patch_core_bool(original, name, value)
+        atomic_replace(save_path, patched)
+        variables = read_core_bools(save_path)
+        if variables[name] is not value:
+            raise SaveGameError(f"写入后校验失败：{name}")
+        return variables
+    finally:
+        os.close(lock_fd)
+        lock_path.unlink(missing_ok=True)
+
 def acquire_lock(lock_path: Path, timeout_seconds: float = 30.0) -> int:
     deadline = time.monotonic() + max(0.1, timeout_seconds)
     while True:
@@ -309,20 +392,49 @@ def write_messages(save_path: Path, messages: list[str]) -> int:
 def write_message(save_path: Path, message: str) -> int:
     return write_messages(save_path, [message])
 
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         usage='%(prog)s <SaveGame路径> "<事件名:事件参数>"'
     )
     parser.add_argument("save_path", type=Path)
-    parser.add_argument("messages", nargs="+")
+    parser.add_argument("messages", nargs="*")
+    parser.add_argument("--read-core-bools", action="store_true")
+    parser.add_argument("--set-core-bool", nargs=2, metavar=("NAME", "VALUE"))
     args = parser.parse_args()
 
-    return write_messages(args.save_path, args.messages)
+    try:
+        if args.read_core_bools:
+            variables = read_core_bools(args.save_path)
+            print(json.dumps({
+                "online": True,
+                "variables": variables,
+                "updatedAt": int(time.time() * 1000),
+            }, ensure_ascii=False))
+            return 0
+
+        if args.set_core_bool:
+            name, raw_value = args.set_core_bool
+            if raw_value not in ("0", "1"):
+                raise SaveGameError("BoolProperty 值必须是 0 或 1")
+            variables = write_core_bool(args.save_path, name, raw_value == "1")
+            print(json.dumps({
+                "online": True,
+                "variables": variables,
+                "updatedAt": int(time.time() * 1000),
+            }, ensure_ascii=False))
+            return 0
+
+        return write_messages(args.save_path, args.messages)
+    except SaveGameError as exc:
+        print(json.dumps({
+            "online": False,
+            "variables": {name: None for name in CORE_BOOL_NAMES},
+            "error": str(exc),
+            "updatedAt": int(time.time() * 1000),
+        }, ensure_ascii=False))
+        return 1
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except SaveGameError as exc:
-        print(f"ERROR: {exc}", file=sys.stderr)
-        raise SystemExit(1)
+    raise SystemExit(main())
