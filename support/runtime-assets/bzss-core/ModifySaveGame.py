@@ -242,70 +242,77 @@ def patch_first_empty_or_append(data: bytes, message: str) -> tuple[bytes, int, 
 CORE_BOOL_NAMES = ("LocalVOIPEnable", "OutputBZSSObj", "CheckingNoob")
 
 
-def find_bool_property(data: bytes, name: str) -> tuple[int, int, int, int] | None:
+def find_bool_property(data: bytes, name: str) -> tuple[int, int] | None:
+    """Return (property_start, bool_value_offset).
+
+    This SaveGame uses UE5's recursive property type node. BoolProperty is
+    serialized as: Name + TypeNode("BoolProperty") + int32(0|1).
+    """
     name_bytes = write_fstring(name)
     search_at = 0
+
     while True:
         name_offset = data.find(name_bytes, search_at)
         if name_offset < 0:
             return None
         search_at = name_offset + 1
+
         try:
             type_offset = name_offset + len(name_bytes)
-            type_value = read_fstring(data, type_offset)
-            if type_value.text != "BoolProperty":
+            type_node, value_offset = read_type_node(data, type_offset)
+            if type_node.name != "BoolProperty" or type_node.children:
                 continue
-            size_offset = type_offset + type_value.size
-            property_size = read_i32(data, size_offset)
-            value_offset = size_offset + 8
-            value_end = value_offset + property_size
-            if property_size < 0 or value_end > len(data):
+            bool_value = read_i32(data, value_offset)
+            if bool_value not in (0, 1):
                 continue
-            return name_offset, size_offset, value_offset, value_end
+            return name_offset, value_offset
         except (SaveGameError, UnicodeError, struct.error):
             continue
 
 
-def read_core_bools(save_path: Path) -> dict[str, bool]:
+def build_bool_property(name: str, value: bool) -> bytes:
+    return (
+        write_fstring(name)
+        + write_type_node("BoolProperty")
+        + struct.pack("<i", 1 if value else 0)
+    )
+
+
+def read_core_bools(save_path: Path) -> dict[str, bool | None]:
+    if not save_path.is_file():
+        raise SaveGameError(f"SaveGame 文件不存在：{save_path}")
+
     data = save_path.read_bytes()
     if not data.startswith(b"GVAS"):
         raise SaveGameError("文件不是 GVAS SaveGame")
-    variables: dict[str, bool] = {}
+
+    variables: dict[str, bool | None] = {}
     for name in CORE_BOOL_NAMES:
         prop = find_bool_property(data, name)
-        if prop is None:
-            raise SaveGameError(f"找不到 BoolProperty：{name}")
-        _property_start, _size_offset, value_offset, value_end = prop
-        property_size = value_end - value_offset
-        if property_size == 0:
-            variables[name] = False
-        elif property_size == 1:
-            variables[name] = data[value_offset] != 0
-        else:
-            raise SaveGameError(f"BoolProperty {name} 的长度异常：{property_size}")
+        variables[name] = None if prop is None else read_i32(data, prop[1]) == 1
     return variables
 
 
 def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
     prop = find_bool_property(data, name)
-    if prop is None:
-        raise SaveGameError(f"找不到 BoolProperty：{name}")
-    property_start, size_offset, value_offset, value_end = prop
-    payload = b"\\x01" if value else b""
-    patched_property = (
-        data[property_start:size_offset]
-        + struct.pack("<i", len(payload))
-        + data[size_offset + 4:value_offset]
-        + payload
-    )
-    return data[:property_start] + patched_property + data[value_end:]
+    encoded_value = struct.pack("<i", 1 if value else 0)
+
+    if prop is not None:
+        _property_start, value_offset = prop
+        return data[:value_offset] + encoded_value + data[value_offset + 4:]
+
+    # Some UE SaveGames omit properties that still have their class default.
+    # Add only the requested BoolProperty before the terminal None marker.
+    insert_at = terminal_none_offset(data)
+    return data[:insert_at] + build_bool_property(name, value) + data[insert_at:]
 
 
-def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool]:
+def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool | None]:
     if not save_path.is_file():
         raise SaveGameError(f"SaveGame 文件不存在：{save_path}")
     if name not in CORE_BOOL_NAMES:
         raise SaveGameError(f"不支持的 BoolProperty：{name}")
+
     lock_path = save_path.with_name(save_path.name + ".writer.lock")
     lock_fd = acquire_lock(lock_path)
     try:
@@ -319,6 +326,7 @@ def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool]:
     finally:
         os.close(lock_fd)
         lock_path.unlink(missing_ok=True)
+
 
 def acquire_lock(lock_path: Path, timeout_seconds: float = 30.0) -> int:
     deadline = time.monotonic() + max(0.1, timeout_seconds)
