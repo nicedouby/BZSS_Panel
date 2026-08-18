@@ -299,37 +299,6 @@ const matchUpdatedLabel = computed(() => t("match.updated", "", {
   time: formatUpdateTime(matchUpdatedAt.value),
 }));
 
-.bzss-core-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  color: var(--color-text-muted);
-  font-size: 9px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.bzss-core-status-label {
-  color: var(--color-text-secondary);
-  letter-spacing: 0.03em;
-}
-.bzss-core-status-item {
-  color: var(--color-text-muted);
-}
-.bzss-core-status-item.is-enabled,
-.bzss-core-status-label {
-  color: #86efac;
-}
-.bzss-core-status-item.is-pending {
-  color: #fde68a;
-}
-.bzss-core-status-item.is-error {
-  color: #fca5a5;
-}
-.bzss-core-status-item.is-unknown {
-  color: var(--color-text-muted);
-}
-
 /* ── System Metrics (subtle topbar display) ── */
 function fmtSysUptime(seconds: number | null | undefined) {
   if (seconds == null || !Number.isFinite(seconds)) return "--";
@@ -1275,4 +1244,34 @@ function toggleSidebar() {
 
 
 
+
+.bzss-core-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.bzss-core-status-label {
+  color: #86efac;
+  letter-spacing: 0.03em;
+}
+.bzss-core-status-item {
+  color: var(--color-text-muted);
+}
+.bzss-core-status-item.is-enabled {
+  color: #86efac;
+}
+.bzss-core-status-item.is-pending {
+  color: #fde68a;
+}
+.bzss-core-status-item.is-error {
+  color: #fca5a5;
+}
+.bzss-core-status-item.is-unknown {
+  color: var(--color-text-muted);
+}
 </style>
