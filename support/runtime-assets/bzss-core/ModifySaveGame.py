@@ -241,6 +241,10 @@ def patch_first_empty_or_append(data: bytes, message: str) -> tuple[bytes, int, 
 
 CORE_BOOL_NAMES = ("LocalVOIPEnable", "OutputBZSSObj", "CheckingNoob")
 
+TAG_HAS_ARRAY_INDEX = 0x01
+TAG_HAS_PROPERTY_GUID = 0x02
+TAG_BOOL_TRUE = 0x10
+
 
 @dataclass(frozen=True)
 class BoolProperty:
@@ -250,7 +254,7 @@ class BoolProperty:
     value_offset: int
     value_end: int
     value: bool | None
-    malformed_legacy_size: bool = False
+    malformed_legacy: bool = False
 
 
 def looks_like_property_start(data: bytes, offset: int) -> bool:
@@ -276,13 +280,13 @@ def is_known_property_boundary(data: bytes, offset: int) -> bool:
 def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
     """Find an UE5 tagged BoolProperty.
 
-    BoolProperty consumes no normal payload. Its value is stored in bit 0 of
-    tag_flags while payload_size remains zero:
-      false = size 0, flags 0x10
-      true  = size 0, flags 0x11
+    Scalar BoolProperty stores its value in tag_flags bit 4 and consumes no
+    normal payload:
+      false = payload_size 0, flags 0x00
+      true  = payload_size 0, flags 0x10
 
-    payload_size=1 is accepted only as a migration source for the two broken
-    writer revisions that were briefly shipped.
+    payload_size=1 and flags bit 0 are accepted only as migration sources for
+    the broken writer revisions previously shipped by BZSS Panel.
     """
     name_bytes = write_fstring(name)
     search_at = 0
@@ -308,30 +312,37 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
                 continue
             tag_flags = data[tag_flags_offset]
 
+            # These managed fields are scalar. Bit 0 was accidentally set by
+            # the previous writer and must not be followed as an ArrayIndex.
+            malformed_array_flag = bool(tag_flags & TAG_HAS_ARRAY_INDEX)
+
             value_offset = tag_flags_offset + 1
-            if tag_flags & 0x02:
+            if tag_flags & TAG_HAS_PROPERTY_GUID:
                 value_offset += 16
             if value_offset > len(data):
                 continue
 
-            if payload_size == 0:
+            if payload_size == 0 and not malformed_array_flag:
                 return BoolProperty(
                     property_start=name_offset,
                     size_offset=size_offset,
                     tag_flags_offset=tag_flags_offset,
                     value_offset=value_offset,
                     value_end=value_offset,
-                    value=bool(tag_flags & 0x01),
+                    value=bool(tag_flags & TAG_BOOL_TRUE),
                 )
 
-            # Broken revision A: size=1 but no payload.
-            # Broken revision B: size=1 followed by an unnecessary 0/1 byte.
-            if value_offset < len(data) and data[value_offset] in (0, 1):
-                value_end = value_offset + 1
-            elif value_offset >= len(data) or is_known_property_boundary(data, value_offset) or looks_like_property_start(data, value_offset):
-                value_end = value_offset
-            else:
-                continue
+            value_end = value_offset
+            if payload_size == 1:
+                # Broken revision A had no byte; revision B appended one.
+                if value_offset < len(data) and data[value_offset] in (0, 1):
+                    value_end = value_offset + 1
+                elif not (
+                    value_offset >= len(data)
+                    or is_known_property_boundary(data, value_offset)
+                    or looks_like_property_start(data, value_offset)
+                ):
+                    continue
 
             return BoolProperty(
                 property_start=name_offset,
@@ -340,14 +351,14 @@ def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
                 value_offset=value_offset,
                 value_end=value_end,
                 value=None,
-                malformed_legacy_size=True,
+                malformed_legacy=True,
             )
         except (SaveGameError, UnicodeError, struct.error):
             continue
 
 
 def build_bool_property(name: str, value: bool) -> bytes:
-    tag_flags = 0x10 | (0x01 if value else 0x00)
+    tag_flags = TAG_BOOL_TRUE if value else 0
     return (
         write_fstring(name)
         + write_type_node("BoolProperty")
@@ -368,7 +379,7 @@ def decode_core_bools(data: bytes) -> tuple[dict[str, bool | None], tuple[str, .
             variables[name] = None
             continue
         variables[name] = prop.value
-        if prop.malformed_legacy_size:
+        if prop.malformed_legacy:
             malformed.append(name)
 
     return variables, tuple(malformed)
@@ -384,7 +395,11 @@ def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
     metadata = bytearray(data[prop.tag_flags_offset:prop.value_offset])
     if not metadata:
         raise SaveGameError(f"BoolProperty 缺少 tag_flags：{name}")
-    metadata[0] = (metadata[0] & 0xFE) | (0x01 if value else 0x00)
+
+    # Remove the accidentally-set ArrayIndex flag, then update BoolTrue bit.
+    metadata[0] &= ~(TAG_HAS_ARRAY_INDEX | TAG_BOOL_TRUE)
+    if value:
+        metadata[0] |= TAG_BOOL_TRUE
 
     return (
         data[:prop.size_offset]
@@ -398,7 +413,7 @@ def repair_legacy_bool_layouts(data: bytes) -> tuple[bytes, tuple[str, ...]]:
     _variables, malformed = decode_core_bools(data)
     repaired = data
     for name in malformed:
-        # Both broken revisions represented an attempted true write.
+        # Every malformed form was produced by an attempted true write.
         repaired = patch_core_bool(repaired, name, True)
     return repaired, malformed
 
@@ -412,7 +427,6 @@ def read_core_bools(save_path: Path) -> dict[str, bool | None]:
     if not malformed:
         return variables
 
-    # One-time atomic migration for SAV files written by either broken release.
     lock_path = save_path.with_name(save_path.name + ".writer.lock")
     lock_fd = acquire_lock(lock_path)
     try:
