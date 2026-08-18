@@ -242,11 +242,37 @@ def patch_first_empty_or_append(data: bytes, message: str) -> tuple[bytes, int, 
 CORE_BOOL_NAMES = ("LocalVOIPEnable", "OutputBZSSObj", "CheckingNoob")
 
 
-def find_bool_property(data: bytes, name: str) -> tuple[int, int] | None:
-    """Return (property_start, bool_value_offset).
+@dataclass(frozen=True)
+class BoolProperty:
+    property_start: int
+    size_offset: int
+    value_offset: int
+    value_end: int
+    value: bool | None
+    missing_payload: bool = False
 
-    This SaveGame uses UE5's recursive property type node. BoolProperty is
-    serialized as: Name + TypeNode("BoolProperty") + int32(0|1).
+
+def looks_like_property_start(data: bytes, offset: int) -> bool:
+    try:
+        name = read_fstring(data, offset)
+        if not name.text:
+            return False
+        if name.text == "None":
+            return True
+        type_node, _cursor = read_type_node(data, offset + name.size)
+        return bool(type_node.name)
+    except (SaveGameError, UnicodeError, struct.error):
+        return False
+
+
+def find_bool_property(data: bytes, name: str) -> BoolProperty | None:
+    """Find UE5 tagged BoolProperty.
+
+    Layout:
+      FString Name
+      TypeNode("BoolProperty")
+      int32 payload_size  # 0 for false, 1 for true
+      uint8 payload       # only present when payload_size == 1
     """
     name_bytes = write_fstring(name)
     search_at = 0
@@ -259,23 +285,104 @@ def find_bool_property(data: bytes, name: str) -> tuple[int, int] | None:
 
         try:
             type_offset = name_offset + len(name_bytes)
-            type_node, value_offset = read_type_node(data, type_offset)
+            type_node, size_offset = read_type_node(data, type_offset)
             if type_node.name != "BoolProperty" or type_node.children:
                 continue
-            bool_value = read_i32(data, value_offset)
-            if bool_value not in (0, 1):
+
+            payload_size = read_i32(data, size_offset)
+            value_offset = size_offset + 4
+
+            if payload_size == 0:
+                return BoolProperty(
+                    property_start=name_offset,
+                    size_offset=size_offset,
+                    value_offset=value_offset,
+                    value_end=value_offset,
+                    value=False,
+                )
+
+            if payload_size != 1:
                 continue
-            return name_offset, value_offset
+
+            # Compatibility migration for the broken writer shipped previously:
+            # it wrote size=1 without the required one-byte payload. In that
+            # case value_offset is already the beginning of the next property.
+            if value_offset >= len(data) or looks_like_property_start(data, value_offset):
+                return BoolProperty(
+                    property_start=name_offset,
+                    size_offset=size_offset,
+                    value_offset=value_offset,
+                    value_end=value_offset,
+                    value=None,
+                    missing_payload=True,
+                )
+
+            raw_value = data[value_offset]
+            if raw_value not in (0, 1):
+                continue
+
+            return BoolProperty(
+                property_start=name_offset,
+                size_offset=size_offset,
+                value_offset=value_offset,
+                value_end=value_offset + 1,
+                value=raw_value == 1,
+            )
         except (SaveGameError, UnicodeError, struct.error):
             continue
 
 
 def build_bool_property(name: str, value: bool) -> bytes:
+    payload = b"\x01" if value else b""
     return (
         write_fstring(name)
         + write_type_node("BoolProperty")
-        + struct.pack("<i", 1 if value else 0)
+        + struct.pack("<i", len(payload))
+        + payload
     )
+
+
+def decode_core_bools(data: bytes) -> tuple[dict[str, bool | None], tuple[str, ...]]:
+    if not data.startswith(b"GVAS"):
+        raise SaveGameError("文件不是 GVAS SaveGame")
+
+    variables: dict[str, bool | None] = {}
+    malformed: list[str] = []
+    for name in CORE_BOOL_NAMES:
+        prop = find_bool_property(data, name)
+        if prop is None:
+            variables[name] = None
+            continue
+        variables[name] = prop.value
+        if prop.missing_payload:
+            malformed.append(name)
+
+    return variables, tuple(malformed)
+
+
+def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
+    prop = find_bool_property(data, name)
+    encoded_property = build_bool_property(name, value)
+
+    if prop is None:
+        # UE may omit class-default properties. Add only the requested field.
+        insert_at = terminal_none_offset(data)
+        return data[:insert_at] + encoded_property + data[insert_at:]
+
+    return (
+        data[:prop.property_start]
+        + encoded_property
+        + data[prop.value_end:]
+    )
+
+
+def repair_missing_bool_payloads(data: bytes) -> tuple[bytes, tuple[str, ...]]:
+    _variables, malformed = decode_core_bools(data)
+    repaired = data
+    for name in malformed:
+        # size=1 from the broken release represented an attempted true write.
+        repaired = patch_core_bool(repaired, name, True)
+    return repaired, malformed
 
 
 def read_core_bools(save_path: Path) -> dict[str, bool | None]:
@@ -283,28 +390,25 @@ def read_core_bools(save_path: Path) -> dict[str, bool | None]:
         raise SaveGameError(f"SaveGame 文件不存在：{save_path}")
 
     data = save_path.read_bytes()
-    if not data.startswith(b"GVAS"):
-        raise SaveGameError("文件不是 GVAS SaveGame")
+    variables, malformed = decode_core_bools(data)
+    if not malformed:
+        return variables
 
-    variables: dict[str, bool | None] = {}
-    for name in CORE_BOOL_NAMES:
-        prop = find_bool_property(data, name)
-        variables[name] = None if prop is None else read_i32(data, prop[1]) == 1
-    return variables
-
-
-def patch_core_bool(data: bytes, name: str, value: bool) -> bytes:
-    prop = find_bool_property(data, name)
-    encoded_value = struct.pack("<i", 1 if value else 0)
-
-    if prop is not None:
-        _property_start, value_offset = prop
-        return data[:value_offset] + encoded_value + data[value_offset + 4:]
-
-    # Some UE SaveGames omit properties that still have their class default.
-    # Add only the requested BoolProperty before the terminal None marker.
-    insert_at = terminal_none_offset(data)
-    return data[:insert_at] + build_bool_property(name, value) + data[insert_at:]
+    # One-time atomic migration for SAV files written by the broken release.
+    lock_path = save_path.with_name(save_path.name + ".writer.lock")
+    lock_fd = acquire_lock(lock_path)
+    try:
+        latest = save_path.read_bytes()
+        repaired, repaired_names = repair_missing_bool_payloads(latest)
+        if repaired_names:
+            atomic_replace(save_path, repaired)
+        variables, remaining = decode_core_bools(repaired)
+        if remaining:
+            raise SaveGameError(f"BoolProperty 自动修复失败：{', '.join(remaining)}")
+        return variables
+    finally:
+        os.close(lock_fd)
+        lock_path.unlink(missing_ok=True)
 
 
 def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool | None]:
@@ -317,10 +421,13 @@ def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool |
     lock_fd = acquire_lock(lock_path)
     try:
         original = save_path.read_bytes()
-        patched = patch_core_bool(original, name, value)
+        repaired, _repaired_names = repair_missing_bool_payloads(original)
+        patched = patch_core_bool(repaired, name, value)
         atomic_replace(save_path, patched)
-        variables = read_core_bools(save_path)
-        if variables[name] is not value:
+
+        written = save_path.read_bytes()
+        variables, malformed = decode_core_bools(written)
+        if malformed or variables[name] is not value:
             raise SaveGameError(f"写入后校验失败：{name}")
         return variables
     finally:
