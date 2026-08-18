@@ -50,6 +50,7 @@ import { LogPostFileBridge } from "./core/logpost-file-bridge.js";
 import { FileIOManager } from "./core/file-io-manager.js";
 import { TaskManager } from "./core/task/TaskManager.js";
 import { BzssCoreCommandService } from "./core/bzss-core-command-service.js";
+import { BzssCoreVariableStateService } from "./core/bzss-core-variable-state-service.js";
 import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
@@ -120,6 +121,11 @@ async function main() {
     logger: logger.child({ moduleId: "core.auditManager", source: "core.auditManager" }),
   });
   await auditManager.init();
+
+  const bzssCoreVariableStateService = new BzssCoreVariableStateService({
+    config: configManager,
+    logger: logger.child({ moduleId: "core.bzssCoreVariableState", source: "core.bzssCoreVariableState" }),
+  });
 
   const bzssCoreCommandService = new BzssCoreCommandService({
     config: configManager,
@@ -203,6 +209,7 @@ async function main() {
     fileIO: fileIOManager,
     taskManager,
     bzssCoreCommandService,
+    bzssCoreVariableStateService,
   };
   auditManager.core = coreContext;
 
