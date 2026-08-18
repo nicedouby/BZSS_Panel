@@ -65,6 +65,16 @@
         >
           {{ tacticalReplayRecordingLabel }}
         </button>
+        <div class="bzss-core-status" title="BZSS-Core 实际 SaveGame 状态">
+          <span class="bzss-core-status-label">BZSS CORE {{ coreOnlineGlyph }}</span>
+          <span
+            v-for="item in coreBoolStatusItems"
+            :key="item.key"
+            class="bzss-core-status-item"
+            :class="`is-${item.status}`"
+            :title="item.title"
+          >{{ item.label }} {{ item.glyph }}</span>
+        </div>
         <BzssCoreMenu />
         <div class="topbar-health" aria-label="RCON and log status">
           <span class="health-chip" :class="rconHealthTone">R</span>
@@ -115,6 +125,7 @@ import { useIsMobile } from "../../composables/useMediaQuery";
 import MobileBottomSheet from "../mobile/MobileBottomSheet.vue";
 import UserMenu from "./UserMenu.vue";
 import BzssCoreMenu from "./BzssCoreMenu.vue";
+import { useBzssCoreStore } from "../../stores/bzss-core.store";
 import { t } from "../../i18n";
 
 const emit = defineEmits<{
@@ -131,6 +142,7 @@ const runtime = getRuntimeSyncState();
 const sysStatus = useSystemStatus();
 const route = useRoute();
 const ui = useUiStore();
+const bzssCore = useBzssCoreStore();
 const isMobile = useIsMobile(1024);
 // 导航抽屉断点统一到 ≤1100px，独立于内容断点
 const isNavDrawer = useIsMobile(1100);
@@ -287,6 +299,37 @@ const matchUpdatedLabel = computed(() => t("match.updated", "", {
   time: formatUpdateTime(matchUpdatedAt.value),
 }));
 
+.bzss-core-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.bzss-core-status-label {
+  color: var(--color-text-secondary);
+  letter-spacing: 0.03em;
+}
+.bzss-core-status-item {
+  color: var(--color-text-muted);
+}
+.bzss-core-status-item.is-enabled,
+.bzss-core-status-label {
+  color: #86efac;
+}
+.bzss-core-status-item.is-pending {
+  color: #fde68a;
+}
+.bzss-core-status-item.is-error {
+  color: #fca5a5;
+}
+.bzss-core-status-item.is-unknown {
+  color: var(--color-text-muted);
+}
+
 /* ── System Metrics (subtle topbar display) ── */
 function fmtSysUptime(seconds: number | null | undefined) {
   if (seconds == null || !Number.isFinite(seconds)) return "--";
@@ -326,7 +369,39 @@ const sysMemLabel = computed(() => fmtSysMem(sysStatus.value?.system?.memory?.rs
 const sysNetInLabel = computed(() => fmtSysRate(sysStatus.value?.system?.performance?.latest?.network?.bytesInPerSec));
 const sysNetOutLabel = computed(() => fmtSysRate(sysStatus.value?.system?.performance?.latest?.network?.bytesOutPerSec));
 
+const coreBoolStatusItems = computed(() => ([
+  ["LocalVOIPEnable", "VOIP"],
+  ["OutputBZSSObj", "OBJ"],
+  ["CheckingNoob", "NOOB"],
+] as const).map(([key, label]) => {
+  const state = bzssCore.variableStates[key];
+  const status = state.error
+    ? "error"
+    : state.pending
+      ? "pending"
+      : state.actual === true
+        ? "enabled"
+        : state.actual === false
+          ? "disabled"
+          : "unknown";
+  const glyph = status === "enabled" ? "●"
+    : status === "disabled" ? "○"
+      : status === "pending" ? "◐"
+        : status === "error" ? "!" : "?";
+  const actual = state.actual === null ? "未知" : String(state.actual);
+  const desired = state.desired === null ? "" : `，目标值：${state.desired}`;
+  return {
+    key,
+    label,
+    status,
+    glyph,
+    title: `${key}｜实际值：${actual}${desired}${state.error ? `｜${state.error}` : ""}`,
+  };
+}));
+const coreOnlineGlyph = computed(() => bzssCore.coreVariables?.online ? "●" : "?");
+
 onMounted(() => {
+  bzssCore.startVariablePolling();
   void loadWarmupState();
   if (canControlTacticalReplayRecording.value) void loadTacticalReplayRecordingState();
 });
