@@ -1,4 +1,37 @@
 import { apiGet, apiPost } from "./apiClient";
+import { apiPatch } from "./apiClient";
+
+export const BZSS_CORE_BOOL_KEYS = [
+  "LocalVOIPEnable",
+  "OutputBZSSObj",
+  "CheckingNoob",
+] as const;
+
+export type BzssCoreBoolKey = typeof BZSS_CORE_BOOL_KEYS[number];
+export type BzssCoreBoolValue = boolean | null;
+
+export interface BzssCoreVariableSnapshot {
+  online: boolean;
+  variables: Record<BzssCoreBoolKey, BzssCoreBoolValue>;
+  error: string | null;
+  updatedAt: number;
+}
+
+export interface BzssCoreVariableState {
+  actual: BzssCoreBoolValue;
+  desired: boolean | null;
+  pending: boolean;
+  error: string | null;
+  updatedAt: number | null;
+}
+
+export async function fetchBzssCoreVariables() {
+  return apiGet<BzssCoreVariableSnapshot>("/api/bzss-core/variables");
+}
+
+export async function setBzssCoreVariable(key: BzssCoreBoolKey, value: boolean) {
+  return apiPatch<BzssCoreVariableSnapshot>("/api/bzss-core/variables", { key, value });
+}
 
 export interface BzssCoreExecuteResult {
   ok: boolean;
