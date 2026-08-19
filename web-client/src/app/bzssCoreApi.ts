@@ -10,11 +10,17 @@ export const BZSS_CORE_BOOL_KEYS = [
 export type BzssCoreBoolKey = typeof BZSS_CORE_BOOL_KEYS[number];
 export type BzssCoreBoolValue = boolean | null;
 
+export type BzssCoreVariableSyncStatus = "synced" | "drifted" | "unknown" | "error";
+
 export interface BzssCoreVariableSnapshot {
   online: boolean;
   variables: Record<BzssCoreBoolKey, BzssCoreBoolValue>;
+  /** Panel persisted target; it remains authoritative across restarts. */
+  desired: Record<BzssCoreBoolKey, BzssCoreBoolValue>;
+  status: Record<BzssCoreBoolKey, BzssCoreVariableSyncStatus>;
   error: string | null;
   updatedAt: number;
+  desiredUpdatedAt: number | null;
 }
 
 export interface BzssCoreVariableState {
