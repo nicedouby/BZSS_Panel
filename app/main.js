@@ -316,6 +316,7 @@ async function main() {
   await logPostFileBridge.start();
   await reserveExchangeService.start();
   await webServer.start();
+  await bzssCoreVariableStateService.start();
 
   // 放在最后启动 Python，确保 UDP 和 Web 都已经准备好。
   await pythonLogParserManager.start();
@@ -350,6 +351,7 @@ async function main() {
     await pythonLogParserManager.stop();
     await reserveExchangeService.stop();
     await webServer.stop();
+    await bzssCoreVariableStateService.stop();
     await pluginManager.stopAll();
     await moduleManager.stopAll();
     rawLogDerivedEvents?.stop?.();
