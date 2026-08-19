@@ -443,28 +443,63 @@ def read_core_bools(save_path: Path) -> dict[str, bool | None]:
         lock_path.unlink(missing_ok=True)
 
 
-def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool | None]:
+def write_core_bools(save_path: Path, updates: dict[str, bool]) -> dict[str, bool | None]:
     if not save_path.is_file():
         raise SaveGameError(f"SaveGame 文件不存在：{save_path}")
-    if name not in CORE_BOOL_NAMES:
-        raise SaveGameError(f"不支持的 BoolProperty：{name}")
+    if not updates:
+        raise SaveGameError("没有需要写入的 BoolProperty")
+
+    normalized_updates: dict[str, bool] = {}
+    for name, value in updates.items():
+        if name not in CORE_BOOL_NAMES:
+            raise SaveGameError(f"不支持的 BoolProperty：{name}")
+        if not isinstance(value, bool):
+            raise SaveGameError(f"BoolProperty 值必须为 true/false：{name}")
+        normalized_updates[name] = value
 
     lock_path = save_path.with_name(save_path.name + ".writer.lock")
     lock_fd = acquire_lock(lock_path)
     try:
         original = save_path.read_bytes()
         repaired, _repaired_names = repair_legacy_bool_layouts(original)
-        patched = patch_core_bool(repaired, name, value)
-        atomic_replace(save_path, patched)
+        patched = repaired
 
+        # All managed fields are patched in one in-memory buffer and replaced
+        # once, so a reconciliation cycle never exposes a partial state.
+        for name in CORE_BOOL_NAMES:
+            if name in normalized_updates:
+                patched = patch_core_bool(patched, name, normalized_updates[name])
+
+        atomic_replace(save_path, patched)
         written = save_path.read_bytes()
         variables, malformed = decode_core_bools(written)
-        if malformed or variables[name] is not value:
-            raise SaveGameError(f"写入后校验失败：{name}")
+        if malformed:
+            raise SaveGameError("写入后仍存在损坏的 BoolProperty")
+        for name, expected in normalized_updates.items():
+            if variables[name] is not expected:
+                raise SaveGameError(f"写入后校验失败：{name}")
         return variables
     finally:
         os.close(lock_fd)
         lock_path.unlink(missing_ok=True)
+
+
+def write_core_bool(save_path: Path, name: str, value: bool) -> dict[str, bool | None]:
+    return write_core_bools(save_path, {name: value})
+
+
+def parse_core_bool_assignments(assignments: list[str]) -> dict[str, bool]:
+    updates: dict[str, bool] = {}
+    for assignment in assignments:
+        name, separator, raw_value = str(assignment).partition("=")
+        name = name.strip()
+        raw_value = raw_value.strip()
+        if not separator or raw_value not in ("0", "1"):
+            raise SaveGameError("批量 BoolProperty 格式应为 Name=0 或 Name=1")
+        if name in updates:
+            raise SaveGameError(f"重复的 BoolProperty：{name}")
+        updates[name] = raw_value == "1"
+    return updates
 
 
 def acquire_lock(lock_path: Path, timeout_seconds: float = 30.0) -> int:
@@ -548,11 +583,24 @@ def main() -> int:
     parser.add_argument("messages", nargs="*")
     parser.add_argument("--read-core-bools", action="store_true")
     parser.add_argument("--set-core-bool", nargs=2, metavar=("NAME", "VALUE"))
+    parser.add_argument("--set-core-bools", nargs="+", metavar="NAME=VALUE")
     args = parser.parse_args()
 
     try:
         if args.read_core_bools:
             variables = read_core_bools(args.save_path)
+            print(json.dumps({
+                "online": True,
+                "variables": variables,
+                "updatedAt": int(time.time() * 1000),
+            }, ensure_ascii=False))
+            return 0
+
+        if args.set_core_bools:
+            variables = write_core_bools(
+                args.save_path,
+                parse_core_bool_assignments(args.set_core_bools),
+            )
             print(json.dumps({
                 "online": True,
                 "variables": variables,
