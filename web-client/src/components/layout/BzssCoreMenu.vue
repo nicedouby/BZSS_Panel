@@ -789,7 +789,7 @@ async function setCoreVariable(key: BzssCoreBoolKey, value: boolean) {
     await bzssCore.setVariable(key, value);
     ui.pushToast({
       title: key,
-      message: value ? "启用值已写入，等待 Core 回读确认。" : "关闭值已写入，等待 Core 回读确认。",
+      message: value ? "启用目标已保存，Panel 将持续调和并等待 Core 回读确认。" : "关闭目标已保存，Panel 将持续调和并等待 Core 回读确认。",
       tone: "ok",
       durationMs: 4200,
     });
