@@ -11,7 +11,7 @@
     <AppPageToolbar>
       <div class="filters">
         <select v-model="filters.source" @change="resetAndRefresh"><option value="all">全部来源</option><option value="live">实时</option><option value="replay">回溯</option></select>
-        <select v-model="filters.type" @change="resetAndRefresh"><option value="all">全部类型</option><option value="kill">击杀</option><option value="tk">TK</option></select>
+        <select v-model="filters.type" @change="resetAndRefresh"><option value="all">全部类型</option><option value="damage">伤害</option><option value="wound">击倒</option><option value="kill">击杀</option><option value="tk">TK</option></select>
         <input v-model="filters.search" placeholder="玩家名字 / Steam64 / EOS / 武器" @keydown.enter.prevent="resetAndRefresh">
         <select v-model.number="filters.limit" @change="resetAndRefresh"><option :value="100">100</option><option :value="200">200</option><option :value="500">500</option></select>
         <button type="button" @click="resetAndRefresh">查询</button>
@@ -25,7 +25,9 @@
         <small>{{ formatBytes(replay.scannedBytes) }} / {{ formatBytes(replay.totalBytes) }} · {{ progress.toFixed(1) }}%</small>
       </AppCard>
       <AppCard compact title="扫描进度"><strong>{{ formatNumber(replay.scannedLines) }} 行</strong><small>发现 {{ formatNumber(replay.killsFound) }} · 导入 {{ formatNumber(replay.imported) }} · 重复 {{ formatNumber(replay.duplicates) }}</small></AppCard>
-      <AppCard compact title="历史击杀"><strong>{{ formatNumber(overview.replayCount) }}</strong></AppCard>
+      <AppCard compact title="历史伤害"><strong>{{ formatNumber(overview.replayDamage) }}</strong></AppCard>
+      <AppCard compact title="历史击倒"><strong>{{ formatNumber(overview.replayWound) }}</strong></AppCard>
+      <AppCard compact title="历史击杀"><strong>{{ formatNumber(overview.replayKills ?? overview.replayCount) }}</strong></AppCard>
       <AppCard compact title="实时击杀"><strong>{{ formatNumber(overview.liveCount) }}</strong></AppCard>
       <AppCard compact title="TK"><strong>{{ formatNumber(overview.teamKills) }}</strong></AppCard>
       <AppCard compact title="最后更新"><strong>{{ formatTime(overview.lastUpdatedAt) }}</strong></AppCard>
@@ -41,7 +43,7 @@
             <tr v-for="record in records" :key="record.id">
               <td>{{ formatTime(record.time) }}</td>
               <td><span class="pill" :class="record.source">{{ record.source === "live" ? "实时" : "回溯" }}</span></td>
-              <td><span class="pill" :class="record.isTeamKill ? 'tk' : 'kill'">{{ record.isTeamKill ? "TK" : "击杀" }}</span></td>
+              <td><span class="pill" :class="record.type === "damage" ? "damage" : record.type === "wound" ? "wound" : record.isTeamKill ? "tk" : "kill"">{{ record.type === "damage" ? "伤害" : record.type === "wound" ? "击倒" : record.isTeamKill ? "TK" : "击杀" }}</span></td>
               <td><strong>{{ record.attacker?.name || "未知" }}</strong><small>{{ shortId(record.attacker?.steam64ID || record.attacker?.eosID) }}</small></td>
               <td>{{ record.attacker?.teamID ?? "-" }}</td>
               <td><strong>{{ record.victim?.name || "未知" }}</strong><small>{{ shortId(record.victim?.steam64ID || record.victim?.eosID) }}</small></td>
@@ -107,7 +109,7 @@ async function refreshAll(silent = false) {
   if (!silent) loading.value = true;
   try {
     const params = new URLSearchParams(Object.entries(filters).map(([key, value]) => [key, String(value)]));
-    const [data, state] = await Promise.all([apiGet<any>(`/api/kill-records?${params}`), apiGet<any>("/api/kill-records/status")]);
+    const [data, state] = await Promise.all([apiGet<any>(`/api/combat-records?${params}`), apiGet<any>("/api/kill-records/status")]);
     records.value = data.records ?? [];
     total.value = Number(data.total) || 0;
     Object.assign(overview, data.overview ?? state.overview ?? {});
