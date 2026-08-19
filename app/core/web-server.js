@@ -2247,7 +2247,7 @@ export class WebServer {
       if (!this.bzssCoreVariableStateService) {
         return this.json(res, 503, { error: "BzssCoreVariableStateUnavailable" });
       }
-      return this.json(res, 200, await this.bzssCoreVariableStateService.read());
+      return this.json(res, 200, await this.bzssCoreVariableStateService.reconcile());
     }
 
     if (url.pathname === "/api/bzss-core/variables" && req.method === "PATCH") {
