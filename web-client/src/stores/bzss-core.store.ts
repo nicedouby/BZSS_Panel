@@ -85,12 +85,12 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
     for (const key of BZSS_CORE_BOOL_KEYS) {
       const state = variableStates.value[key];
       const actual = data.online ? data.variables[key] : null;
+      const desired = data.desired[key];
       state.actual = actual;
+      state.desired = typeof desired === "boolean" ? desired : null;
+      state.pending = Boolean(data.online && state.desired !== null && actual !== state.desired);
+      state.error = data.status[key] === "error" ? (data.error ?? "BZSS-Core 调和失败") : null;
       state.updatedAt = data.online && actual !== null ? data.updatedAt : state.updatedAt;
-      if (state.pending && state.desired === actual) {
-        state.pending = false;
-        state.desired = null;
-      }
     }
   }
 
@@ -128,7 +128,7 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
   function startVariablePolling() {
     if (variablesTimer !== null) return;
     void refreshVariables();
-    variablesTimer = window.setInterval(() => void refreshVariables(), 5000);
+    variablesTimer = window.setInterval(() => void refreshVariables(), 3000);
     window.addEventListener("focus", refreshVariables);
   }
 
