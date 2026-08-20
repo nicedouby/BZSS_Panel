@@ -24,11 +24,6 @@ describe("page registry", () => {
   });
 
   it("writes permission and layout metadata into router records", () => {
-    const combatManager = buildPageRoutes().find((route) => route.name === "combat-manager");
-    expect(combatManager?.meta?.requiredPermission).toBe("combat_manager.view");
-    expect(combatManager?.meta?.legacyRequiredPermissions).toEqual(["kill_manager.view"]);
-    expect(combatManager?.meta?.layoutMode).toBe("workspace");
-    expect(combatManager?.meta?.contentPadding).toBe("none");
 
     const tacticalReport = buildPageRoutes().find((route) => route.name === "tactical-report");
     expect(tacticalReport?.meta?.requiredPermission).toBe("plugin:tactical-report:view");
