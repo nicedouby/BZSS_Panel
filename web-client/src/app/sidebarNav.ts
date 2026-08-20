@@ -13,7 +13,6 @@ export type NavSectionKey =
   | "opsLive"
   | "players"
   | "balance"
-  | "combat"
   | "broadcast"
   | "analytics"
   | "system"
@@ -117,7 +116,7 @@ export function buildNavSections(options: {
   }
 
   for (const page of apiPages) {
-    if (!page.enabled || page.hiddenFromSidebar) continue;
+    if (!page.enabled || page.hiddenFromSidebar || isRetiredCombatRoute(page.route)) continue;
     if (!canShowPage(page, options.user)) continue;
 
     const path = normalizeRoute(page.route);
@@ -224,6 +223,11 @@ function canShowPage(page: RegisteredWebPage, user: any) {
   );
 }
 
+function isRetiredCombatRoute(route: unknown) {
+  const value = normalizeRoute(route);
+  return value.includes("combat") || value.includes("battle") || value.includes("kill") || value.includes("weapon");
+}
+
 function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   const id = normalizeLabel(page.id);
   const source = normalizeLabel(page.source);
@@ -236,7 +240,6 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route.includes("tactical-report")) return "broadcast";
   if (route.includes("steam-playtime-publicity-reminder")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
-  if (route.includes("weapon") || route.includes("kill") || id.includes("combat") || id.includes("battle")) return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.includes("draw-vote") || route.includes("welcome-join") || id.includes("warn") || id.includes("broadcast")) return "broadcast";
   if (route.includes("server-info-statistics") || route.includes("match-snapshots") || route.includes("pjsc")) return "analytics";
@@ -252,7 +255,6 @@ function normalizeDynamicOrder(section: NavSectionKey, order: number) {
     opsLive: 100,
     players: 100,
     balance: 100,
-    combat: 100,
     broadcast: 100,
     analytics: 100,
     system: 100,
