@@ -555,6 +555,9 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "settings.manage",
   "admin_users.manage",
   "bzss_core.use",
+  // Retained only to load existing permission groups after combat UI retirement.
+  // No route or feature is granted by this retired permission.
+  "combat_manager.view",
   ...WEB_PAGE_PERMISSION_MATRIX.map((entry) => String(entry.requiredPermission ?? "").trim()).filter(Boolean),
 ]);
 
