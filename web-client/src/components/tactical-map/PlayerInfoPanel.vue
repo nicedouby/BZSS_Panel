@@ -480,7 +480,7 @@ watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
   color: white;
 }
 
-header-main {
+.header-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
