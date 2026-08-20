@@ -275,7 +275,7 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
       id: MODULE_ID,
       name: "战斗信息收集器",
       kind: "module",
-      version: "1.0.0",
+      version: "1.1.0",
       description: "无副作用地收集实时和日志溯源的伤害、击倒、死亡事件，并保存到内存与 JSONL 缓存。",
     },
     apiName: "combatCollector",
@@ -283,6 +283,20 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
     async start() {
       await store.load();
       replayStatus = { ...createReplayStatus(), ...(store.getStats().state ?? {}), status: "idle", completed: false };
+      core.webRegistry?.registerPage?.({
+        id: "web.combatRecords",
+        title: "战斗记录",
+        group: "管理",
+        route: "/combat-records",
+        pageModule: "/pages/combat-records.js",
+        source: MODULE_ID,
+        required: false,
+        enabled: true,
+        order: 108,
+        icon: "⚔️",
+        requiredPermission: "combat_manager.view",
+        legacyRequiredPermissions: ["kill_manager.view"],
+      });
       for (const eventName of Object.keys(CORE_COMBAT_TYPES)) {
         unsubscribers.push(core.eventBus?.onCoreEvent?.(eventName, ingestCoreEvent));
       }

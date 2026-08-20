@@ -1717,6 +1717,71 @@ async function testCombatCleanRoutesDoNotForceCurrentServerFilter() {
   assert.equal(calls[3].serverId, "");
 }
 
+async function testCombatRecordsRouteReadsCollectorWithTraceFilters() {
+  const calls = [];
+  const overview = {
+    count: 3,
+    damage: 1,
+    wound: 1,
+    death: 1,
+    nullptrActors: 1,
+    nullptrWeapons: 1,
+    replay: { status: "completed", progress: 100 },
+  };
+  const server = createServer({
+    core: {
+      authManager: {
+        getUserFromRequest() { return { username: "viewer", role: "Operator" }; },
+      },
+    },
+    modules: {
+      combatCollector: {
+        getRecords(filter) {
+          calls.push(filter);
+          return {
+            total: 1,
+            records: [{
+              id: "combat:death:file:42",
+              type: "death",
+              attacker: { name: null, nameState: "nullptr" },
+              victim: { name: "Victim", nameState: "present" },
+              weapon: null,
+              weaponState: "nullptr",
+              sourceFile: "SquadGame.log",
+              sourceOffset: 42,
+            }],
+          };
+        },
+        getOverview() { return overview; },
+      },
+    },
+  });
+
+  const recorder = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/combat-records?type=death&sourceMode=replay&search=nullptr&offset=10&limit=25",
+    headers: { host: "localhost" },
+    socket: {},
+  }, recorder.res);
+
+  assert.equal(recorder.state.status, 200);
+  const body = JSON.parse(recorder.state.body);
+  assert.equal(body.ok, true);
+  assert.equal(body.total, 1);
+  assert.equal(body.records[0].attacker.nameState, "nullptr");
+  assert.equal(body.records[0].sourceOffset, 42);
+  assert.deepEqual(body.overview, overview);
+  assert.deepEqual(calls, [{
+    serverId: "",
+    sourceMode: "replay",
+    type: "death",
+    search: "nullptr",
+    offset: "10",
+    limit: "25",
+  }]);
+}
+
 async function testCombatLogRoutesExposeLogsAndMetadata() {
   const calls = [];
   const server = createServer({
@@ -3963,6 +4028,7 @@ await testSquadNamePolicyRoutesExposeTestAndProtectedSave();
 await testSquadNamePolicyGuardRoutesExposeStateSimulateAndProtectedClear();
 await testSquadNamePolicyPatrolRoutesExposeStateSimulateAndProtectedClear();
 await testCombatCleanRoutesDoNotForceCurrentServerFilter();
+await testCombatRecordsRouteReadsCollectorWithTraceFilters();
 await testWeaponCollectorApiRequiresGet();
 await testGroupReportSnapshotRouteReturnsWrappedSnapshot();
 await testSnapshotAllRequiresAuth();

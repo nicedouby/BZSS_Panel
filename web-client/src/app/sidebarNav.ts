@@ -12,6 +12,7 @@ import {
 export type NavSectionKey =
   | "opsLive"
   | "players"
+  | "combat"
   | "balance"
   | "broadcast"
   | "analytics"
@@ -52,6 +53,7 @@ export interface RegisteredWebPage {
 export const sectionOrder: NavSectionKey[] = [
   "opsLive",
   "players",
+  "combat",
   "balance",
   "broadcast",
   "analytics",
@@ -62,6 +64,7 @@ export const sectionOrder: NavSectionKey[] = [
 export const sectionMeta: Record<NavSectionKey, { label: string; description: string; icon: string }> = {
   opsLive:   { label: "对局态势", description: "实时态势与现场沟通",       icon: "🎯" },
   players:   { label: "玩家与小队", description: "玩家档案、小队动作与建队规则", icon: "👥" },
+  combat:    { label: "战斗记录", description: "伤害、击倒、死亡与执法调试",     icon: "⚔️" },
   balance:   { label: "队伍平衡", description: "跳边入口与公平换边",       icon: "⚖️" },
   broadcast: { label: "通知广播", description: "公告、警告与阶段提示",     icon: "📢" },
   analytics: { label: "数据分析", description: "统计、快照与诊断数据",     icon: "📊" },
@@ -234,6 +237,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   const title = normalizeLabel(page.title);
 
   if (route === "/match-status" || route === "/match-state" || route === "/chat-monitor" || route === "/bzss-core-snapshots") return "opsLive";
+  if (route === "/combat-records" || route === "/kill-records" || route.includes("victim-damage-display")) return "combat";
   if (route === "/tb" || route.includes("fair-team-balance") || id.includes("team-balance")) return "balance";
   if (route === "/player-database" || route === "/reserve-slots" || route === "/black-edge-privilege" || route === "/player-session-records" || route === "/squad-management") return "players";
   if (route.includes("group-report") || route.includes("squad-rule-chain") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
@@ -254,6 +258,7 @@ function normalizeDynamicOrder(section: NavSectionKey, order: number) {
   const sectionFloor: Record<NavSectionKey, number> = {
     opsLive: 100,
     players: 100,
+    combat: 100,
     balance: 100,
     broadcast: 100,
     analytics: 100,

@@ -7,6 +7,14 @@ const superAdmin = {
 };
 
 describe("sidebar navigation sections", () => {
+  it("shows the combat records page only to authorized users", () => {
+    const allowed = buildNavSections({ user: { permissions: ["combat_manager.view"] } });
+    const denied = buildNavSections({ user: { permissions: ["match_state.view"] } });
+
+    expect(allowed.find((section) => section.key === "combat")?.items.map((item) => item.path)).toContain("/combat-records");
+    expect(denied.flatMap((section) => section.items.map((item) => item.path))).not.toContain("/combat-records");
+  });
+
   it("builds workflow sections instead of implementation buckets", () => {
     const sections = buildNavSections({ user: superAdmin });
 
