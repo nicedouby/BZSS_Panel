@@ -640,6 +640,7 @@ export class WebServer {
       module: this.modules.pressureZoneRules,
       url,
       req,
+      readJsonBody: (request) => this.readJsonBody(request),
       json: (status, obj) => this.json(res, status, obj),
     });
     if (pressureZoneRulesHandled) return;
