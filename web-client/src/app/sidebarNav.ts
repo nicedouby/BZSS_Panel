@@ -89,6 +89,13 @@ export const staticNavItems: NavItem[] = [
     order: 145,
   },
   {
+    path: "/plugins/panel-ban",
+    icon: "🚫",
+    label: "面板封禁",
+    section: "players",
+    order: 90,
+  },
+  {
     path: "/system/logpost-consumption-performance",
     icon: "📈",
     label: "消费性能评估",
