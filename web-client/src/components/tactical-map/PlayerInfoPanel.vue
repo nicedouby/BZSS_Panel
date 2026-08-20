@@ -801,7 +801,6 @@ watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
 }
-</style>
 
 .quick-ban-dialog { margin: 8px 0; padding: 9px; border: 1px solid rgba(239,68,68,.45); background: rgba(35,12,20,.96); border-radius: 4px; }
 .quick-ban-title { color: #fecaca; font-size: 11px; font-weight: 800; margin-bottom: 4px; }
@@ -815,3 +814,4 @@ watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
 .quick-ban-submit:disabled { opacity: .5; cursor: wait; }
 .quick-ban-error { color: #fda4af; font-size: 10px; margin-bottom: 5px; }
 .quick-ban-success { color: #86efac; font-size: 10px; margin-bottom: 5px; }
+</style>
