@@ -54,7 +54,6 @@ export const sectionOrder: NavSectionKey[] = [
   "opsLive",
   "players",
   "balance",
-  "combat",
   "broadcast",
   "analytics",
   "system",
@@ -65,7 +64,6 @@ export const sectionMeta: Record<NavSectionKey, { label: string; description: st
   opsLive:   { label: "对局态势", description: "实时态势与现场沟通",       icon: "🎯" },
   players:   { label: "玩家与小队", description: "玩家档案、小队动作与建队规则", icon: "👥" },
   balance:   { label: "队伍平衡", description: "跳边入口与公平换边",       icon: "⚖️" },
-  combat:    { label: "战斗管理", description: "处置、战绩与战斗事件",     icon: "⚔️" },
   broadcast: { label: "通知广播", description: "公告、警告与阶段提示",     icon: "📢" },
   analytics: { label: "数据分析", description: "统计、快照与诊断数据",     icon: "📊" },
   system:    { label: "系统维护", description: "运行状态、权限与审计",     icon: "🔧" },
@@ -238,7 +236,6 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route.includes("tactical-report")) return "broadcast";
   if (route.includes("steam-playtime-publicity-reminder")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
-  if (route === "/combat-manager" || route === "/kill-records" || route === "/battle-log" || route === "/combat-log" || route === "/combat-log/query") return "combat";
   if (route.includes("weapon") || route.includes("kill") || id.includes("combat") || id.includes("battle")) return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.includes("draw-vote") || route.includes("welcome-join") || id.includes("warn") || id.includes("broadcast")) return "broadcast";
