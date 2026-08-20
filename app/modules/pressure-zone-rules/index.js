@@ -43,6 +43,13 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
     return `[压家圈服规] 当前地图：${displayMapName}；以主基地FOB圈为基准向外衍生${extension}；交战位于压家圈内时按点位位置逐级缩圈；详细规则请查看面板。`;
   }
 
+  function setEnabled(value) {
+    state.enabled = Boolean(value);
+    if (!state.enabled) state.lastError = "插件已关闭";
+    else state.lastError = "";
+    return getState();
+  }
+
   async function broadcast(message = state.announcement) {
     if (!state.enabled || !message) return { success: false, skipped: true, reason: "disabled-or-empty" };
     const broadcastApi = modules?.adminWarn?.broadcastMessage ?? modules?.adminWarn?.sendAdminBroadcast;
@@ -109,7 +116,7 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
       description: "按当前地图识别并广播明确压家圈服规。",
     },
     apiName: "pressureZoneRules",
-    api: { getState, refresh, broadcast },
+    api: { getState, refresh, broadcast, setEnabled },
     async init() {},
     async start() {
       unsubscribe = modules?.tacticalState?.subscribe?.((snapshot) => {
