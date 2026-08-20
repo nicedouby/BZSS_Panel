@@ -159,7 +159,6 @@ export function isRouteActive(currentRoute: unknown, itemRoute: unknown): boolea
   const item = normalizeRoute(itemRoute);
   if (current === item) return true;
   if (item === "/match-status" && current === "/match-state") return true;
-  if (item === "/combat-manager" && current === "/combat-clean") return true;
   const definition = pageRegistry.find((page) => page.path === item);
   if (definition?.aliases?.some((alias) => current === alias || current.startsWith(`${alias}/`))) return true;
   return item !== "/" && current.startsWith(`${item}/`);
