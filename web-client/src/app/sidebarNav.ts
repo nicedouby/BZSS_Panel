@@ -238,7 +238,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route.includes("tactical-report")) return "broadcast";
   if (route.includes("steam-playtime-publicity-reminder")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
-  if (route === "/combat-manager" || route === "/kill-records" || route === "/battle-log" || route === "/combat-log" || route === "/combat-log/query" || route === "/combat-clean") return "combat";
+  if (route === "/combat-manager" || route === "/kill-records" || route === "/battle-log" || route === "/combat-log" || route === "/combat-log/query") return "combat";
   if (route.includes("weapon") || route.includes("kill") || id.includes("combat") || id.includes("battle")) return "combat";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
   if (route.includes("draw-vote") || route.includes("welcome-join") || id.includes("warn") || id.includes("broadcast")) return "broadcast";
