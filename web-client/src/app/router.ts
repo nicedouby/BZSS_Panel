@@ -98,10 +98,6 @@ export const router = createRouter({
     },
     ...buildPageRoutes(),
     {
-      path: "/combat-clean",
-      redirect: (to) => ({ name: "combat-manager", query: to.query, hash: to.hash }),
-    },
-    {
       path: "/access-denied",
       component: ComingSoonPage,
       props: {
