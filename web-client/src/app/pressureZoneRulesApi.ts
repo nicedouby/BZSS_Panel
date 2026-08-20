@@ -31,3 +31,11 @@ export async function broadcastPressureZoneRule() {
     method: "POST",
   });
 }
+
+export async function setPressureZoneRulesEnabled(enabled: boolean) {
+  return request<PressureZoneRulesState>("/api/pressure-zone-rules/toggle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}
