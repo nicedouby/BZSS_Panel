@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-import { MAP_PRESSURE_RULES, TEMPORARY_SHRINK_RULES, resolvePressureRule } from "./rules.js";
+import { MAP_PRESSURE_RULES, TEMPORARY_SHRINK_RULES, getMapAssetName, resolvePressureMapKey, resolvePressureRule } from "./rules.js";
 
 const MODULE_ID = "module.pressureZoneRules";
 
@@ -20,6 +20,9 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
   };
   let unsubscribe = null;
   let lastMapIdentity = "";
+  const BROADCAST_COOLDOWN_MS = 10 * 60 * 1000;
+  let lastBroadcastIdentity = "";
+  let lastBroadcastAtMs = 0;
 
   function clone(value) {
     if (value == null) return value;
@@ -31,14 +34,13 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
   }
 
   function buildAnnouncement(rule, mapName) {
-    if (!rule) return `[压家圈服规] 当前地图：${mapName || "未知地图"}。暂未配置明确压家圈规则，请以管理员公告为准。`;
-    return [
-      "[压家圈服规]",
-      `当前地图：${mapName}`,
-      `明确压家圈：以一方主基地为中心，向外衍生 ${rule.fullCount ? `${rule.fullCount} 个完整 FOB 圈` : ""}${rule.innerCount ? `+${rule.innerCount} 个 FOB 内圈` : ""}。`,
-      "交战位于一方压家圈内时，按点位位置逐级减少压家圈层级。",
-      "详细规则可在面板“压家圈服规”页面查看。",
-    ].filter(Boolean).join("\\n");
+    const safeMapName = String(mapName || "UNKNOWN").replace(/[^\\x20-\\x7E]/g, "").trim() || "UNKNOWN";
+    if (!rule) return `[PRESSURE RULES] MAP: ${safeMapName} | No map-specific pressure rule is configured.`;
+    const extension = [
+      rule.fullCount ? `${rule.fullCount} FULL FOB RING(S)` : "",
+      rule.innerCount ? `${rule.innerCount} FOB INNER RING(S)` : "",
+    ].filter(Boolean).join(" + ");
+    return `[PRESSURE RULES] MAP: ${safeMapName} | EXTENSION: ${extension} OUTWARD FROM THE BASE FOB RING | COMBAT-IN-ZONE SHRINK RULE APPLIES | SEE PANEL FOR DETAILS`;
   }
 
   async function broadcast(message = state.announcement) {
@@ -67,17 +69,34 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
 
   async function refresh(snapshot = null, { broadcastOnChange = true } = {}) {
     const source = snapshot ?? await modules?.tacticalState?.getSnapshot?.() ?? {};
-    const mapName = String(source?.server?.map ?? source?.server?.layer ?? source?.match?.map ?? source?.match?.layer ?? "").trim();
-    const rule = resolvePressureRule(mapName);
-    const identity = `${mapName}|${rule?.id ?? "unknown"}`;
-    if (identity === lastMapIdentity && state.rule) return getState();
+    const candidates = [
+      source?.server?.map,
+      source?.server?.layer,
+      source?.match?.map,
+      source?.match?.layer,
+    ].map((value) => String(value ?? "").trim()).filter(Boolean);
+    const rawMapName = candidates[0] ?? "";
+    const assetMapKey = candidates.map(resolvePressureMapKey).find(Boolean) ?? "";
+    const assetMapName = getMapAssetName(assetMapKey);
+    const mapName = assetMapName || rawMapName;
+    const rule = resolvePressureRule(assetMapKey || rawMapName);
+    const identity = assetMapKey || `raw:${rawMapName.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
+    if (!identity || (identity === lastMapIdentity && state.map)) return getState();
     lastMapIdentity = identity;
     state.map = mapName;
-    state.mapKey = rule?.id ?? "";
+    state.mapKey = assetMapKey || rule?.id || "";
     state.rule = rule ? clone(rule) : null;
-    state.announcement = buildAnnouncement(rule, mapName);
+    state.announcement = buildAnnouncement(rule, assetMapName || rawMapName);
     state.updatedAt = new Date().toISOString();
-    if (broadcastOnChange && mapName) await broadcast();
+    const now = Date.now();
+    const canAutoBroadcast = broadcastOnChange && rule && (
+      identity !== lastBroadcastIdentity || now - lastBroadcastAtMs >= BROADCAST_COOLDOWN_MS
+    );
+    if (canAutoBroadcast) {
+      lastBroadcastIdentity = identity;
+      lastBroadcastAtMs = now;
+      await broadcast();
+    }
     return getState();
   }
 
