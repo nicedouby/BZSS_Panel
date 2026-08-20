@@ -88,6 +88,16 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "pressure-zone-rules",
+    path: "/pressure-zone-rules",
+    component: () => import("../pages/PressureZoneRulesPage.vue"),
+    title: "压家圈服规",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "opsLive", label: "压家圈服规", icon: "🛡️", order: 17 },
+    ...workspacePage,
+  },
+  {
     name: "pressure-zone-settings",
     path: "/settings/pressure-zone",
     component: () => import("../pages/PressureZoneSettingsPage.vue"),

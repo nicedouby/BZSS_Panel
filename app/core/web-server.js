@@ -20,6 +20,7 @@ import { handleAstrbotBridgeRoutes } from "../modules/astrbot-bridge/routes.js";
 import { handleTacticalStateRoutes } from "../modules/tactical-state/routes.js";
 import { handleStepCounterRoutes } from "../modules/step-counter/routes.js";
 import { handleDynamicPressureZoneRoutes } from "../modules/dynamic-pressure-zone/routes.js";
+import { handlePressureZoneRulesRoutes } from "../modules/pressure-zone-rules/routes.js";
 import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
 import { handleTacticalFeedWriterRoutes } from "../modules/tactical-feed-writer/routes.js";
 import {
@@ -634,6 +635,14 @@ export class WebServer {
       json: (status, obj) => this.json(res, status, obj),
     });
     if (stepCounterHandled) return;
+
+    const pressureZoneRulesHandled = await handlePressureZoneRulesRoutes({
+      module: this.modules.pressureZoneRules,
+      url,
+      req,
+      json: (status, obj) => this.json(res, status, obj),
+    });
+    if (pressureZoneRulesHandled) return;
 
     const dynamicPressureZoneHandled = await handleDynamicPressureZoneRoutes({
       core: this.core,
