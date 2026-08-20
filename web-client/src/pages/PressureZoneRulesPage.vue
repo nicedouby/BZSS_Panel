@@ -6,21 +6,21 @@
         <h1>压家圈服规</h1>
         <p>插件会根据当前地图自动识别规则，并在换图后广播当前地图的明确压家圈。</p>
       </div>
-      <button class="button ghost" :class="{ danger: isDisabled }" :disabled="toggling || !hasState" @click="toggleEnabled">
+      <button class="button ghost"  :class="toggleButtonClass" :disabled="toggleDisabled" @click="toggleEnabled">
         {{ toggleLabel }}
       </button>
-      <button class="button primary" :disabled="broadcasting || !canBroadcast" @click="broadcast">
+      <button class="button primary"  :disabled="broadcastDisabled" @click="broadcast">
         {{ broadcasting ? "广播中…" : "再次广播当前地图规则" }}
       </button>
     </header>
 
-    <section v-if="state" class="current-card" :class="{ unknown: !state.rule }">
-      <div><span>当前地图</span><strong>{{ state.map || "等待地图数据" }}</strong></div>
-      <div><span>当前规则</span><strong>{{ state.rule?.label || "未配置明确规则" }}</strong></div>
-      <div><span>插件状态</span><strong>{{ state.enabled ? "已启用" : "已关闭" }}</strong></div>
+    <section v-if="hasState" class="current-card" :class="currentCardClass">
+      <div><span>当前地图</span><strong>{{ currentMapName }}</strong></div>
+      <div><span>当前规则</span><strong>{{ currentRuleLabel }}</strong></div>
+      <div><span>插件状态</span><strong>{{ pluginStatusLabel }}</strong></div>
     </section>
 
-    <section class="announcement-card" v-if="state">
+    <section class="announcement-card" v-if="hasState">
       <h2>当前地图广播内容</h2>
       <pre>{{ state.announcement }}</pre>
       <small v-if="state.lastError" class="error">{{ state.lastError }}</small>
@@ -35,7 +35,7 @@
 
     <section class="temporary-card">
       <h2>压家圈缩圈暂行规定</h2>
-      <p v-for="line in shrinkLines" :key="line">{{ line }}</p>
+      <p v-for="(line, index) in shrinkLines" :key="index">{{ line }}</p>
     </section>
   </main>
 </template>
@@ -49,6 +49,13 @@ const broadcasting = ref(false);
 const toggling = ref(false);
 let timer: number | null = null;
 const hasState = computed(() => state.value !== null);
+const currentMapName = computed(() => state.value?.map || "等待地图数据");
+const currentRuleLabel = computed(() => state.value?.rule?.label || "未配置明确规则");
+const pluginStatusLabel = computed(() => state.value?.enabled ? "已启用" : "已关闭");
+const currentCardClass = computed(() => state.value?.rule ? "" : "unknown");
+const toggleButtonClass = computed(() => state.value?.enabled === false ? "button ghost danger" : "button ghost");
+const toggleDisabled = computed(() => toggling.value || !hasState.value);
+const broadcastDisabled = computed(() => broadcasting.value || !canBroadcast.value);
 const isDisabled = computed(() => state.value?.enabled === false);
 const canBroadcast = computed(() => Boolean(state.value?.enabled && state.value?.announcement));
 const toggleLabel = computed(() => toggling.value ? "处理中…" : state.value?.enabled ? "关闭自动广播" : "开启自动广播");
