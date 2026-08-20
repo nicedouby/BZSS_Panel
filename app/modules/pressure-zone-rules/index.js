@@ -1,6 +1,6 @@
 // -*- coding: utf-8 -*-
 
-import { MAP_PRESSURE_RULES, TEMPORARY_SHRINK_RULES, getMapAssetName, resolvePressureMapKey, resolvePressureRule } from "./rules.js";
+import { MAP_PRESSURE_RULES, TEMPORARY_SHRINK_RULES, getMapAssetName, getMapDisplayName, resolvePressureMapKey, resolvePressureRule } from "./rules.js";
 
 const MODULE_ID = "module.pressureZoneRules";
 
@@ -33,14 +33,14 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
     return clone({ ...state, mapRules: MAP_PRESSURE_RULES, temporaryShrinkRules: TEMPORARY_SHRINK_RULES });
   }
 
-  function buildAnnouncement(rule, mapName) {
-    const safeMapName = String(mapName || "UNKNOWN").replace(/[^\x20-\x7E]/g, "").trim() || "UNKNOWN";
-    if (!rule) return `[PRESSURE RULES] MAP: ${safeMapName} | No map-specific pressure rule is configured.`;
+  function buildAnnouncement(rule, mapName, mapKey = "") {
+    const displayMapName = getMapDisplayName(mapKey, mapName || "未知地图") || "未知地图";
+    if (!rule) return `[压家圈服规] 当前地图：${displayMapName}，当前地图暂未配置明确压家圈规则，请以管理员公告为准。`;
     const extension = [
-      rule.fullCount ? `${rule.fullCount} FULL FOB RING(S)` : "",
-      rule.innerCount ? `${rule.innerCount} FOB INNER RING(S)` : "",
-    ].filter(Boolean).join(" + ");
-    return `[PRESSURE RULES] MAP: ${safeMapName} | EXTENSION: ${extension} OUTWARD FROM THE BASE FOB RING | COMBAT-IN-ZONE SHRINK RULE APPLIES | SEE PANEL FOR DETAILS`;
+      rule.fullCount ? `${rule.fullCount}个完整FOB圈` : "",
+      rule.innerCount ? `${rule.innerCount}个FOB内圈` : "",
+    ].filter(Boolean).join("＋");
+    return `[压家圈服规] 当前地图：${displayMapName}；以主基地FOB圈为基准向外衍生${extension}；交战位于压家圈内时按点位位置逐级缩圈；详细规则请查看面板。`;
   }
 
   async function broadcast(message = state.announcement) {
@@ -86,7 +86,7 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
     state.map = mapName;
     state.mapKey = assetMapKey || rule?.id || "";
     state.rule = rule ? clone(rule) : null;
-    state.announcement = buildAnnouncement(rule, assetMapName || rawMapName);
+    state.announcement = buildAnnouncement(rule, assetMapName || rawMapName, assetMapKey);
     state.updatedAt = new Date().toISOString();
     const now = Date.now();
     const canAutoBroadcast = broadcastOnChange && rule && (
