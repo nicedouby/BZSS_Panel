@@ -292,6 +292,18 @@
                   <div class="actions-grid-hud">
                     <button
                       type="button"
+                      class="hud-action-btn-styled ban-btn"
+                      @click="handleBan"
+                      :disabled="actionBusy || !canBanPlayer"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon btn-icon--ban" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><path d="m7 7 10 10"/></svg></span>
+                        <span class="btn-text">BAN / 封禁</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
                       class="hud-action-btn-styled warn-btn"
                       @click="handleWarn"
                       :disabled="actionBusy || !canWarnPlayer"
@@ -840,6 +852,11 @@ const userPermissions = computed(() => {
 });
 const canSwitchTeam = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.switch")));
 const canWarnPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "warning.send")));
+const canBanPlayer = computed(() => Boolean(
+  auth.user?.isSuperAdmin
+  || hasPermission(userPermissions.value, "panel.ban")
+  || hasPermission(userPermissions.value, "squad.kick"),
+));
 const canKickPlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.kick")));
 const canRemovePlayer = computed(() => Boolean(auth.user?.isSuperAdmin || hasPermission(userPermissions.value, "squad.remove")));
 const canEditPlaytime = computed(() => Boolean(auth.user?.isSuperAdmin));
@@ -1236,6 +1253,52 @@ async function refreshSteamProfile() {
     });
   } finally {
     steamProfileRefreshing.value = false;
+  }
+}
+
+async function handleBan() {
+  const player = props.player;
+  if (!player || actionBusy.value || !canBanPlayer.value) return;
+
+  const reason = window.prompt("请输入封禁原因", "")?.trim();
+  if (!reason) {
+    ui.pushToast({ title: "封禁已取消", message: "请先填写封禁原因。", tone: "warn" });
+    return;
+  }
+
+  const durationText = window.prompt("请输入封禁时长，例如 7d、12h、30m", "7d")?.trim();
+  if (!durationText) return;
+
+  const confirmed = await ui.openConfirm({
+    title: "确认封禁玩家？",
+    message: `玩家：${player.name}\n原因：${reason}\n时长：${durationText}`,
+    tone: "error",
+  });
+  if (!confirmed || actionBusy.value) return;
+
+  actionBusy.value = true;
+  try {
+    await apiPost<any>("/api/plugins/panel-ban/entries", {
+      steamID: player.steamId ?? "",
+      eosID: player.eosId ?? "",
+      name: player.name ?? "",
+      reason,
+      durationText,
+      status: "active",
+    });
+    ui.pushToast({
+      title: "封禁已提交",
+      message: `${player.name} 已加入封禁列表，现有 Panel Ban 规则将负责踢出。`,
+      tone: "ok",
+    });
+  } catch (error) {
+    ui.pushToast({
+      title: "封禁失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
   }
 }
 
@@ -4019,6 +4082,9 @@ onUnmounted(() => {
   grid-column: 1 / -1;
 }
 
+.hud-admin-console .ban-btn { color: #fecaca; border-color: rgba(239,68,68,.45); }
+.hud-admin-console .ban-btn:hover:not(:disabled) { background: rgba(127,29,29,.7); border-color: #ef4444; }
+.hud-admin-console .btn-icon--ban { color: #f87171; }
 .hud-admin-console .warn-btn {
   border-color: rgba(251, 191, 36, 0.2);
 }
