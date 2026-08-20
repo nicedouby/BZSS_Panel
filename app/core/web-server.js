@@ -2581,12 +2581,6 @@ export class WebServer {
     }
 
 
-    if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const body = await this.readJsonBody(req);
-      return this.json(res, 200, combatClean.clear(body.serverId ?? serverId));
-    }
-  }
 
     if (url.pathname.startsWith("/api/battle-log")) {
       const battleLog = this.modules.battleLog;
