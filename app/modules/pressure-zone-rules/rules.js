@@ -62,6 +62,6 @@ export function getMapAssetName(mapKey = "") {
 }
 
 export function getMapDisplayName(mapKey = "", fallback = "") {
-  const compactKey = String(mapKey ?? "").replace(/_(?:AAS|RAAS|Seed)_v\\d+$/i, "");
+  const compactKey = String(mapKey ?? "").replace(/_(?:AAS|RAAS|Seed)_v\d+$/i, "");
   return MAP_DISPLAY_NAMES[compactKey] ?? String(fallback ?? "").trim();
 }
