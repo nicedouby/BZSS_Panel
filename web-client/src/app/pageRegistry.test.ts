@@ -31,6 +31,17 @@ describe("page registry", () => {
 
   });
 
+  it("registers the combat records page with trace-safe permissions", () => {
+    const definition = pageRegistry.find((page) => page.name === "combat-records");
+    const route = buildPageRoutes().find((item) => item.name === "combat-records");
+
+    expect(definition?.path).toBe("/combat-records");
+    expect(definition?.aliases).toContain("/kill-records");
+    expect(definition?.nav).toMatchObject({ section: "combat", label: "战斗记录" });
+    expect(route?.meta?.requiredPermission).toBe("combat_manager.view");
+    expect(route?.meta?.legacyRequiredPermissions).toEqual(["kill_manager.view"]);
+  });
+
   it("shares the same static navigation source with the sidebar", () => {
     expect(staticNavItems).toEqual(getStaticNavItems());
   });

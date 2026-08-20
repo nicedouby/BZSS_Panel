@@ -51,6 +51,9 @@ async function testStartupReplayCacheAndLiveIngest() {
     const first = createCombatCollectorModule(firstHarness);
     await first.start();
     await waitFor(() => first.api.getReplayStatus().status === "completed");
+    assert.equal(firstHarness.registeredPages.length, 1);
+    assert.equal(firstHarness.registeredPages[0].route, "/combat-records");
+    assert.equal(firstHarness.registeredPages[0].requiredPermission, "combat_manager.view");
     assert.equal(first.api.getRecords({ limit: 20 }).total, 3);
     assert.deepEqual(first.api.getRecords({ limit: 20 }).records.map((record) => record.type).sort(), ["damage", "death", "wound"]);
     assert.equal(first.api.getReplayStatus().startOffset, 0);
@@ -112,8 +115,12 @@ function createHarness({ sourcePath, storeDirectory }) {
   const listeners = new Map();
   const harness = {
     emitted: 0,
+    registeredPages: [],
     core: {
       webStatus: { serverId: "BZSS_Main" },
+      webRegistry: {
+        registerPage(page) { harness.registeredPages.push(page); },
+      },
       eventBus: {
         onCoreEvent(eventName, handler) {
           const key = `core:${eventName}`;
