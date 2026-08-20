@@ -25,7 +25,7 @@ import { createPlayerDbSyncModule } from "../modules/player-db-sync/index.js";
 import { createPlayerTimeStatsModule } from "../modules/player-time-stats/index.js";
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
-import { createKillRecordsModule } from "../modules/kill-records/index.js";
+import { createCombatCollectorModule } from "../modules/combat-collector/index.js";
 import { createBattleLogModule } from "../modules/battle-log/index.js";
 import { createCombatLogModule } from "../modules/combat-log/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
@@ -98,7 +98,7 @@ export class ModuleManager {
       createPlayerDbSyncModule,
       createPlayerTimeStatsModule,
       createIpLookupModule,
-      createKillRecordsModule,
+      createCombatCollectorModule,
       createBattleLogModule,
       createCombatLogModule,
       createAdminWarnModule,

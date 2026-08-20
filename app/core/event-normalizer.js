@@ -57,6 +57,8 @@ export function normalizeRawGameEvent(rawEvent) {
     seq,
     sourceSeq: String(rawEvent.SourceSeq ?? ""),
     sourceOffset: String(rawEvent.SourceOffset ?? ""),
+    sourceFile: String(rawEvent.SourceFile ?? ""),
+    sourceFileId: String(rawEvent.SourceFileId ?? rawEvent.SourceFileID ?? ""),
     rawLineHash: String(rawEvent.RawLineHash ?? ""),
     sourceMode: String(rawEvent.SourceMode ?? rawEvent.sourceMode ?? "live"),
     canTriggerActions: parseBoolean(rawEvent.CanTriggerActions ?? rawEvent.canTriggerActions ?? true),
