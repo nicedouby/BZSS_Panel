@@ -1974,40 +1974,6 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/query/combat-clean" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? "";
-      return this.json(res, 200, {
-        events: this.modules.combatClean?.getEvents?.({
-          serverId,
-          limit: url.searchParams.get("limit") ?? "100",
-          offset: url.searchParams.get("offset") ?? "0",
-          type: url.searchParams.get("type") ?? "all",
-          search: url.searchParams.get("q") ?? "",
-        }) ?? [],
-        overview: this.modules.combatClean?.getOverview?.(serverId) ?? null,
-      });
-    }
-
-    if (url.pathname === "/api/query/combat-manager" && req.method === "GET") {
-      const serverId = url.searchParams.get("serverId") ?? "";
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      return this.json(res, 200, {
-        events: cleanCombatEventsForClient(combatManager.getEvents?.({
-          serverId,
-          limit: url.searchParams.get("limit") ?? "100",
-          offset: url.searchParams.get("offset") ?? "0",
-          type: url.searchParams.get("type") ?? "all",
-          search: url.searchParams.get("q") ?? "",
-        }) ?? []),
-        overview: cleanCombatOverviewForClient(combatManager.getOverview?.(serverId) ?? null),
-      });
-    }
 
     if (url.pathname === "/api/playtime/status") {
       return this.json(res, 200, this.modules.playtime.getStatus());
@@ -2538,107 +2504,11 @@ export class WebServer {
       return this.json(res, result.ok ? 200 : 409, result);
     }
 
-    if (url.pathname === "/api/combat-manager/overview") {
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      return this.json(res, 200, cleanCombatOverviewForClient(combatManager.getOverview(url.searchParams.get("serverId") ?? "")));
-    }
 
-    if (url.pathname === "/api/combat-manager/events") {
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      return this.json(res, 200, {
-        events: cleanCombatEventsForClient(combatManager.getEvents({
-          type: url.searchParams.get("type") ?? "all",
-          search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
-          limit: url.searchParams.get("limit") ?? "300",
-          offset: url.searchParams.get("offset") ?? "0",
-          serverId: url.searchParams.get("serverId") ?? "",
-          mode: url.searchParams.get("mode") ?? "",
-          playerKey: url.searchParams.get("playerKey") ?? "",
-        })),
-        overview: cleanCombatOverviewForClient(combatManager.getOverview(url.searchParams.get("serverId") ?? "")),
-      });
-    }
 
-    if (url.pathname === "/api/combat-manager/rates") {
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      return this.json(res, 200, {
-        rates: combatManager.getRateHistory(url.searchParams.get("serverId") ?? "", Number(url.searchParams.get("window") ?? 30)),
-      });
-    }
 
-    if (url.pathname === "/api/combat-manager/player-events" && req.method === "GET") {
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      return this.json(res, 200, {
-        events: cleanCombatEventsForClient(combatManager.getPlayerEvents?.(url.searchParams.get("serverId") ?? "", {
-          steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
-          eosID: url.searchParams.get("eosID") ?? "",
-          controllerID: url.searchParams.get("controllerID") ?? "",
-          name: url.searchParams.get("name") ?? "",
-          playerKey: url.searchParams.get("playerKey") ?? "",
-        }, {
-          limit: url.searchParams.get("limit") ?? "20",
-          offset: url.searchParams.get("offset") ?? "0",
-        }) ?? []),
-        overview: cleanCombatOverviewForClient(combatManager.getOverview?.(url.searchParams.get("serverId") ?? "") ?? null),
-      });
-    }
 
-    if (url.pathname === "/api/combat-manager/cache" && req.method === "GET") {
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      const serverId = url.searchParams.get("serverId") ?? "";
-      const snapshot = await combatManager.ensureCacheSnapshot?.(serverId)
-        ?? await combatManager.readCacheSnapshot?.(serverId);
-      if (!snapshot) {
-        return this.json(res, 404, {
-          error: "CombatManagerCacheNotFound",
-          message: "Combat manager cache file is not available yet.",
-        });
-      }
-      return this.json(res, 200, { snapshot });
-    }
 
-    if (url.pathname === "/api/combat-manager/clear" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
-      const combatManager = this.modules.combatManager;
-      if (!combatManager) {
-        return this.json(res, 404, {
-          error: "CombatManagerUnavailable",
-          message: "Combat manager module is not loaded.",
-        });
-      }
-      const body = await this.readJsonBody(req);
-      return this.json(res, 200, combatManager.clear(body.serverId ?? url.searchParams.get("serverId") ?? ""));
-    }
 
     if (url.pathname === "/api/combat/events") {
       return this.json(res, 200, {
@@ -2710,63 +2580,6 @@ export class WebServer {
       }
     }
 
-    if (url.pathname.startsWith("/api/combat-clean")) {
-      const combatClean = this.modules.combatClean;
-      if (!combatClean) {
-        return this.json(res, 404, {
-          error: "CombatCleanUnavailable",
-          message: "Combat clean module is not loaded.",
-        });
-      }
-      const serverId = url.searchParams.get("serverId") ?? "";
-
-      if (url.pathname === "/api/combat-clean/events" && req.method === "GET") {
-        return this.json(res, 200, {
-          events: combatClean.getEvents({
-            serverId,
-            type: url.searchParams.get("type") ?? "all",
-            search: url.searchParams.get("search") ?? "",
-            limit: url.searchParams.get("limit") ?? "300",
-            offset: url.searchParams.get("offset") ?? "0",
-            playerKey: url.searchParams.get("playerKey") ?? "",
-          }),
-          overview: combatClean.getOverview(serverId),
-        });
-      }
-
-      if (url.pathname === "/api/combat-clean/overview" && req.method === "GET") {
-        return this.json(res, 200, combatClean.getOverview(serverId));
-      }
-
-      if (url.pathname === "/api/combat-clean/rates" && req.method === "GET") {
-        const windowMinutes = Number(url.searchParams.get("window") ?? 30);
-        return this.json(res, 200, {
-          rates: combatClean.getRateHistory(serverId, windowMinutes),
-        });
-      }
-
-      const cleanEventMatch = url.pathname.match(/^\/api\/combat-clean\/events\/(.+)$/);
-      if (cleanEventMatch && req.method === "GET") {
-        const record = combatClean.getEventById(decodeURIComponent(cleanEventMatch[1]));
-        if (!record) return this.json(res, 404, { error: "CombatCleanEventNotFound" });
-        return this.json(res, 200, { event: record });
-      }
-
-      if (url.pathname === "/api/combat-clean/player-events" && req.method === "GET") {
-        return this.json(res, 200, {
-          events: combatClean.getPlayerEvents(serverId, {
-            steam64ID: url.searchParams.get("steam64ID") ?? url.searchParams.get("steamID") ?? "",
-            eosID: url.searchParams.get("eosID") ?? "",
-            controllerID: url.searchParams.get("controllerID") ?? "",
-            name: url.searchParams.get("name") ?? "",
-            playerKey: url.searchParams.get("playerKey") ?? "",
-          }, {
-            limit: url.searchParams.get("limit") ?? "20",
-            offset: url.searchParams.get("offset") ?? "0",
-          }),
-          overview: combatClean.getOverview(serverId),
-        });
-      }
 
     if (url.pathname === "/api/combat-clean/clear" && req.method === "POST") {
       if (!this.requireSuperAdmin(user, res)) return;
@@ -3779,23 +3592,6 @@ export class WebServer {
 
     if (url.pathname === "/api/kills/recent") {
       const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-      const records = this.modules.combatManager?.getEvents
-        ? this.modules.combatManager.getEvents({
-            serverId,
-            type: url.searchParams.get("type") ?? "all",
-            search: url.searchParams.get("search") ?? "",
-            limit: url.searchParams.get("limit") ?? "100",
-          })
-        : this.modules.killManage?.getRecentKills?.(serverId, 100) ?? [];
-      return this.json(res, 200, {
-        records,
-        viewer: {
-          username: user.username,
-          role: user.role,
-          isSuperAdmin: this.core.authManager.hasEverything(user),
-        },
-      });
-    }
 
     if (url.pathname === "/api/weapon-collector/stats" && req.method === "GET") {
       const pluginApi = this.getPluginApi("plugin.weaponCollector");
