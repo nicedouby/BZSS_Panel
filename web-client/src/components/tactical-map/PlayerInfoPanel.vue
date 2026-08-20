@@ -458,7 +458,29 @@ watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
   margin-bottom: 10px;
 }
 
-.header-actions {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n\n.quick-ban-btn {\n  border: 1px solid rgba(239, 68, 68, 0.55); background: rgba(127, 29, 29, 0.42); color: #fecaca; border-radius: 3px; padding: 3px 5px; font-size: 9px; font-weight: 800; cursor: pointer;\n}\n.quick-ban-btn:hover { background: rgba(239, 68, 68, 0.75); color: white; }\n\n.header-main {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.quick-ban-btn {
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  background: rgba(127, 29, 29, 0.42);
+  color: #fecaca;
+  border-radius: 3px;
+  padding: 3px 5px;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quick-ban-btn:hover {
+  background: rgba(239, 68, 68, 0.75);
+  color: white;
+}
+
+header-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
