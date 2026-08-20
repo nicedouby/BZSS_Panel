@@ -19,6 +19,8 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
     lastError: "",
   };
   let unsubscribe = null;
+  let periodicBroadcastTimer = null;
+  const PERIODIC_BROADCAST_MS = 300 * 1000;
   let lastMapIdentity = "";
   const BROADCAST_COOLDOWN_MS = 10 * 60 * 1000;
   let lastBroadcastIdentity = "";
@@ -40,7 +42,7 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
       rule.fullCount ? `${rule.fullCount}个完整FOB圈` : "",
       rule.innerCount ? `${rule.innerCount}个FOB内圈` : "",
     ].filter(Boolean).join("＋");
-    return `[压家圈服规] 当前地图：${displayMapName}；以主基地FOB圈为基准向外衍生${extension}；交战位于压家圈内时按点位位置逐级缩圈；详细规则请查看面板。`;
+    return `[压家圈服规] 当前地图：${displayMapName}；以主基地FOB圈为基准向外衍生${extension}；交战位于压家圈内时按点位位置逐级缩圈。`;
   }
 
   function setEnabled(value) {
@@ -123,8 +125,14 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
         void refresh(snapshot).catch((error) => moduleLogger.warn?.(`[PressureZoneRules] 刷新失败：${error?.message ?? error}`));
       }) ?? null;
       await refresh(null, { broadcastOnChange: false });
+      periodicBroadcastTimer = setInterval(() => {
+        if (!state.enabled || !state.rule || !state.announcement) return;
+        void broadcast().catch((error) => moduleLogger.warn?.(`[PressureZoneRules] 定时广播失败：${error?.message ?? error}`));
+      }, PERIODIC_BROADCAST_MS);
     },
     async stop() {
+      if (periodicBroadcastTimer) clearInterval(periodicBroadcastTimer);
+      periodicBroadcastTimer = null;
       unsubscribe?.();
       unsubscribe = null;
     },
