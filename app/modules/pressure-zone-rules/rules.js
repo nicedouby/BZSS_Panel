@@ -45,10 +45,23 @@ export function resolvePressureRule(mapName = "") {
   ) ?? null;
 }
 
+const MAP_DISPLAY_NAMES = Object.freeze({
+  AlBasrah: "巴士拉", Chora: "乔拉", Fallujah: "费卢杰", Harju: "哈尤", Kokan: "科坎",
+  Lashkar: "拉什卡山谷", Sumari: "三鲜岛", GooseBay: "鹅湾", Gorodok: "格罗多克",
+  Yehorivka: "叶城", Tallil: "塔利尔", Skorpo: "斯科普", Kohat: "克哈特",
+  Mutaha: "木塔哈", Narva: "纳尔瓦", Kamdesh: "坎德仕高地", Manicouagan: "曼尼古根",
+  Mestia: "梅斯蒂亚", FoolsRoad: "愚者之路",
+});
+
 export function resolvePressureMapKey(mapName = "") {
   return resolveTacticalMapKey(String(mapName ?? "")) ?? "";
 }
 
 export function getMapAssetName(mapKey = "") {
   return TACTICAL_MAP_CONFIGS[String(mapKey ?? "")]?.name ?? "";
+}
+
+export function getMapDisplayName(mapKey = "", fallback = "") {
+  const compactKey = String(mapKey ?? "").replace(/_(?:AAS|RAAS|Seed)_v\\d+$/i, "");
+  return MAP_DISPLAY_NAMES[compactKey] ?? String(fallback ?? "").trim();
 }
