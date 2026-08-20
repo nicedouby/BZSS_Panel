@@ -47,6 +47,7 @@ import { createAstrbotBridgeModule } from "../modules/astrbot-bridge/index.js";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createTacticalStateModule } from "../modules/tactical-state/index.js";
 import { createDynamicPressureZoneModule } from "../modules/dynamic-pressure-zone/index.js";
+import { createPressureZoneRulesModule } from "../modules/pressure-zone-rules/index.js";
 import { createTacticalReplayPlayerModule } from "../modules/tactical-replay-player-native/index.js";
 import { createTacticalStateV2Module } from "../modules/tactical-state-v2/index.js";
 import { createStepCounterModule } from "../modules/step-counter/index.js";
@@ -121,6 +122,7 @@ export class ModuleManager {
       createBzssCoreMonitorModule,
       createTacticalStateModule,
       createDynamicPressureZoneModule,
+      createPressureZoneRulesModule,
       createTacticalReplayPlayerModule,
       createTacticalStateV2Module,
       createStepCounterModule,
