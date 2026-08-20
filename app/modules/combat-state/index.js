@@ -639,8 +639,22 @@ function normalizeCombatEvent({ event, params, type }) {
     confidence: getParam(params, "Confidence"),
     parseStatus: getParam(params, "ParseStatus"),
     identitySource: getParam(params, "IdentitySource"),
+    sourceEventId: String(event?.eventId ?? ""),
+    sourceMode: String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "live"),
+    canTriggerActions: event?.canTriggerActions !== false,
+    isReplay: Boolean(event?.isReplay),
+    sourceFile: String(event?.sourceFile ?? event?.rawEvent?.SourceFile ?? ""),
+    sourceFileId: String(event?.sourceFileId ?? event?.rawEvent?.SourceFileId ?? event?.rawEvent?.SourceFileID ?? ""),
+    sourceOffset: parseSourceOffset(event?.sourceOffset ?? event?.rawEvent?.SourceOffset),
+    rawLineHash: String(event?.rawLineHash ?? event?.rawEvent?.RawLineHash ?? ""),
     rawLog: getRawLog(event),
   };
+}
+
+function parseSourceOffset(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
 function getParam(params, name) {

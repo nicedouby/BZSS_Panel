@@ -742,10 +742,9 @@
     "killManage": {
       "enabled": true
     },
-    "killRecords": {
+    "combatCollector": {
       "enabled": true,
-      "replayOnStart": true,
-      "storeDirectory": "./data/kill-records/BZSS_Main",
+      "storeDirectory": "./data/combat-events/BZSS_Main",
       "logPostConfigPath": "./LogPost/config.json",
       "readChunkBytes": 4194304,
       "batchSize": 100
