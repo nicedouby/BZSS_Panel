@@ -6,10 +6,10 @@
         <h1>压家圈服规</h1>
         <p>插件会根据当前地图自动识别规则，并在换图后广播当前地图的明确压家圈。</p>
       </div>
-      <button class="button ghost" :class="{ danger: state && !state.enabled }" :disabled="toggling || !state" @click="toggleEnabled">
-        {{ toggling ? "处理中…" : state?.enabled ? "关闭自动广播" : "开启自动广播" }}
+      <button class="button ghost" :class="{ danger: isDisabled }" :disabled="toggling || !hasState" @click="toggleEnabled">
+        {{ toggleLabel }}
       </button>
-      <button class="button primary" :disabled="broadcasting || !state?.announcement || !state?.enabled" @click="broadcast">
+      <button class="button primary" :disabled="broadcasting || !canBroadcast" @click="broadcast">
         {{ broadcasting ? "广播中…" : "再次广播当前地图规则" }}
       </button>
     </header>
@@ -27,7 +27,7 @@
     </section>
 
     <section class="rule-grid">
-      <article v-for="group in state?.mapRules || []" :key="group.id" class="rule-card" :class="{ active: group.id === state?.rule?.id }">
+      <article v-for="group in mapRules" :key="group.id" class="rule-card" :class="{ active: group.id === state?.rule?.id }">
         <h2>{{ group.label }}</h2>
         <p>{{ group.maps.join("、") }}</p>
       </article>
@@ -48,6 +48,11 @@ const state = ref<PressureZoneRulesState | null>(null);
 const broadcasting = ref(false);
 const toggling = ref(false);
 let timer: number | null = null;
+const hasState = computed(() => state.value !== null);
+const isDisabled = computed(() => state.value?.enabled === false);
+const canBroadcast = computed(() => Boolean(state.value?.enabled && state.value?.announcement));
+const toggleLabel = computed(() => toggling.value ? "处理中…" : state.value?.enabled ? "关闭自动广播" : "开启自动广播");
+const mapRules = computed(() => state.value?.mapRules ?? []);
 const shrinkLines = computed(() => String(state.value?.temporaryShrinkRules ?? "").split("\n").filter(Boolean));
 
 async function load() {
@@ -56,7 +61,12 @@ async function load() {
 async function toggleEnabled() {
   if (!state.value) return;
   toggling.value = true;
-  try { state.value = await setPressureZoneRulesEnabled(!state.value.enabled); } finally { toggling.value = false; }
+  try {
+    const nextState = await setPressureZoneRulesEnabled(state.value.enabled !== true);
+    state.value = nextState;
+  } finally {
+    toggling.value = false;
+  }
 }
 async function broadcast() {
   broadcasting.value = true;
