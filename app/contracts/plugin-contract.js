@@ -24,7 +24,6 @@
  *   return {
  *     manifest: { id: "plugin.example", name: "Example Plugin", kind: "plugin", version: "0.1.0" },
  *     async start() {
- *       core.eventBus.onModuleEvent("module.combatManager", "KILL_MANAGER_EVENT", (event) => {});
  *     }
  *   };
  * }
