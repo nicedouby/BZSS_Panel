@@ -1314,8 +1314,6 @@ export class WebServer {
             snapshotSizeBytes: this.lastSnapshotSizeBytes ?? 0,
             slowApiRequests: this.slowApiRequests ?? [],
             eventsRawCount: this.core.runtimeState?.state?.events?.raw?.length ?? 0,
-            combatCleanCount: this.modules.combatClean?.api?.getOverview?.()?.count ?? 0,
-            combatCleanRejected: this.modules.combatClean?.api?.getOverview?.()?.rejected ?? 0,
             battleLogCount: this.modules.battleLog?.api?.getOverview?.()?.count ?? 0,
             consoleBufferCount: this.core.console?.getHistory?.()?.length ?? 0,
             chatHistoryCount: this.modules.chatManager?.api?.getHistory?.()?.length ?? 0,
