@@ -221,62 +221,11 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
 
-  {
-    name: "kill-records",
-    path: "/kill-records",
-    component: () => import("../pages/KillRecordsPage.vue"),
-    title: "击杀记录",
-    category: "core",
-    refreshPolicy: "polling",
-    nav: { section: "combat", label: "击杀记录", icon: "🎯", order: 5 },
-    requiredPermission: "combat_manager.view",
-    legacyRequiredPermissions: ["kill_manager.view"],
-    ...workspacePage,
-  },
-  {
-    name: "combat-log",
-    path: "/combat-log",
-    component: () => import("../pages/CombatLogPage.vue"),
-    titleKey: "routeTitle.combatLog",
-    category: "core",
-    refreshPolicy: "polling",
-    nav: { section: "combat", label: "战斗日志", icon: "📝", order: 30 },
-    ...workspacePage,
-  },
-  {
-    name: "tk-apology",
-    path: "/tk-apology",
-    component: () => import("../pages/TeamKillApologyPage.vue"),
-    title: "TK 道歉处理",
-    category: "plugin",
-    refreshPolicy: "polling",
-    nav: { section: "combat", label: "TK 道歉处理", icon: "⚠️", order: 35 },
-    superAdminOnly: true,
-    ...workspacePage,
-  },
-  {
-    name: "combat-log-query",
-    path: "/combat-log/query",
-    component: () => import("../pages/CombatLogQueryPage.vue"),
-    title: "战斗日志查询",
-    category: "core",
-    refreshPolicy: "manual",
-    requiredPermission: "combat_manager.view",
-    legacyRequiredPermissions: ["kill_manager.view"],
-    ...workspacePage,
-  },
-  {
-    name: "battle-log",
-    path: "/battle-log",
-    component: () => import("../pages/BattleLogPage.vue"),
-    titleKey: "routeTitle.battleLog",
-    category: "core",
-    refreshPolicy: "polling",
-    nav: { section: "combat", label: "战绩记录", icon: "🏆", order: 20 },
-    requiredPermission: "combat_manager.view",
-    legacyRequiredPermissions: ["kill_manager.view"],
-    ...workspacePage,
-  },
+
+
+
+
+
   {
     name: "admin-warns",
     path: "/admin-warns",
