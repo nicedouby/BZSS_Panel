@@ -3582,9 +3582,6 @@ export class WebServer {
       });
     }
 
-    if (url.pathname === "/api/kills/recent") {
-      const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
-
     if (url.pathname === "/api/weapon-collector/stats" && req.method === "GET") {
       const pluginApi = this.getPluginApi("plugin.weaponCollector");
       if (!pluginApi) {
