@@ -22,7 +22,10 @@
             {{ player.ping != null ? player.ping : rconDetail.ping }}ms
           </span>
         </div>
-        <button class="close-btn" @click="$emit('close')" title="关闭">×</button>
+        <div class="header-actions">
+          <button class="quick-ban-btn" type="button" title="快捷封禁玩家" @click.stop="banDialogOpen = true">BAN</button>
+          <button class="close-btn" @click="$emit('close')" title="关闭">×</button>
+        </div>
       </div>
       <div class="header-sub font-mono">
         <span class="team-badge" :class="`team-${player.teamId}`">TEAM {{ player.teamId }}</span>
@@ -36,6 +39,24 @@
         >
           {{ bzssCoreFtBadge.label }}
         </span>
+      </div>
+    </div>
+
+    <div v-if="banDialogOpen" class="quick-ban-dialog" @click.stop>
+      <div class="quick-ban-title">快捷封禁 · {{ displayPlayerName }}</div>
+      <div class="quick-ban-identity">{{ banIdentitySummary }}</div>
+      <input v-model.trim="banReason" class="quick-ban-input" placeholder="封禁原因（必填）" />
+      <div class="quick-ban-duration">
+        <input v-model.number="banDurationValue" type="number" min="1" class="quick-ban-input" />
+        <select v-model="banDurationUnit" class="quick-ban-input">
+          <option value="minutes">分钟</option><option value="hours">小时</option><option value="days">天</option><option value="weeks">周</option>
+        </select>
+      </div>
+      <div v-if="banError" class="quick-ban-error">{{ banError }}</div>
+      <div v-if="banSuccess" class="quick-ban-success">{{ banSuccess }}</div>
+      <div class="quick-ban-actions">
+        <button type="button" class="quick-ban-cancel" @click="banDialogOpen = false">取消</button>
+        <button type="button" class="quick-ban-submit" :disabled="banSubmitting" @click="submitQuickBan">{{ banSubmitting ? "提交中…" : "确认封禁" }}</button>
       </div>
     </div>
 
@@ -147,6 +168,7 @@ import { t } from "../../i18n";
 import type { BzssCoreTrackedPlayerInfo } from "../../app/bzssCoreApi";
 import { resolveRoleIcon } from "../../utils/role-icons";
 import { resolveVehicleIcon } from "../../utils/vehicle-icons";
+import { apiPost } from "../../app/apiClient";
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
@@ -189,6 +211,41 @@ const emit = defineEmits<{
 }>();
 
 const panelRef = ref<HTMLElement | null>(null);
+const banDialogOpen = ref(false);
+const banSubmitting = ref(false);
+const banReason = ref("");
+const banDurationValue = ref(7);
+const banDurationUnit = ref<"minutes" | "hours" | "days" | "weeks">("days");
+const banError = ref("");
+const banSuccess = ref("");
+
+const banIdentity = computed(() => ({
+  steamID: String(props.rconDetail?.steamId ?? props.rconDetail?.steamID ?? (props.player as any)?.steamId ?? (props.player as any)?.steamID ?? "").trim(),
+  eosID: String(props.rconDetail?.eosId ?? props.rconDetail?.eosID ?? (props.player as any)?.eosId ?? (props.player as any)?.eosID ?? "").trim(),
+  name: displayPlayerName.value,
+}));
+const banIdentitySummary = computed(() => {
+  const identity = banIdentity.value;
+  return [identity.steamID && `Steam64: ${identity.steamID}`, identity.eosID && `EOS: ${identity.eosID}`].filter(Boolean).join(" · ") || "将按玩家名称匹配";
+});
+
+async function submitQuickBan() {
+  if (banSubmitting.value) return;
+  if (!banReason.value.trim()) { banError.value = "请填写封禁原因"; return; }
+  const identity = banIdentity.value;
+  if (!identity.steamID && !identity.eosID && !identity.name) { banError.value = "缺少可用的玩家身份信息"; return; }
+  banSubmitting.value = true; banError.value = ""; banSuccess.value = "";
+  try {
+    const response = await apiPost<any>("/api/plugins/panel-ban/entries", {
+      ...identity, reason: banReason.value.trim(), durationValue: banDurationValue.value, durationUnit: banDurationUnit.value,
+    });
+    if (response?.success === false || response?.error) throw new Error(response?.message || response?.error || "封禁失败");
+    banSuccess.value = "封禁已提交，玩家将按现有规则被踢出";
+    banReason.value = "";
+  } catch (error) {
+    banError.value = error instanceof Error ? error.message : "封禁请求失败";
+  } finally { banSubmitting.value = false; }
+}
 const offsetLeft = ref(props.x);
 const offsetTop = ref(props.y);
 
@@ -401,7 +458,7 @@ watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
   margin-bottom: 10px;
 }
 
-.header-main {
+.header-actions {\n  display: flex;\n  align-items: center;\n  gap: 4px;\n}\n\n.quick-ban-btn {\n  border: 1px solid rgba(239, 68, 68, 0.55); background: rgba(127, 29, 29, 0.42); color: #fecaca; border-radius: 3px; padding: 3px 5px; font-size: 9px; font-weight: 800; cursor: pointer;\n}\n.quick-ban-btn:hover { background: rgba(239, 68, 68, 0.75); color: white; }\n\n.header-main {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -745,3 +802,16 @@ watch(() => [props.x, props.y], syncPanelPosition, { flush: "post" });
   border-color: rgba(255, 255, 255, 0.12);
 }
 </style>
+
+.quick-ban-dialog { margin: 8px 0; padding: 9px; border: 1px solid rgba(239,68,68,.45); background: rgba(35,12,20,.96); border-radius: 4px; }
+.quick-ban-title { color: #fecaca; font-size: 11px; font-weight: 800; margin-bottom: 4px; }
+.quick-ban-identity { color: #94a3b8; font-size: 9px; margin-bottom: 7px; word-break: break-all; }
+.quick-ban-input { box-sizing: border-box; width: 100%; margin-bottom: 6px; padding: 6px; color: #e2e8f0; background: rgba(15,23,42,.9); border: 1px solid rgba(148,163,184,.25); border-radius: 3px; font-size: 10px; }
+.quick-ban-duration { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.quick-ban-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.quick-ban-actions button { border-radius: 3px; padding: 5px 8px; font-size: 10px; cursor: pointer; }
+.quick-ban-cancel { color: #cbd5e1; background: transparent; border: 1px solid rgba(148,163,184,.3); }
+.quick-ban-submit { color: white; background: #b91c1c; border: 1px solid #ef4444; }
+.quick-ban-submit:disabled { opacity: .5; cursor: wait; }
+.quick-ban-error { color: #fda4af; font-size: 10px; margin-bottom: 5px; }
+.quick-ban-success { color: #86efac; font-size: 10px; margin-bottom: 5px; }
