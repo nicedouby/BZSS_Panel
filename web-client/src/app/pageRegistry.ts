@@ -220,18 +220,7 @@ export const pageRegistry: PageDefinition[] = [
     nav: { section: "players", label: "黑奴跳边 CDK", icon: "🔑", order: 30 },
     ...workspacePage,
   },
-  {
-    name: "combat-manager",
-    path: "/combat-manager",
-    component: () => import("../pages/CombatManagerPage.vue"),
-    titleKey: "routeTitle.combatManager",
-    category: "core",
-    refreshPolicy: "polling",
-    nav: { section: "combat", label: "战斗管理", icon: "🛡️", order: 10 },
-    requiredPermission: "combat_manager.view",
-    legacyRequiredPermissions: ["kill_manager.view"],
-    ...workspacePage,
-  },
+
   {
     name: "kill-records",
     path: "/kill-records",
