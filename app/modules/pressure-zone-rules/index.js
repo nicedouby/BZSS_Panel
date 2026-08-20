@@ -34,7 +34,7 @@ export function createPressureZoneRulesModule({ core, modules, config, logger } 
   }
 
   function buildAnnouncement(rule, mapName) {
-    const safeMapName = String(mapName || "UNKNOWN").replace(/[^\\x20-\\x7E]/g, "").trim() || "UNKNOWN";
+    const safeMapName = String(mapName || "UNKNOWN").replace(/[^\x20-\x7E]/g, "").trim() || "UNKNOWN";
     if (!rule) return `[PRESSURE RULES] MAP: ${safeMapName} | No map-specific pressure rule is configured.`;
     const extension = [
       rule.fullCount ? `${rule.fullCount} FULL FOB RING(S)` : "",
