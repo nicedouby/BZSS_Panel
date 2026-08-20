@@ -76,9 +76,10 @@
               <td><ActorCell :actor="record.attacker" /></td>
               <td><ActorCell :actor="record.victim" /></td>
               <td><NullableValue :value="record.weapon ?? undefined" :state="record.weaponState" /></td>
-              <td>{{ record.damage ?? "-" }}</td>
+              <td>{{ record.damage ?? "" }}</td>
               <td class="source-cell" :title="record.sourceFile || '-'">
-                <strong>{{ shortFile(record.sourceFile) }}</strong><small>offset {{ record.sourceOffset ?? "-" }}</small>
+                <strong v-if="record.sourceFile">{{ shortFile(record.sourceFile) }}</strong>
+                <small v-if="record.sourceOffset != null">offset {{ record.sourceOffset }}</small>
               </td>
             </tr>
           </template>
@@ -94,21 +95,12 @@
         </header>
 
         <dl class="detail-grid">
-          <div><dt>记录 ID</dt><dd>{{ selected.id }}</dd></div>
-          <div><dt>来源模式</dt><dd>{{ sourceLabel(selected.observedModes) }}</dd></div>
-          <div><dt>攻击者</dt><dd>{{ actorDetail(selected.attacker) }}</dd></div>
-          <div><dt>受害者</dt><dd>{{ actorDetail(selected.victim) }}</dd></div>
-          <div><dt>武器</dt><dd>{{ nullableLabel(selected.weapon, selected.weaponState) }}</dd></div>
-          <div><dt>伤害</dt><dd>{{ selected.damage ?? "-" }}</dd></div>
-          <div><dt>源文件</dt><dd>{{ selected.sourceFile || "-" }}</dd></div>
-          <div><dt>源文件 ID</dt><dd>{{ selected.sourceFileId || "-" }}</dd></div>
-          <div><dt>字节偏移</dt><dd>{{ selected.sourceOffset ?? "-" }}</dd></div>
-          <div><dt>源事件 ID</dt><dd>{{ selected.sourceEventId || "-" }}</dd></div>
-          <div><dt>原始行哈希</dt><dd>{{ selected.rawLineHash || "-" }}</dd></div>
-          <div><dt>解析状态</dt><dd>{{ parseLabel(selected.parse) }}</dd></div>
+          <div v-for="item in detailItems(selected)" :key="item.label">
+            <dt>{{ item.label }}</dt><dd>{{ item.value }}</dd>
+          </div>
         </dl>
 
-        <section class="raw-panel"><h3>原始日志</h3><pre>{{ selected.rawLog || "-" }}</pre></section>
+        <section v-if="selected.rawLog" class="raw-panel"><h3>原始日志</h3><pre>{{ selected.rawLog }}</pre></section>
         <section class="raw-panel"><h3>完整缓存记录</h3><pre>{{ prettyJson(selected) }}</pre></section>
       </aside>
     </div>
@@ -201,7 +193,9 @@ const lastUpdatedLabel = computed(() => lastUpdatedAt.value ? `更新于 ${forma
 const NullableValue = defineComponent({
   props: { value: { type: String, default: null }, state: { type: String, default: "missing" } },
   setup(props) {
-    return () => h("span", { class: ["nullable-value", `is-${props.state}`] }, nullableLabel(props.value, props.state));
+    return () => props.state === "missing"
+      ? null
+      : h("span", { class: ["nullable-value", `is-${props.state}`] }, nullableLabel(props.value, props.state));
   },
 });
 
@@ -210,7 +204,7 @@ const ActorCell = defineComponent({
   setup(props) {
     return () => h("div", { class: "actor-cell" }, [
       h(NullableValue, { value: props.actor?.name ?? undefined, state: props.actor?.nameState }),
-      h("small", actorIdentity(props.actor)),
+      ...actorIdentities(props.actor).map((identity) => h("small", { class: "actor-identity" }, identity)),
     ]);
   },
 });
@@ -245,12 +239,42 @@ function clearSearch() { filters.search = ""; applyFilters(); }
 function previousPage() { offset.value = Math.max(0, offset.value - pageSize); void fetchRecords(); }
 function nextPage() { if (offset.value + pageSize < total.value) { offset.value += pageSize; void fetchRecords(); } }
 function typeLabel(type: string) { return ({ damage: "伤害", wound: "击倒", death: "死亡" } as Record<string, string>)[type] ?? type ?? "-"; }
-function sourceLabel(modes: string[] = []) { return modes.map((mode) => mode === "live" ? "实时" : mode === "replay" ? "日志溯源" : mode).join(" + ") || "-"; }
-function nullableLabel(value: unknown, state: unknown) { if (state === "nullptr") return "nullptr"; if (state === "missing") return "缺失"; return String(value ?? "缺失"); }
-function actorIdentity(actor?: CombatActor) { return actor?.steam64ID || actor?.eosID || (actor?.teamID != null ? `Team ${actor.teamID}` : "无身份信息"); }
-function actorDetail(actor?: CombatActor) { return `${nullableLabel(actor?.name, actor?.nameState)} · Steam ${actor?.steam64ID ?? "-"} · EOS ${actor?.eosID ?? "-"} · Team ${actor?.teamID ?? "-"}`; }
-function shortFile(value: string) { return String(value || "-").split(/[\\/]/).pop() || "-"; }
-function parseLabel(value?: Record<string, string>) { if (!value) return "-"; return [value.status, value.confidence, value.identityConfidence, value.parseConfidence].filter(Boolean).join(" / ") || "-"; }
+function sourceLabel(modes: string[] = []) { return modes.map((mode) => mode === "live" ? "实时" : mode === "replay" ? "日志溯源" : mode).join(" + "); }
+function nullableLabel(value: unknown, state: unknown) { return state === "nullptr" ? "nullptr" : String(value ?? ""); }
+function actorIdentities(actor?: CombatActor) {
+  return [
+    actor?.steam64ID ? `Steam64 ${actor.steam64ID}` : "",
+    actor?.eosID ? `EOS ${actor.eosID}` : "",
+  ].filter(Boolean);
+}
+function actorDetail(actor?: CombatActor) {
+  return [
+    actor?.nameState === "nullptr" ? "nullptr" : actor?.name,
+    ...actorIdentities(actor),
+    actor?.controllerID ? `Controller ${actor.controllerID}` : "",
+    actor?.teamID != null ? `Team ${actor.teamID}` : "",
+    actor?.squadID != null ? `Squad ${actor.squadID}` : "",
+  ].filter(Boolean).join(" · ");
+}
+function detailItems(record: CombatRecord) {
+  return [
+    ["记录 ID", record.id],
+    ["来源模式", sourceLabel(record.observedModes)],
+    ["攻击者", actorDetail(record.attacker)],
+    ["受害者", actorDetail(record.victim)],
+    ["武器", record.weaponState === "nullptr" ? "nullptr" : record.weapon],
+    ["伤害", record.damage],
+    ["源文件", record.sourceFile],
+    ["源文件 ID", record.sourceFileId],
+    ["字节偏移", record.sourceOffset],
+    ["源事件 ID", record.sourceEventId],
+    ["原始行哈希", record.rawLineHash],
+    ["解析状态", parseLabel(record.parse)],
+  ].filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([label, value]) => ({ label: String(label), value: String(value) }));
+}
+function shortFile(value: string) { return String(value || "").split(/[\\/]/).pop() || ""; }
+function parseLabel(value?: Record<string, string>) { return value ? [value.status, value.confidence, value.identityConfidence, value.parseConfidence].filter(Boolean).join(" / ") : ""; }
 function prettyJson(value: unknown) { return JSON.stringify(value ?? null, null, 2); }
 function formatTime(value: string) {
   if (!value) return "-";
@@ -270,8 +294,8 @@ onUnmounted(() => window.clearInterval(refreshTimer));
 .combat-records-page { height: 100%; min-height: 0; overflow: hidden; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 10px; }
 .toolbar-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .updated-at { color: var(--color-text-muted); font-size: 12px; }
-.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); gap: 8px; }
-.summary-card { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--color-border-soft); border-radius: 8px; background: var(--color-bg-card); }
+.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 8px; }
+.summary-card { display: grid; gap: 5px; min-height: 58px; padding: 9px 12px; border: 1px solid var(--color-border-soft); border-radius: 8px; background: var(--color-bg-card); }
 .summary-card span { color: var(--color-text-muted); font-size: 11px; }
 .summary-card strong { font-size: 20px; line-height: 1; }
 .summary-card.damage strong { color: #60a5fa; } .summary-card.wound strong { color: #fbbf24; } .summary-card.death strong { color: #f87171; }
@@ -281,17 +305,18 @@ onUnmounted(() => window.clearInterval(refreshTimer));
 .toolbar-button, .icon-button { height: 34px; padding: 0 12px; border: 1px solid var(--color-border-default); border-radius: 6px; background: var(--color-bg-card); color: var(--color-text-primary); cursor: pointer; }
 .toolbar-button:disabled { opacity: .45; cursor: default; }.toolbar-button.primary { border-color: rgba(96,165,250,.45); background: rgba(96,165,250,.14); }
 .pagination { display: flex; align-items: center; justify-content: flex-end; gap: 8px; white-space: nowrap; color: var(--color-text-muted); font-size: 12px; }
-.table-region { min-height: 0; overflow: hidden; border: 1px solid var(--color-border-soft); border-radius: 8px; background: var(--color-bg-card); }
-.record-row { cursor: pointer; }.time-cell { white-space: nowrap; }.source-cell { max-width: 180px; }.source-cell strong, .source-cell small, .actor-cell small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.source-cell small, .actor-cell small { margin-top: 3px; color: var(--color-text-muted); font-size: 10px; }
+.table-region { min-height: 0; overflow: auto; border: 1px solid var(--color-border-soft); border-radius: 8px; background: var(--color-bg-card); }
+.record-row { cursor: pointer; transition: background-color .15s ease; }.record-row:hover { background: rgba(96,165,250,.06); }.time-cell { white-space: nowrap; }.source-cell { max-width: 180px; }.source-cell strong, .source-cell small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.source-cell small { margin-top: 3px; color: var(--color-text-muted); font-size: 10px; }
+.actor-cell { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; max-width: 280px; vertical-align: middle; }.actor-identity { color: var(--color-text-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; line-height: 1.2; white-space: nowrap; }
 .type-pill, .source-mode, .nullable-value { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border-radius: 999px; background: rgba(148,163,184,.12); font-size: 11px; white-space: nowrap; }
 .type-pill[data-type="damage"] { color: #93c5fd; background: rgba(59,130,246,.14); }.type-pill[data-type="wound"] { color: #fde68a; background: rgba(245,158,11,.14); }.type-pill[data-type="death"] { color: #fca5a5; background: rgba(239,68,68,.14); }
-.nullable-value.is-nullptr { color: #fbbf24; background: rgba(245,158,11,.16); font-family: ui-monospace, monospace; }.nullable-value.is-missing { color: var(--color-text-muted); }
+.nullable-value.is-nullptr { color: #fbbf24; background: rgba(245,158,11,.16); font-family: ui-monospace, monospace; }
 .empty-cell { padding: 40px !important; text-align: center; color: var(--color-text-muted); }.empty-cell.danger { color: #fca5a5; }
 .detail-backdrop { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: flex-end; background: rgba(0,0,0,.55); }
 .detail-drawer { width: min(760px, 92vw); height: 100%; overflow: auto; padding: 18px; border-left: 1px solid var(--color-border-default); background: var(--color-bg-card); box-shadow: -20px 0 50px rgba(0,0,0,.35); }
 .detail-drawer header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.detail-drawer header p { margin: 0 0 4px; color: var(--color-text-muted); font-size: 12px; }.detail-drawer h2 { margin: 0; font-size: 18px; }.icon-button { width: 34px; padding: 0; font-size: 20px; }
 .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 18px 0; }.detail-grid div { min-width: 0; padding: 10px; border: 1px solid var(--color-border-soft); border-radius: 6px; }.detail-grid dt { margin-bottom: 5px; color: var(--color-text-muted); font-size: 10px; text-transform: uppercase; }.detail-grid dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 12px; }
 .raw-panel { margin-top: 10px; }.raw-panel h3 { margin: 0 0 6px; font-size: 12px; }.raw-panel pre { max-height: 260px; margin: 0; overflow: auto; padding: 12px; border: 1px solid var(--color-border-soft); border-radius: 6px; background: rgba(0,0,0,.2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }
-@media (max-width: 1100px) { .summary-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }.filter-bar { grid-template-columns: repeat(2, minmax(140px, 1fr)); }.search-field, .pagination { grid-column: span 2; } }
+@media (max-width: 1100px) { .summary-grid { grid-template-columns: repeat(3, minmax(120px, 1fr)); }.filter-bar { grid-template-columns: repeat(2, minmax(140px, 1fr)); }.search-field, .pagination { grid-column: span 2; }.actor-cell { max-width: 210px; } }
 @media (max-width: 720px) { .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.detail-grid { grid-template-columns: 1fr; } }
 </style>
