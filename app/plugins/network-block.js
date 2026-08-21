@@ -10,7 +10,6 @@ const PLUGIN_ID = "networkBlock";
 const PAGE_ROUTE = "/plugins/network-block";
 const DEFAULT_DATA_DIR = "./data/plugins/network-block";
 const DEFAULT_DATA_FILE = "blocks.json";
-const DEFAULT_UDP_PORTS = "7787,7788,27165";
 const STATUS_ACTIVE = "active";
 const STATUS_DISABLED = "disabled";
 const STATUS_EXPIRED = "expired";
@@ -65,7 +64,7 @@ function snapshot(entry) {
 export function createPlugin({ core, config, logger } = {}) {
   const log = logger ?? core?.logger ?? console;
   const runtime = { entries: [], filePath: "", events: [], timer: null, queue: Promise.resolve() };
-  const state = { enabled: true, subscribed: true, dataDir: DEFAULT_DATA_DIR, udpPorts: DEFAULT_UDP_PORTS,
+  const state = { enabled: true, subscribed: true, dataDir: DEFAULT_DATA_DIR,
     enforcementAvailable: process.platform === "win32", lastSyncAt: "", lastError: "", applySuccess: 0, applyFailed: 0 };
 
   const enqueue = (task) => {
@@ -81,9 +80,8 @@ export function createPlugin({ core, config, logger } = {}) {
     const raw = config?.get?.(`plugins.${PLUGIN_ID}`, {}) ?? {};
     state.enabled = raw.enabled !== false;
     state.dataDir = text(raw.dataDir, DEFAULT_DATA_DIR);
-    state.udpPorts = text(raw.udpPorts, DEFAULT_UDP_PORTS);
   };
-  const ruleName = (entry, protocol) => `BZSS Network Block ${entry.id} ${protocol}`;
+  const ruleName = (entry) => `BZSS Network Block ${entry.id}`;
 
   async function runNetsh(args) {
     if (process.platform !== "win32") {
@@ -95,20 +93,13 @@ export function createPlugin({ core, config, logger } = {}) {
   }
 
   async function deleteRules(entry) {
-    for (const protocol of ["UDP", "TCP"]) {
-      await runNetsh(["advfirewall", "firewall", "delete", "rule", `name=${ruleName(entry, protocol)}`])
-        .catch(() => {});
-    }
+    await runNetsh(["advfirewall", "firewall", "delete", "rule", `name=${ruleName(entry)}`]).catch(() => {});
   }
 
   async function applyRules(entry) {
     await deleteRules(entry);
-    // UDP ports cover the Squad game/query traffic. TCP rule covers uncommon TCP listeners without
-    // blocking unrelated Windows services.
-    await runNetsh(["advfirewall", "firewall", "add", "rule", `name=${ruleName(entry, "UDP")}`,
-      "dir=in", "action=block", `remoteip=${entry.ip}`, "protocol=UDP", `localport=${state.udpPorts}`, "profile=any"]);
-    await runNetsh(["advfirewall", "firewall", "add", "rule", `name=${ruleName(entry, "TCP")}`,
-      "dir=in", "action=block", `remoteip=${entry.ip}`, "protocol=TCP", `localport=${state.udpPorts}`, "profile=any"]);
+    await runNetsh(["advfirewall", "firewall", "add", "rule", `name=${ruleName(entry)}`,
+      "dir=in", "action=block", `remoteip=${entry.ip}`, "protocol=any", "profile=any"]);
   }
 
   async function save(reason) {
@@ -225,9 +216,8 @@ export function createPlugin({ core, config, logger } = {}) {
       (!filter.status || filter.status === "all" || entry.status === filter.status) && (!search || [entry.ip, entry.reason, entry.createdBy].join(" ").toLowerCase().includes(search))); } };
 
   return { manifest: { id: `plugin.${PLUGIN_ID}`, name: "Network Block", kind: "plugin", version: "1.0.0",
-      description: "按 IP 创建具有到期时间的 Windows 防火墙游戏端口阻塞规则。",
-      configSchema: [{ key: `plugins.${PLUGIN_ID}.enabled`, type: "boolean", default: true, description: "是否启用网络阻塞" },
-        { key: `plugins.${PLUGIN_ID}.udpPorts`, type: "string", default: DEFAULT_UDP_PORTS, description: "Squad 对外 UDP/TCP 端口列表" }] },
+      description: "按 IP 创建具有到期时间的 Windows 防火墙入站阻塞规则。",
+      configSchema: [{ key: `plugins.${PLUGIN_ID}.enabled`, type: "boolean", default: true, description: "是否启用网络阻塞" }] },
     apiName: PLUGIN_ID, api,
     async init() { await load(false); },
     async start() { if (!state.enabled) return; await reconcile(); runtime.timer = setInterval(() => void enqueue(reconcile), 60_000); },

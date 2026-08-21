@@ -1,12 +1,12 @@
 <template>
   <section class="network-block-page">
-    <PageHeader title="网络阻塞" subtitle="按 IP 阻止连接到 Squad 游戏端口。规则由 Windows 防火墙执行，到期后自动移除。" eyebrow="Moderation">
+    <PageHeader title="网络阻塞" subtitle="按 IP 阻止该地址对服务器的所有入站连接。规则由 Windows 防火墙执行，到期后自动移除。" eyebrow="Moderation">
       <template #actions><StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>{{ state.lastError ? "状态异常" : "防火墙正常" }}</StatusBadge><AppButton size="sm" variant="ghost" :loading="refreshing" @click="refresh">刷新</AppButton><AppButton size="sm" variant="ghost" :loading="reconciling" @click="reconcile">立即校验</AppButton></template>
     </PageHeader>
     <StatGrid :items="summaryItems" :loading="loading && !state" />
     <div v-if="pageError || error || state?.lastError" class="notice"><strong>异常</strong><span>{{ pageError || error || state?.lastError }}</span></div>
     <div class="grid">
-      <PageCard title="新增 / 编辑网络阻塞" description="仅支持单个 IPv4 或 IPv6 地址，不支持 IP 段。必须设置到期时间。">
+      <PageCard title="新增 / 编辑网络阻塞" description="仅支持单个 IPv4 或 IPv6 地址，不支持 IP 段。该 IP 的全部入站连接都会被阻止。必须设置到期时间。">
         <form class="form" @submit.prevent="submit">
           <label><span>IP 地址</span><input v-model.trim="draft.ip" placeholder="例如 203.0.113.42" /></label>
           <label><span>原因（可选）</span><textarea v-model.trim="draft.reason" rows="3" placeholder="记录争议原因，仅管理员可见" /></label>
@@ -16,7 +16,7 @@
           <div><AppButton type="submit" :loading="saving">{{ editingId ? "保存修改" : "创建网络阻塞" }}</AppButton><AppButton type="button" variant="ghost" @click="reset">清空</AppButton></div>
         </form>
       </PageCard>
-      <PageCard title="执行说明" description="每条有效规则会限制其 IP 访问配置的 Squad 端口。"><p>端口：<code>{{ state?.udpPorts || "-" }}</code></p><p>Windows 防火墙：{{ state?.enforcementAvailable ? "可用" : "不可用" }}</p><p>应用成功：{{ state?.applySuccess ?? 0 }} · 失败：{{ state?.applyFailed ?? 0 }}</p></PageCard>
+      <PageCard title="执行说明" description="每条有效规则会阻止该 IP 对本机的全部入站连接。"><p>Windows 防火墙：{{ state?.enforcementAvailable ? "可用" : "不可用" }}</p><p>应用成功：{{ state?.applySuccess ?? 0 }} · 失败：{{ state?.applyFailed ?? 0 }}</p></PageCard>
     </div>
     <PageCard title="网络阻塞列表" description="关闭或删除条目会立即移除对应防火墙规则。">
       <template #actions><input v-model.trim="search" class="search" placeholder="搜索 IP、原因或创建者" /></template>
@@ -30,7 +30,7 @@ import { computed, reactive, ref } from "vue";
 import { apiDelete, apiGet, apiPatch, apiPost } from "../app/apiClient";
 import AppButton from "../components/ui/AppButton.vue"; import EmptyState from "../components/ui/EmptyState.vue"; import PageCard from "../components/common/PageCard.vue"; import PageHeader from "../components/common/PageHeader.vue"; import StatGrid from "../components/ui/StatGrid.vue"; import type { StatItem } from "../components/ui/StatGrid.vue"; import StatusBadge from "../components/ui/StatusBadge.vue"; import { formatTime } from "../composables/useDateTimeFormat"; import { usePollingResource } from "../composables/usePollingResource";
 type Entry = { id:string; ip:string; reason:string; expiresAt:string; expiresInLabel:string; status:"active"|"disabled"|"expired"; createdBy:string };
-type State = { entries:Entry[]; totalEntries:number; activeEntries:number; disabledEntries:number; expiredEntries:number; udpPorts:string; enforcementAvailable:boolean; lastError:string; applySuccess:number; applyFailed:number };
+type State = { entries:Entry[]; totalEntries:number; activeEntries:number; disabledEntries:number; expiredEntries:number; enforcementAvailable:boolean; lastError:string; applySuccess:number; applyFailed:number };
 const pageError=ref(""); const saving=ref(false); const reconciling=ref(false); const editingId=ref(""); const search=ref("");
 const draft=reactive({ip:"",reason:"",expiresAt:"",durationValue:7,durationUnit:"days"});
 const {data:state,loading,refreshing,error,refresh}=usePollingResource<State|null>({fetcher:async()=> (await apiGet<any>("/api/plugins/network-block/state"))?.data??null,intervalMs:5000,immediate:true,pauseWhenHidden:true,refreshOnActivated:true,keepPreviousData:true});
