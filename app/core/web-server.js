@@ -3275,6 +3275,31 @@ export class WebServer {
         });
       }
 
+      if (url.pathname === "/api/plugins/network-block/resolve-player-ip" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        const playerDatabase = this.modules.playerDatabase;
+        if (!playerDatabase?.findByIdentity) {
+          return this.json(res, 503, { error: "PlayerDatabaseUnavailable", message: "玩家数据库不可用，无法读取玩家 IP。" });
+        }
+        const player = await playerDatabase.findByIdentity({
+          playerId: body?.playerId,
+          id: body?.playerId,
+          steamID: body?.steamID,
+          steam64ID: body?.steamID,
+          eosID: body?.eosID,
+          name: body?.name,
+        });
+        const ip = String(player?.current_ip ?? player?.currentIp ?? player?.ip ?? "").trim();
+        if (!ip) {
+          return this.json(res, 404, { error: "PlayerIpNotFound", message: "该玩家没有可用的当前 IP 记录。" });
+        }
+        return this.json(res, 200, {
+          ok: true,
+          data: { playerId: player?.id ?? null, name: player?.current_name ?? player?.name ?? "", ip },
+        });
+      }
+
       if (url.pathname === "/api/plugins/network-block/entries" && req.method === "POST") {
         if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
