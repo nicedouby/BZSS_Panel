@@ -358,6 +358,16 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "network-block",
+    path: "/plugins/network-block",
+    component: () => import("../pages/NetworkBlockPage.vue"),
+    title: "网络阻塞",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "网络阻塞", icon: "🌐", order: 91 },
+    ...workspacePage,
+  },
+  {
     name: "squad-management",
     path: "/squad-management",
     component: () => import("../pages/SquadManagementPage.vue"),

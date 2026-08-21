@@ -96,6 +96,13 @@ export const staticNavItems: NavItem[] = [
     order: 90,
   },
   {
+    path: "/plugins/network-block",
+    icon: "🌐",
+    label: "网络阻塞",
+    section: "players",
+    order: 91,
+  },
+  {
     path: "/system/logpost-consumption-performance",
     icon: "📈",
     label: "消费性能评估",

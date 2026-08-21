@@ -1,0 +1,50 @@
+<template>
+  <section class="network-block-page">
+    <PageHeader title="网络阻塞" subtitle="按 IP 阻止连接到 Squad 游戏端口。规则由 Windows 防火墙执行，到期后自动移除。" eyebrow="Moderation">
+      <template #actions><StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>{{ state.lastError ? "状态异常" : "防火墙正常" }}</StatusBadge><AppButton size="sm" variant="ghost" :loading="refreshing" @click="refresh">刷新</AppButton><AppButton size="sm" variant="ghost" :loading="reconciling" @click="reconcile">立即校验</AppButton></template>
+    </PageHeader>
+    <StatGrid :items="summaryItems" :loading="loading && !state" />
+    <div v-if="pageError || error || state?.lastError" class="notice"><strong>异常</strong><span>{{ pageError || error || state?.lastError }}</span></div>
+    <div class="grid">
+      <PageCard title="新增 / 编辑网络阻塞" description="仅支持单个 IPv4 或 IPv6 地址，不支持 IP 段。必须设置到期时间。">
+        <form class="form" @submit.prevent="submit">
+          <label><span>IP 地址</span><input v-model.trim="draft.ip" placeholder="例如 203.0.113.42" /></label>
+          <label><span>原因（可选）</span><textarea v-model.trim="draft.reason" rows="3" placeholder="记录争议原因，仅管理员可见" /></label>
+          <label><span>到期时间</span><input v-model="draft.expiresAt" type="datetime-local" /></label>
+          <div class="duration"><label><span>时长</span><input v-model.number="draft.durationValue" type="number" min="1" /></label><label><span>单位</span><select v-model="draft.durationUnit"><option value="minutes">分钟</option><option value="hours">小时</option><option value="days">天</option><option value="weeks">周</option></select></label></div>
+          <p>到期预览：<strong>{{ expiryPreview }}</strong></p>
+          <div><AppButton type="submit" :loading="saving">{{ editingId ? "保存修改" : "创建网络阻塞" }}</AppButton><AppButton type="button" variant="ghost" @click="reset">清空</AppButton></div>
+        </form>
+      </PageCard>
+      <PageCard title="执行说明" description="每条有效规则会限制其 IP 访问配置的 Squad 端口。"><p>端口：<code>{{ state?.udpPorts || "-" }}</code></p><p>Windows 防火墙：{{ state?.enforcementAvailable ? "可用" : "不可用" }}</p><p>应用成功：{{ state?.applySuccess ?? 0 }} · 失败：{{ state?.applyFailed ?? 0 }}</p></PageCard>
+    </div>
+    <PageCard title="网络阻塞列表" description="关闭或删除条目会立即移除对应防火墙规则。">
+      <template #actions><input v-model.trim="search" class="search" placeholder="搜索 IP、原因或创建者" /></template>
+      <table><thead><tr><th>状态</th><th>IP</th><th>原因</th><th>到期</th><th>创建者</th><th>操作</th></tr></thead><tbody><tr v-for="entry in visibleEntries" :key="entry.id"><td><StatusBadge :tone="entry.status === 'active' ? 'success' : entry.status === 'expired' ? 'warning' : 'neutral'" size="sm">{{ statusLabel(entry.status) }}</StatusBadge></td><td><code>{{ entry.ip }}</code></td><td>{{ entry.reason || "—" }}</td><td>{{ formatTime(entry.expiresAt) }}<small>{{ entry.expiresInLabel }}</small></td><td>{{ entry.createdBy || "system" }}</td><td><AppButton size="sm" variant="ghost" @click="edit(entry)">编辑</AppButton><AppButton v-if="entry.status === 'active'" size="sm" variant="ghost" @click="setStatus(entry, 'disabled')">关闭</AppButton><AppButton v-else-if="entry.status === 'disabled'" size="sm" variant="ghost" @click="setStatus(entry, 'active')">启用</AppButton><AppButton size="sm" variant="ghost" @click="remove(entry)">删除</AppButton></td></tr></tbody></table>
+      <EmptyState v-if="!visibleEntries.length && !loading" compact title="暂无网络阻塞" description="创建一条 IP 阻塞规则后会显示在这里。" />
+    </PageCard>
+  </section>
+</template>
+<script setup lang="ts">
+import { computed, reactive, ref } from "vue";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../app/apiClient";
+import AppButton from "../components/ui/AppButton.vue"; import EmptyState from "../components/ui/EmptyState.vue"; import PageCard from "../components/common/PageCard.vue"; import PageHeader from "../components/common/PageHeader.vue"; import StatGrid from "../components/ui/StatGrid.vue"; import type { StatItem } from "../components/ui/StatGrid.vue"; import StatusBadge from "../components/ui/StatusBadge.vue"; import { formatTime } from "../composables/useDateTimeFormat"; import { usePollingResource } from "../composables/usePollingResource";
+type Entry = { id:string; ip:string; reason:string; expiresAt:string; expiresInLabel:string; status:"active"|"disabled"|"expired"; createdBy:string };
+type State = { entries:Entry[]; totalEntries:number; activeEntries:number; disabledEntries:number; expiredEntries:number; udpPorts:string; enforcementAvailable:boolean; lastError:string; applySuccess:number; applyFailed:number };
+const pageError=ref(""); const saving=ref(false); const reconciling=ref(false); const editingId=ref(""); const search=ref("");
+const draft=reactive({ip:"",reason:"",expiresAt:"",durationValue:7,durationUnit:"days"});
+const {data:state,loading,refreshing,error,refresh}=usePollingResource<State|null>({fetcher:async()=> (await apiGet<any>("/api/plugins/network-block/state"))?.data??null,intervalMs:5000,immediate:true,pauseWhenHidden:true,refreshOnActivated:true,keepPreviousData:true});
+const summaryItems=computed<StatItem[]>(()=>[{key:"total",label:"总条目",value:state.value?.totalEntries??0,tone:"info"},{key:"active",label:"有效阻塞",value:state.value?.activeEntries??0,tone:"success"},{key:"expired",label:"已过期",value:state.value?.expiredEntries??0,tone:"warning"},{key:"disabled",label:"已关闭",value:state.value?.disabledEntries??0,tone:"neutral"}]);
+const visibleEntries=computed(()=> (state.value?.entries??[]).filter(e=>!search.value||[e.ip,e.reason,e.createdBy].join(" ").toLowerCase().includes(search.value.toLowerCase())));
+const expiryPreview=computed(()=>{if(draft.expiresAt)return new Date(draft.expiresAt).toLocaleString(); const f:{[key:string]:number}={minutes:60000,hours:3600000,days:86400000,weeks:604800000}; return draft.durationValue>0?new Date(Date.now()+draft.durationValue*f[draft.durationUnit]).toLocaleString():"未设置";});
+function reset(){editingId.value="";Object.assign(draft,{ip:"",reason:"",expiresAt:"",durationValue:7,durationUnit:"days"});}
+function edit(e:Entry){editingId.value=e.id;Object.assign(draft,{ip:e.ip,reason:e.reason,expiresAt:localInput(e.expiresAt)});window.scrollTo({top:0,behavior:"smooth"});}
+function localInput(v:string){const d=new Date(v);const z=(n:number)=>String(n).padStart(2,"0");return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;}
+function expiresAt(){if(draft.expiresAt){const d=new Date(draft.expiresAt);if(!Number.isNaN(d.getTime()))return d.toISOString();}const f:{[key:string]:number}={minutes:60000,hours:3600000,days:86400000,weeks:604800000};return new Date(Date.now()+draft.durationValue*f[draft.durationUnit]).toISOString();}
+async function submit(){pageError.value="";if(!draft.ip){pageError.value="请输入 IP 地址。";return;}saving.value=true;try{const body={ip:draft.ip,reason:draft.reason,expiresAt:expiresAt()};if(editingId.value)await apiPatch<any>(`/api/plugins/network-block/entries/${encodeURIComponent(editingId.value)}`,body);else await apiPost<any>("/api/plugins/network-block/entries",body);reset();await refresh();}catch(e){pageError.value=e instanceof Error?e.message:String(e);}finally{saving.value=false;}}
+async function setStatus(e:Entry,status:string){try{await apiPatch<any>(`/api/plugins/network-block/entries/${encodeURIComponent(e.id)}`,{status,expiresAt:e.expiresAt});await refresh();}catch(err){pageError.value=err instanceof Error?err.message:String(err);}}
+async function remove(e:Entry){if(!window.confirm(`确认删除对 ${e.ip} 的网络阻塞吗？`))return;try{await apiDelete<any>(`/api/plugins/network-block/entries/${encodeURIComponent(e.id)}`);await refresh();}catch(err){pageError.value=err instanceof Error?err.message:String(err);}}
+async function reconcile(){reconciling.value=true;try{await apiPost<any>("/api/plugins/network-block/reconcile",{});await refresh();}catch(err){pageError.value=err instanceof Error?err.message:String(err);}finally{reconciling.value=false;}}
+function statusLabel(s:string){return s==="active"?"有效":s==="disabled"?"已关闭":"已过期";}
+</script>
+<style scoped>.network-block-page{display:grid;gap:16px}.grid{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}.form,label{display:grid;gap:7px}.form{gap:14px}.duration{display:grid;grid-template-columns:1fr 1fr;gap:12px}input,textarea,select,.search{padding:10px 12px;border:1px solid var(--color-border-default);border-radius:10px;background:var(--color-bg-card);color:var(--color-text-primary)}table{width:100%;border-collapse:collapse}th,td{padding:11px 9px;border-bottom:1px solid var(--color-border-default);text-align:left}small{display:block;color:var(--color-text-muted);margin-top:3px}.notice{padding:12px;border:1px solid var(--color-status-danger);border-radius:10px;color:var(--color-status-danger)}@media(max-width:900px){.grid{grid-template-columns:1fr}table{font-size:12px}}</style>

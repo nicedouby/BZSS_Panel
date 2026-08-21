@@ -3224,6 +3224,103 @@ export class WebServer {
         }
       }
     }
+    if (url.pathname.startsWith("/api/plugins/network-block")) {
+      const pluginApi = this.getPluginApi("plugin.networkBlock");
+      if (!pluginApi) {
+        return this.json(res, 404, {
+          error: "NetworkBlockUnavailable",
+          message: "Network block plugin is not loaded.",
+        });
+      }
+
+      if (url.pathname === "/api/plugins/network-block/state" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.getState?.() ?? null,
+        });
+      }
+
+      if (url.pathname === "/api/plugins/network-block/entries" && req.method === "GET") {
+        return this.json(res, 200, {
+          ok: true,
+          data: pluginApi.listEntries?.({
+            status: url.searchParams.get("status") ?? "all",
+            search: url.searchParams.get("search") ?? "",
+            includeExpired: url.searchParams.get("includeExpired") !== "false",
+          }) ?? [],
+        });
+      }
+
+      if (url.pathname === "/api/plugins/network-block/load" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.load?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/network-block/reload" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.reload?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/network-block/reconcile" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.reconcile?.(),
+        });
+      }
+
+      if (url.pathname === "/api/plugins/network-block/entries" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, {
+          ok: true,
+          data: await pluginApi.createEntry?.({
+            ...body,
+            actor: user,
+            createdBy: user?.username ?? "",
+          }),
+        });
+      }
+
+      if (url.pathname.startsWith("/api/plugins/network-block/entries/")) {
+        const entryId = decodeURIComponent(url.pathname.slice("/api/plugins/network-block/entries/".length));
+        if (!entryId) {
+          return this.json(res, 400, {
+            error: "InvalidNetworkBlockEntryId",
+            message: "Network block entry id is required.",
+          });
+        }
+
+        if (req.method === "PATCH") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, {
+            ok: true,
+            data: await pluginApi.updateEntry?.(entryId, {
+              ...body,
+              actor: user,
+              updatedBy: user?.username ?? "",
+            }),
+          });
+        }
+
+        if (req.method === "DELETE") {
+          if (!this.requireSuperAdmin(user, res)) return;
+          return this.json(res, 200, {
+            ok: true,
+            data: await pluginApi.deleteEntry?.(entryId, {
+              actor: user,
+            }),
+          });
+        }
+      }
+    }
 
     if (url.pathname.startsWith("/api/modules/player-session-records")) {
       const moduleApi = this.modules.playerSessionRecords;
