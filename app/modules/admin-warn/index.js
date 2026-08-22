@@ -31,7 +31,9 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
 
   const api = {
     async warnPlayer(req) {
-      return sendNotification("warning", req);
+      return Array.isArray(req?.warnings) || Array.isArray(req?.items)
+        ? sendWarningBatch(req)
+        : sendNotification("warning", req);
     },
 
     async sendAdminWarn(req) {
@@ -899,7 +901,9 @@ function buildOperationLabel(req, { normalizedKind, targetScope, targetName, rea
     return `警告${targetName}的欢迎警告`;
   }
   if (normalizedKind === "warning" && targetScope) {
-    return `警告${targetName || targetScope.toUpperCase()}`;
+    return reason && !["manual_warn", "batch_warning"].includes(reason)
+      ? `警告${reason}`
+      : `警告${targetName || targetScope.toUpperCase()}`;
   }
   return targetName ? `警告${targetName}` : "";
 }
