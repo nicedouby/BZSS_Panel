@@ -9,7 +9,6 @@ const HANDLED_TTL_MS = 60_000;
 
 const DEFAULT_CONFIG = {
   enabled: false,
-  triggerProbabilityPercent: 100,
   quotes: [],
 };
 
@@ -41,11 +40,11 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
         id: text(quote?.id) || `quote-${index + 1}`,
         text: text(quote?.text).slice(0, 180),
         enabled: quote?.enabled !== false,
+        weight: clamp(Number(quote?.weight ?? quote?.probability ?? 1) || 0, 0, 100000),
       })).filter((quote) => quote.text)
       : [];
     return {
       enabled: source.enabled === true,
-      triggerProbabilityPercent: clamp(Number(source.triggerProbabilityPercent ?? DEFAULT_CONFIG.triggerProbabilityPercent) || 0, 0, 100),
       quotes,
     };
   }
@@ -85,12 +84,11 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     if (event?.isReplay || record?.isReplay || event?.canTriggerActions === false || record?.canTriggerActions === false) return skip("replay", record);
     const id = eventId(event, record);
     if (!claim(id)) return skip("duplicate", record);
-    if (Math.random() * 100 >= runtimeConfig.triggerProbabilityPercent) return skip("probability", record);
-    const candidates = runtimeConfig.quotes.filter((quote) => quote.enabled && quote.text);
-    if (!candidates.length) return skip("no_quote", record);
+    const candidates = runtimeConfig.quotes.filter((quote) => quote.enabled && quote.text && quote.weight > 0);
+    if (!candidates.length) return skip("no_selectable_quote", record);
     const victim = resolveVictim(text(record?.serverId ?? event?.serverId ?? core?.webStatus?.serverId), record);
     if (!victim) return skip("victim_missing", record);
-    const quote = candidates[Math.floor(Math.random() * candidates.length)];
+    const quote = selectWeightedQuote(candidates);
     const playerId = text(victim.playerID ?? victim.playerId);
     try {
       const result = await modules?.adminWarn?.sendAdminWarn?.({
@@ -116,6 +114,15 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
       return { success: false, error: state.lastError };
     }
   }
+  function selectWeightedQuote(candidates) {
+    const totalWeight = candidates.reduce((sum, quote) => sum + quote.weight, 0);
+    let cursor = Math.random() * totalWeight;
+    for (const quote of candidates) {
+      cursor -= quote.weight;
+      if (cursor < 0) return quote;
+    }
+    return candidates[candidates.length - 1];
+  }
   function skip(reason, record) {
     state.skipped += 1;
     pushHistory({ success: false, skipped: true, reason, victim: text(record?.victimName), eventType: text(record?.type) });
@@ -133,7 +140,7 @@ export function createPlugin({ core = {}, modules = {}, config = null, logger = 
     clearHistory() { state.history = []; state.lastError = ""; return api.getState(); },
   };
   return {
-    manifest: { id: PLUGIN_ID, name: "死亡名言警告", kind: "plugin", version: "1.0.0", description: "仅在 Kill/death 时按概率向死亡玩家发送随机名言。" },
+    manifest: { id: PLUGIN_ID, name: "死亡名言警告", kind: "plugin", version: "1.1.0", description: "仅在 Kill/death 时按每条名言权重随机向死亡玩家发送名言。" },
     apiName: "deathQuoteWarning",
     api,
     async start() {
