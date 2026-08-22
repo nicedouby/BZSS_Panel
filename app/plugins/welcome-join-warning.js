@@ -299,6 +299,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
           reason: `player_join_rule:${item.ruleId}`,
           relatedEventId: event?.eventId,
           targetName: context.playerName,
+          operationLabel: `警告${context.playerName}的欢迎警告`,
           targetSteamId: context.steamID || undefined,
           targetEosId: context.eosID || undefined,
           message: item.message,
