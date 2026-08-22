@@ -556,6 +556,17 @@ export const pageRegistry: PageDefinition[] = [
     ...documentPage,
   },
   {
+    name: "death-quote-warning",
+    path: "/plugins/death-quote-warning",
+    component: () => import("../pages/DeathQuoteWarningPage.vue"),
+    title: "死亡名言警告",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "broadcast", label: "死亡名言警告", icon: "💬", order: 41 },
+    superAdminOnly: true,
+    ...workspacePage,
+  },
+  {
     name: "welcome-join-warning",
     path: "/debug/welcome-join-warning",
     component: () => import("../pages/WelcomeJoinWarningDebugPage.vue"),
