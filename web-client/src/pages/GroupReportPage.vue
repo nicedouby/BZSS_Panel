@@ -4,7 +4,7 @@
 
     <WorkspaceToolbar>
       <template #actions>
-        <RouterLink class="tab-link active" to="/plugins/group-report">报告</RouterLink>
+        <RouterLink class="tab-link active" to="/plugins/group-report">抱团报备</RouterLink>
         <button type="button" class="danger" @click="clearAllGroups" :disabled="!groups.length">
           一键全部删除
         </button>
@@ -37,7 +37,7 @@
           >
             <div class="group-head">
               <div class="group-head-copy">
-                <h2>{{ group.name }}</h2>
+                <h2><span class="group-number" :style="groupNumberStyle(group)">#{{ group.number }}</span>{{ group.name }}</h2>
                 <p>{{ group.members.length }} 人 · 更新 {{ formatTime(group.updatedAt) }}</p>
                 <div class="group-meta-row">
                   <span class="group-color-chip" :style="groupChipStyle(group)">{{ group.color || "#9CA3AF" }}</span>
@@ -436,6 +436,10 @@ function groupChipStyle(group: GroupReportGroup) {
     color,
   };
 }
+function groupNumberStyle(group: GroupReportGroup) {
+  const color = group.color || "#9CA3AF";
+  return { backgroundColor: color, borderColor: color };
+}
 
 function isAlreadyInSelectedGroup(player: SearchablePlayer) {
   if (!selectedGroup.value) return false;
@@ -700,6 +704,7 @@ function formatTime(value: number) {
   margin: 0;
   font-size: 16px;
 }
+.group-number { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 20px; margin-right: 6px; padding: 0 5px; border: 1px solid transparent; border-radius: 5px; color: #07111f; font-size: 11px; font-weight: 900; vertical-align: 2px; }
 
 .group-head-copy p {
   margin: 4px 0 0;
@@ -929,7 +934,6 @@ button.danger:hover:not(:disabled) {
   }
 }
 </style>
-
 
 
 

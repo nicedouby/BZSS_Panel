@@ -92,6 +92,7 @@
               :playtimes="playtimes"
               :combat-stats-lookup="combatStatsLookup"
               :health-lookup="healthLookup"
+              :group-report-memberships="groupReportMemberships"
               :density-mode="pageState.densityMode"
               :multi-select-mode="multiSelectMode"
               :selected-player-ids="selectedPlayerIds"
@@ -327,6 +328,7 @@ import { cancelIdleTask, scheduleIdleTask } from "../utils/idle";
 import { resolvePlayerIdentityIp } from "../app/playerIdentityApi";
 import { useTacticalStateStore } from "../stores/tactical-state.store";
 import { fetchTacticalStatePlayers } from "../app/tacticalStateApi";
+import { groupReportApi, type GroupReportGroup } from "../features/group-report/groupReport.api";
 import type {
   PageState,
   PlayerDetailViewModel,
@@ -468,6 +470,23 @@ const tacticalPlayers = computed(() => {
   return Array.isArray(streamedPlayers) ? streamedPlayers : [];
 });
 const tacticalPlayerLookup = computed(() => buildTacticalPlayerLookup(tacticalPlayers.value));
+type GroupReportMembership = { id: string; number: number; name: string; color: string };
+const groupReportQuery = useQuery({
+  queryKey: computed(() => ["group-report-memberships", auth.authenticated]),
+  enabled: computed(() => active.value && auth.authenticated), queryFn: groupReportApi.getSnapshot, staleTime: 5_000,
+  refetchInterval: computed(() => (active.value && !pageHidden.value && auth.authenticated ? 15_000 : false)), refetchIntervalInBackground: false, refetchOnWindowFocus: false,
+});
+const groupReportMemberships = computed<Record<string, GroupReportMembership>>(() => {
+  const lookup: Record<string, GroupReportMembership> = {};
+  for (const group of (groupReportQuery.data.value?.groups ?? []) as GroupReportGroup[]) {
+    const membership = { id: group.id, number: Number(group.number) || 0, name: group.name, color: group.color || "#9CA3AF" };
+    for (const member of group.members ?? []) {
+      const steamId = String(member.steamId ?? "").trim().toLowerCase(); const eosId = String(member.eosId ?? "").trim().toLowerCase();
+      if (steamId) lookup[`steam:${steamId}`] = membership; if (eosId) lookup[`eos:${eosId}`] = membership;
+    }
+  }
+  return lookup;
+});
 
 // Player details use the compact 2-second player summary above. Do not start
 // the full tactical-map stream here: position deltas would rebuild this entire

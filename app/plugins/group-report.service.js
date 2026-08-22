@@ -41,6 +41,12 @@ export function normalizeOptionalColor(value) {
   return undefined;
 }
 
+const GROUP_COLORS = ["#38BDF8", "#FB7185", "#A78BFA", "#34D399", "#FBBF24", "#F97316", "#22D3EE", "#E879F9"];
+function normalizeGroupNumber(value) {
+  const number = Math.trunc(Number(value));
+  return Number.isSafeInteger(number) && number > 0 ? number : undefined;
+}
+
 export function buildPlayerKey(input = {}) {
   const eosId = String(input.eosId ?? "").trim();
   if (eosId) return `eos:${eosId}`;
@@ -67,7 +73,7 @@ export class GroupReportService {
     this.loaded = false;
     this.writeChain = Promise.resolve();
     this.store = {
-      version: 1,
+      version: 2,
       updatedAt: nowMs(),
       groups: [],
     };
@@ -92,7 +98,7 @@ export class GroupReportService {
       }
 
       this.store = {
-        version: 1,
+        version: 2,
         updatedAt: nowMs(),
         groups: [],
       };
@@ -106,7 +112,7 @@ export class GroupReportService {
   getSnapshot() {
     return {
       plugin: "group-report",
-      version: 1,
+      version: 2,
       generatedAt: nowMs(),
       groups: cloneJson(this.store.groups),
     };
@@ -125,11 +131,13 @@ export class GroupReportService {
     await this.load();
 
     const at = nowMs();
+    const number = this.nextGroupNumber();
     const group = {
       id: createGroupId(),
+      number,
       name: normalizeGroupName(input.name),
       note: normalizeOptionalText(input.note),
-      color: normalizeOptionalColor(input.color),
+      color: normalizeOptionalColor(input.color) ?? GROUP_COLORS[(number - 1) % GROUP_COLORS.length],
       anchorPlayerKey: normalizeOptionalText(input.anchorPlayerKey),
       createdAt: at,
       updatedAt: at,
@@ -369,6 +377,10 @@ export class GroupReportService {
     }
     return group;
   }
+  nextGroupNumber() {
+    const highest = this.store.groups.reduce((max, group) => Math.max(max, normalizeGroupNumber(group.number) ?? 0), 0);
+    return highest + 1;
+  }
 
   touch() {
     this.store.updatedAt = nowMs();
@@ -415,21 +427,22 @@ export class GroupReportService {
   }
 
   normalizeStore(parsed) {
-    const groups = Array.isArray(parsed?.groups) ? parsed.groups.map((group) => this.normalizeGroup(group)) : [];
+    const groups = Array.isArray(parsed?.groups) ? parsed.groups.map((group, index) => this.normalizeGroup(group, index + 1)) : [];
     return {
-      version: 1,
+      version: 2,
       updatedAt: typeof parsed?.updatedAt === "number" ? parsed.updatedAt : nowMs(),
       groups,
     };
   }
 
-  normalizeGroup(group) {
+  normalizeGroup(group, fallbackNumber) {
     const members = Array.isArray(group?.members) ? group.members.map((member) => this.normalizeMember(member)).filter(Boolean) : [];
     const normalized = {
       id: String(group?.id ?? createGroupId()),
+      number: normalizeGroupNumber(group?.number) ?? fallbackNumber,
       name: normalizeGroupName(group?.name),
       note: normalizeOptionalText(group?.note),
-      color: normalizeOptionalColor(group?.color),
+      color: normalizeOptionalColor(group?.color) ?? GROUP_COLORS[((normalizeGroupNumber(group?.number) ?? fallbackNumber) - 1) % GROUP_COLORS.length],
       anchorPlayerKey: normalizeOptionalText(group?.anchorPlayerKey),
       createdAt: Number(group?.createdAt ?? nowMs()) || nowMs(),
       updatedAt: Number(group?.updatedAt ?? nowMs()) || nowMs(),

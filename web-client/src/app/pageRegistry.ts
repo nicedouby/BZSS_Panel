@@ -263,10 +263,10 @@ export const pageRegistry: PageDefinition[] = [
     name: "group-report",
     path: "/plugins/group-report",
     component: () => import("../pages/GroupReportPage.vue"),
-    title: "组队举报",
+    title: "抱团报备",
     category: "plugin",
     refreshPolicy: "polling",
-    nav: { section: "players", label: "组队举报", icon: "🚩", order: 60 },
+    nav: { section: "players", label: "抱团报备", icon: "🚩", order: 60 },
     ...workspacePage,
   },
   {

@@ -15,6 +15,7 @@ export interface GroupReportMember {
 
 export interface GroupReportGroup {
   id: string;
+  number: number;
   name: string;
   note?: string;
   color?: string;
@@ -27,7 +28,7 @@ export interface GroupReportGroup {
 
 export interface GroupReportSnapshot {
   plugin: "group-report";
-  version: 1;
+  version: number;
   generatedAt: number;
   groups: GroupReportGroup[];
 }

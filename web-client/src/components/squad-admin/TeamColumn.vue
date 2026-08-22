@@ -94,7 +94,7 @@
       />
     </label>
 
-    <div class="squad-list">
+    <div ref="squadList" class="squad-list">
       <SquadCard
         v-for="squad in team.squads"
         :key="`${squad.squadId}`"
@@ -102,6 +102,7 @@
         :playtimes="playtimes"
         :combat-stats-lookup="combatStatsLookup"
         :health-lookup="healthLookup"
+        :group-report-memberships="groupReportMemberships"
         :density-mode="densityMode"
         :multi-select-mode="multiSelectMode"
         :selected-player-ids="selectedPlayerIds"
@@ -109,12 +110,13 @@
         @toggle-player-check="($event) => $emit('toggle-player-check', $event)"
         @select-squad="$emit('select-squad', $event)"
       />
+      <svg v-if="groupReportPaths.length" class="group-report-branches" aria-hidden="true"><path v-for="branch in groupReportPaths" :key="branch.id" :d="branch.path" :stroke="branch.color" /></svg>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { PlayerRowViewModel, TeamViewModel, SquadViewModel, CombatStats, SquadLeaderRowViewModel } from "../../types/squad-admin.types";
 import SquadCard from "./SquadCard.vue";
 import TeamHeaderQuickStats from "./TeamHeaderQuickStats.vue";
@@ -126,6 +128,7 @@ const props = defineProps<{
   playtimes: Record<string, any>;
   combatStatsLookup: Record<string, CombatStats>;
   healthLookup?: Record<string, number | null>;
+  groupReportMemberships?: Record<string, { id: string; number: number; name: string; color: string }>;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
@@ -149,6 +152,17 @@ function handleSearch(event: Event) {
 
 const teamColorClass = computed(() => (props.team.teamColorType === "team1" ? "team1" : "team2"));
 const isComfortable = computed(() => props.densityMode !== "compact");
+const squadList = ref<HTMLElement | null>(null); const groupReportPaths = ref<Array<{ id: string; color: string; path: string }>>([]);
+let groupReportResizeObserver: ResizeObserver | null = null; let groupReportDrawHandle: number | null = null;
+function scheduleGroupReportBranches() { if (groupReportDrawHandle != null) cancelAnimationFrame(groupReportDrawHandle); groupReportDrawHandle = requestAnimationFrame(() => { groupReportDrawHandle = null; drawGroupReportBranches(); }); }
+function drawGroupReportBranches() {
+  const container = squadList.value; if (!container) return; const bounds = container.getBoundingClientRect(); const groups = new Map<string, Array<{ x: number; y: number; color: string }>>();
+  for (const node of Array.from(container.querySelectorAll<HTMLElement>(".group-report-tag[data-group-report-id]"))) { const id = node.dataset.groupReportId; if (!id) continue; const rect = node.getBoundingClientRect(); if (rect.bottom < bounds.top || rect.top > bounds.bottom) continue; const points = groups.get(id) ?? []; points.push({ x: rect.left - bounds.left + rect.width / 2, y: rect.top - bounds.top + rect.height / 2, color: node.dataset.groupReportColor || "#9CA3AF" }); groups.set(id, points); }
+  groupReportPaths.value = [...groups.entries()].flatMap(([id, points]) => { if (points.length < 2) return []; points.sort((a,b) => a.y-b.y); const x = Math.min(...points.map((point) => point.x)) - 9; const start = points[0]; const end = points[points.length - 1]; const segments = points.map((point) => `M ${x} ${point.y} H ${point.x}`).join(" "); return [{ id, color: start.color, path: `M ${start.x} ${start.y} H ${x} V ${end.y} ${segments}` }]; });
+}
+onMounted(() => { groupReportResizeObserver = new ResizeObserver(scheduleGroupReportBranches); if (squadList.value) groupReportResizeObserver.observe(squadList.value); scheduleGroupReportBranches(); });
+onBeforeUnmount(() => { groupReportResizeObserver?.disconnect(); if (groupReportDrawHandle != null) cancelAnimationFrame(groupReportDrawHandle); });
+watch(() => [props.team, props.groupReportMemberships], async () => { await nextTick(); scheduleGroupReportBranches(); }, { deep: true, flush: "post" });
 
 const factionFlagUrl = computed(() => {
   // factionCode comes from ShowServerInfo; keep team name as a legacy fallback.
@@ -592,6 +606,7 @@ const teamAveragePingText = computed(() => {
 
 /* ─── 小队列表 ───────────────────────────────────────────────────────────── */
 .squad-list {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -602,6 +617,8 @@ const teamAveragePingText = computed(() => {
   padding-right: 2px;
   overscroll-behavior: contain;
 }
+.group-report-branches { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; z-index:5; }
+.group-report-branches path { fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.92; }
 
 /* 滚动条样式 */
 .squad-list::-webkit-scrollbar {

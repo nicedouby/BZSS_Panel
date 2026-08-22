@@ -69,6 +69,7 @@
           :playtime-hours="getPlayerPlaytime(squad.leader.steamId)"
           :combat-stats="getPlayerCombatStats(squad.leader)"
           :health="getPlayerHealth(squad.leader)"
+          :group-report="getGroupReport(squad.leader)"
           :steam-avatar="getPlayerSteamAvatar(squad.leader.steamId)"
           :server-playtime-seconds="getPlayerServerSeconds(squad.leader.steamId)"
           :warmup-playtime-seconds="getPlayerWarmupSeconds(squad.leader.steamId)"
@@ -89,6 +90,7 @@
           :playtime-hours="getPlayerPlaytime(member.steamId)"
           :combat-stats="getPlayerCombatStats(member)"
           :health="getPlayerHealth(member)"
+          :group-report="getGroupReport(member)"
           :steam-avatar="getPlayerSteamAvatar(member.steamId)"
           :server-playtime-seconds="getPlayerServerSeconds(member.steamId)"
           :warmup-playtime-seconds="getPlayerWarmupSeconds(member.steamId)"
@@ -115,6 +117,7 @@ const props = defineProps<{
   playtimes: Record<string, any>;
   combatStatsLookup: Record<string, CombatStats>;
   healthLookup?: Record<string, number | null>;
+  groupReportMemberships?: Record<string, { id: string; number: number; name: string; color: string }>;
   densityMode?: "comfortable" | "compact";
   multiSelectMode?: boolean;
   selectedPlayerIds?: Set<string | number>;
@@ -249,6 +252,7 @@ function getPlayerHealth(player: PlayerRowViewModel): number | null {
   const hp = props.healthLookup[name];
   return hp != null && Number.isFinite(hp) ? hp : null;
 }
+function getGroupReport(player: PlayerRowViewModel) { const raw = player.raw && typeof player.raw === "object" ? player.raw as Record<string, any> : {}; const steam = String(player.steamId ?? raw.steamID ?? raw.steamId ?? "").trim().toLowerCase(); const eos = String(player.eosId ?? raw.eosID ?? raw.eosId ?? "").trim().toLowerCase(); return (steam && props.groupReportMemberships?.[`steam:${steam}`]) || (eos && props.groupReportMemberships?.[`eos:${eos}`]) || undefined; }
 
 function warningTone(label: string): "error" | "warn" | "idle" {
   if (label.startsWith("违规：")) return "error";

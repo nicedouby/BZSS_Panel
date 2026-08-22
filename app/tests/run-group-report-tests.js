@@ -43,6 +43,8 @@ async function testCrudAndPersistence() {
     });
 
     assert.equal(group.name, "抱团 A");
+    assert.equal(group.number, 1);
+    assert.match(group.color, /^#[0-9A-F]{6}$/);
     assert.equal(service.getSnapshot().groups.length, 1);
     assert.equal(events.at(-1)?.eventName, "group-report.snapshot-updated");
 
@@ -71,7 +73,7 @@ async function testCrudAndPersistence() {
 
     const savedPath = path.join(tempDir, "plugins", "group-report", "groups.json");
     const saved = JSON.parse(await fs.readFile(savedPath, "utf8"));
-    assert.equal(saved.version, 1);
+    assert.equal(saved.version, 2);
     assert.equal(saved.groups.length, 0);
   });
 }

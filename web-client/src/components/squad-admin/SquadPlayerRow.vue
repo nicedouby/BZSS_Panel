@@ -1,9 +1,10 @@
 <template>
   <div
     class="squad-player-row player-row"
-    :class="{ selected: isSelected, 'is-leader': player.isLeader, 'is-checked': multiSelectMode && checked, 'has-steam-avatar': !!avatarUrl }"
+    :class="{ selected: isSelected, 'is-leader': player.isLeader, 'is-checked': multiSelectMode && checked, 'has-steam-avatar': !!avatarUrl, 'has-group-report': !!groupReport }"
     @click="handleSelect"
   >
+    <span v-if="groupReport" class="group-report-tag" :data-group-report-id="groupReport.id" :data-group-report-color="groupReport.color" :style="{ '--group-report-color': groupReport.color }" :title="`抱团 #${groupReport.number}｜${groupReport.name}`">#{{ groupReport.number }}</span>
     <div class="player-side">
       <div v-if="multiSelectMode" class="player-checkbox-container">
         <div class="player-checkbox-custom" :class="{ 'is-checked': checked }"></div>
@@ -140,6 +141,7 @@ const props = defineProps<{
   steamAvatar?: string | null;
   serverPlaytimeSeconds?: number | null;
   warmupPlaytimeSeconds?: number | null;
+  groupReport?: { id: string; number: number; name: string; color: string };
 }>();
 
 const emit = defineEmits<{
@@ -488,6 +490,8 @@ function displayRole(role: string | null | undefined) {
   isolation: isolate;
   transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
+.squad-player-row.player-row.has-group-report { grid-template-columns: 82px minmax(0, 1fr) !important; }
+.group-report-tag { position:absolute; left:4px; top:50%; z-index:7; display:inline-flex; align-items:center; justify-content:center; width:18px; min-height:48px; padding:3px 0; transform:translateY(-50%); border:1px solid color-mix(in srgb, var(--group-report-color) 80%, white 12%); border-radius:5px; color:#07111f; background:var(--group-report-color); box-shadow:0 0 0 2px rgba(2,6,23,.72), 0 0 10px color-mix(in srgb, var(--group-report-color) 55%, transparent); font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:10px; font-weight:900; line-height:1; writing-mode:vertical-rl; text-orientation:mixed; letter-spacing:.04em; }
 
 .squad-player-row.player-row::before {
   content: "";
