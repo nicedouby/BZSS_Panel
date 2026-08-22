@@ -137,6 +137,16 @@ async function testPrivateDetectionRequiresCompletedRefresh() {
   assert.equal(__test.isConfirmedPrivatePlaytimeRow({ steam_game_seconds: 0 }), false);
   assert.equal(__test.isConfirmedPrivatePlaytimeRow({ steam_game_seconds: 0, fetched_at: 100 }), true);
   assert.equal(__test.isConfirmedPrivatePlaytimeRow({ steam_game_seconds: 1, fetched_at: 100 }), false);
+  assert.equal(
+    __test.isConfirmedPrivatePlaytimeRow({ steam_game_seconds: 0, game_seconds: 7200, fetched_at: 100 }),
+    false,
+    "positive effective playtime must override a stale zero raw Steam field",
+  );
+  assert.equal(
+    __test.isConfirmedPrivatePlaytimeRow({ steamGameSeconds: 0, gameSeconds: 7200, fetchedAt: 100 }),
+    false,
+    "camelCase merged cache rows must follow the same public-playtime rule",
+  );
 }
 
 async function testWarningAndBroadcastSchedule() {
