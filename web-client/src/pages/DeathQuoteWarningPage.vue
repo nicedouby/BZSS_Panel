@@ -120,7 +120,8 @@ async function save() {
   finally { saving.value = false; }
 }
 
-function quotePercentage(quote: { enabled: boolean; weight: number }) { const total = draft.quotes.filter(item => item.enabled).reduce((sum, item) => sum + Math.max(0, Number(item.weight) || 0), 0); return total > 0 && quote.enabled ? `${((Math.max(0, Number(quote.weight) || 0) / total) * 100).toFixed(1)}%` : "0%"; }\nfunction addQuote() { draft.quotes.push({ id: `quote-${Date.now().toString(36)}`, text: "", enabled: true, weight: 1 }); }
+function quotePercentage(quote: { enabled: boolean; weight: number }) { const total = draft.quotes.filter(item => item.enabled).reduce((sum, item) => sum + Math.max(0, Number(item.weight) || 0), 0); return total > 0 && quote.enabled ? `${((Math.max(0, Number(quote.weight) || 0) / total) * 100).toFixed(1)}%` : "0%"; }
+function addQuote() { draft.quotes.push({ id: `quote-${Date.now().toString(36)}`, text: "", enabled: true, weight: 1 }); }
 async function clearHistory() {
   try { const response = await apiPost<any>("/api/plugins/death-quote-warning/clear", {}); apply(response.data); }
   catch (err) { ui.pushToast({ title: "清空失败", message: err instanceof Error ? err.message : String(err), tone: "error" }); }
