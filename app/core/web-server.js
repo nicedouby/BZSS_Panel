@@ -2939,6 +2939,23 @@ export class WebServer {
       }
     }
 
+    if (url.pathname.startsWith("/api/plugins/death-quote-warning")) {
+      const pluginApi = this.getPluginApi("death-quote-warning");
+      if (!pluginApi) return this.json(res, 404, { error: "DeathQuoteWarningUnavailable", message: "Death quote warning plugin is not loaded." });
+      if (url.pathname === "/api/plugins/death-quote-warning/state" && req.method === "GET") {
+        return this.json(res, 200, { ok: true, data: pluginApi.getState?.() ?? null });
+      }
+      if (url.pathname === "/api/plugins/death-quote-warning/config" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        return this.json(res, 200, { ok: true, data: await pluginApi.updateConfig?.(body ?? {}) });
+      }
+      if (url.pathname === "/api/plugins/death-quote-warning/clear" && req.method === "POST") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        return this.json(res, 200, { ok: true, data: pluginApi.clearHistory?.() ?? null });
+      }
+    }
+
     if (url.pathname.startsWith("/api/plugins/welcome-join-warning")) {
       const pluginApi = this.getPluginApi("welcome-join-warning");
       if (!pluginApi) {
