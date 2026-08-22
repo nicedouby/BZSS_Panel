@@ -326,6 +326,40 @@ async function testBatchWarningsCanSkipHistory() {
   await module.stop();
 }
 
+async function testAggregatedWarningBatch() {
+  const calls = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok" };
+    },
+  });
+  await module.start();
+
+  const result = await module.api.warnPlayer({
+    operationLabel: "暖服YLW信息",
+    reason: "warmup_ylw",
+    sourceModule: "plugin.test",
+    message: "请注意暖服规则",
+    warnings: [
+      { targetName: "PlayerA" },
+      { targetName: "PlayerB" },
+      { targetName: "PlayerC" },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.targetCount, 3);
+  assert.equal(result.sentCount, 3);
+  assert.equal(calls.length, 3);
+
+  const records = module.api.getRecent({ kind: "warning", limit: 10 });
+  assert.equal(records.length, 1);
+  assert.equal(records[0].operationLabel, "警告暖服YLW信息");
+  assert.equal(records[0].targetCount, 3);
+  await module.stop();
+}
+
 await testWarnSuccessAndSanitize();
 await testWarnByPlayerIdPreferred();
 await testWarnByNameFallbackForLegacyCallers();
