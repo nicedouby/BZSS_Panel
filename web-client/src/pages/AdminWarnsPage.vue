@@ -67,7 +67,7 @@
                   <div class="line-status"></div>
                   <div class="line-time">{{ formatTimeOnly(item.createdAt) }}</div>
                   <div class="line-body">
-                    <div class="line-id"><strong>{{ item.targetName }}</strong> <span>{{ item.reason }}</span><em v-if="item.actorUsername">管理员：{{ item.actorUsername }}</em></div>
+                    <div class="line-id"><strong>{{ item.operationLabel || item.targetName }}</strong> <span>{{ item.reason }}</span><em v-if="item.actorUsername">管理员：{{ item.actorUsername }}</em></div>
                     <div class="line-msg">{{ item.message }}</div>
                   </div>
                 </div>
@@ -159,6 +159,7 @@ interface ModuleRecord {
   sourceModule?: string;
   reason?: string;
   targetName?: string;
+  operationLabel?: string;
   message?: string;
   success?: boolean;
   skipped?: boolean;
