@@ -291,6 +291,81 @@ async function testUnknownPlaytimeRule() {
   await harness.plugin.stop();
 }
 
+async function testReplayJoinCannotTriggerWelcomeOrSteamLookup() {
+  const harness = createHarness({
+    config: rulesConfig({
+      defaultIntervalMs: 1,
+      rules: [
+        {
+          id: "always",
+          name: "Always",
+          priority: 10,
+          initialDelayMs: 1,
+          conditions: [{ type: "always" }],
+          steps: [{ message: "should never send" }],
+        },
+        {
+          id: "unknown",
+          name: "Unknown",
+          priority: 20,
+          initialDelayMs: 1,
+          conditions: [{ type: "playtimeUnknown" }],
+          steps: [{ message: "should never lookup" }],
+        },
+      ],
+    }),
+  });
+
+  await harness.plugin.start();
+  const result = await harness.plugin.api.simulateJoin({
+    playerName: "AlreadyPlaying",
+    steamID: "steam-old",
+    eventId: "replayed-join",
+    sourceMode: "replay",
+    canTriggerActions: true,
+  });
+  await wait();
+
+  assert.equal(harness.warnings.length, 0, "replayed join must never send AdminWarn");
+  assert.deepEqual(harness.lookups, [], "replayed join must not perform playtime lookup work");
+  assert.equal(result.scheduled.length, 0);
+  assert.equal(result.suppressed[0]?.reason, "non_live_event");
+
+  await harness.plugin.stop();
+}
+
+async function testNonActionableLiveJoinCannotTriggerWelcome() {
+  const harness = createHarness({
+    config: rulesConfig({
+      defaultIntervalMs: 1,
+      rules: [
+        {
+          id: "always",
+          name: "Always",
+          priority: 10,
+          initialDelayMs: 1,
+          conditions: [{ type: "always" }],
+          steps: [{ message: "should never send" }],
+        },
+      ],
+    }),
+  });
+
+  await harness.plugin.start();
+  const result = await harness.plugin.api.simulateJoin({
+    playerName: "BackfilledPlayer",
+    eventId: "backfilled-live-shape",
+    sourceMode: "live",
+    canTriggerActions: false,
+  });
+  await wait();
+
+  assert.equal(harness.warnings.length, 0);
+  assert.equal(result.suppressed[0]?.reason, "non_live_event");
+
+  await harness.plugin.stop();
+}
+
 (async () => {
   try {
     await testLegacyConfigMigratesToDefaultRules();
@@ -299,6 +374,8 @@ async function testUnknownPlaytimeRule() {
     await testCooldownSkipsRepeatedPlayer();
     await testSteamIdTriggersPlaytimeRule();
     await testUnknownPlaytimeRule();
+    await testReplayJoinCannotTriggerWelcomeOrSteamLookup();
+    await testNonActionableLiveJoinCannotTriggerWelcome();
     console.log("Welcome Join Warning rule tests passed successfully!");
   } catch (error) {
     console.error("Test execution failed:", error);
