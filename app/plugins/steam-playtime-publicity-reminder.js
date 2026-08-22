@@ -448,10 +448,21 @@ function isConfirmedPrivatePlaytimeRow(row) {
   const fetchedAt = Number(row.fetched_at ?? row.fetchedAt ?? 0);
   if (!Number.isFinite(fetchedAt) || fetchedAt <= 0) return false;
 
+  // The playtime service merges two caches: the Steam lookup cache and the main
+  // player database. A player-database row without Steam playtime can temporarily
+  // overwrite steam_game_seconds with 0 while the effective game_seconds remains
+  // the valid public Steam value. The match-status UI uses that effective value,
+  // so treat any positive effective playtime as authoritative evidence that the
+  // profile is public before consulting the raw Steam field.
+  const effectiveSecondsRaw = row.game_seconds ?? row.gameSeconds;
+  if (effectiveSecondsRaw != null && String(effectiveSecondsRaw).trim() !== "") {
+    const effectiveSeconds = Number(effectiveSecondsRaw);
+    if (Number.isFinite(effectiveSeconds) && effectiveSeconds > 0) return false;
+  }
+
   const rawSeconds = row.steam_game_seconds
     ?? row.steamGameSeconds
-    ?? row.game_seconds
-    ?? row.gameSeconds;
+    ?? effectiveSecondsRaw;
   if (rawSeconds == null || String(rawSeconds).trim() === "") return false;
   const seconds = Number(rawSeconds);
   return Number.isFinite(seconds) && seconds === 0;
