@@ -143,6 +143,35 @@ export function createPlugin({ core, modules, config, logger } = {}) {
   }
 
   async function handleJoinEvent(event = {}) {
+    if (!canTriggerWelcomeAction(event)) {
+      const context = await resolvePlayerContext(event, { resolvePlaytime: false });
+      recordRecentEvent(event, context);
+      const eventSummary = buildEventSummary(event, context);
+      state.joinEventCount += 1;
+      state.lastJoinAt = new Date().toISOString();
+      state.suppressedCount += 1;
+      const sourceMode = String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim();
+      recordHistory({
+        kind: "join",
+        success: false,
+        skipped: true,
+        reason: "non_live_event",
+        event: eventSummary,
+        suppressed: [{
+          reason: "non_live_event",
+          sourceMode,
+          canTriggerActions: event?.canTriggerActions ?? event?.rawEvent?.CanTriggerActions ?? null,
+        }],
+      });
+      return {
+        event: eventSummary,
+        player: cloneJsonSafe(context),
+        scheduled: [],
+        matchedRules: [],
+        suppressed: [{ reason: "non_live_event", sourceMode }],
+      };
+    }
+
     const rules = state.config.rules;
     const needsPlaytime = rulesNeedPlaytime(rules);
     const context = await resolvePlayerContext(event, { resolvePlaytime: needsPlaytime });
@@ -898,6 +927,18 @@ function normalizeConditionType(type) {
   return aliases[lowered] ?? text;
 }
 
+function canTriggerWelcomeAction(event = {}) {
+  const sourceMode = String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim().toLowerCase();
+  if (sourceMode && sourceMode !== "live") return false;
+
+  const canTriggerActions = event?.canTriggerActions ?? event?.rawEvent?.CanTriggerActions;
+  if (canTriggerActions === false || String(canTriggerActions ?? "").trim().toLowerCase() === "false") {
+    return false;
+  }
+
+  return true;
+}
+
 function buildSimulatedJoinEvent(payload = {}) {
   const playerName = String(payload?.playerName ?? payload?.name ?? "DebugPlayer").trim() || "DebugPlayer";
   const eventPayload = {
@@ -928,6 +969,8 @@ function buildSimulatedJoinEvent(payload = {}) {
     eventId: String(payload?.eventId ?? `manual:${Date.now()}`),
     eventName: "On_PlayerJoined",
     serverId: String(payload?.serverId ?? "").trim(),
+    sourceMode: String(payload?.sourceMode ?? "live").trim() || "live",
+    canTriggerActions: payload?.canTriggerActions ?? true,
     time: new Date().toISOString(),
     payload: eventPayload,
     paramMap,
@@ -968,6 +1011,8 @@ function buildJoinEventFromRawLog(event = {}) {
     eventId: String(event?.eventId ?? `raw-join:${Date.now()}`),
     eventName: RAW_LOG_JOIN_EVENT_NAME,
     serverId: String(event?.serverId ?? "").trim(),
+    sourceMode: String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim(),
+    canTriggerActions: event?.canTriggerActions ?? event?.rawEvent?.CanTriggerActions,
     time: String(event?.time ?? new Date().toISOString()),
     rawLog: String(event?.rawLog ?? event?.rawEvent?.Raw ?? ""),
     payload: {
