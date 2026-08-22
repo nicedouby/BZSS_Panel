@@ -2940,7 +2940,7 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/death-quote-warning")) {
-      const pluginApi = this.getPluginApi("death-quote-warning");
+      const pluginApi = this.getPluginApi("plugin.death-quote-warning");
       if (!pluginApi) return this.json(res, 404, { error: "DeathQuoteWarningUnavailable", message: "Death quote warning plugin is not loaded." });
       if (url.pathname === "/api/plugins/death-quote-warning/state" && req.method === "GET") {
         return this.json(res, 200, { ok: true, data: pluginApi.getState?.() ?? null });
