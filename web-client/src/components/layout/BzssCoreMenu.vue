@@ -35,6 +35,9 @@
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('vehicle')">
           Spawn Vehicle
         </button>
+        <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('rearm')">
+          Rearm Soldier
+        </button>
         <button type="button" class="bzss-core-item" role="menuitem" @click="openDialog('raw')">
           Raw Command
         </button>
@@ -335,6 +338,29 @@
               </footer>
             </form>
 
+            <form v-else-if="dialogMode === 'rearm'" class="bzss-core-form" @submit.prevent="submitRearmCommand">
+              <label class="bzss-core-field">
+                <span>Player ID</span>
+                <input v-model.trim="rearmPlayerId" type="text" inputmode="numeric" placeholder="例如 12" autocomplete="off" />
+              </label>
+              <label class="bzss-core-field">
+                <span>Item Asset Path</span>
+                <input v-model.trim="rearmAssetPath" type="text" placeholder="/Game/.../BP_Item.BP_Item_C" autocomplete="off" />
+              </label>
+              <label class="bzss-core-field">
+                <span>Inventory Slot</span>
+                <input v-model.trim="rearmSlot" type="text" inputmode="numeric" placeholder="0" autocomplete="off" />
+              </label>
+              <div class="bzss-core-preview">
+                <span>Command</span>
+                <code>{{ rearmPreview }}</code>
+              </div>
+              <footer class="bzss-core-actions">
+                <button type="button" class="bzss-core-secondary" @click="closeDialog">Cancel</button>
+                <button type="submit" class="bzss-core-primary" :disabled="busy || !rearmPlayerId || !rearmAssetPath || !rearmSlot">Run</button>
+              </footer>
+            </form>
+
             <form v-else class="bzss-core-form" @submit.prevent="submitRawCommand">
               <label class="bzss-core-field">
                 <span>Raw command</span>
@@ -385,7 +411,7 @@ import { usePlayerStore } from "../../stores/player.store";
 import { useBzssCoreStore } from "../../stores/bzss-core.store";
 import { isInputElement } from "../../utils/keyboard";
 
-type DialogMode = "weather" | "time" | "raw" | "vehicle" | "forb-ress" | "automatic-heal";
+type DialogMode = "weather" | "time" | "raw" | "vehicle" | "rearm" | "forb-ress" | "automatic-heal";
 
 interface VehiclePreset {
   name: string;
@@ -482,6 +508,9 @@ const automaticHealEnabled = ref<"0" | "1">("1");
 const automaticHealValue = ref("0");
 const timeParameter = ref("");
 const rawCommand = ref("");
+const rearmPlayerId = ref("");
+const rearmAssetPath = ref("");
+const rearmSlot = ref("0");
 
 // Vehicle spawning states
 const targetPlayer = ref("");
@@ -507,6 +536,7 @@ const dialogTitle = computed(() => {
   if (dialogMode.value === "automatic-heal") return "Automatic Heal";
   if (dialogMode.value === "time") return "Set Time";
   if (dialogMode.value === "vehicle") return "Spawn Vehicle";
+  if (dialogMode.value === "rearm") return "Rearm Soldier";
   return "Raw Command";
 });
 const dialogSubtitle = computed(() => {
@@ -515,6 +545,7 @@ const dialogSubtitle = computed(() => {
   if (dialogMode.value === "automatic-heal") return "Enable automatic healing and set its value.";
   if (dialogMode.value === "time") return "Final format: SetTime:XXXX";
   if (dialogMode.value === "vehicle") return "Select target player, input asset path or choose from shortcuts.";
+  if (dialogMode.value === "rearm") return "Give an item to a soldier using PlayerId, asset path, and inventory slot.";
   return "Everything except the paths is sent as raw text.";
 });
 const weatherPreview = computed(() => `SetWeather:${selectedWeather.value},${weatherParameter.value || "10"}`);
@@ -529,6 +560,11 @@ const vehiclePreview = computed(() => {
   const p = targetPlayer.value || "Player";
   const path = vehicleAssetPath.value || "AssetPath";
   return `CreateVehicle:${p},${path},${vehicleTeamId.value}`;
+});
+const rearmPreview = computed(() => {
+  const playerId = rearmPlayerId.value || "PlayerId";
+  const path = rearmAssetPath.value || "ItemAssetPath";
+  return `RearmSoldier:${playerId},${path},${rearmSlot.value || "0"}`;
 });
 
 const onlinePlayersList = computed(() => {
@@ -687,6 +723,10 @@ function openDialog(mode: DialogMode) {
     timeParameter.value = "";
   } else if (mode === "raw") {
     rawCommand.value = "";
+  } else if (mode === "rearm") {
+    rearmPlayerId.value = "";
+    rearmAssetPath.value = "";
+    rearmSlot.value = "0";
   } else if (mode === "vehicle") {
     vehicleAssetPath.value = "";
     vehicleTeamId.value = "0";
@@ -907,6 +947,17 @@ async function submitVehicleCommand() {
     busy.value = false;
     isBatchSpawning.value = false;
   }
+}
+
+async function submitRearmCommand() {
+  const playerId = rearmPlayerId.value.trim();
+  const path = rearmAssetPath.value.trim();
+  const slot = rearmSlot.value.trim();
+  if (!playerId || !path || !slot) return;
+  await executeCommand({
+    directive: "RearmSoldier",
+    parameter: `${playerId},${path},${slot}`,
+  });
 }
 
 async function submitRawCommand() {
