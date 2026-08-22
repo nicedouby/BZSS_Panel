@@ -715,6 +715,7 @@ function normalizeStoredRecord(record) {
     kind: normalizeKind(record?.kind),
     createdAt: Number(record?.createdAt ?? Date.now()),
     targetName: String(record?.targetName ?? "").trim(),
+    operationLabel: optionalText(record?.operationLabel),
     targetPlayerId: optionalText(record?.targetPlayerId),
     targetEosId: optionalText(record?.targetEosId),
     targetSteamId: optionalText(record?.targetSteamId),
@@ -760,6 +761,7 @@ function createRecordPredicate(filter = {}) {
         item.sourceModule,
         item.reason,
         item.targetName,
+        item.operationLabel,
         item.message,
         item.errorMessage,
       ].join(" "));
