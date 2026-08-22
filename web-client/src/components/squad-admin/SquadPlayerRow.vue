@@ -46,6 +46,14 @@
       <div class="player-title-line">
         <span class="player-name" :title="displayName">{{ displayName }}</span>
         <span
+          v-if="persistentPlayerBadge"
+          class="persistent-player-badge"
+          :class="persistentPlayerBadge.tone"
+          :title="persistentPlayerBadge.title"
+        >
+          {{ persistentPlayerBadge.label }}
+        </span>
+        <span
           v-if="bzssCoreFtBadge"
           class="bzss-core-ft-badge"
           :class="bzssCoreFtBadge.tone"
@@ -185,6 +193,29 @@ const displayName = computed(() => {
 const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
 const serverPlaytimeText = computed(() => formatTrackedDuration(props.serverPlaytimeSeconds));
 const warmupPlaytimeText = computed(() => formatTrackedDuration(props.warmupPlaytimeSeconds));
+
+const persistentPlayerBadge = computed(() => {
+  const serverSeconds = Number(props.serverPlaytimeSeconds);
+  const warmupSeconds = Number(props.warmupPlaytimeSeconds);
+  const minimumServerSeconds = 80 * 60 * 60;
+
+  if (!Number.isFinite(serverSeconds) || serverSeconds <= minimumServerSeconds) return null;
+
+  // 暖服时长只能是本服游玩时长的一部分；脏数据仍按安全范围展示。
+  const safeWarmupSeconds = Number.isFinite(warmupSeconds) && warmupSeconds >= 0 ? warmupSeconds : 0;
+  const warmupRatio = Math.min(1, safeWarmupSeconds / serverSeconds);
+  const warmupPercent = (warmupRatio * 100).toFixed(1);
+
+  let level = 1;
+  if (warmupRatio > 0.5) level = 3;
+  else if (warmupRatio > 0.3) level = 2;
+
+  return {
+    label: "常驻玩家" + "|".repeat(level),
+    tone: "persistent-player-badge--level-" + level,
+    title: "本服游玩 " + formatTrackedDuration(serverSeconds) + "｜暖服 " + formatTrackedDuration(safeWarmupSeconds) + "（占比 " + warmupPercent + "%）",
+  };
+});
 const playtimeTitle = computed(() => {
   const hours = props.playtimeHours;
   if (typeof hours !== "number" || !Number.isFinite(hours) || hours === 0) return "Steam 时长未公开";
@@ -572,6 +603,41 @@ function displayRole(role: string | null | undefined) {
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 9px;
   letter-spacing: .035em;
+}
+
+.persistent-player-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 18px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.persistent-player-badge--level-1 {
+  color: #cffafe;
+  background: rgba(6, 182, 212, 0.13);
+  border-color: rgba(34, 211, 238, 0.34);
+}
+
+.persistent-player-badge--level-2 {
+  color: #fef3c7;
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(251, 191, 36, 0.38);
+}
+
+.persistent-player-badge--level-3 {
+  color: #f3e8ff;
+  background: rgba(168, 85, 247, 0.18);
+  border-color: rgba(192, 132, 252, 0.46);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
 }
 
 .squad-player-row .role-chip,
