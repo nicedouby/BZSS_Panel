@@ -15,6 +15,7 @@ const ALLOWED_DIRECTIVES = new Set([
   "RemoveAdminTrack",
   "DragCapturePoint",
   "Kill",
+  "RearmSoldier",
 ]);
 
 /**
@@ -186,6 +187,10 @@ export class BzssCoreCommandService {
       const validation = this.validateKillParameter(text);
       if (!validation.ok) return validation;
     }
+    if (normalizedDirective === "RearmSoldier") {
+      const validation = this.validateRearmSoldierParameter(text);
+      if (!validation.ok) return validation;
+    }
     return { ok: true, directive: normalizedDirective, parameter: text, command: `${normalizedDirective}:${text}` };
   }
 
@@ -197,6 +202,33 @@ export class BzssCoreCommandService {
     const playerId = Number(text);
     if (!Number.isSafeInteger(playerId) || playerId < 0) {
       return invalid("InvalidKillPlayerId", "Kill player ID must be a non-negative safe integer.");
+    }
+    return { ok: true };
+  }
+
+  validateRearmSoldierParameter(parameter) {
+    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
+    if (parts.length !== 3) {
+      return invalid("InvalidRearmSoldierParameter", "RearmSoldier requires PlayerId, item asset path, and inventory slot.");
+    }
+
+    const [playerId, itemPath, slot] = parts;
+    if (!/^\\d+$/.test(playerId)) {
+      return invalid("InvalidRearmSoldierPlayerId", "RearmSoldier PlayerId must be a non-negative integer.");
+    }
+    const numericPlayerId = Number(playerId);
+    if (!Number.isSafeInteger(numericPlayerId) || numericPlayerId < 0) {
+      return invalid("InvalidRearmSoldierPlayerId", "RearmSoldier PlayerId must be a non-negative safe integer.");
+    }
+    if (!itemPath || /[\\u0000-\\u001f\\u007f]/.test(itemPath) || !itemPath.startsWith("/Game/")) {
+      return invalid("InvalidRearmSoldierItemPath", "RearmSoldier item path must be a single-line /Game/ asset path.");
+    }
+    if (!/^\\d+$/.test(slot)) {
+      return invalid("InvalidRearmSoldierSlot", "RearmSoldier inventory slot must be a non-negative integer.");
+    }
+    const numericSlot = Number(slot);
+    if (!Number.isSafeInteger(numericSlot) || numericSlot < 0) {
+      return invalid("InvalidRearmSoldierSlot", "RearmSoldier slot must be a non-negative safe integer.");
     }
     return { ok: true };
   }
