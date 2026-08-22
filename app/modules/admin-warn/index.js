@@ -38,6 +38,14 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
       return api.warnPlayer(req);
     },
 
+    async warnPlayers(req) {
+      return sendWarningBatch(req);
+    },
+
+    async sendAdminWarnBatch(req) {
+      return api.warnPlayers(req);
+    },
+
     async broadcastMessage(req) {
       return sendNotification("broadcast", req);
     },
@@ -73,7 +81,9 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
     const reason = String(req?.reason ?? defaultReasonForKind(normalizedKind));
     const targetScope = normalizedKind === "warning" ? normalizeWarningTarget(req?.targetScope ?? req?.target) : "";
     // Selection-based batch warnings deliberately avoid one history line per player.
-    const appendRecord = (entry) => req?.record === false ? { ...entry, persisted: false } : memoryStore.push(entry);
+    const appendRecord = (entry) => req?.record === false
+      ? { ...entry, persisted: false }
+      : memoryStore.push({ ...entry, operationLabel: entry.operationLabel ?? operationLabel });
     const relatedEventId = optionalText(req?.relatedEventId);
     const actor = req?.actor ?? req?.viewer ?? null;
     const system = Boolean(req?.system);
@@ -86,6 +96,7 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
     const targetName = normalizedKind === "warning"
       ? (targetScope ? targetScope.toUpperCase() : String(req?.targetName ?? "").trim())
       : "";
+    const operationLabel = buildOperationLabel(req, { normalizedKind, targetScope, targetName, reason });
     const targetPlayerId = normalizedKind === "warning" && !targetScope
       ? sanitizeTargetPlayerId(optionalText(req?.targetPlayerId ?? req?.targetPlayerID ?? req?.playerId ?? req?.playerID))
       : undefined;
@@ -263,6 +274,95 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
         errorMessage,
       };
     }
+  }
+
+  async function sendWarningBatch(req = {}) {
+    const warnings = Array.isArray(req?.warnings)
+      ? req.warnings
+      : Array.isArray(req?.items)
+        ? req.items
+        : [];
+    const sourceModule = String(req?.sourceModule ?? "unknown");
+    const reason = String(req?.reason ?? "batch_warning");
+    const batchLabel = String(req?.operationLabel ?? req?.batchLabel ?? req?.label ?? reason).trim();
+    const operationLabel = batchLabel.startsWith("警告") ? batchLabel : `警告${batchLabel}`;
+    const actor = req?.actor ?? req?.viewer ?? null;
+    const system = Boolean(req?.system);
+    const actorRecord = normalizeActorRecord(actor, system);
+
+    if (!warnings.length) {
+      const record = memoryStore.push({
+        ...actorRecord,
+        id: makeRecordId("batch-empty"),
+        kind: "warning",
+        createdAt: Date.now(),
+        sourceModule,
+        reason: "empty_batch",
+        operationLabel,
+        targetName: "批量警告",
+        message: String(req?.message ?? "").trim(),
+        commandText: "",
+        success: false,
+        skipped: true,
+        skipReason: "empty_batch",
+        targetCount: 0,
+        sentCount: 0,
+        failedCount: 0,
+      });
+      return { success: false, skipped: true, skipReason: "empty_batch", record };
+    }
+
+    const results = await Promise.all(warnings.map((item) => sendNotification("warning", {
+      ...req,
+      ...item,
+      warnings: undefined,
+      items: undefined,
+      record: false,
+      sourceModule: item?.sourceModule ?? sourceModule,
+      reason: item?.reason ?? reason,
+      operationLabel,
+      system: item?.system ?? system,
+    })));
+
+    const sentCount = results.filter((item) => item?.success).length;
+    const failedCount = results.length - sentCount;
+    const success = failedCount === 0;
+    const summaryMessage = String(req?.message ?? req?.summaryMessage ?? "").trim()
+      || `${sentCount}/${results.length} 个玩家警告已下发`;
+    const record = memoryStore.push({
+      ...actorRecord,
+      id: makeRecordId(success ? "batch-ok" : "batch-failed"),
+      kind: "warning",
+      createdAt: Date.now(),
+      sourceModule,
+      reason: success ? reason : `${reason}_failed`,
+      operationLabel,
+      targetName: "批量警告",
+      message: summaryMessage,
+      commandText: `AdminWarn batch ${sentCount}/${results.length}`,
+      success,
+      skipped: false,
+      targetCount: results.length,
+      sentCount,
+      failedCount,
+      batch: true,
+      relatedEventId: optionalText(req?.relatedEventId),
+      errorMessage: failedCount
+        ? results.filter((item) => item?.errorMessage || item?.skipReason).slice(0, 3)
+          .map((item) => item.errorMessage ?? item.skipReason).join("; ")
+        : undefined,
+    });
+
+    return {
+      success,
+      skipped: false,
+      targetCount: results.length,
+      sentCount,
+      failedCount,
+      operationLabel,
+      record,
+      results,
+    };
   }
 
   async function sendScopedWarning({
@@ -788,6 +888,18 @@ function sanitizeBroadcastMessage(message) {
     .replace(/"/g, "'")
     .trim()
     .slice(0, 180);
+}
+
+function buildOperationLabel(req, { normalizedKind, targetScope, targetName, reason }) {
+  const explicit = String(req?.operationLabel ?? req?.batchLabel ?? req?.recordLabel ?? "").trim();
+  if (explicit) return explicit.startsWith("警告") || normalizedKind !== "warning" ? explicit : `警告${explicit}`;
+  if (normalizedKind === "warning" && /^player_join_rule:/.test(reason) && targetName) {
+    return `警告${targetName}的欢迎警告`;
+  }
+  if (normalizedKind === "warning" && targetScope) {
+    return `警告${targetName || targetScope.toUpperCase()}`;
+  }
+  return targetName ? `警告${targetName}` : "";
 }
 
 function defaultReasonForKind(kind) {
