@@ -40,6 +40,7 @@ export function createLogClockModule({ core, modules, config, logger }) {
   function handleRawLogLine(event) {
     if (!enabled) return;
     if (!isSubscribed()) return;
+    if (isReplayEvent(event)) return;
     if (event?.eventName !== "On_RawLogLine") return;
     if (!resetRegex) return;
 
@@ -66,6 +67,7 @@ export function createLogClockModule({ core, modules, config, logger }) {
   function handleWorldBringUp(event) {
     if (!enabled) return;
     if (!isSubscribed()) return;
+    if (isReplayEvent(event)) return;
     if (event?.eventName !== "round.world_bring_up") return;
 
     const round = event?.normalized?.roundWorldBringUp
@@ -136,6 +138,13 @@ export function createLogClockModule({ core, modules, config, logger }) {
       }
     },
   };
+}
+
+// Startup recovery replays recent LogPost rows. Those historical anchors are
+// useful to restore state elsewhere, but must not reset the LogClock's
+// intentional 10-minute boot fallback.
+function isReplayEvent(event) {
+  return Boolean(event?.isReplay || event?.fileBridgeReplay);
 }
 
 function resolveRoundWorldBringUpFromParamMap(event) {
