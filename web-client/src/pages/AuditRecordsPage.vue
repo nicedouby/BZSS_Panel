@@ -59,24 +59,21 @@
         <thead>
           <tr>
             <th>时间</th>
-            <th>操作人</th>
-            <th>操作</th>
-            <th>目标</th>
-            <th>位置</th>
+            <th>操作摘要</th>
+            <th>来源</th>
             <th>服务器</th>
-            <th>IP</th>
             <th>结果</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="8" class="empty-cell">加载中</td>
+            <td colspan="5" class="empty-cell">加载中</td>
           </tr>
           <tr v-else-if="errorMessage">
-            <td colspan="8" class="empty-cell danger">{{ errorMessage }}</td>
+            <td colspan="5" class="empty-cell danger">{{ errorMessage }}</td>
           </tr>
           <tr v-else-if="!records.length">
-            <td colspan="8" class="empty-cell">暂无操作记录</td>
+            <td colspan="5" class="empty-cell">暂无操作记录</td>
           </tr>
           <template v-else>
             <tr
@@ -86,15 +83,12 @@
               @click="selected = record"
             >
               <td>{{ formatTime(record.createdAtMs) }}</td>
-              <td>
-                <strong>{{ record.actorUsername || "unknown" }}</strong>
-                <small>{{ record.actorRole || record.actorType }}</small>
+              <td class="summary-cell">
+                <strong>{{ actionSummary(record) }}</strong>
+                <small v-if="record.clientIp">来自 {{ record.clientIp }}</small>
               </td>
-              <td>{{ actionLabel(record.action) }}</td>
-              <td>{{ targetLabel(record) }}</td>
               <td>{{ sourcePageLabel(record.sourcePage) }}</td>
               <td>{{ record.serverName || record.serverId || "-" }}</td>
-              <td>{{ record.clientIp || "-" }}</td>
               <td>
                 <span class="result-pill" :data-result="record.result">{{ resultLabel(record.result) }}</span>
               </td>
@@ -278,6 +272,31 @@ function targetLabel(record: AuditRecord) {
   return name || id || record.targetType || "-";
 }
 
+function actorLabel(record: AuditRecord) {
+  return record.actorUsername || "系统";
+}
+
+function targetNameLabel(record: AuditRecord) {
+  return record.targetName || record.targetData?.targetName || record.targetId || "目标玩家";
+}
+
+function actionSummary(record: AuditRecord) {
+  const actor = actorLabel(record);
+  const target = targetNameLabel(record);
+  const summaries: Record<string, string> = {
+    "player.warn": `${actor} 警告了 ${target}`,
+    "player.switch_team": `${actor} 将 ${target} 强制跳边`,
+    "player.remove_from_squad": `${actor} 将 ${target} 移出小队`,
+    "server.broadcast": `${actor} 发布了一条全服广播`,
+    "tank_battle.execute": `${actor} 执行了坦克大战`,
+    "playtime.refresh.smart": `${actor} 智能刷新了玩家时长`,
+    "playtime.refresh.force": `${actor} 强制刷新了全部玩家时长`,
+    "rcon.command.execute": `${actor} 执行了一条 RCON 指令`,
+    reserve_slot_management: `${actor} 修改了预留位`,
+  };
+  return summaries[record.action] ?? `${actor} 执行了${actionLabel(record.action)}`;
+}
+
 function formatTime(value: number) {
   if (!value) return "-";
   return new Intl.DateTimeFormat(undefined, {
@@ -376,6 +395,14 @@ td small {
 td small {
   margin-top: 3px;
   color: var(--color-text-muted);
+}
+
+.summary-cell {
+  min-width: 320px;
+}
+
+.summary-cell strong {
+  font-weight: 600;
 }
 
 .empty-cell {
