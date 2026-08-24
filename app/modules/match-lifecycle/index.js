@@ -459,6 +459,11 @@ export function createMatchLifecycleModule({ core, modules, config, logger }) {
   }
 
   function acceptLogEvent(event = {}) {
+    const sourceMode = text(event.sourceMode ?? event.rawEvent?.SourceMode).toLowerCase();
+    const canTriggerActions = event.canTriggerActions ?? event.rawEvent?.CanTriggerActions;
+    if (Boolean(event.isReplay) || (sourceMode && sourceMode !== "live")) return false;
+    if (canTriggerActions === false || text(canTriggerActions).toLowerCase() === "false") return false;
+
     const id = text(event.eventId);
     if (id && recentEventIds.has(id)) return false;
     const ms = lifecycleEventMs(event);
