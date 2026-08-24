@@ -263,6 +263,21 @@ function testParseLogLine() {
   assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.health, 125);
   assert.equal(compactRuntime.runtimePlayers[0].soldierInfo.weaponClass, "QBZ191");
 
+  const newCompactRuntimeLine = "[2026.08.24-04.17.44:259][712]PIE: Error: "
+    + "{true}/{true}/{ID:3,P:327,280,2,-79,CI{0,45,PLA,},-1}/{true}/"
+    + "{ID:6,P:247,463,-1,137,CI{0,45,QBZ192,},-1}/"
+    + "{ID:2,P:291,208,3,-36,CI{0,115,M4,},-1}/"
+    + "{ID:5,P:303,211,3,52,CI{0,52,M4A1,},-1}/"
+    + "{ID:7,P:361,228,3,-116,CI{0,45,QBZ191,},-1}/"
+    + "{ID:8,P:424,130,1,54,CI{0,115,M4A1,},-1}/";
+  const newCompactRuntime = parseBzssCoreLogLine(newCompactRuntimeLine);
+  assert.equal(newCompactRuntime.type, "playerRuntime");
+  assert.deepEqual(newCompactRuntime.runtimePlayers.map((player) => player.playerIndex), [3, 6, 2, 5, 7, 8]);
+  assert.deepEqual(newCompactRuntime.runtimePlayers[0].position, { x: 32700, y: 28000, z: 200 });
+  assert.equal(newCompactRuntime.runtimePlayers[0].yaw, -79);
+  assert.equal(newCompactRuntime.runtimePlayers[0].soldierInfo.weaponClass, "PLA");
+  assert.equal(newCompactRuntime.runtimePlayers[0].vehicleSeatIndex, -1);
+
   const invalidPawnRuntime = parseBzssCoreLogLine("PIE: Error: {ID:2,Pos:InvalidPawn,CI{0,125,M16A4,}}/n/");
   assert.equal(invalidPawnRuntime.type, "playerRuntime");
   assert.equal(invalidPawnRuntime.runtimePlayers.length, 1);
@@ -567,7 +582,13 @@ function testMonitorState() {
     ).ok,
     true,
   );
-  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 3);
+  assert.equal(
+    compactRuntimeModule.api.ingestLogLine({ rawEvent: { RawLine: newCompactRuntimeLine } }).ok,
+    true,
+  );
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 8);
+  assert.ok(compactRuntimeModule.api.getRuntimePlayers().some((player) => player.playerIndex === 8));
+
   assert.deepEqual(
     compactRuntimeModule.api.getRuntimePlayers().map((player) => player.playerIndex),
     [0, 1, 2],
