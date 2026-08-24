@@ -15,7 +15,7 @@ const MATCH_END_EVENTS = ["GAME_END", "MATCH_END", "ROUND_END", "ROUND_ENDED", "
 const PENDING_CREATE_LOG_TTL_MS = 5 * 60 * 1000;
 const CREATE_EVENT_DEDUPE_TTL_MS = 10_000;
 
-export function createSquadLifecycleModule({ core, config, logger }) {
+export function createSquadLifecycleModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: "module.squadLifecycle",
     source: "module.squadLifecycle",
@@ -76,7 +76,7 @@ export function createSquadLifecycleModule({ core, config, logger }) {
       id: "module.squadLifecycle",
       name: "Squad Lifecycle Module",
       kind: "module",
-      version: "0.2.0",
+      version: "0.2.1",
       description: "Maintain squad lifecycle records, pending squad create logs, and creation timestamps from logs and RCON snapshots.",
     },
     apiName: "squadLifecycle",
@@ -203,6 +203,13 @@ export function createSquadLifecycleModule({ core, config, logger }) {
         parsed.needsTeamId = false;
       }
     }
+    if (parsed.teamId == null) {
+      const creatorTeamId = resolveCreatorTeamId(serverId, parsed);
+      if (creatorTeamId != null) {
+        parsed.teamId = creatorTeamId;
+        parsed.needsTeamId = false;
+      }
+    }
     rememberCreateEvent(serverId, parsed);
 
     logWithFallback(moduleLogger, "info", `/xm [SquadLifecycle] squad create accepted: S${parsed.squadId} ${parsed.squadName} by ${parsed.creatorName || "unknown"}`, {
@@ -303,6 +310,23 @@ export function createSquadLifecycleModule({ core, config, logger }) {
 
     for (const pending of pendingItems) {
       cleanupExpiredPending();
+
+      const creatorTeamId = resolveCreatorTeamId(serverId, pending);
+      if (creatorTeamId != null) {
+        const resolvedParsed = {
+          ...pending,
+          teamId: creatorTeamId,
+          needsTeamId: false,
+          squadName: pending.squadName,
+          originalSquadName: pending.squadName,
+          currentSquadName: "",
+        };
+        const record = reducer.handleSquadCreateLogEvent(resolvedParsed);
+        pendingCreateLogs.delete(buildPendingKey(pending));
+        emitSquadCreatedEvent(serverId, matchId, resolvedParsed, record);
+        continue;
+      }
+
       const matched = findMatchedSnapshotSquad(pending, squads);
       if (!matched) {
         logWithFallback(moduleLogger, "warn", "[SquadLifecycle] pending create did not match current RCON squads", {
@@ -345,6 +369,28 @@ export function createSquadLifecycleModule({ core, config, logger }) {
         },
       });
     }
+  }
+
+  function resolveCreatorTeamId(serverId, source = {}) {
+    const playerState = modules?.playerState?.api ?? modules?.playerState;
+    if (!playerState) return null;
+
+    let player = null;
+    if (typeof playerState.findPlayer === "function") {
+      player = playerState.findPlayer(serverId, {
+        steamID: source.creatorSteamId,
+        eosID: source.creatorEosId,
+        name: source.creatorName,
+      });
+    } else if (source.creatorSteamId && typeof playerState.getPlayerBySteamID === "function") {
+      player = playerState.getPlayerBySteamID(serverId, source.creatorSteamId);
+    } else if (source.creatorEosId && typeof playerState.getPlayerByEOSID === "function") {
+      player = playerState.getPlayerByEOSID(serverId, source.creatorEosId);
+    } else if (source.creatorName && typeof playerState.getPlayerByName === "function") {
+      player = playerState.getPlayerByName(serverId, source.creatorName);
+    }
+
+    return toNumber(player?.teamID ?? player?.teamId);
   }
 
   function cleanupExpiredPending() {
