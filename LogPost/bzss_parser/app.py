@@ -165,6 +165,11 @@ class BzssLogParserApp:
             int(raw_log_output_config.get("max_per_second", 20) or 20),
         )
         self._raw_log_forward_times: deque[float] = deque()
+        # Dedicated limiter for high-frequency BZSS runtime/scoreboard frames.
+        # Keep this independent from generic raw-log sampling so state remains
+        # available even when raw output is disabled.
+        self._bzss_state_forward_times: deque[float] = deque()
+        self.bzss_state_max_per_second = max(1, min(max_per_second, 20))
 
         console_config = self.config.get("console", {})
         self.console = ConsolePrinter(
@@ -638,14 +643,16 @@ class BzssLogParserApp:
         )
 
     def should_forward_raw_log_line(self, line: str, preserved_rule: str = "") -> bool:
-        # BZSS-Core player, scoreboard, and vehicle lines are required panel
-        # state. They must bypass optional raw-output switches, token filters,
-        # rate limits, and blacklist rules.
-        if (
-            is_bzss_core_runtime_line(line)
-            or is_bzss_core_scoreboard_line(line)
-            or is_bzss_core_vehicle_line(line)
-        ):
+        # BZSS-Core player/scoreboard lines are required panel state, so
+        # they bypass optional raw-output switches, token filters, and the
+        # blacklist. They still pass through a bounded telemetry limiter:
+        # otherwise every compact P/Pos tick is duplicated into JSONL, outbox,
+        # UDP, and the Node event bus and can exhaust the JS heap on busy
+        # servers. Vehicle frames use their dedicated branch in process_line
+        # and remain lossless there.
+        if is_bzss_core_runtime_line(line) or is_bzss_core_scoreboard_line(line):
+            return self.bzss_state_rate_limiter_allow()
+        if is_bzss_core_vehicle_line(line):
             return True
 
         if not self.raw_log_output_enabled:
@@ -679,6 +686,15 @@ class BzssLogParserApp:
         if self.raw_log_output_mode == "lossless":
             return True
         return self.raw_log_rate_limiter_allow()
+
+    def bzss_state_rate_limiter_allow(self) -> bool:
+        now = time.time()
+        while self._bzss_state_forward_times and now - self._bzss_state_forward_times[0] >= 1.0:
+            self._bzss_state_forward_times.popleft()
+        if len(self._bzss_state_forward_times) >= self.bzss_state_max_per_second:
+            return False
+        self._bzss_state_forward_times.append(now)
+        return True
 
     def raw_log_rate_limiter_allow(self) -> bool:
         now = time.time()
