@@ -262,8 +262,8 @@ async function testStaleReplayWinnerCannotOverrideNewerWorldEvent() {
   }
 }
 
-async function testReplayStateNeverBecomesActionable() {
-  const harness = await createHarness({ playtime: 0 });
+async function testReplayAndNonActionableWinnerAreIgnored() {
+  const harness = await createHarness({ playtime: 123 });
   try {
     harness.eventBus.emitCoreEvent("round.match_winner", winnerEvent({
       eventId: "winner-replay",
@@ -271,11 +271,16 @@ async function testReplayStateNeverBecomesActionable() {
       canTriggerActions: true,
       logLineTime: "2026.08.16-01.30.00:000",
     }));
+    assert.equal(harness.api.getState().state, MATCH_LIFECYCLE_STATE.LIVE);
 
-    const lifecycle = harness.api.getState();
-    assert.equal(lifecycle.state, MATCH_LIFECYCLE_STATE.FINISHED);
-    assert.equal(lifecycle.isReplay, true);
-    assert.equal(lifecycle.canTriggerActions, false);
+    harness.eventBus.emitCoreEvent("round.match_winner", winnerEvent({
+      eventId: "winner-non-actionable",
+      isReplay: false,
+      canTriggerActions: false,
+      logLineTime: "2026.08.16-01.31.00:000",
+    }));
+    assert.equal(harness.api.getState().state, MATCH_LIFECYCLE_STATE.LIVE);
+    assert.equal(harness.api.getState().endedAt, "");
   } finally {
     await harness.cleanup();
   }
@@ -300,7 +305,7 @@ await testPositiveOldPlaytimeCannotResurrectFinishedMatch();
 await testWorldBringUpMovesEndedMatchToMapReady();
 await testRconMapChangeCreatesLoadingTransition();
 await testStaleReplayWinnerCannotOverrideNewerWorldEvent();
-await testReplayStateNeverBecomesActionable();
+await testReplayAndNonActionableWinnerAreIgnored();
 await testFinishedTransitionsToWaitingForNextMatch();
 
 console.log("Match lifecycle tests passed.");
