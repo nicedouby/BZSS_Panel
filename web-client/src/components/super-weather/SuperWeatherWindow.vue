@@ -177,7 +177,7 @@ import WeatherInspector from "./WeatherInspector.vue";
 
 const STORAGE_KEY = "bzss.super-weather.window";
 const WORKSPACE_STORAGE_KEY = "bzss.super-weather.timeline-workspace";
-const WINDOW_STATE_VERSION = 2;
+const WINDOW_STATE_VERSION = 3;
 const DEFAULT_WORKSPACE_SECONDS = 2 * 60 * 60;
 const ALLOWED_WORKSPACE_SECONDS = new Set([2 * 60 * 60, 6 * 60 * 60]);
 const MIN_WINDOW_WIDTH = 360;
@@ -523,30 +523,43 @@ function stopResize() {
   window.removeEventListener("pointercancel", stopResize);
 }
 function clampWindow() {
-  windowState.x = Math.max(0, Math.min(windowState.x, window.innerWidth - Math.min(180, windowState.width)));
-  windowState.y = Math.max(0, Math.min(windowState.y, window.innerHeight - 52));
+  const normalized = normalizeWindowState(windowState);
+  Object.assign(windowState, normalized);
+}
+function normalizeWindowState(value: Partial<typeof DEFAULT_WINDOW> = {}) {
+  const viewportWidth = Math.max(1, window.innerWidth || DEFAULT_WINDOW.width);
+  const viewportHeight = Math.max(52, window.innerHeight || DEFAULT_WINDOW.height);
+  const maxWidth = Math.max(1, viewportWidth - 16);
+  const maxHeight = Math.max(52, viewportHeight - 16);
+  const minWidth = Math.min(MIN_WINDOW_WIDTH, maxWidth);
+  const minHeight = Math.min(MIN_WINDOW_HEIGHT, maxHeight);
+  const width = Math.round(Math.min(maxWidth, Math.max(minWidth, Number(value.width) || DEFAULT_WINDOW.width)));
+  const height = Math.round(Math.min(maxHeight, Math.max(minHeight, Number(value.height) || DEFAULT_WINDOW.height)));
+  const x = Math.round(Math.max(0, Math.min(Number(value.x) || 0, viewportWidth - width)));
+  const y = Math.round(Math.max(0, Math.min(Number(value.y) || 0, viewportHeight - (value.minimized ? 52 : height))));
+  return {
+    ...DEFAULT_WINDOW,
+    ...value,
+    version: WINDOW_STATE_VERSION,
+    x,
+    y,
+    width,
+    height,
+    minimized: Boolean(value.minimized),
+  };
 }
 function loadWindowState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
-    if (saved.version !== WINDOW_STATE_VERSION) {
-      return {
-        ...DEFAULT_WINDOW,
-        x: Number.isFinite(saved.x) ? saved.x : DEFAULT_WINDOW.x,
-        y: Number.isFinite(saved.y) ? saved.y : DEFAULT_WINDOW.y,
-        minimized: Boolean(saved.minimized),
-        width: Math.min(DEFAULT_WINDOW.width, Math.max(MIN_WINDOW_WIDTH, window.innerWidth - 16)),
-        height: Math.min(DEFAULT_WINDOW.height, Math.max(MIN_WINDOW_HEIGHT, window.innerHeight - 16)),
-      };
-    }
-    return {
+    const compatible = saved.version === WINDOW_STATE_VERSION ? saved : {
       ...DEFAULT_WINDOW,
-      ...saved,
-      width: Math.max(MIN_WINDOW_WIDTH, Number(saved.width) || DEFAULT_WINDOW.width),
-      height: Math.max(MIN_WINDOW_HEIGHT, Number(saved.height) || DEFAULT_WINDOW.height),
+      x: Number.isFinite(saved.x) ? saved.x : DEFAULT_WINDOW.x,
+      y: Number.isFinite(saved.y) ? saved.y : DEFAULT_WINDOW.y,
+      minimized: Boolean(saved.minimized),
     };
+    return normalizeWindowState(compatible);
   }
-  catch { return { ...DEFAULT_WINDOW }; }
+  catch { return normalizeWindowState(DEFAULT_WINDOW); }
 }
 function persistWindowState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(windowState)); }
 function loadWorkspaceSeconds() {
@@ -590,7 +603,7 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
   min-width: min(360px, calc(100vw - 8px));
   min-height: 300px;
   max-width: calc(100vw - 8px);
-  max-height: 1200px;
+  max-height: calc(100vh - 8px);
   resize: none;
   overflow: hidden;
   border: 1px solid rgba(94, 194, 240, .28);
