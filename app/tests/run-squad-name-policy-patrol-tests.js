@@ -45,6 +45,15 @@ async function createHarness(configOverride = {}) {
   await fs.writeFile(policyPath, `${JSON.stringify(policy, null, 2)}\n`, "utf8");
 
   const moduleListeners = new Map();
+  const submittedViolations = [];
+  const modules = {
+    squadRuleChain: {
+      async submitViolation(event) {
+        submittedViolations.push(event);
+        return { status: "handled", event };
+      },
+    },
+  };
   const core = {
     logger: makeLogger(),
     createLogger: makeLogger,
@@ -69,17 +78,18 @@ async function createHarness(configOverride = {}) {
       return defaultValue;
     },
   };
-  const instance = createSquadNamePolicyPatrolModule({ core, config, logger: core.logger });
+  const instance = createSquadNamePolicyPatrolModule({ core, modules, config, logger: core.logger });
 
   return {
     instance,
+    submittedViolations,
     emit(moduleId, eventName, event) {
       emit(moduleListeners, `${moduleId}:${eventName}`, event);
     },
   };
 }
 
-async function testViolationIsFlaggedButNotActedOn() {
+async function testViolationIsEnforcedThroughRuleChain() {
   const harness = await createHarness();
   await harness.instance.start();
   harness.emit("module.matchState", "squadsUpdated", {
@@ -92,8 +102,13 @@ async function testViolationIsFlaggedButNotActedOn() {
   const state = harness.instance.api.getState();
   assert.equal(state.stats.evaluated, 1);
   assert.equal(state.stats.violations, 1);
-  assert.equal(state.recent[0].status, "violation");
-  assert.equal(state.recent[0].disposition, "flag_only");
+  assert.equal(state.stats.enforced, 1);
+  assert.equal(state.recent[0].status, "handled");
+  assert.equal(state.recent[0].disposition, "enforce");
+  assert.equal(harness.submittedViolations.length, 1);
+  assert.equal(harness.submittedViolations[0].sourceMode, "live");
+  assert.equal(harness.submittedViolations[0].canTriggerActions, true);
+  assert.equal(harness.submittedViolations[0].squadName, "BMP违规队");
   await harness.instance.stop();
 }
 
@@ -125,7 +140,8 @@ async function testPlainLetterNameIsFlagged() {
 
   const state = harness.instance.api.getState();
   assert.equal(state.stats.violations, 1);
-  assert.equal(state.recent[0].status, "violation");
+  assert.equal(state.recent[0].status, "handled");
+  assert.equal(harness.submittedViolations.length, 1);
   await harness.instance.stop();
 }
 
@@ -190,7 +206,7 @@ async function waitForHandlers() {
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
-await testViolationIsFlaggedButNotActedOn();
+await testViolationIsEnforcedThroughRuleChain();
 await testAllowedNameStaysAllowed();
 await testPlainLetterNameIsFlagged();
 await testDuplicateSnapshotIsSkipped();
