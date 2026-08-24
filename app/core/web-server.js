@@ -1779,6 +1779,9 @@ export class WebServer {
         if (!body?.config || typeof body.config !== "object" || Array.isArray(body.config)) {
           return this.json(res, 400, { error: "InvalidBody", message: "config must be object" });
         }
+        const current = this.core.config?.get?.("plugins.plugin.nzcd", {}) ?? {};
+        this.core.config?.set?.("plugins.plugin.nzcd", { ...current, ...body.config });
+        await this.core.config?.save?.().catch(() => {});
         return this.json(res, 200, nzcdApi.updateConfig?.(body.config) ?? {});
       }
       return this.json(res, 405, { error: "MethodNotAllowed", message: "Unsupported NZCD API route." });
