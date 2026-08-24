@@ -15,41 +15,63 @@ import {
 } from "../app/bzssCoreApi";
 
 export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
-  if (Array.isArray(data.players) && data.players.length > 0) {
-    return data.players;
-  }
-
   const runtimePlayers = data.runtimePlayers ?? [];
   const scoreboardPlayers = data.scoreboardPlayers ?? [];
-  const byIndex = new Map<number | string, any>();
+  const mergedByKey = new Map<string, any>();
+
+  const keyOf = (player: any) => {
+    const key = player?.playerIndex ?? player?.playerId;
+    return key == null ? "" : String(key);
+  };
+
+  for (const player of Array.isArray(data.players) ? data.players : []) {
+    const key = keyOf(player);
+    if (key) mergedByKey.set(key, { ...player });
+  }
 
   for (const player of scoreboardPlayers) {
-    if (player.playerIndex == null && player.playerId == null) continue;
-    const key = String(player.playerIndex ?? player.playerId ?? "");
-    byIndex.set(key, {
+    const key = keyOf(player);
+    if (!key) continue;
+    const existing = mergedByKey.get(key);
+    mergedByKey.set(key, {
+      ...(existing ?? {}),
       ...player,
-      position: null,
-      yaw: null,
-      stale: true,
-      presence: {
-        state: "scoreboardOnly",
-      },
-      telemetry: {
-        position: null,
-        yaw: null,
-        combatInfo: "",
-      },
+      // Preserve the richer backend scoreboard object when available.
+      teamId: player.teamId ?? existing?.teamId ?? null,
+      squadId: player.squadId ?? existing?.squadId ?? null,
+      playerScoreboard: existing?.playerScoreboard ?? player.playerScoreboard,
+      presence: existing?.presence ?? { state: "scoreboardOnly" },
     });
   }
 
   for (const player of runtimePlayers) {
-    if (player.playerIndex == null && player.playerId == null) continue;
-    const key = String(player.playerIndex ?? player.playerId ?? "");
-    const existing = byIndex.get(key);
-    byIndex.set(key, existing ? { ...existing, ...player } : { ...player });
+    const key = keyOf(player);
+    if (!key) continue;
+    const existing = mergedByKey.get(key);
+    mergedByKey.set(key, {
+      ...(existing ?? {}),
+      ...player,
+      position: player.position ?? existing?.position ?? null,
+      yaw: player.yaw ?? existing?.yaw ?? null,
+      combatInfo: player.combatInfo ?? existing?.combatInfo ?? "",
+      telemetry: {
+        ...(existing?.telemetry ?? {}),
+        position: player.position ?? existing?.telemetry?.position ?? null,
+        yaw: player.yaw ?? existing?.telemetry?.yaw ?? null,
+        combatInfo: player.combatInfo ?? existing?.telemetry?.combatInfo ?? "",
+      },
+      runtimeObservedAt: player.observedAt ?? existing?.runtimeObservedAt ?? "",
+      presence: {
+        ...(existing?.presence ?? {}),
+        state: player.presenceHint === "noPawn"
+          ? "noPawn"
+          : (existing?.presence?.state === "scoreboardOnly" ? "active" : (existing?.presence?.state ?? "active")),
+        runtimeObservedAt: player.observedAt ?? existing?.presence?.runtimeObservedAt ?? "",
+      },
+    });
   }
 
-  return [...byIndex.values()];
+  return [...mergedByKey.values()];
 }
 
 export const useBzssCoreStore = defineStore("bzssCore", () => {
