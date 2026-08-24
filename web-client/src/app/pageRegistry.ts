@@ -213,6 +213,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "nzcd",
+    path: "/plugins/nzcd",
+    component: () => import("../pages/NzcdPage.vue"),
+    title: "NZCD 娱乐插件",
+    category: "plugin",
+    refreshPolicy: "polling",
+    nav: { section: "players", label: "NZCD 娱乐插件", icon: "📏", order: 26 },
+    superAdminOnly: true,
+    ...workspacePage,
+  },
+  {
     name: "warmup-reserve-grant",
     path: "/warmup-reserve-grant",
     component: () => import("../pages/WarmupReserveGrantPage.vue"),
