@@ -20,6 +20,24 @@ describe("bzss-core store player resolution", () => {
     expect(players.map((player) => player.playerIndex)).toEqual([1, 2, 3]);
   });
 
+  it("falls back when the backend merged players array is empty", () => {
+    const players = buildBzssCorePlayers({
+      ok: true,
+      status: "ready",
+      state: {} as any,
+      runtimePlayers: [{ playerIndex: 3, position: { x: 307, y: 391, z: 2 }, yaw: -74 } as any],
+      scoreboardPlayers: [],
+      players: [],
+    });
+
+    expect(players).toHaveLength(1);
+    expect(players[0]).toMatchObject({
+      playerIndex: 3,
+      position: { x: 307, y: 391, z: 2 },
+      yaw: -74,
+    });
+  });
+
   it("falls back to merging scoreboard-first runtime data when players is absent", () => {
     const players = buildBzssCorePlayers({
       ok: true,
