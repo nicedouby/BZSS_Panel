@@ -582,13 +582,7 @@ function testMonitorState() {
     ).ok,
     true,
   );
-  assert.equal(
-    compactRuntimeModule.api.ingestLogLine({ rawEvent: { RawLine: newCompactRuntimeLine } }).ok,
-    true,
-  );
-  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 8);
-  assert.ok(compactRuntimeModule.api.getRuntimePlayers().some((player) => player.playerIndex === 8));
-
+  assert.equal(compactRuntimeModule.api.getRuntimePlayers().length, 3);
   assert.deepEqual(
     compactRuntimeModule.api.getRuntimePlayers().map((player) => player.playerIndex),
     [0, 1, 2],
@@ -603,6 +597,29 @@ function testMonitorState() {
   assert.equal(compactInvalidPawnMerged.presenceHint, "noPawn");
   assert.equal(compactInvalidPawnMerged.presence?.state, "noPawn");
   assert.equal(compactInvalidPawnMerged.telemetry?.position, null);
+
+  const rawLineRuntimeModule = createBzssCoreMonitorModule({
+    core: {
+      eventBus: { onCoreEvent() { return () => {}; }, emitModuleEvent() {} },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+    },
+  });
+  const rawLineEvent = {
+    rawEvent: {
+      RawLine: "[2026.08.24-04.17.44:259][712]PIE: Error: "
+        + "{true}/{true}/{ID:3,P:327,280,2,-79,CI{0,45,PLA,},-1}/{true}/"
+        + "{ID:6,P:247,463,-1,137,CI{0,45,QBZ192,},-1}/"
+        + "{ID:2,P:291,208,3,-36,CI{0,115,M4,},-1}/"
+        + "{ID:5,P:303,211,3,52,CI{0,52,M4A1,},-1}/"
+        + "{ID:7,P:361,228,3,-116,CI{0,45,QBZ191,},-1}/"
+        + "{ID:8,P:424,130,1,54,CI{0,115,M4A1,},-1}/",
+    },
+  };
+  assert.equal(rawLineRuntimeModule.api.ingestLogLine(rawLineEvent).ok, true);
+  assert.deepEqual(
+    rawLineRuntimeModule.api.getRuntimePlayers().map((player) => player.playerIndex),
+    [3, 6, 2, 5, 7, 8],
+  );
 
   const compactAnonymousRuntimeModule = createBzssCoreMonitorModule({
     core: {
