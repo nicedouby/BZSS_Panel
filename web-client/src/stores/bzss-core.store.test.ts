@@ -18,6 +18,10 @@ describe("bzss-core store player resolution", () => {
     });
 
     expect(players.map((player) => player.playerIndex)).toEqual([1, 2, 3]);
+    expect(players[0]).toMatchObject({
+      position: { x: 1, y: 2, z: 3 },
+      telemetry: { position: { x: 1, y: 2, z: 3 } },
+    });
   });
 
   it("falls back when the backend merged players array is empty", () => {
