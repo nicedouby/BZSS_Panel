@@ -209,7 +209,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         { key: "enabled", type: "boolean", default: true, description: "是否启用 NZCD" },
         { key: "defaultMin", type: "number", default: DEFAULT_MIN, description: "默认最小长度（厘米）" },
         { key: "defaultMax", type: "number", default: DEFAULT_MAX, description: "默认最大长度（厘米）" },
-        { key: "ranges", type: "textarea", default: [], description: "玩家专属区间配置" },
+        { key: "ranges", type: "object", default: [], description: "玩家专属区间配置" },
         { key: "dataFile", type: "string", default: DEFAULT_DATA_FILE, description: "玩家记录文件" },
       ],
     },
