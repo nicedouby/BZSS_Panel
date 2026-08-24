@@ -15,7 +15,7 @@ import {
 } from "../app/bzssCoreApi";
 
 export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
-  if (Array.isArray(data.players)) {
+  if (Array.isArray(data.players) && data.players.length > 0) {
     return data.players;
   }
 
@@ -25,7 +25,7 @@ export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
 
   for (const player of scoreboardPlayers) {
     if (player.playerIndex == null && player.playerId == null) continue;
-    const key = player.playerIndex ?? player.playerId ?? "";
+    const key = String(player.playerIndex ?? player.playerId ?? "");
     byIndex.set(key, {
       ...player,
       position: null,
@@ -44,7 +44,7 @@ export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
 
   for (const player of runtimePlayers) {
     if (player.playerIndex == null && player.playerId == null) continue;
-    const key = player.playerIndex ?? player.playerId ?? "";
+    const key = String(player.playerIndex ?? player.playerId ?? "");
     const existing = byIndex.get(key);
     byIndex.set(key, existing ? { ...existing, ...player } : { ...player });
   }
@@ -180,12 +180,10 @@ export const useBzssCoreStore = defineStore("bzssCore", () => {
         error.value = data.ok ? "" : data.status || "BZSS-Core returned an error.";
         loading.value = false;
       },
-      (err, source) => {
+      () => {
         loading.value = false;
-        if (source.readyState === EventSource.CLOSED) {
-          error.value = "SSE Stream connection error.";
-          stopStream();
-        }
+        stopStream();
+        void fetchSnapshot();
       }
     );
   }
