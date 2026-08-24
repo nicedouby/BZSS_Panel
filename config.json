@@ -766,6 +766,11 @@
         "intervalMs": 15000
       }
     },
+    "squadNamePolicyPatrol": {
+      "enabled": true,
+      "intervalMs": 15000,
+      "dedupeTtlMs": 60000
+    },
     "warmupReserveGrant": {
       "enabled": true,
       "grantEveryMinutes": 60,
