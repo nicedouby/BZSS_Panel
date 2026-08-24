@@ -10,6 +10,13 @@ const DEBUG_SNAPSHOT_DIR = path.join("data", "match-end-snapshot-debug");
 const AUTO_DEDUPE_MS = 30_000;
 const AUTO_SETTLE_MS = 1_800;
 
+function canCaptureAutomaticEvent(event = {}) {
+  const sourceMode = String(event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim().toLowerCase();
+  const canTriggerActions = event?.canTriggerActions ?? event?.rawEvent?.CanTriggerActions;
+  if (event?.isReplay || (sourceMode && sourceMode !== "live")) return false;
+  return !(canTriggerActions === false || String(canTriggerActions).toLowerCase() === "false");
+}
+
 export function createPlugin({ core, modules, logger } = {}) {
   const pluginLogger = logger ?? core?.logger ?? console;
   const taskManager = core?.taskManager ?? null;
@@ -585,11 +592,13 @@ export function createPlugin({ core, modules, logger } = {}) {
       }
       if (core?.eventBus?.onCoreEvent) {
         unsubscribers.push(core.eventBus.onCoreEvent("round.match_winner", (event) => {
+          if (!canCaptureAutomaticEvent(event)) return;
           captureAutomatic(event).catch((error) => {
             pluginLogger.error?.("[MatchEndSnapshot] round.match_winner capture failed: " + (error?.stack || error));
           });
         }));
         unsubscribers.push(core.eventBus.onCoreEvent("MATCH_END", (event) => {
+          if (!canCaptureAutomaticEvent(event)) return;
           captureAutomatic(event).catch((error) => {
             pluginLogger.error?.("[MatchEndSnapshot] MATCH_END capture failed: " + (error?.stack || error));
           });
