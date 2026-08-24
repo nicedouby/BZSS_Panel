@@ -23,12 +23,15 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
   const unsubscribers = [];
   const recentRecords = [];
   const processedKeys = new Map();
+  const startupExistingKeys = new Set();
+  let startupBaselineInitialized = false;
   const stats = {
     evaluated: 0,
     violations: 0,
     allowed: 0,
     enforced: 0,
     enforcementFailed: 0,
+    startupExistingSkipped: 0,
     duplicatesSkipped: 0,
     errors: 0,
   };
@@ -76,8 +79,8 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
       id: MODULE_ID,
       name: "Squad Name Policy Patrol",
       kind: "module",
-      version: "1.1.0",
-      description: "RCON snapshot patrol that enforces squad-name policy when lifecycle log events are missed.",
+      version: "1.2.0",
+      description: "RCON snapshot patrol that enforces newly observed policy violations while preserving squads present at process startup.",
     },
     apiName: API_NAME,
     api,
@@ -109,6 +112,8 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
         } catch {}
       }
       processedKeys.clear();
+      startupExistingKeys.clear();
+      startupBaselineInitialized = false;
     },
   };
 
@@ -127,13 +132,43 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
     lastPatrolAt = now;
 
     const squads = Array.isArray(event.squads) ? event.squads : [];
-    for (const squad of squads) {
-      await inspectSquadCandidate({
-        ...squad,
-        serverId: event.serverId,
-        matchId: event.matchId ?? event.sessionId ?? event.sessionID,
-        time: event.time,
-      }, "RCON_PATROL");
+    const candidates = squads.map((squad) => normalizeSquadEvent({
+      ...squad,
+      serverId: event.serverId,
+      matchId: event.matchId ?? event.sessionId ?? event.sessionID,
+      time: event.time,
+      source: "RCON_PATROL",
+    }));
+
+    if (!startupBaselineInitialized) {
+      startupBaselineInitialized = true;
+      for (const candidate of candidates) {
+        if (candidate.serverId && candidate.teamId != null && candidate.squadId != null && candidate.squadName) {
+          startupExistingKeys.add(buildDedupeKey(candidate));
+        }
+      }
+      stats.startupExistingSkipped += startupExistingKeys.size;
+      rememberRecord({
+        source: "RCON_PATROL",
+        status: "startup_baseline",
+        reason: "existing_squads_grandfathered",
+        squadCount: startupExistingKeys.size,
+      });
+      moduleLogger?.info?.("[SquadNamePolicyPatrol] startup squad baseline captured.", {
+        operation: "startup_baseline",
+        data: { squadCount: startupExistingKeys.size },
+      });
+      return;
+    }
+
+    const currentKeys = new Set(candidates.map(buildDedupeKey));
+    for (const key of startupExistingKeys) {
+      if (!currentKeys.has(key)) startupExistingKeys.delete(key);
+    }
+
+    for (const candidate of candidates) {
+      if (startupExistingKeys.has(buildDedupeKey(candidate))) continue;
+      await inspectSquadCandidate(candidate, "RCON_PATROL");
     }
   }
 
