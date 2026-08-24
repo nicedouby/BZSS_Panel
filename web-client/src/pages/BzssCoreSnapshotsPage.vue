@@ -1071,7 +1071,9 @@ function handleSort(key: "playerIndex" | "playerId" | keyof BzssCoreScoreboardPl
 
 const runtimePlayers = computed(() => payload.value?.runtimePlayers ?? []);
 const scoreboardPlayers = computed(() => payload.value?.scoreboardPlayers ?? []);
-const mergedPlayers = computed<BzssCoreMergedPlayer[]>(() => Array.isArray(payload.value?.players) ? (payload.value?.players as BzssCoreMergedPlayer[]) : []);
+const mergedPlayers = computed<BzssCoreMergedPlayer[]>(() => (
+  bzssCoreStore.players as BzssCoreMergedPlayer[]
+));
 
 const totalSceneCount = computed(() => {
   return (payload.value?.captureZones?.length ?? 0) + (payload.value?.fobs?.length ?? 0) + (payload.value?.mainZones?.length ?? 0);
