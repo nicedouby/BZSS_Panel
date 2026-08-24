@@ -89,9 +89,30 @@ async function createHarness(configOverride = {}) {
   };
 }
 
+async function testStartupExistingViolationIsGrandfathered() {
+  const harness = await createHarness();
+  await harness.instance.start();
+  const existing = createEvent({ squadName: "BMP违规队", creationSignature: "startup-existing" });
+
+  await primeStartupBaseline(harness, [existing]);
+  harness.emit("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    matchId: "match-1",
+    squads: [existing],
+  });
+  await waitForHandlers();
+
+  const state = harness.instance.api.getState();
+  assert.equal(state.stats.startupExistingSkipped, 1);
+  assert.equal(state.stats.evaluated, 0);
+  assert.equal(harness.submittedViolations.length, 0);
+  await harness.instance.stop();
+}
+
 async function testViolationIsEnforcedThroughRuleChain() {
   const harness = await createHarness();
   await harness.instance.start();
+  await primeStartupBaseline(harness);
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
@@ -115,6 +136,7 @@ async function testViolationIsEnforcedThroughRuleChain() {
 async function testAllowedNameStaysAllowed() {
   const harness = await createHarness();
   await harness.instance.start();
+  await primeStartupBaseline(harness);
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
@@ -131,6 +153,7 @@ async function testAllowedNameStaysAllowed() {
 async function testPlainLetterNameIsFlagged() {
   const harness = await createHarness();
   await harness.instance.start();
+  await primeStartupBaseline(harness);
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
@@ -154,6 +177,7 @@ async function testDuplicateSnapshotIsSkipped() {
     matchId: "match-1",
     squads: [squad],
   });
+  await waitForHandlers();
   harness.emit("module.matchState", "squadsUpdated", {
     serverId: "BZSS_Main",
     matchId: "match-1",
@@ -200,12 +224,22 @@ function makeLogger() {
   };
 }
 
+async function primeStartupBaseline(harness, squads = []) {
+  harness.emit("module.matchState", "squadsUpdated", {
+    serverId: "BZSS_Main",
+    matchId: "match-1",
+    squads,
+  });
+  await waitForHandlers();
+}
+
 async function waitForHandlers() {
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
+await testStartupExistingViolationIsGrandfathered();
 await testViolationIsEnforcedThroughRuleChain();
 await testAllowedNameStaysAllowed();
 await testPlainLetterNameIsFlagged();
