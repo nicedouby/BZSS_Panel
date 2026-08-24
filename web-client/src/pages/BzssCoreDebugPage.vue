@@ -75,7 +75,8 @@ const raw = ref<any>(null);
 const jsonRef = ref<HTMLElement | null>(null);
 const showFullJson = ref(false);
 
-const monitorState = computed(() => snapshot.value?.state ?? {});\nconst runtimePlayers = computed(() => Array.isArray(snapshot.value?.runtimePlayers) ? snapshot.value.runtimePlayers : []);
+const monitorState = computed(() => snapshot.value?.state ?? {});
+const runtimePlayers = computed(() => Array.isArray(snapshot.value?.runtimePlayers) ? snapshot.value.runtimePlayers : []);
 const metrics = computed(() => [
   { label: "运行时玩家", value: runtimePlayers.value.length },
   { label: "计分板玩家", value: Array.isArray(snapshot.value?.scoreboardPlayers) ? snapshot.value.scoreboardPlayers.length : 0 },
