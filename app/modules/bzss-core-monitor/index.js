@@ -2630,26 +2630,35 @@ function parseBzssCorePieRuntimeLine(text) {
 
 function isCompactBzssRuntimeLine(text) {
   const source = String(text ?? "");
-  if (!/\{?\s*ID\s*:\s*-?\d+/i.test(source) || !/Pos\s*:/i.test(source)) {
-    return false;
-  }
-  const rows = splitCompactRuntimeRows(source);
-  return rows.some((row) => parseCompactRuntimeRow(row) != null);
+  if (!/\{?\s*ID\s*:\s*-?\d+/i.test(source) || !/(?:Pos|P)\s*:/i.test(source)) return false;
+  return splitCompactRuntimeRows(source).some((row) => parseCompactRuntimeRow(row) != null);
 }
 
 function splitCompactRuntimeRows(text) {
   const source = String(text ?? "");
+  const rows = [];
+  let depth = 0;
+  let start = -1;
+  // New frames use slash-separated top-level player blocks; CI{…} remains nested.
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (char === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        const row = source.slice(start, index + 1).trim();
+        if (/^\{\s*ID\s*:/i.test(row)) rows.push(row);
+        start = -1;
+      }
+    }
+  }
+  if (rows.length > 0) return rows;
   const first = source.search(/\{?\s*ID\s*:/i);
   if (first < 0) return [];
-
-  const payload = source.slice(first)
-    .replace(/\\n/g, "/n/")
-    .replace(/\r?\n/g, "/n/");
-
-  return payload
-    .split("/n/")
-    .map((row) => row.trim())
-    .filter(Boolean)
+  return source.slice(first).replace(/\\n/g, "/n/").replace(/\r?\n/g, "/n/").split("/n/")
+    .map((row) => row.trim()).filter(Boolean)
     .map((row) => row.startsWith("{") ? row : `{${row}`)
     .map((row) => row.endsWith("}") ? row : `${row}}`);
 }
@@ -2715,12 +2724,12 @@ function parseCompactRuntimeRow(row) {
   const playerId = toFiniteNumber(playerIdField?.split(":")?.slice(1).join(":"));
   if (playerId == null) return null;
 
-  const posFieldIndex = fields.findIndex((field) => /^Pos\s*:/i.test(field));
+  const posFieldIndex = fields.findIndex((field) => /^(?:Pos|P)\s*:/i.test(field));
   if (posFieldIndex < 0) return null;
 
   const posTokens = [];
   const tailTokens = [];
-  const firstPosToken = String(fields[posFieldIndex] ?? "").replace(/^Pos\s*:/i, "").trim();
+  const firstPosToken = String(fields[posFieldIndex] ?? "").replace(/^(?:Pos|P)\s*:/i, "").trim();
   if (firstPosToken) posTokens.push(firstPosToken);
 
   for (const token of fields.slice(posFieldIndex + 1)) {
