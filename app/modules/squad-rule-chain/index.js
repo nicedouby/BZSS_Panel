@@ -189,7 +189,7 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       actions: [],
     };
 
-    if (!enforcement.active && event.bypassPopulationThreshold !== true) {
+    if (!enforcement.active) {
       stats.populationSkipped += 1;
       record.status = "population_skipped";
       record.updatedAt = nowIso();
