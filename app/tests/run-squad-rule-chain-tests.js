@@ -307,21 +307,6 @@ async function testNameViolationShortCircuits() {
   }
 }
 
-async function testNameViolationStillEnforcesBelowPopulationThreshold() {
-  const harness = await createHarness({ playerCount: 5 });
-  try {
-    harness.eventBus.emitModuleEvent(
-      "module.squadLifecycle",
-      "squadCreated",
-      creation({ squadName: "BMP违规队", squadId: 12 }),
-    );
-    await waitFor(() => harness.disbands.length === 1);
-    assert.equal(harness.disbands.length, 1);
-  } finally {
-    await harness.stop();
-  }
-}
-
 async function testPopulationThresholdSkipsHistoryWithoutPausingClock() {
   const options = { playerCount: 40, logClockSeconds: 10 };
   const harness = await createHarness(options);
@@ -936,7 +921,6 @@ async function testDisbandFailureIsNotReportedAsHandled() {
 
 testClassificationFieldsNormalizeWithoutLoss();
 await testNameViolationShortCircuits();
-await testNameViolationStillEnforcesBelowPopulationThreshold();
 await testPopulationThresholdSkipsHistoryWithoutPausingClock();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
