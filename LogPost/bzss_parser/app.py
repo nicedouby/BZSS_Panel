@@ -34,7 +34,7 @@ from bzss_parser.udp_sender import UdpSender
 
 MatchedEvent = Tuple[str, List[Tuple[str, str]]]
 
-BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*Pos\s*:", re.IGNORECASE)
+BZSS_CORE_RUNTIME_LINE_RE = re.compile(r"\{\s*ID\s*:\s*-?\d+\s*,\s*(?:Pos|P)\s*:", re.IGNORECASE)
 BZSS_CORE_SCOREBOARD_LINE_RE = re.compile(r"\bPlayerScoreboard\s*\{", re.IGNORECASE)
 BZSS_CORE_VEHICLE_FRAME_RE = re.compile(r"\b(?:VRI|VehicleInfo)\s*\{", re.IGNORECASE)
 BZSS_CORE_VEHICLE_CHUNK_RE = re.compile(
@@ -356,12 +356,19 @@ class BzssLogParserApp:
             early_preserved_rule = ""
             if self.preserve_enabled:
                 early_preserved_rule = self.preserve_filter.match(line)
+            critical_runtime_line = is_bzss_core_runtime_line(line)
+            critical_scoreboard_line = is_bzss_core_scoreboard_line(line)
             critical_vehicle_line = is_bzss_core_vehicle_line(line)
+            critical_bzss_state_line = (
+                critical_runtime_line
+                or critical_scoreboard_line
+                or critical_vehicle_line
+            )
 
             if (
                 self.blacklist.is_blacklisted(line)
                 and not early_preserved_rule
-                and not critical_vehicle_line
+                and not critical_bzss_state_line
             ):
                 self.stats["lines_blacklisted"] += 1
                 self.persist_checkpoint(
@@ -631,10 +638,14 @@ class BzssLogParserApp:
         )
 
     def should_forward_raw_log_line(self, line: str, preserved_rule: str = "") -> bool:
-        # Vehicle chunks are required panel state. Keep this check before the
-        # optional raw-log output switch and its blacklist so an older local
-        # config cannot silently disable tactical vehicle telemetry.
-        if is_bzss_core_vehicle_line(line):
+        # BZSS-Core player, scoreboard, and vehicle lines are required panel
+        # state. They must bypass optional raw-output switches, token filters,
+        # rate limits, and blacklist rules.
+        if (
+            is_bzss_core_runtime_line(line)
+            or is_bzss_core_scoreboard_line(line)
+            or is_bzss_core_vehicle_line(line)
+        ):
             return True
 
         if not self.raw_log_output_enabled:
