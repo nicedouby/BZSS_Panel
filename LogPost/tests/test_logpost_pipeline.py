@@ -487,6 +487,43 @@ class LogPostPipelineTests(unittest.TestCase):
         raw_log_path = pathlib.Path(app.writer.output_dir) / today / "On_RawLogLine.jsonl"
         self.assertFalse(raw_log_path.exists())
 
+    def test_new_bzss_core_runtime_frame_bypasses_disabled_raw_output_and_blacklist(self) -> None:
+        app = self.make_app(
+            raw_log_output={
+                "enabled": False,
+                "source": "Squad.log",
+                "contains": ["CPZ:"],
+                "max_per_second": 1,
+            },
+            blacklist_contains=["PIE: Error:"],
+        )
+        line = (
+            "[2026.08.24-04.58.17:813][349]PIE: Error: "
+            "{true}/{true}/{ID:3,P:307,391,2,-74,CI{0,115,PF-98,},-1}/{true}/"
+            "{ID:5,P:293,121,1,116,CI{0,115,M3MAAWS,},-1}/"
+            "{ID:9,P:241,248,1,-69,CI{0,115,QBZ192,},1}/"
+            "{ID:10,P:302,121,1,161,CI{0,115,M4A1,},-1}/"
+            "{ID:11,P:307,390,1,-76,CI{0,115,QBZ192,},1}/"
+            "{ID:2,P:319,275,0,89,CI{0,115,QSZ-92,},-1}/"
+            "{ID:6,P:444,122,0,-20,CI{0,115,M4A1,},-1}/"
+        )
+
+        app.process_line({
+            "line": line,
+            "offset": 0,
+            "next_offset": len(line) + 1,
+            "sourcePath": "SquadGame.log",
+            "fileId": "file-1",
+        })
+
+        self.assertEqual(
+            [event["Event"] for event in app.udp_sender.sent],
+            ["On_RawLogLine"],
+        )
+        self.assertEqual(app.udp_sender.sent[0]["Raw"], line)
+        self.assertEqual(app.stats["rawlog_forwarded"], 1)
+        self.assertEqual(app.stats["lines_blacklisted"], 0)
+
     def test_bzss_core_vehicle_frame_bypasses_raw_token_filter(self) -> None:
         app = self.make_app(raw_log_output={
             "enabled": True,
