@@ -1765,6 +1765,25 @@ export class WebServer {
       return this.json(res, 405, { error: "MethodNotAllowed", message: "Unsupported TK apology API route." });
     }
 
+    if (url.pathname.startsWith("/api/plugins/plugin.nzcd/")) {
+      const nzcdApi = this.getPluginApi("plugin.nzcd");
+      if (!nzcdApi) {
+        return this.json(res, 404, { error: "NzcdUnavailable", message: "NZCD plugin is not loaded." });
+      }
+      if (url.pathname === "/api/plugins/plugin.nzcd/state" && req.method === "GET") {
+        return this.json(res, 200, nzcdApi.getState?.() ?? {});
+      }
+      if (url.pathname === "/api/plugins/plugin.nzcd/config" && req.method === "PATCH") {
+        if (!this.requireSuperAdmin(user, res)) return;
+        const body = await this.readJsonBody(req);
+        if (!body?.config || typeof body.config !== "object" || Array.isArray(body.config)) {
+          return this.json(res, 400, { error: "InvalidBody", message: "config must be object" });
+        }
+        return this.json(res, 200, nzcdApi.updateConfig?.(body.config) ?? {});
+      }
+      return this.json(res, 405, { error: "MethodNotAllowed", message: "Unsupported NZCD API route." });
+    }
+
     const pluginMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/(enabled|config)$/);
     if (pluginMatch && req.method === "PATCH") {
       if (!this.requireSuperAdmin(user, res)) return;
