@@ -39,7 +39,26 @@ export function buildBzssCorePlayers(data: BzssCorePlayerInfoResponse) {
       // Preserve the richer backend scoreboard object when available.
       teamId: player.teamId ?? existing?.teamId ?? null,
       squadId: player.squadId ?? existing?.squadId ?? null,
-      playerScoreboard: existing?.playerScoreboard ?? player.playerScoreboard,
+      playerScoreboard: {
+        ...(existing?.playerScoreboard ?? {}),
+        ...(player.playerScoreboard ?? {}),
+        raw: player.raw ?? existing?.playerScoreboard?.raw ?? "",
+        stats: {
+          ...(existing?.playerScoreboard?.stats ?? {}),
+          dataLives: player.lives ?? existing?.playerScoreboard?.stats?.dataLives ?? null,
+          numKills: player.kills ?? existing?.playerScoreboard?.stats?.numKills ?? null,
+          vehicleKills: player.vehicleKills ?? existing?.playerScoreboard?.stats?.vehicleKills ?? null,
+          numDeaths: player.deaths ?? existing?.playerScoreboard?.stats?.numDeaths ?? null,
+          numWoundeds: player.woundeds ?? existing?.playerScoreboard?.stats?.numWoundeds ?? null,
+          numWounds: player.wounds ?? existing?.playerScoreboard?.stats?.numWounds ?? null,
+          numTeamKills: player.teamKills ?? existing?.playerScoreboard?.stats?.numTeamKills ?? null,
+          healPoints: player.healPoints ?? existing?.playerScoreboard?.stats?.healPoints ?? null,
+          revivedPoints: player.revivedPoints ?? existing?.playerScoreboard?.stats?.revivedPoints ?? null,
+          teamworkScore: player.teamworkScore ?? existing?.playerScoreboard?.stats?.teamworkScore ?? null,
+          objectiveScore: player.objectiveScore ?? existing?.playerScoreboard?.stats?.objectiveScore ?? null,
+          combatScore: player.combatScore ?? existing?.playerScoreboard?.stats?.combatScore ?? null,
+        },
+      },
       presence: existing?.presence ?? { state: "scoreboardOnly" },
     });
   }
