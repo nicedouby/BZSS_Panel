@@ -108,7 +108,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   async function consumeReserveDay(steamId, name) {
     const reserve = modules?.reserveSlots;
-    if (!reserve?.getState || !reserve?.upsertMember || !/^7656119\\d{10}$/.test(steamId)) {
+    if (!reserve?.getState || !reserve?.upsertMember || !/^7656119\d{10}$/.test(steamId)) {
       return { ok: false, message: "无法识别玩家预留位，刷新牛子长度失败。" };
     }
 
