@@ -236,8 +236,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         warningMessages: expandWarningMessages(record.warningMessages, runtimeConfig),
         broadcastMessage: "",
         removeLeaderBeforeDisband: runtimeConfig.action === "disband_then_warn",
-        // 队名规范是即时安全规则，不受统一规则链的人数门槛限制。
-        bypassPopulationThreshold: true,
       };
       const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
       if (typeof ruleChain?.submitViolation === "function") {
