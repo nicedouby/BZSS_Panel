@@ -1,10 +1,6 @@
 // -*- coding: utf-8 -*-
 
-import {
-  classifySquadNameWithPolicy,
-  testSquadNamePolicy,
-} from "../../domain/squad-name-policy/index.js";
-import { SQUAD_RULE_SOURCES } from "../squad-rule-chain/events.js";
+import { testSquadNamePolicy } from "../../domain/squad-name-policy/index.js";
 
 const MODULE_ID = "module.squadNamePolicyPatrol";
 const API_NAME = "squadNamePolicyPatrol";
@@ -12,7 +8,7 @@ const DEFAULT_INTERVAL_MS = 15_000;
 const DEFAULT_DEDUPE_TTL_MS = 60 * 1000;
 const DEFAULT_RECENT_LIMIT = 200;
 
-export function createSquadNamePolicyPatrolModule({ core, modules, config, logger }) {
+export function createSquadNamePolicyPatrolModule({ core, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
     moduleId: MODULE_ID,
     source: MODULE_ID,
@@ -23,15 +19,10 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
   const unsubscribers = [];
   const recentRecords = [];
   const processedKeys = new Map();
-  const startupExistingKeys = new Set();
-  let startupBaselineInitialized = false;
   const stats = {
     evaluated: 0,
     violations: 0,
     allowed: 0,
-    enforced: 0,
-    enforcementFailed: 0,
-    startupExistingSkipped: 0,
     duplicatesSkipped: 0,
     errors: 0,
   };
@@ -62,7 +53,7 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
         event: normalized,
         evaluation,
         violation,
-        disposition: violation ? "enforce" : "allow",
+        disposition: violation ? "flag_only" : "allow",
       };
     },
 
@@ -79,8 +70,8 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
       id: MODULE_ID,
       name: "Squad Name Policy Patrol",
       kind: "module",
-      version: "1.2.0",
-      description: "RCON snapshot patrol that enforces newly observed policy violations while preserving squads present at process startup.",
+      version: "1.0.0",
+      description: "RCON snapshot patrol that recognizes non-compliant squad names without taking disband actions.",
     },
     apiName: API_NAME,
     api,
@@ -112,8 +103,6 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
         } catch {}
       }
       processedKeys.clear();
-      startupExistingKeys.clear();
-      startupBaselineInitialized = false;
     },
   };
 
@@ -132,43 +121,13 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
     lastPatrolAt = now;
 
     const squads = Array.isArray(event.squads) ? event.squads : [];
-    const candidates = squads.map((squad) => normalizeSquadEvent({
-      ...squad,
-      serverId: event.serverId,
-      matchId: event.matchId ?? event.sessionId ?? event.sessionID,
-      time: event.time,
-      source: "RCON_PATROL",
-    }));
-
-    if (!startupBaselineInitialized) {
-      startupBaselineInitialized = true;
-      for (const candidate of candidates) {
-        if (candidate.serverId && candidate.teamId != null && candidate.squadId != null && candidate.squadName) {
-          startupExistingKeys.add(buildDedupeKey(candidate));
-        }
-      }
-      stats.startupExistingSkipped += startupExistingKeys.size;
-      rememberRecord({
-        source: "RCON_PATROL",
-        status: "startup_baseline",
-        reason: "existing_squads_grandfathered",
-        squadCount: startupExistingKeys.size,
-      });
-      moduleLogger?.info?.("[SquadNamePolicyPatrol] startup squad baseline captured.", {
-        operation: "startup_baseline",
-        data: { squadCount: startupExistingKeys.size },
-      });
-      return;
-    }
-
-    const currentKeys = new Set(candidates.map(buildDedupeKey));
-    for (const key of startupExistingKeys) {
-      if (!currentKeys.has(key)) startupExistingKeys.delete(key);
-    }
-
-    for (const candidate of candidates) {
-      if (startupExistingKeys.has(buildDedupeKey(candidate))) continue;
-      await inspectSquadCandidate(candidate, "RCON_PATROL");
+    for (const squad of squads) {
+      await inspectSquadCandidate({
+        ...squad,
+        serverId: event.serverId,
+        matchId: event.matchId ?? event.sessionId ?? event.sessionID,
+        time: event.time,
+      }, "RCON_PATROL");
     }
   }
 
@@ -203,76 +162,25 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
       stats.evaluated += 1;
       const evaluation = testSquadNamePolicy(normalized.squadName, config);
       const violation = isPatrolViolation(evaluation);
-      if (!violation) {
-        stats.allowed += 1;
-        return rememberRecord({
-          event: normalized,
-          source,
-          status: "allowed",
-          reason: evaluation.reason,
-          evaluation,
-          violation: false,
-          disposition: "allow",
-        });
-      }
-
-      stats.violations += 1;
-      const classificationResult = classifySquadNameWithPolicy(normalized.squadName, config);
-      const ruleChain = modules?.squadRuleChain?.api ?? modules?.squadRuleChain;
-      if (typeof ruleChain?.submitViolation !== "function") {
-        throw new Error("squadRuleChain.submitViolation is unavailable");
-      }
-
-      const actionRecord = await ruleChain.submitViolation({
-        ...normalized,
-        sourceMode: "live",
-        canTriggerActions: true,
-        source: SQUAD_RULE_SOURCES.squadNameRule,
-        sourceEventId: normalized.eventId || buildPatrolEventId(normalized),
-        leaderName: normalized.creatorName,
-        leaderSteamId: normalized.creatorSteamId,
-        leaderEosId: normalized.creatorEosId,
-        classification: classificationResult.classification,
-        policyRevision: classificationResult.policyRevision,
-        squadType: classificationResult.classification?.nature,
-        squadNature: classificationResult.classification?.nature,
-        squadTypeId: classificationResult.classification?.typeId,
-        squadTypeLabel: classificationResult.classification?.typeLabel,
-        squadRuleId: classificationResult.classification?.ruleId,
-        reason: evaluation.reason || "Squad name policy violation detected by RCON patrol.",
-        warningMessages: evaluation.warningMessages,
-        removeLeaderBeforeDisband: false,
-        metadata: {
-          patrolSource: source,
-          creationSignature: normalized.creationSignature,
-        },
-      });
-
-      const handled = actionRecord?.status === "handled";
-      if (handled) stats.enforced += 1;
-      else if (actionRecord?.status === "error") stats.enforcementFailed += 1;
+      if (violation) stats.violations += 1;
+      else stats.allowed += 1;
 
       return rememberRecord({
         event: normalized,
         source,
-        status: actionRecord?.status ?? "submitted",
+        status: violation ? "violation" : "allowed",
         reason: evaluation.reason,
         evaluation,
-        violation: true,
-        disposition: "enforce",
-        actionRecord,
+        violation,
+        disposition: violation ? "flag_only" : "allow",
       });
     } catch (error) {
       stats.errors += 1;
-      stats.enforcementFailed += 1;
-      moduleLogger?.warn?.(`[SquadNamePolicyPatrol] enforcement failed: ${error?.message ?? error}`);
       return rememberRecord({
         event: normalized,
         source,
         status: "error",
         reason: error instanceof Error ? error.message : String(error),
-        violation: true,
-        disposition: "enforce",
       });
     }
   }
@@ -303,7 +211,7 @@ export function createSquadNamePolicyPatrolModule({ core, modules, config, logge
 function readConfig(config) {
   const raw = config?.get?.("modules.squadNamePolicyPatrol", {}) ?? {};
   return {
-    enabled: Boolean(raw.enabled ?? true),
+    enabled: Boolean(raw.enabled ?? false),
     intervalMs: positiveNumber(raw.intervalMs, DEFAULT_INTERVAL_MS),
     dedupeTtlMs: positiveNumber(raw.dedupeTtlMs, DEFAULT_DEDUPE_TTL_MS),
     recentLimit: positiveNumber(raw.recentLimit, DEFAULT_RECENT_LIMIT),
@@ -321,8 +229,6 @@ function normalizeSquadEvent(event = {}) {
     squadName: text(event.squadName ?? event.name),
     teamName: text(event.teamName ?? event.factionName),
     creatorName: text(event.creatorName ?? event.leaderName),
-    creatorSteamId: text(event.creatorSteamId ?? event.leaderSteamId ?? event.steamId ?? event.steamID),
-    creatorEosId: text(event.creatorEosId ?? event.leaderEosId ?? event.eosId ?? event.eosID),
     source: text(event.source),
     time: text(event.time ?? event.createdAt ?? event.observedAt) || nowIso(),
   };
@@ -342,10 +248,6 @@ function buildDedupeKey(event) {
     event.squadId,
     normalizeName(event.squadName),
   ].map((item) => String(item ?? "")).join("|");
-}
-
-function buildPatrolEventId(event) {
-  return `patrol:${buildDedupeKey(event)}`;
 }
 
 function normalizeName(value) {
