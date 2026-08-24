@@ -767,7 +767,7 @@
       }
     },
     "squadNamePolicyPatrol": {
-      "enabled": true,
+      "enabled": false,
       "intervalMs": 15000,
       "dedupeTtlMs": 60000
     },
