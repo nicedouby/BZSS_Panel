@@ -4,7 +4,7 @@ import { createSquadLifecycleModule } from "../modules/squad-lifecycle/index.js"
 import { parseSquadCreateEvent } from "../modules/squad-lifecycle/log-adapter.js";
 import { clearTeamFactionMappings } from "../core/team-faction-cache.js";
 
-function createHarness() {
+function createHarness(options = {}) {
   clearTeamFactionMappings("BZSS_Main");
   const coreListeners = new Map();
   const moduleListeners = new Map();
@@ -38,6 +38,19 @@ function createHarness() {
     },
   };
 
+  const modules = {
+    playerState: {
+      findPlayer(_serverId, identity = {}) {
+        const player = options.player ?? null;
+        if (!player) return null;
+        const steamMatches = !identity.steamID || String(identity.steamID) === String(player.steamID ?? "");
+        const eosMatches = !identity.eosID || String(identity.eosID) === String(player.eosID ?? "");
+        const nameMatches = !identity.name || String(identity.name) === String(player.name ?? "");
+        return steamMatches || eosMatches || nameMatches ? { ...player } : null;
+      },
+    },
+  };
+
   const config = {
     get(path, defaultValue) {
       if (path === "modules.squadLifecycle") {
@@ -52,7 +65,7 @@ function createHarness() {
 
   return {
     core,
-    module: createSquadLifecycleModule({ core, config, logger: core.logger }),
+    module: createSquadLifecycleModule({ core, modules, config, logger: core.logger }),
     logs,
   };
 }
@@ -126,6 +139,44 @@ async function testLogCreateWithTeamId() {
   assert.equal(current.list[0].creationConfidence, "HIGH");
   assert.equal(current.list[0].createdDisplayText, "\u521b\u5efa\u4e8e 20:31:42");
   assert.equal(current.list[0].sourceLabel, "\u65e5\u5fd7\u786e\u8ba4");
+  await harness.module.stop();
+}
+
+async function testLogCreateResolvesTeamFromCreatorIdentity() {
+  const harness = createHarness({
+    player: {
+      name: "Creator",
+      steamID: "76561198000000999",
+      eosID: "eos-creator",
+      teamID: "2",
+    },
+  });
+  const emitted = [];
+  const unsubscribe = harness.core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", (event) => {
+    emitted.push(event);
+  });
+  await harness.module.start();
+
+  harness.core.eventBus.emitCoreEvent("On_SquadCreated", squadEventBase({
+    rawLog: "creator identity team resolution",
+    paramMap: {
+      SquadID: "4",
+      SquadName: "违规名字",
+      FactionName: "Faction Name That Does Not Match RCON",
+      PlayerName: "Creator",
+      Steam64ID: "76561198000000999",
+      EOSID: "eos-creator",
+    },
+  }));
+
+  assert.equal(harness.module.api.getPendingCount(), 0);
+  assert.equal(emitted.length, 1);
+  assert.equal(emitted[0].teamId, 2);
+  assert.equal(emitted[0].squadName, "违规名字");
+  assert.equal(emitted[0].originalSquadName, "违规名字");
+  assert.equal(emitted[0].creationSource, "LOG");
+
+  unsubscribe();
   await harness.module.stop();
 }
 
@@ -682,6 +733,7 @@ async function testMatchSwitchClearsPreviousRoundRecords() {
 }
 
 await testLogCreateWithTeamId();
+await testLogCreateResolvesTeamFromCreatorIdentity();
 await testPendingCreateFlushesFromSnapshot();
 await testRawLogLineCreatesPendingAndFlushesToLog();
 await testRawLogLineParseFailureWarns();
