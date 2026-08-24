@@ -3429,6 +3429,9 @@ function extractRawLogLine(input) {
   if (typeof input === "string") return input;
   return String(
     input?.rawLog
+    ?? input?.rawLine
+    ?? input?.rawEvent?.RawLine
+    ?? input?.rawEvent?.rawLine
     ?? input?.rawEvent?.Raw
     ?? input?.payload?.rawLog
     ?? input?.payload?.raw
