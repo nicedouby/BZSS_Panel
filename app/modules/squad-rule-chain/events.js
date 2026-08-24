@@ -108,7 +108,6 @@ export function normalizeSquadRuleViolationEvent(event = {}) {
     broadcastMessage: text(event.broadcastMessage),
     disbandReason: text(event.disbandReason),
     removeLeaderBeforeDisband: Boolean(event.removeLeaderBeforeDisband),
-    bypassPopulationThreshold: Boolean(event.bypassPopulationThreshold),
     metadata: cloneValue(event.metadata) ?? null,
   };
 }
