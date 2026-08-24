@@ -27,12 +27,12 @@
       <h2>状态与解析诊断</h2>
       <dl class="diagnostics">
         <div><dt>status</dt><dd>{{ snapshot?.status ?? "--" }}</dd></div>
-        <div><dt>revision</dt><dd>{{ snapshot?.revision ?? "--" }}</dd></div>
-        <div><dt>updatedAt</dt><dd>{{ snapshot?.updatedAt ?? "--" }}</dd></div>
-        <div><dt>markerSeen</dt><dd>{{ snapshot?.markerSeen ?? "--" }}</dd></div>
-        <div><dt>rawLineHash</dt><dd class="mono">{{ snapshot?.rawLineHash || "--" }}</dd></div>
-        <div><dt>lastError</dt><dd>{{ snapshot?.lastError || "--" }}</dd></div>
-        <div><dt>rawFields</dt><dd class="mono">{{ (snapshot?.rawFields ?? []).join(" | ") || "--" }}</dd></div>
+        <div><dt>revision</dt><dd>{{ monitorState.revision ?? "--" }}</dd></div>
+        <div><dt>updatedAt</dt><dd>{{ monitorState.updatedAt ?? "--" }}</dd></div>
+        <div><dt>markerSeen</dt><dd>{{ monitorState.markerSeen ?? "--" }}</dd></div>
+        <div><dt>rawLineHash</dt><dd class="mono">{{ monitorState.rawLineHash || "--" }}</dd></div>
+        <div><dt>lastError</dt><dd>{{ monitorState.lastError || "--" }}</dd></div>
+        <div><dt>rawFields</dt><dd class="mono">{{ (monitorState.rawFields ?? []).join(" | ") || "--" }}</dd></div>
       </dl>
     </section>
 
@@ -75,7 +75,7 @@ const raw = ref<any>(null);
 const jsonRef = ref<HTMLElement | null>(null);
 const showFullJson = ref(false);
 
-const runtimePlayers = computed(() => Array.isArray(snapshot.value?.runtimePlayers) ? snapshot.value.runtimePlayers : []);
+const monitorState = computed(() => snapshot.value?.state ?? {});\nconst runtimePlayers = computed(() => Array.isArray(snapshot.value?.runtimePlayers) ? snapshot.value.runtimePlayers : []);
 const metrics = computed(() => [
   { label: "运行时玩家", value: runtimePlayers.value.length },
   { label: "计分板玩家", value: Array.isArray(snapshot.value?.scoreboardPlayers) ? snapshot.value.scoreboardPlayers.length : 0 },
