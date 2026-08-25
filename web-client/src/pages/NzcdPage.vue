@@ -15,8 +15,8 @@
       <h2>基础设置</h2>
       <div class="form-grid">
         <label><span>启用插件</span><input v-model="form.enabled" type="checkbox"></label>
-        <label><span>默认最小值（cm）</span><input v-model.number="form.defaultMin" type="number" min="0"></label>
-        <label><span>默认最大值（cm）</span><input v-model.number="form.defaultMax" type="number" min="0"></label>
+        <label><span>默认最小值（cm）</span><input v-model.number="form.defaultMin" type="number" min="-10000"></label>
+        <label><span>默认最大值（cm）</span><input v-model.number="form.defaultMax" type="number" min="-10000"></label>
       </div>
       <p class="hint">玩家区间按 Steam64、EOS ID 或玩家名称匹配。12 小时后只清理生成结果，不清理这里的区间设置。</p>
     </section>
@@ -29,9 +29,9 @@
       <div v-if="!form.ranges.length" class="empty">暂无专属区间，所有玩家使用默认区间。</div>
       <div v-for="(range, index) in form.ranges" :key="index" class="range-row">
         <input v-model="range.playerKey" placeholder="Steam64 / EOS ID / 玩家名称">
-        <input v-model.number="range.min" type="number" min="0" placeholder="最小">
+        <input v-model.number="range.min" type="number" min="-10000" placeholder="最小">
         <span>—</span>
-        <input v-model.number="range.max" type="number" min="0" placeholder="最大">
+        <input v-model.number="range.max" type="number" min="-10000" placeholder="最大">
         <label class="enabled"><input v-model="range.enabled" type="checkbox">启用</label>
         <button class="danger" @click="removeRange(index)">删除</button>
       </div>
