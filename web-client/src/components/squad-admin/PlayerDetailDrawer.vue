@@ -76,6 +76,10 @@
                     <span class="role-icon-wrap" v-html="roleIconSvg"></span>
                     <span class="role-text-lbl">{{ props.player.role }}</span>
                   </div>
+                  <div v-if="isLoyalPlayer" class="loyal-player-badge" title="步战鼠鼠为最常玩服务器，且占排行榜总时长超过 50%">
+                    <span class="loyal-player-mark">◆</span>
+                    <span>忠诚玩家</span>
+                  </div>
                   <div class="hud-header-actions">
                   <button
                     type="button"
@@ -283,7 +287,7 @@
                 <div class="hud-pane-section hud-server-ranking">
                   <div class="hud-section-header">
                     <span class="hud-section-title">常玩服务器 / PLAYTIME RANKING</span>
-                    <span class="hud-section-subtitle">TOP 10</span>
+                    <span class="hud-section-subtitle">TOP 5</span>
                   </div>
                   <div v-if="databaseLoading" class="server-ranking-state">
                     <span class="loader-dot"></span> 正在读取排行榜…
@@ -292,7 +296,7 @@
                   <div v-else-if="!favoriteServerRankings.length" class="server-ranking-state">暂无常玩服务器数据</div>
                   <ol v-else class="server-ranking-list">
                     <li v-for="server in favoriteServerRankings" :key="server.rank_position" class="server-ranking-row">
-                      <span class="server-ranking-index">{{ server.rank_position }}</span>
+                      <span class="server-ranking-index" :class="`rank-${server.rank_position}`">{{ server.rank_position }}</span>
                       <div class="server-ranking-main">
                         <strong :title="server.server_name">{{ server.server_name }}</strong>
                         <small>{{ server.server_id || "未知服务器 ID" }}</small>
@@ -949,8 +953,10 @@ const favoriteServerRankings = computed(() => {
   const rankings = Array.isArray(databaseDetail.value?.squadBrowserServerRankings)
     ? databaseDetail.value.squadBrowserServerRankings
     : [];
-  return rankings.slice(0, 10);
+  return rankings.slice(0, 5);
 });
+const isLoyalPlayer = computed(() => Array.isArray(databaseDetail.value?.tags)
+  && databaseDetail.value.tags.some((tag: any) => tag?.tag_type === "automatic" && tag?.tag_value === "忠诚玩家"));
 
 const rawDataText = computed(() => (showAdvanced.value ? safeStringify(props.player?.raw) : ""));
 
@@ -3391,6 +3397,30 @@ onUnmounted(() => {
   border-color: rgba(255, 255, 255, 0.12);
 }
 
+.loyal-player-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid rgba(251, 191, 36, 0.48);
+  border-radius: 999px;
+  color: #fef3c7;
+  background: linear-gradient(135deg, rgba(120, 53, 15, 0.78), rgba(245, 158, 11, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(254, 243, 199, 0.05), 0 0 14px rgba(245, 158, 11, 0.14);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.loyal-player-mark {
+  color: #fbbf24;
+  font-size: 9px;
+  filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.65));
+}
+
 /* Glass player detail window: let the Loading Screen remain visible through the panel. */
 .floating-window-layer {
   background:
@@ -4229,11 +4259,45 @@ onUnmounted(() => {
   height: 24px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
-  color: #fdba74;
-  background: rgba(249, 115, 22, 0.13);
+  flex: 0 0 24px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 50%;
+  color: #e2e8f0;
+  background: rgba(71, 85, 105, 0.42);
+  box-shadow: 0 0 10px rgba(15, 23, 42, 0.5);
   font-size: 11px;
   font-weight: 900;
+}
+
+.server-ranking-index.rank-1 {
+  border-color: rgba(250, 204, 21, 0.75);
+  color: #fff7b2;
+  background: radial-gradient(circle at 35% 30%, #facc15, #a16207 78%);
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.3);
+}
+
+.server-ranking-index.rank-2 {
+  border-color: rgba(226, 232, 240, 0.7);
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #cbd5e1, #64748b 78%);
+}
+
+.server-ranking-index.rank-3 {
+  border-color: rgba(251, 146, 60, 0.72);
+  color: #ffedd5;
+  background: radial-gradient(circle at 35% 30%, #fb923c, #9a3412 78%);
+}
+
+.server-ranking-index.rank-4 {
+  border-color: rgba(56, 189, 248, 0.65);
+  color: #e0f2fe;
+  background: radial-gradient(circle at 35% 30%, #38bdf8, #0369a1 78%);
+}
+
+.server-ranking-index.rank-5 {
+  border-color: rgba(192, 132, 252, 0.65);
+  color: #f3e8ff;
+  background: radial-gradient(circle at 35% 30%, #c084fc, #7e22ce 78%);
 }
 
 .server-ranking-main {
