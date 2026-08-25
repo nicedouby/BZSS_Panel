@@ -19,7 +19,7 @@ const API_NAME = "squadRuleChain";
 const DEFAULT_RECENT_LIMIT = 200;
 const DEFAULT_FINAL_PASS_FALLBACK_DELAY_MS = 1500;
 const DEFAULT_DATA_DIR = "./data/squad-rule-chain";
-const DEFAULT_ENFORCEMENT_PLAYER_THRESHOLD = 50;
+const DEFAULT_ENFORCEMENT_PLAYER_THRESHOLD = 0;
 const FINAL_PASS_CACHE_FILE = "final-pass-cache.json";
 
 export function createSquadRuleChainModule({ core, modules, config, logger }) {
@@ -414,10 +414,11 @@ export function createSquadRuleChainModule({ core, modules, config, logger }) {
       ? players.length
       : Math.max(0, Math.floor(Number(snapshot.playerCount ?? 0) || 0));
     return {
-      active: playerCount > runtime.enforcementPlayerThreshold,
+      active: runtime.enforcementPlayerThreshold <= 0
+        || playerCount > runtime.enforcementPlayerThreshold,
       playerCount,
       threshold: runtime.enforcementPlayerThreshold,
-      comparison: "greater_than",
+      comparison: runtime.enforcementPlayerThreshold <= 0 ? "disabled" : "greater_than",
       source: players.length > 0 ? "squadManagement.players" : "webStatus.playerCount",
     };
   }
