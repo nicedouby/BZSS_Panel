@@ -219,7 +219,7 @@
             </div>
 
             <small v-if="result.database?.playerId" class="db-note">
-              ✓ 已同步至玩家数据库 · 新增/更新 {{ result.database.savedSessions ?? 0 }} 条游玩记录
+              ✓ 已同步至玩家数据库 · 本次新增 {{ result.database.savedSessions ?? 0 }} 条游玩记录
             </small>
           </div>
         </div>
