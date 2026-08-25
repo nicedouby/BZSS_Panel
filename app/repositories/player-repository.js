@@ -846,13 +846,15 @@ export class PlayerRepository {
 
   async upsertSquadBrowserSessions(playerId, sessions = [], fetchedAt = now()) {
     const id = Number(playerId);
-    if (!Number.isFinite(id)) return { inserted: 0, updated: 0 };
+    if (!Number.isFinite(id)) return { inserted: 0, existing: 0 };
 
     let inserted = 0;
-    let updated = 0;
+    let existingCount = 0;
     for (const session of Array.isArray(sessions) ? sessions : []) {
+      // serverName is deliberately excluded: names are mutable and should never
+      // turn one historical session into multiple database rows.
       const externalId = cleanText(session?.id)
-        ?? [session?.serverId, session?.joinedAt, session?.serverName].map((value) => String(value ?? "")).join("|");
+        ?? [session?.serverId, session?.joinedAt, session?.leftAt].map((value) => String(value ?? "")).join("|");
       if (!externalId || externalId === "||") continue;
 
       const joinedAt = Number(session?.joinedAt ?? 0);
@@ -868,28 +870,77 @@ export class PlayerRepository {
            player_id, external_session_id, server_id, server_name, joined_at, left_at,
            duration_minutes, fetched_at, source, raw_json
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SquadBrowser', ?)
-         ON CONFLICT(player_id, external_session_id) DO UPDATE SET
-           server_id = excluded.server_id,
-           server_name = excluded.server_name,
-           joined_at = excluded.joined_at,
-           left_at = excluded.left_at,
-           duration_minutes = excluded.duration_minutes,
-           fetched_at = excluded.fetched_at,
-           raw_json = excluded.raw_json`,
+         ON CONFLICT(player_id, external_session_id) DO NOTHING`,
         id,
         externalId,
         cleanText(session?.serverId),
-        cleanText(session?.serverName),
+        null,
         Number.isFinite(joinedAt) && joinedAt > 0 ? joinedAt : null,
         Number.isFinite(leftAt) && leftAt > 0 ? leftAt : null,
         Number.isFinite(durationMinutes) ? Math.max(0, Math.floor(durationMinutes)) : null,
         Number(fetchedAt) || now(),
         JSON.stringify(session ?? {}),
       );
-      if (existing) updated += 1;
+      if (existing) existingCount += 1;
       else inserted += 1;
     }
-    return { inserted, updated };
+    return { inserted, existing: existingCount };
+  }
+
+  async upsertSquadBrowserProfile(playerId, licenseId, profile = {}, fetchedAt = now(), lastError = null) {
+    const id = Number(playerId);
+    const license = cleanId(licenseId);
+    if (!Number.isFinite(id) || !license) return null;
+    const timestamp = Number(fetchedAt) || now();
+    await this.db.run(
+      `INSERT INTO squadbrowser_player_profiles (
+         player_id, license_id, fetched_at, last_attempt_at, last_error, raw_json
+       ) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(player_id) DO UPDATE SET
+         license_id = excluded.license_id,
+         fetched_at = excluded.fetched_at,
+         last_attempt_at = excluded.last_attempt_at,
+         last_error = excluded.last_error,
+         raw_json = excluded.raw_json`,
+      id, license, timestamp, timestamp, cleanText(lastError), JSON.stringify(profile ?? {}),
+    );
+    return { playerId: id, licenseId: license, fetchedAt: timestamp };
+  }
+
+  async recordSquadBrowserLookupFailure(playerId, licenseId, error) {
+    const id = Number(playerId);
+    const license = cleanId(licenseId);
+    if (!Number.isFinite(id) || !license) return null;
+    const timestamp = now();
+    await this.db.run(
+      `INSERT INTO squadbrowser_player_profiles (
+         player_id, license_id, fetched_at, last_attempt_at, last_error, raw_json
+       ) VALUES (?, ?, 0, ?, ?, '{}')
+       ON CONFLICT(player_id) DO UPDATE SET
+         license_id = excluded.license_id,
+         last_attempt_at = excluded.last_attempt_at,
+         last_error = excluded.last_error`,
+      id, license, timestamp, cleanText(error),
+    );
+    return { playerId: id, licenseId: license, lastAttemptAt: timestamp };
+  }
+
+  async listSquadBrowserRefreshCandidates({ limit = 50, staleBefore = now() } = {}) {
+    const take = Math.max(1, Math.min(500, Number(limit) || 50));
+    const staleAt = Number(staleBefore) || now();
+    return this.db.all(
+      `SELECT players.id, players.current_name, players.steam_id, players.eos_id,
+              profiles.fetched_at AS squadbrowser_fetched_at
+       FROM players
+       LEFT JOIN squadbrowser_player_profiles profiles ON profiles.player_id = players.id
+       WHERE players.steam_id IS NOT NULL AND TRIM(players.steam_id) <> ''
+         AND (profiles.fetched_at IS NULL OR profiles.fetched_at < ?)
+       ORDER BY CASE WHEN profiles.fetched_at IS NULL OR profiles.fetched_at = 0 THEN 0 ELSE 1 END,
+                profiles.fetched_at ASC, players.updated_at DESC
+       LIMIT ?`,
+      staleAt,
+      take,
+    );
   }
 
   async listSquadBrowserSessions(playerId, options = {}) {
