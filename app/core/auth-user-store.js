@@ -7,7 +7,11 @@ import { WEB_PAGE_PERMISSION_MATRIX } from "../../web-client/src/shared/web-page
 
 const DEFAULT_USERS_FILE = "./config/auth/users.json";
 const LEGACY_USERS_FILE = "./data/auth/users.json";
-const PERMISSION_ALIASES = Object.freeze({});
+const PERMISSION_ALIASES = Object.freeze({
+  // Backward compatibility for permission groups created before panel ban
+  // received its standalone permission.
+  "plugin:panel-ban:view": "panel_ban.manage",
+});
 
 export class AuthUserStore {
   constructor({ config = {}, logger } = {}) {
