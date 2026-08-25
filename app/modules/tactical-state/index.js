@@ -14,8 +14,8 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
   const state = createInitialState();
   const profileCacheTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheTtlMs", 30_000) ?? 30_000);
   const profileNegativeCacheTtlMs = 10_000;
-  const profileCacheIdleTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheIdleTtlMs", 600_000) ?? 600_000);
-  const profileCacheMaxEntries = Number(config?.get?.("modules.tacticalState.profileCacheMaxEntries", 5000) ?? 5000);
+  const profileCacheIdleTtlMs = Number(config?.get?.("modules.tacticalState.profileCacheIdleTtlMs", 120_000) ?? 120_000);
+  const profileCacheMaxEntries = Number(config?.get?.("modules.tacticalState.profileCacheMaxEntries", 512) ?? 512);
   const profileCache = new Map();
   const subscribers = new Set();
   const streamSubscribers = new Set();
@@ -151,7 +151,11 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
           : Array.isArray(modules.bzssCoreMonitor?.getPlayers?.())
             ? modules.bzssCoreMonitor.getPlayers()
             : [];
-        const bzssRaw = modules.bzssCoreMonitor?.getRawSnapshot?.() ?? null;
+        // Tactical composition only needs scene assets here. Avoid cloning the
+        // monitor's runtime and scoreboard player maps a second time.
+        const bzssRaw = modules.bzssCoreMonitor?.getTacticalAssetsSnapshot?.()
+          ?? modules.bzssCoreMonitor?.getRawSnapshot?.()
+          ?? null;
 
         const linked = await linkPlayers({
           serverId,
@@ -329,21 +333,21 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         mode: firstText(serverStatus.mode, match.mode, webStatus.mode, ""),
         tickets: normalizeTickets(match?.tickets ?? serverStatus?.tickets ?? null),
         playerCount: numberOrNull(serverStatus.playerCount, webStatus.playerCount, playerStatePlayers.length),
-        rconStatus: clonePlainObject(matchState?.rconStatus ?? {}),
+        rconStatus: matchState?.rconStatus ?? {},
       },
-      match: clonePlainObject(matchState?.match ?? {}),
+      match: matchState?.match ?? {},
       teams,
       players: linked.players,
       assets: {
-        captureZones: cloneArray(bzssRaw?.captureZones),
-        fobs: cloneArray(bzssRaw?.fobs),
-        mainZones: cloneArray(bzssRaw?.mainZones),
+        captureZones: Array.isArray(bzssRaw?.captureZones) ? bzssRaw.captureZones : [],
+        fobs: Array.isArray(bzssRaw?.fobs) ? bzssRaw.fobs : [],
+        mainZones: Array.isArray(bzssRaw?.mainZones) ? bzssRaw.mainZones : [],
         // Vehicle runtime records are independent from player telemetry.  Keep
         // them in the unified tactical snapshot so every map consumer receives
         // the same complete vehicle frame through the existing SSE channel.
-        vehicles: cloneArray(bzssRaw?.vehicles),
-        vehicleTypes: cloneArray(bzssRaw?.vehicleTypes),
-        explosions: cloneArray(bzssRaw?.explosions),
+        vehicles: Array.isArray(bzssRaw?.vehicles) ? bzssRaw.vehicles : [],
+        vehicleTypes: Array.isArray(bzssRaw?.vehicleTypes) ? bzssRaw.vehicleTypes : [],
+        explosions: Array.isArray(bzssRaw?.explosions) ? bzssRaw.explosions : [],
       },
       diagnostics: {
         unlinkedRconPlayers: linked.diagnostics.unlinkedRconPlayers,
@@ -832,9 +836,11 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
         profileUpdatedAt: profile?.updatedAt ?? "",
         generatedAt,
       },
+      // Source snapshots are already retained by their owner modules and are
+      // treated as immutable. Share them internally; public APIs clone output.
       raw: {
-        rcon: clonePlainObject(rconPlayer),
-        bzss: clonePlainObject(bzssPlayer),
+        rcon: rconPlayer ?? null,
+        bzss: bzssPlayer ?? null,
         source,
       },
     };
