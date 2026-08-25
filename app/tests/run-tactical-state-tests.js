@@ -198,6 +198,16 @@ async function main() {
   assert.equal(alpha.profile.playtimeHours, 2);
   assert.equal(alpha.link.confidence, "high");
 
+  const summaries = await tacticalModule.api.getPlayerSummaries();
+  const alphaSummary = summaries.find((player) => player.identity.name === "Alpha");
+  assert.ok(alphaSummary);
+  assert.equal(alphaSummary.raw, undefined);
+  assert.equal(alphaSummary.telemetry.position, undefined);
+  assert.equal(alphaSummary.telemetry.rotation, undefined);
+  assert.equal(alphaSummary.telemetry.yaw, undefined);
+  assert.equal(alphaSummary.network.gamePing, 42);
+  assert.equal(alphaSummary.profile.playtimeHours, 2);
+
   const bravo = snapshot.players.find((player) => player.identity.name === "Bravo");
   assert.ok(bravo);
   assert.equal(bravo.link.method, "controllerID");
