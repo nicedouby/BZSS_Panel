@@ -70,6 +70,15 @@
                   <option value="weeks">周</option>
                 </select>
               </label>
+              <div class="field field--wide quick-duration">
+                <span>快捷封禁时长</span>
+                <div class="quick-duration-actions">
+                  <AppButton type="button" size="sm" variant="ghost" @click="setQuickDuration(1)">1 天</AppButton>
+                  <AppButton type="button" size="sm" variant="ghost" @click="setQuickDuration(3)">3 天</AppButton>
+                  <AppButton type="button" size="sm" variant="ghost" @click="setQuickDuration(7)">7 天</AppButton>
+                  <AppButton type="button" size="sm" variant="ghost" @click="setQuickDuration(30)">30 天</AppButton>
+                </div>
+              </div>
             </div>
 
             <div class="form-meta">
@@ -481,6 +490,11 @@ watch(targetPlayerInput, (val) => {
     draft.eosID = "";
   }
 });
+
+function setQuickDuration(days: number) {
+  draft.durationValue = days;
+  draft.durationUnit = "days";
+}
 
 function handlePlayerSelect(player: any) {
   draft.steamID = player.steam_id || player.steamID || player.steamId || "";
@@ -931,6 +945,9 @@ function expiryLabelClass(entry: BanEntry) {
   border-color: color-mix(in srgb, var(--color-status-info) 60%, white 40%);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-status-info) 22%, transparent);
 }
+
+.quick-duration { display: grid; gap: 8px; }
+.quick-duration-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .form-meta {
   display: grid;
