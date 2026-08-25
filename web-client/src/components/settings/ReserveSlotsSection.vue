@@ -605,13 +605,32 @@
           <input v-model.number="batchForm.durationDays" class="reserve-input" type="number" min="1" step="1" required>
         </label>
         <label class="reserve-field">
-          <span>当前局门槛（秒）</span>
+          <span>当前局内累计时长门槛（秒）</span>
           <input v-model.number="batchForm.minCurrentSessionSeconds" class="reserve-input" type="number" min="0" step="1">
         </label>
         <label class="reserve-field">
           <span>服务器累计时长门槛（秒）</span>
           <input v-model.number="batchForm.minServerSeconds" class="reserve-input" type="number" min="0" step="1">
         </label>
+        <label class="reserve-field">
+          <span>生效时间（留空则立即生效）</span>
+          <input v-model="batchForm.activateAt" class="reserve-input" type="datetime-local">
+        </label>
+        <div class="quick-renew-grid">
+          <button type="button" class="reserve-btn" @click="setBatchActivationDelay(0)">立即生效</button>
+          <button type="button" class="reserve-btn" @click="setBatchActivationDelay(30)">30 分钟后</button>
+          <button type="button" class="reserve-btn" @click="setBatchActivationDelay(60)">1 小时后</button>
+        </div>
+        <label class="reserve-field">
+          <span>失效时间（留空则不自动失效）</span>
+          <input v-model="batchForm.autoDeactivateAt" class="reserve-input" type="datetime-local">
+        </label>
+        <div class="quick-renew-grid">
+          <button type="button" class="reserve-btn" @click="setBatchAutoDeactivateDelay(0)">不自动失效</button>
+          <button type="button" class="reserve-btn" @click="setBatchAutoDeactivateDelay(24 * 60)">24 小时后</button>
+          <button type="button" class="reserve-btn" @click="setBatchAutoDeactivateDelay(7 * 24 * 60)">7 天后</button>
+        </div>
+        <p class="reserve-helper">{{ batchSchedulePreview }}</p>
         <label class="checkbox-row">
           <input v-model="batchForm.allowMultiActivation" type="checkbox">
           <span>允许同一玩家多次使用该批次中的不同 CDK</span>
@@ -619,7 +638,7 @@
 
         <footer>
           <button class="ghost-button" type="button" @click="closeBatchCreateModal">取消</button>
-          <button class="primary-button" type="submit" :disabled="batchCreating">
+          <button class="primary-button" type="submit" :disabled="batchCreating || !batchScheduleValid">
             {{ batchCreating ? "创建中..." : "创建批次" }}
           </button>
         </footer>
