@@ -6,7 +6,7 @@ import {
 } from "../shared/web-page-permissions.js";
 import type { NavSectionKey } from "./sidebarNav";
 
-export type PageCategory = "core" | "plugin" | "system" | "debug";
+export type PageCategory = "core" | "plugin" | "entertainment" | "system" | "debug";
 export type RefreshPolicy = "realtime" | "polling" | "manual";
 export type LayoutMode = "workspace" | "document";
 export type ContentPadding = "none" | "default";
