@@ -4,6 +4,9 @@ const SOURCE_URL = "https://squadbrowser.app/players";
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 const CACHE_TTL_MS = 60_000;
+const AUTO_REFRESH_TTL_MS = 36 * 60 * 60 * 1000;
+const AUTO_REFRESH_INTERVAL_MS = 12_000;
+const AUTO_REFRESH_BATCH_SIZE = 50;
 
 let actionCache = {
   profile: "404fee0c709081e101437b42eca9a7480cf839f19e",
@@ -223,17 +226,117 @@ async function persistLookupResult(playerDatabase, result) {
     result.sessions,
     Date.parse(result.fetchedAt) || Date.now(),
   );
+  const fetchedAt = Date.parse(result.fetchedAt) || Date.now();
+  await playerDatabase.upsertSquadBrowserProfile?.(
+    dbPlayer.id,
+    player.steamId,
+    result.player,
+    fetchedAt,
+  );
   const detail = await playerDatabase.getPlayerDetail?.(dbPlayer.id);
   const profile = detail?.steamProfile ?? {};
   return {
     playerId: dbPlayer.id,
     avatar: profile.avatar_medium ?? profile.avatar_full ?? dbPlayer.steam_avatar ?? null,
-    savedSessions: Number(saved?.inserted ?? 0) + Number(saved?.updated ?? 0),
+    savedSessions: Number(saved?.inserted ?? 0),
   };
 }
 
-export function createSquadBrowserPlayerLookupModule({ logger, modules }) {
+export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) {
   const cache = new Map();
+  let refreshTimer = null;
+  let initialRefreshTimer = null;
+  let refreshInFlight = false;
+  let refreshCount = 0;
+  let lastRefreshAt = null;
+  let lastRefreshError = null;
+
+  function onlineSteamIds() {
+    const serverId = core?.webStatus?.serverId;
+    const players = modules?.playerState?.getOnlinePlayers?.(serverId) ?? [];
+    return new Set(players
+      .map((player) => String(player?.steamID ?? player?.steam64 ?? player?.steam_id ?? "").trim())
+      .filter((steam64) => /^\d{17}$/.test(steam64)));
+  }
+
+  async function refreshOneCandidate(candidate) {
+    const steam64 = normalizeSteam64(candidate?.steam_id);
+    try {
+      await api.lookup(steam64, { bypassCache: true });
+      refreshCount += 1;
+      lastRefreshAt = Date.now();
+      lastRefreshError = null;
+      return true;
+    } catch (error) {
+      lastRefreshError = error?.message ?? String(error);
+      await modules?.playerDatabase?.recordSquadBrowserLookupFailure?.(
+        candidate?.id,
+        steam64,
+        lastRefreshError,
+      );
+      logger?.warn?.(`[SquadBrowser] automatic refresh failed steam64=${steam64}: ${lastRefreshError}`);
+      return false;
+    }
+  }
+
+  async function runAutoRefresh() {
+    if (refreshInFlight || !modules?.playerDatabase?.listSquadBrowserRefreshCandidates) return;
+    refreshInFlight = true;
+    try {
+      const candidates = await modules.playerDatabase.listSquadBrowserRefreshCandidates({
+        limit: AUTO_REFRESH_BATCH_SIZE,
+        staleBefore: Date.now() - AUTO_REFRESH_TTL_MS,
+      });
+      if (!candidates.length) return;
+
+      // 对局中的玩家永远优先；其余玩家按未查询、最久未刷新的顺序由数据库返回。
+      const online = onlineSteamIds();
+      candidates.sort((a, b) => Number(online.has(String(b.steam_id))) - Number(online.has(String(a.steam_id))));
+      await refreshOneCandidate(candidates[0]);
+    } finally {
+      refreshInFlight = false;
+    }
+  }
+
+  const api = {
+    async lookup(value, { bypassCache = false } = {}) {
+      const steam64 = normalizeSteam64(value);
+      const cached = cache.get(steam64);
+      const result = !bypassCache && cached && cached.expiresAt > Date.now()
+        ? cached.value
+        : await fetchLookupResult(steam64);
+
+      const database = await persistLookupResult(modules?.playerDatabase, result);
+      const enriched = {
+        ...result,
+        database,
+        player: {
+          ...result.player,
+          steamAvatar: database?.avatar ?? null,
+        },
+      };
+      cache.set(steam64, { expiresAt: Date.now() + CACHE_TTL_MS, value: enriched });
+      if (cache.size > 100) {
+        const oldest = cache.keys().next().value;
+        if (oldest) cache.delete(oldest);
+      }
+      logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${enriched.sessions.length} saved=${database?.savedSessions ?? 0}`);
+      return enriched;
+    },
+    getAutoRefreshStatus() {
+      return {
+        ttlHours: AUTO_REFRESH_TTL_MS / 3_600_000,
+        refreshCount,
+        lastRefreshAt,
+        lastRefreshError,
+        refreshing: refreshInFlight,
+      };
+    },
+    clearCache() {
+      cache.clear();
+      return { ok: true };
+    },
+  };
 
   return {
     manifest: {
@@ -244,35 +347,18 @@ export function createSquadBrowserPlayerLookupModule({ logger, modules }) {
       description: "查询 SquadBrowser 的玩家档案与最近服务器游玩记录。",
     },
     apiName: "squadBrowserPlayerLookup",
-    api: {
-      async lookup(value) {
-        const steam64 = normalizeSteam64(value);
-        const cached = cache.get(steam64);
-        const result = cached && cached.expiresAt > Date.now()
-          ? cached.value
-          : await fetchLookupResult(steam64);
-
-        const database = await persistLookupResult(modules?.playerDatabase, result);
-        const enriched = {
-          ...result,
-          database,
-          player: {
-            ...result.player,
-            steamAvatar: database?.avatar ?? null,
-          },
-        };
-        cache.set(steam64, { expiresAt: Date.now() + CACHE_TTL_MS, value: enriched });
-        if (cache.size > 100) {
-          const oldest = cache.keys().next().value;
-          if (oldest) cache.delete(oldest);
-        }
-        logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${enriched.sessions.length} saved=${database?.savedSessions ?? 0}`);
-        return enriched;
-      },
-      clearCache() {
-        cache.clear();
-        return { ok: true };
-      },
+    api,
+    async start() {
+      // 先稍等模块全部启动，再开始低频后台刷新，避免影响实时事件。
+      refreshTimer = setInterval(() => { void runAutoRefresh(); }, AUTO_REFRESH_INTERVAL_MS);
+      initialRefreshTimer = setTimeout(() => { void runAutoRefresh(); }, 3_000);
+      logger?.info?.("[SquadBrowser] automatic player refresh started (36h TTL).");
+    },
+    async stop() {
+      if (refreshTimer) clearInterval(refreshTimer);
+      if (initialRefreshTimer) clearTimeout(initialRefreshTimer);
+      refreshTimer = null;
+      initialRefreshTimer = null;
     },
   };
 }
