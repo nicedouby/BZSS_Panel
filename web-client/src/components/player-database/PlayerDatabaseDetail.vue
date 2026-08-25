@@ -21,11 +21,11 @@
         </section>
 
         <section class="profile-section">
-          <div class="section-heading"><div><h2>其他服务器游玩时长</h2><p>由 SquadBrowser 游玩记录累计；仅保存稳定的服务器 ID，不保存会变化的服务器名称。</p></div></div>
-          <div v-if="squadBrowserServerPlaytime.length" class="server-playtime-list">
-            <article v-for="server in squadBrowserServerPlaytime" :key="server.server_id" class="server-playtime-item">
-              <div><span>服务器 ID</span><strong>{{ server.server_id }}</strong><small>{{ server.session_count }} 次记录 · 最近 {{ formatShortTime(server.last_played_at) }}</small></div>
-              <b>{{ formatMinutes(server.total_minutes) }}</b>
+          <div class="section-heading"><div><h2>常玩服务器排行</h2><p>保存 SquadBrowser 返回的最新前 15 名，含服务器名称与累计游玩时长。</p></div></div>
+          <div v-if="squadBrowserServerRankings.length" class="server-playtime-list">
+            <article v-for="server in squadBrowserServerRankings" :key="server.rank_position" class="server-playtime-item">
+              <div><span>#{{ server.rank_position }} · {{ server.server_id || "未知服务器 ID" }}</span><strong>{{ server.server_name }}</strong><small>最近 {{ formatShortTime(server.last_played_at) }}</small></div>
+              <b>{{ formatMinutes(server.playtime_minutes) }}</b>
             </article>
           </div>
           <p v-else class="empty-history">尚未查询到其他服务器游玩记录；后台查成分刷新后会自动显示。</p>
@@ -95,7 +95,7 @@ const playerName = computed(() => String(player.value.current_name || player.val
 const avatar = computed(() => steamProfile.value?.avatar_medium || player.value.steam_avatar || player.value.steamAvatar || "");
 const assetEntries = computed(() => Object.entries(props.detail?.summary?.assets || player.value.assets || {}));
 const noteEntries = computed(() => Object.entries(props.detail?.summary?.notes || {}));
-const squadBrowserServerPlaytime = computed(() => props.detail?.squadBrowserServerPlaytime || []);
+const squadBrowserServerRankings = computed(() => props.detail?.squadBrowserServerRankings || []);
 
 const containerMeta: Record<string, { title: string; icon: string }> = {
   "steam-friends": { title: "Steam 好友", icon: "♟" }, aliases: { title: "历史名称", icon: "A" }, ips: { title: "IP 历史", icon: "◎" }, sessions: { title: "进退服记录", icon: "↔" },
