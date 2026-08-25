@@ -565,6 +565,9 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "reserve_slots.cdk.manage",
   "reserve_slots.export",
   "reserve_slots.config.manage",
+  "black_edge_privilege.manage",
+  "tactical_replay.manage",
+  "tank_battle.execute",
   // Retained only to load existing permission groups after combat UI retirement.
   // No route or feature is granted by this retired permission.
   "combat_manager.view",
