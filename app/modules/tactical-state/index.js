@@ -249,14 +249,42 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
   }
 
   async function getPlayers() {
-    const snapshot = await getSnapshot();
-    return Array.isArray(snapshot.players) ? snapshot.players : [];
+    if (!state.snapshot) await composeSnapshot();
+    const players = Array.isArray(state.snapshot?.players) ? state.snapshot.players : [];
+    return clonePlainObject(players);
+  }
+
+  async function getPlayerSummaries() {
+    if (!state.snapshot) await composeSnapshot();
+    const players = Array.isArray(state.snapshot?.players) ? state.snapshot.players : [];
+    return players.map(compactTacticalPlayer);
   }
 
   async function getPlayer(identity = {}, options = {}) {
-    const snapshot = await getSnapshot();
-    const players = Array.isArray(snapshot.players) ? snapshot.players : [];
-    return findPlayer(players, identity, options);
+    if (!state.snapshot) await composeSnapshot();
+    const players = Array.isArray(state.snapshot?.players) ? state.snapshot.players : [];
+    return clonePlainObject(findPlayer(players, identity, options));
+  }
+
+  function compactTacticalPlayer(player) {
+    const telemetry = { ...(player?.telemetry ?? {}) };
+    const vehicle = { ...(player?.vehicle ?? {}) };
+    delete telemetry.position;
+    delete telemetry.rotation;
+    delete telemetry.yaw;
+    delete vehicle.raw;
+
+    return {
+      identity: { ...(player?.identity ?? {}) },
+      presence: { ...(player?.presence ?? {}) },
+      match: { ...(player?.match ?? {}) },
+      telemetry,
+      combat: { ...(player?.combat ?? {}) },
+      vehicle,
+      network: { ...(player?.network ?? {}) },
+      profile: { ...(player?.profile ?? {}) },
+      freshness: { ...(player?.freshness ?? {}) },
+    };
   }
 
   function buildSnapshot({
@@ -1180,6 +1208,7 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
     api: {
       getSnapshot: getComposedSnapshot,
       getPlayers,
+      getPlayerSummaries,
       getPlayer,
       subscribe,
       subscribeStream,
