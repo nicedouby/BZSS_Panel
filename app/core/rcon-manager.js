@@ -58,12 +58,24 @@ export class RconManager {
     this.queryPoolSize = this.allowMultipleConnections
       ? parsePositiveInteger(this.config.queryPoolSize, 1)
       : 1;
+    this.notificationPoolSize = this.allowMultipleConnections
+      ? parsePositiveInteger(this.config.notificationPoolSize, 2)
+      : 1;
+    this.enforcementPoolSize = this.allowMultipleConnections
+      ? parsePositiveInteger(this.config.enforcementPoolSize, 1)
+      : 1;
+    this.notificationTimeoutMs = Math.max(
+      500,
+      Number(this.config.notificationTimeoutMs ?? 3000),
+    );
 
     this.squadRcon = null;
     this.disbandRcon = null;
     this.rconWorkers = [];
     this.commandPool = createRconPool("command");
     this.queryPool = createRconPool("query");
+    this.notificationPool = createRconPool("notification");
+    this.enforcementPool = createRconPool("enforcement");
     this.disbandPool = createRconPool("disband");
     this.queue = this.commandPool.queue;
     this.priorityQueue = this.commandPool.priorityQueue;
@@ -164,6 +176,14 @@ export class RconManager {
     this.queryPool.lanes = this.allowMultipleConnections
       ? this.createPoolLanes("query", this.queryPoolSize)
       : [createPoolLane("query-1", this.squadRcon)];
+    this.notificationPool.lanes = this.allowMultipleConnections
+      ? this.createPoolLanes("notification", this.notificationPoolSize, {
+          commandTimeoutMs: this.notificationTimeoutMs,
+        })
+      : [createPoolLane("notification-1", this.squadRcon)];
+    this.enforcementPool.lanes = this.allowMultipleConnections
+      ? this.createPoolLanes("enforcement", this.enforcementPoolSize)
+      : [createPoolLane("enforcement-1", this.squadRcon)];
     this.rconWorkers = this.commandPool.lanes;
 
     try {
@@ -184,7 +204,12 @@ export class RconManager {
             this.logger.error(`RCON disband lane connection failed: ${err.message}`, { operation: "start" });
           });
 
-        for (const worker of [...this.commandPool.lanes, ...this.queryPool.lanes]) {
+        for (const worker of [
+          ...this.commandPool.lanes,
+          ...this.notificationPool.lanes,
+          ...this.enforcementPool.lanes,
+          ...this.queryPool.lanes,
+        ]) {
           worker.client.connect()
             .then(() => {
               this.logger.info(`RCON lane ${worker.id} connected.`, { operation: "start" });
@@ -229,22 +254,29 @@ export class RconManager {
       this.disbandRcon = null;
     }
 
-    for (const worker of this.rconWorkers) {
-      if (worker.client && worker.client !== this.squadRcon) {
-        await worker.client.disconnect().catch(() => {});
-      }
-    }
-    for (const worker of this.queryPool.lanes) {
-      if (worker.client && worker.client !== this.squadRcon) {
-        await worker.client.disconnect().catch(() => {});
+    const disconnectedClients = new Set();
+    for (const pool of [this.commandPool, this.notificationPool, this.enforcementPool, this.queryPool]) {
+      for (const worker of pool.lanes) {
+        if (
+          worker.client
+          && worker.client !== this.squadRcon
+          && !disconnectedClients.has(worker.client)
+        ) {
+          disconnectedClients.add(worker.client);
+          await worker.client.disconnect().catch(() => {});
+        }
       }
     }
     this.rconWorkers = [];
     this.commandPool.lanes = [];
     this.queryPool.lanes = [];
+    this.notificationPool.lanes = [];
+    this.enforcementPool.lanes = [];
     this.disbandPool.lanes = [];
     this.clearPoolTimer(this.commandPool);
     this.clearPoolTimer(this.queryPool);
+    this.clearPoolTimer(this.notificationPool);
+    this.clearPoolTimer(this.enforcementPool);
     this.clearPoolTimer(this.disbandPool);
 
     this.setConnected(false);
@@ -372,7 +404,7 @@ export class RconManager {
     this.webStatus.set("rcon", value ? "connected" : "disconnected");
   }
 
-  createPoolLanes(kind, count) {
+  createPoolLanes(kind, count, { commandTimeoutMs } = {}) {
     const lanes = [];
     for (let i = 0; i < count; i++) {
       const client = new SquadRcon({
@@ -380,7 +412,7 @@ export class RconManager {
         port: this.config.port,
         password: resolveRconPassword(this.config, this.logger),
         autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
-        commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
+        commandTimeoutMs: commandTimeoutMs ?? this.config.commandTimeoutMs ?? 15000,
         connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
         logger: this.logger,
       });
@@ -517,6 +549,12 @@ export class RconManager {
   resolveCommandPool(request, command) {
     if (isDisbandLaneRequest(request, command)) return this.disbandPool;
     if (isQueryLaneRequest(request, command)) return this.queryPool;
+    if (this.allowMultipleConnections && isEnforcementLaneRequest(request, command)) {
+      return this.enforcementPool;
+    }
+    if (this.allowMultipleConnections && isNotificationLaneRequest(request, command)) {
+      return this.notificationPool;
+    }
     return this.commandPool;
   }
 
@@ -527,7 +565,7 @@ export class RconManager {
       if (client) pool.lanes = [createPoolLane("disband", client)];
       return;
     }
-    if ((pool.name === "command" || pool.name === "query") && this.squadRcon) {
+    if (["command", "query", "notification", "enforcement"].includes(pool.name) && this.squadRcon) {
       pool.lanes = [createPoolLane(`${pool.name}-1`, this.squadRcon)];
     }
     if (pool.name === "command") this.rconWorkers = this.commandPool.lanes;
@@ -616,8 +654,10 @@ export class RconManager {
   }
 
   pumpAllPools() {
+    this.pumpPool(this.enforcementPool);
     this.pumpPool(this.disbandPool);
     this.pumpPool(this.commandPool);
+    this.pumpPool(this.notificationPool);
     this.pumpPool(this.queryPool);
   }
 
@@ -666,7 +706,13 @@ export class RconManager {
 
   isClientBusy(client) {
     if (!client) return false;
-    const pools = [this.commandPool, this.queryPool, this.disbandPool];
+    const pools = [
+      this.commandPool,
+      this.queryPool,
+      this.notificationPool,
+      this.enforcementPool,
+      this.disbandPool,
+    ];
     return pools.some((pool) => pool.lanes.some((lane) => lane.client === client && lane.busy));
   }
 
@@ -972,6 +1018,8 @@ export class RconManager {
       })),
       commandPool: this.getPoolStatus(this.commandPool),
       queryPool: this.getPoolStatus(this.queryPool),
+      notificationPool: this.getPoolStatus(this.notificationPool),
+      enforcementPool: this.getPoolStatus(this.enforcementPool),
       disbandLane: this.getPoolStatus(this.disbandPool),
       polling: {
         enabled: this.polling.enabled,
@@ -989,7 +1037,11 @@ export class RconManager {
   }
 
   getQueueSize() {
-    return getPoolQueueSize(this.commandPool) + getPoolQueueSize(this.queryPool) + getPoolQueueSize(this.disbandPool);
+    return getPoolQueueSize(this.commandPool)
+      + getPoolQueueSize(this.queryPool)
+      + getPoolQueueSize(this.notificationPool)
+      + getPoolQueueSize(this.enforcementPool)
+      + getPoolQueueSize(this.disbandPool);
   }
 
   getPoolStatus(pool) {
@@ -1155,6 +1207,19 @@ function isPriorityRequest(request) {
 function isDisbandLaneRequest(request, command) {
   const lane = String(request?.rconChannel ?? request?.lane ?? "").trim().toLowerCase();
   return lane === "disband" || /^AdminDisbandSquad\b/i.test(String(command ?? "").trim());
+}
+
+function isEnforcementLaneRequest(request, command) {
+  const lane = String(request?.rconChannel ?? request?.lane ?? "").trim().toLowerCase();
+  if (["enforcement", "critical", "moderation"].includes(lane)) return true;
+  return /^(AdminForceTeamChange|AdminKick|AdminBan|AdminRemovePlayerFromSquad|AdminKickFromSquad|AdminKillServer)\b/i
+    .test(String(command ?? "").trim());
+}
+
+function isNotificationLaneRequest(request, command) {
+  const lane = String(request?.rconChannel ?? request?.lane ?? "").trim().toLowerCase();
+  if (["notification", "notify", "warning"].includes(lane)) return true;
+  return /^(AdminWarn|AdminWarnById|AdminBroadcast)\b/i.test(String(command ?? "").trim());
 }
 
 function isQueryLaneRequest(request, command) {

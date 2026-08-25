@@ -492,8 +492,11 @@
     "passwordFromEnv": "BZSS_RCON_PASSWORD",
     "commandTimeoutMs": 15000,
     "connectTimeoutMs": 5000,
-    "allowMultipleConnections": false,
+    "allowMultipleConnections": true,
     "commandPoolSize": 4,
+    "notificationPoolSize": 2,
+    "notificationTimeoutMs": 3000,
+    "enforcementPoolSize": 1,
     "queryPoolSize": 1,
     "rateLimit": {
       "minIntervalMs": 500,
