@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 10,
+  "revision": 14,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-08-14T11:44:11.227Z",
+  "updatedAt": "2026-08-23T11:06:12.788Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -724,8 +724,8 @@
   ],
   "entries": [
     {
-      "id": "rule:manual_mssvpjm9",
-      "name": "✪ 臀大突击队 ✪",
+      "id": "rule:manual_mt5pblsu",
+      "name": "世一萌 后藤独",
       "aliases": [],
       "keywords": [],
       "typeId": "infantry",
@@ -741,11 +741,45 @@
       "searchTokens": []
     },
     {
-      "id": "rule:manual_mssvpfi4",
+      "id": "rule:manual_mt4dy9tq",
+      "name": "伊丽莎白皇家突击队",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "infantry",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": true,
+      "enabled": true,
+      "priority": 1000,
+      "source": "squad_name_tracking_whitelist",
+      "notes": "Added from squad-name tracking whitelist.",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:manual_mt4dy89k",
       "name": "新队名规则",
       "aliases": [],
       "keywords": [],
       "typeId": "matv",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": true,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
+    {
+      "id": "rule:manual_mssvpjm9",
+      "name": "✪ 臀大突击队 ✪",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "infantry",
       "faction": "",
       "asset": "",
       "maxPlayersOverride": null,

@@ -40,24 +40,6 @@
       "passwordChangedAt": 1781236564104
     },
     {
-      "id": "user:迟诞",
-      "username": "迟诞",
-      "usernameNormalized": "迟诞",
-      "passwordHash": "scrypt$4TY3OBTI8GH4_apYj51GlQ$YIo4tjv8uaqh2ygzSkhQIKkHbGlgCyL_Fn9-vQMiA7Fj7wx6WovlkiQohSbHC-JBwFs0l6griviWufqnWqhEew",
-      "role": "SuperAdmin",
-      "displayName": "",
-      "steam64": "76561199438874824",
-      "viewerTeamAutoSwapEnabled": true,
-      "enabled": true,
-      "note": "",
-      "permissionGroupId": null,
-      "authVersion": 3,
-      "permissions": [],
-      "createdAt": 1781236582895,
-      "updatedAt": 1783761227680,
-      "passwordChangedAt": 1781236582895
-    },
-    {
       "id": "user:和苏苏",
       "username": "和苏苏",
       "usernameNormalized": "和苏苏",
@@ -74,24 +56,6 @@
       "createdAt": 1781236599259,
       "updatedAt": 1781254401118,
       "passwordChangedAt": 1781236599259
-    },
-    {
-      "id": "user:黑子",
-      "username": "黑子",
-      "usernameNormalized": "黑子",
-      "passwordHash": "scrypt$FLaW5Rt00_yvtCis6ybUZA$0uYfq_Rd103gC3dmWOis5EPGOjjDgAn6czql30qttLzDQOp9axEcZhOOkyw4rO56Rpyb6kIn2Rndg0wbxSz6iQ",
-      "role": "Admin",
-      "displayName": "",
-      "steam64": "76561199787534392",
-      "viewerTeamAutoSwapEnabled": true,
-      "enabled": true,
-      "note": "",
-      "permissionGroupId": "group:mqnj4bbjbp0zvug8",
-      "authVersion": 1,
-      "permissions": [],
-      "createdAt": 1781236620619,
-      "updatedAt": 1782030792822,
-      "passwordChangedAt": 1781236620619
     },
     {
       "id": "user:kk",
@@ -301,18 +265,19 @@
         "match_state.view",
         "console.view",
         "chat_monitor.view",
+        "combat_manager.view",
+        "squad_management.view",
         "player_session_records.view",
         "player_database.view",
-        "combat_manager.view",
         "admin_warn.view",
         "scheduled_broadcast.view",
-        "squad_management.view",
         "group_report.view",
         "plugin:tactical-report:view",
         "plugin:tactical-report:update",
         "plugin:tactical-report:logs",
         "plugin:tactical-report:user-codes",
         "plugin:panel-ban:view",
+        "plugin:network-block:view",
         "server_stats.view",
         "debug.udp_forwarder.view",
         "debug.match_snapshots.view",
@@ -330,7 +295,7 @@
         "bzss_core.use"
       ],
       "createdAt": 1781241936876,
-      "updatedAt": 1782390519981
+      "updatedAt": 1787639203526
     },
     {
       "id": "group:mqkuexptsdztzqxi",

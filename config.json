@@ -1001,6 +1001,19 @@
         "enabled": false,
         "delaySeconds": 5,
         "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
+      },
+      "nzcd": {
+        "enabled": true,
+        "defaultMin": 1,
+        "defaultMax": 30,
+        "ranges": [
+          {
+            "playerKey": "76561199666599666",
+            "min": 180,
+            "max": 300000,
+            "enabled": true
+          }
+        ]
       }
     },
     "welcome-join-warning": {
@@ -1123,7 +1136,7 @@
     }
   },
   "warmup": {
-    "enabled": false
+    "enabled": true
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
