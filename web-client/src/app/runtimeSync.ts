@@ -360,7 +360,15 @@ function normalizeRuntimeSnapshot(input: any) {
   const teams = suppliedTeams.length > 0
     ? suppliedTeams
     : deriveRuntimeTeams(activePlayers, squadList);
-  const matchState = payload?.matchState ?? {
+  const providedMatchState = payload?.matchState;
+  const matchState = providedMatchState
+    ? {
+      ...providedMatchState,
+      teams: Array.isArray(providedMatchState.teams) && providedMatchState.teams.length > 0
+        ? providedMatchState.teams
+        : teams,
+    }
+    : {
     serverStatus: {
       ...(match?.server ?? {}),
       ...webStatus,
