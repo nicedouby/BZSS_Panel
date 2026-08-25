@@ -23,11 +23,15 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
   }
 
   if (url.pathname === "/api/tactical-state/players" && req.method === "GET") {
-    const players = await tacticalState.getPlayers?.({ user });
     const summaryOnly = url.searchParams.get("summary") === "1";
+    const players = summaryOnly && tacticalState.getPlayerSummaries
+      ? await tacticalState.getPlayerSummaries({ user })
+      : await tacticalState.getPlayers?.({ user });
     json(200, {
       ok: true,
-      players: summaryOnly ? compactTacticalPlayers(players) : players,
+      players: summaryOnly && !tacticalState.getPlayerSummaries
+        ? compactTacticalPlayers(players)
+        : players,
     });
     return true;
   }
