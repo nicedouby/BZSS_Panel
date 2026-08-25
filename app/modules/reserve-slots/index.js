@@ -51,7 +51,12 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     resolvedLocalReserveFilePath: "",
     loadedAt: null,
     unsubscribeChatMessage: null,
+    unsubscribeSessionPlayers: [],
     cleanupTimer: null,
+    sessionTracking: {
+      bySteamId: new Map(),
+      lastRoundResetAt: 0,
+    },
     writeQueue: Promise.resolve(),
   };
 
@@ -133,6 +138,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
     async start() {
       subscribeChatMessages();
+      subscribeSessionTracking();
       scheduleExpiredCleanup();
       if (runtime.config.adminFilePath) {
         void withReserveWriteLock(() => deleteExpiredReserveSlotMembers()).catch(() => {});
@@ -147,6 +153,10 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
       } catch {}
         runtime.unsubscribeChatMessage = null;
       }
+      for (const unsubscribe of runtime.unsubscribeSessionPlayers.splice(0)) {
+        try { unsubscribe?.(); } catch {}
+      }
+      runtime.sessionTracking.bySteamId.clear();
       if (runtime.cleanupTimer) {
         clearInterval(runtime.cleanupTimer);
         runtime.cleanupTimer = null;
@@ -178,6 +188,51 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     runtime.unsubscribeChatMessage = modules.chatManager.on("message", (event) => {
       void handleChatMessage(event);
     });
+  }
+
+  function subscribeSessionTracking() {
+    if (runtime.unsubscribeSessionPlayers.length) return;
+    const track = (event = {}) => {
+      recordCurrentMatchSessionPlayers(event?.players ?? core?.runtimeState?.getPlayers?.()?.active ?? []);
+    };
+    const reset = () => {
+      runtime.sessionTracking.bySteamId.clear();
+      runtime.sessionTracking.lastRoundResetAt = Date.now();
+    };
+
+    if (typeof core?.eventBus?.onCoreEvent === "function") {
+      runtime.unsubscribeSessionPlayers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", track));
+      runtime.unsubscribeSessionPlayers.push(core.eventBus.onCoreEvent("round.world_bring_up", reset));
+    }
+    if (typeof core?.eventBus?.onModuleEvent === "function") {
+      runtime.unsubscribeSessionPlayers.push(core.eventBus.onModuleEvent("module.matchState", "playersUpdated", track));
+    }
+    track();
+  }
+
+  function recordCurrentMatchSessionPlayers(input = []) {
+    const now = Date.now();
+    const players = Array.isArray(input?.active) ? input.active : (Array.isArray(input) ? input : []);
+    const seenSteamIds = new Set();
+
+    for (const player of players) {
+      const steamId = String(player?.steamID ?? player?.steamId ?? player?.steam64ID ?? player?.steam64Id ?? "").trim();
+      if (!STEAM64_RE.test(steamId)) continue;
+      seenSteamIds.add(steamId);
+      const existing = runtime.sessionTracking.bySteamId.get(steamId);
+      if (!existing) {
+        runtime.sessionTracking.bySteamId.set(steamId, { accumulatedMs: 0, lastSeenAt: now });
+        continue;
+      }
+      existing.accumulatedMs += Math.max(0, now - existing.lastSeenAt);
+      existing.lastSeenAt = now;
+    }
+
+    for (const [steamId, entry] of runtime.sessionTracking.bySteamId) {
+      if (!seenSteamIds.has(steamId) && now - entry.lastSeenAt > 10 * 60 * 1000) {
+        runtime.sessionTracking.bySteamId.delete(steamId);
+      }
+    }
   }
 
   function scheduleExpiredCleanup() {
@@ -946,6 +1001,7 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
 
   async function resolvePlayerCurrentSessionSeconds(player) {
     const snapshot = core?.runtimeState?.getPlayers?.();
+    recordCurrentMatchSessionPlayers(snapshot?.active ?? []);
     if (!snapshot || typeof snapshot !== "object") return 0;
 
     const candidates = [];
@@ -964,13 +1020,20 @@ export function createReserveSlotsModule({ core, modules, config, logger }) {
     }) ?? null;
 
     const directSeconds = Number(target?.currentSessionSeconds ?? target?.sessionSeconds ?? target?.session_seconds ?? 0);
-    if (Number.isFinite(directSeconds) && directSeconds > 0) {
-      return Math.max(0, directSeconds);
-    }
-
     const joinedAtMs = resolveJoinedAtMs(target);
-    if (!joinedAtMs) return 0;
-    return Math.max(0, Math.floor((Date.now() - joinedAtMs) / 1000));
+    const joinedSeconds = joinedAtMs ? Math.max(0, Math.floor((Date.now() - joinedAtMs) / 1000)) : 0;
+    const tracked = runtime.sessionTracking.bySteamId.get(String(player?.steamId ?? "").trim());
+    const trackedSeconds = tracked
+      ? Math.max(0, Math.floor((tracked.accumulatedMs + (Date.now() - tracked.lastSeenAt)) / 1000))
+      : 0;
+
+    // The tracker survives reconnects during the same round; direct/joined values are
+    // retained as fallbacks for players already present when the panel starts.
+    return Math.max(
+      Number.isFinite(directSeconds) ? Math.max(0, directSeconds) : 0,
+      joinedSeconds,
+      trackedSeconds,
+    );
   }
 
   function resolveJoinedAtMs(player) {
