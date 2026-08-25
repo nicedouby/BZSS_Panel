@@ -222,7 +222,7 @@ async function createHarness(options = {}) {
         return {
           directory: path.join(tempDir, "rule-chain"),
           finalPassFallbackDelayMs: options.finalPassFallbackDelayMs,
-          enforcementPlayerThreshold: 50,
+          enforcementPlayerThreshold: options.enforcementPlayerThreshold ?? 50,
         };
       }
       if (key === "plugins.stepwiseSquadPlaytimeGuard") {
@@ -341,6 +341,28 @@ async function testPopulationThresholdSkipsHistoryWithoutPausingClock() {
     assert.equal(state.stats.populationSkipped, 1);
     assert.equal(harness.disbands[0].squadId, 112);
     assert.equal(options.logClockSeconds, 25, "population gating must not reset the shared log clock");
+  } finally {
+    await harness.stop();
+  }
+}
+
+async function testZeroThresholdDisablesPopulationGate() {
+  const harness = await createHarness({
+    playerCount: 0,
+    enforcementPlayerThreshold: 0,
+  });
+  try {
+    harness.eventBus.emitModuleEvent(
+      "module.squadLifecycle",
+      "squadCreated",
+      creation({ squadName: "123", squadId: 114 }),
+    );
+    await waitFor(() => harness.disbands.length === 1);
+    const record = harness.ruleChain.api.getState().recent[0];
+    assert.equal(record.status, "handled");
+    assert.equal(record.enforcement.active, true);
+    assert.equal(record.enforcement.threshold, 0);
+    assert.equal(record.enforcement.comparison, "disabled");
   } finally {
     await harness.stop();
   }
@@ -922,6 +944,7 @@ async function testDisbandFailureIsNotReportedAsHandled() {
 testClassificationFieldsNormalizeWithoutLoss();
 await testNameViolationShortCircuits();
 await testPopulationThresholdSkipsHistoryWithoutPausingClock();
+await testZeroThresholdDisablesPopulationGate();
 await testStepwiseViolationShortCircuitsFair();
 await testFairOnlyRunsAfterFirstTwoPass();
 await testTrackingDoesNotTreatFairViolationAsAllowedCreation();
