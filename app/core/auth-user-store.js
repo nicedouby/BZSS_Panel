@@ -560,6 +560,11 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "settings.manage",
   "admin_users.manage",
   "bzss_core.use",
+  // Reserve-slot permissions are separated so member management can be delegated safely.
+  "reserve_slots.manage",
+  "reserve_slots.cdk.manage",
+  "reserve_slots.export",
+  "reserve_slots.config.manage",
   // Retained only to load existing permission groups after combat UI retirement.
   // No route or feature is granted by this retired permission.
   "combat_manager.view",
