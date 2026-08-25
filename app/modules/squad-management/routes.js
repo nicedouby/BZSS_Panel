@@ -17,8 +17,8 @@ export async function handleSquadManagementRoutes({
       json(405, { error: "MethodNotAllowed", message: "Only GET is supported." });
       return true;
     }
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, { error: "Forbidden", message: "SuperAdmin access is required." });
+    if (!core.authManager?.hasPermission?.(user, "debug.tools")) {
+      json(403, { error: "Forbidden", message: "debug.tools permission is required." });
       return true;
     }
     const diagnostics = modules.logpostDiagnostics;
