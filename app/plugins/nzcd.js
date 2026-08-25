@@ -203,7 +203,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
       name: "NZCD 娱乐插件",
       kind: "plugin",
       version: "1.0.0",
-      category: "Entertainment",
+      category: "娱乐",
       description: "响应 nzcd / sxnzcd，生成并广播玩家牛子长度；刷新时消耗一天预留位。",
       configSchema: [
         { key: "enabled", type: "boolean", default: true, description: "是否启用 NZCD" },
