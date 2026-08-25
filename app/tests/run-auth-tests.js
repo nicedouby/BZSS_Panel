@@ -361,6 +361,37 @@ async function testPermissionGroupsPersistAndResolveForAdminUser() {
   }
 }
 
+async function testUserStoreAcceptsAllPermissionEditorOptions() {
+  const originalCwd = process.cwd();
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-permission-editor-"));
+  process.chdir(tempDir);
+
+  try {
+    const store = new AuthUserStore({
+      config: { usersFilePath: "./data/auth/users.json" },
+    });
+    await store.start();
+
+    const group = await store.createPermissionGroup({
+      name: "Permission Editor Coverage",
+      permissions: [
+        "rcon.settickets",
+        "tactical_map_replay.view",
+        "tactical_map_replay.export",
+      ],
+    });
+
+    assert.deepEqual(group.permissions, [
+      "rcon.settickets",
+      "tactical_map_replay.view",
+      "tactical_map_replay.export",
+    ]);
+  } finally {
+    process.chdir(originalCwd);
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 async function testUserStorePersistsPanelBanPermission() {
   const originalCwd = process.cwd();
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-auth-lianban-alias-"));
