@@ -42,6 +42,15 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/system/logpost", requiredPermission: "settings.manage", superAdminOnly: true },
   { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
   { route: "/system/audit-records", requiredPermission: "audit.view" },
+  { route: "/system/astrbot", requiredPermission: "astrbot.manage" },
+  { route: "/plugins/nzcd", requiredPermission: "nzcd.manage" },
+  { route: "/warmup-reserve-grant", requiredPermission: "warmup_reserve_grant.manage" },
+  { route: "/debug/squad-restriction-enforcement", requiredPermission: "debug.tools" },
+  { route: "/match-end-snapshots", requiredPermission: "match_end_snapshots.manage" },
+  { route: "/debug/victim-damage-display", requiredPermission: "debug.tools" },
+  { route: "/plugins/squad-leader-impeachment", requiredPermission: "squad_leader_impeachment.manage" },
+  { route: "/plugins/death-quote-warning", requiredPermission: "death_quote_warning.manage" },
+  { route: "/system/logpost", requiredPermission: "debug.tools" },
 ]);
 
 const WEB_PAGE_PERMISSION_MAP = new Map(
