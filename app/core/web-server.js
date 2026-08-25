@@ -5,6 +5,7 @@ import { createReadStream, existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import { constants as zlibConstants, gzipSync } from "node:zlib";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { BzssCoreCommandService } from "./bzss-core-command-service.js";
 import { BZSS_CORE_BOOL_KEYS } from "./bzss-core-variable-state-service.js";
@@ -5168,13 +5169,21 @@ export class WebServer {
       this.logger?.warn(`[large-slow-json] url=${urlStr} sizeBytes=${sizeBytes} durationMs=${durationMs.toFixed(2)}ms`);
     }
 
+    const acceptsGzip = /(?:^|,)\\s*gzip(?:;|,|$)/i.test(String(req?.headers?.["accept-encoding"] ?? ""));
+    const shouldCompress = acceptsGzip && sizeBytes >= 1024;
+    const responseBody = shouldCompress
+      ? gzipSync(data, { level: zlibConstants.Z_BEST_SPEED })
+      : data;
+
     res.writeHead(status, {
       ...BASE_SECURITY_HEADERS,
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": "no-store",
+      "Vary": "Accept-Encoding",
+      ...(shouldCompress ? { "Content-Encoding": "gzip" } : {}),
       ...extraHeaders,
     });
-    res.end(data);
+    res.end(responseBody);
   }
 
   getRequestIp(req) {
