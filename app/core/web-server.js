@@ -3156,6 +3156,7 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/panel-ban")) {
+      if (!this.requirePermission(user, "panel_ban.manage", res)) return;
       const pluginApi = this.getPluginApi("plugin.panelBan");
       if (!pluginApi) {
         return this.json(res, 404, {
