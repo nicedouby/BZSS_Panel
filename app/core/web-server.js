@@ -873,6 +873,7 @@ export class WebServer {
           message: "Only GET is supported.",
         });
       }
+      if (!this.requirePermission(user, "debug.tools", res)) return;
       const api = this.modules.squadRestrictionMonitor;
       if (!api?.getState) {
         return this.json(res, 404, {
@@ -914,6 +915,7 @@ export class WebServer {
           message: "Only GET is supported.",
         });
       }
+      if (!this.requirePermission(user, "debug.tools", res)) return;
       const api = this.modules.squadRestrictionEnforcement;
       if (!api?.getState) {
         return this.json(res, 404, {
