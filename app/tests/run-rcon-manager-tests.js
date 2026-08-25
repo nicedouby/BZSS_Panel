@@ -102,6 +102,12 @@ function createHarness(overrides = {}) {
   if (Array.isArray(overrides.queryLanes)) {
     manager.queryPool.lanes = overrides.queryLanes;
   }
+  if (Array.isArray(overrides.notificationLanes)) {
+    manager.notificationPool.lanes = overrides.notificationLanes;
+  }
+  if (Array.isArray(overrides.enforcementLanes)) {
+    manager.enforcementPool.lanes = overrides.enforcementLanes;
+  }
   if (Array.isArray(overrides.disbandLanes)) {
     manager.disbandPool.lanes = overrides.disbandLanes;
     manager.disbandQueue = manager.disbandPool.priorityQueue;
@@ -389,6 +395,8 @@ async function testDefaultUsesSinglePhysicalConnection() {
   assert.equal(manager.allowMultipleConnections, false);
   assert.equal(manager.commandPoolSize, 1);
   assert.equal(manager.queryPoolSize, 1);
+  assert.equal(manager.notificationPoolSize, 1);
+  assert.equal(manager.enforcementPoolSize, 1);
 }
 
 async function testMultipleConnectionOptInUsesConfiguredPoolSize() {
@@ -397,11 +405,65 @@ async function testMultipleConnectionOptInUsesConfiguredPoolSize() {
     rconConfig: {
       commandPoolSize: 4,
       queryPoolSize: 2,
+      notificationPoolSize: 3,
+      enforcementPoolSize: 2,
     },
   });
   assert.equal(manager.allowMultipleConnections, true);
   assert.equal(manager.commandPoolSize, 4);
   assert.equal(manager.queryPoolSize, 2);
+  assert.equal(manager.notificationPoolSize, 3);
+  assert.equal(manager.enforcementPoolSize, 2);
+}
+
+async function testEnforcementLaneDoesNotWaitForBlockedNotification() {
+  let markNotificationStarted;
+  const notificationStarted = new Promise((resolve) => {
+    markNotificationStarted = resolve;
+  });
+  const notificationNeverFinishes = new Promise(() => {});
+  const notificationCommands = [];
+  const enforcementCommands = [];
+  const { manager } = createHarness({
+    allowMultipleConnections: true,
+    notificationLanes: [{
+      id: "notification-1",
+      client: {
+        connected: true,
+        loggedIn: true,
+        async connect() {},
+        async execute(command) {
+          notificationCommands.push(command);
+          markNotificationStarted();
+          return notificationNeverFinishes;
+        },
+      },
+      busy: false, lastCommandTime: 0, lastUsedAt: 0, cooldownUntil: 0, failureCount: 0, lastError: "",
+    }],
+    enforcementLanes: [{
+      id: "enforcement-1",
+      client: createFakeClient({ id: "enforcement-1", executedCommands: enforcementCommands }),
+      busy: false, lastCommandTime: 0, lastUsedAt: 0, cooldownUntil: 0, failureCount: 0, lastError: "",
+    }],
+  });
+
+  const notificationPromise = manager.dispatchCommand({
+    command: "AdminWarnById 41 \"Slow warning\"",
+    system: true,
+  });
+  await notificationStarted;
+
+  const enforcementResult = await manager.dispatchCommand({
+    command: "AdminForceTeamChange 76561198377609640",
+    system: true,
+    priority: "interactive",
+  });
+
+  assert.equal(enforcementResult.success, true);
+  assert.equal(enforcementResult.queueLane, "enforcement-1");
+  assert.deepEqual(notificationCommands, ["AdminWarnById 41 \"Slow warning\""]);
+  assert.deepEqual(enforcementCommands.map((item) => item.command), ["AdminForceTeamChange 76561198377609640"]);
+  notificationPromise.catch(() => {});
 }
 
 async function testCommandPoolUsesMultipleReadyLanes() {
@@ -723,6 +785,7 @@ async function testLaneFailureDoesNotBlockOtherLane() {
 await testResolveRconPermissionAliases();
 await testDefaultUsesSinglePhysicalConnection();
 await testMultipleConnectionOptInUsesConfiguredPoolSize();
+await testEnforcementLaneDoesNotWaitForBlockedNotification();
 await testDispatchCommandRejectsMissingPermission();
 await testDispatchCommandAllowsMatchingPermission();
 await testDispatchCommandAllowsSystemBypass();

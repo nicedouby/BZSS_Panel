@@ -3,13 +3,17 @@
     "enabled": true,
     "host": "192.168.0.183",
     "port": 30144,
-    "password": "9290dd2aa02b",
+    "password": "",
+    "passwordFromEnv": "BZSS_RCON_PASSWORD",
 
     "autoReconnectDelay": 5000,
     "commandTimeoutMs": 15000,
     "connectTimeoutMs": 5000,
-    "allowMultipleConnections": false,
+    "allowMultipleConnections": true,
     "commandPoolSize": 4,
+    "notificationPoolSize": 2,
+    "notificationTimeoutMs": 3000,
+    "enforcementPoolSize": 1,
     "queryPoolSize": 1,
 
     "rateLimit": {
