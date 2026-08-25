@@ -1,15 +1,18 @@
 // -*- coding: utf-8 -*-
 
+// Tactical snapshots are immutable after commit. The compact view can safely
+// share normalized fields with the full snapshot instead of deep-cloning the
+// entire graph every 100 ms. Public read APIs still clone their return values.
 export function compactSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
   return {
-    meta: cloneJson(source.meta ?? {}),
-    server: cloneJson(source.server ?? {}),
-    match: cloneJson(source.match ?? {}),
-    teams: cloneJson(Array.isArray(source.teams) ? source.teams : []),
+    meta: source.meta ?? {},
+    server: source.server ?? {},
+    match: source.match ?? {},
+    teams: Array.isArray(source.teams) ? source.teams : [],
     players: (Array.isArray(source.players) ? source.players : []).map(compactPlayer),
-    squadFollow: cloneJson(source.squadFollow ?? null),
-    assets: cloneJson(source.assets ?? {}),
+    squadFollow: source.squadFollow ?? null,
+    assets: source.assets ?? {},
     diagnostics: compactDiagnostics(source.diagnostics),
   };
 }
@@ -17,15 +20,15 @@ export function compactSnapshot(snapshot) {
 function compactPlayer(player) {
   const source = player && typeof player === "object" ? player : {};
   return {
-    identity: cloneJson(source.identity ?? {}),
-    presence: cloneJson(source.presence ?? {}),
-    match: cloneJson(source.match ?? {}),
-    telemetry: cloneJson(source.telemetry ?? {}),
-    combat: cloneJson(source.combat ?? {}),
+    identity: source.identity ?? {},
+    presence: source.presence ?? {},
+    match: source.match ?? {},
+    telemetry: source.telemetry ?? {},
+    combat: source.combat ?? {},
     vehicle: compactVehicle(source.vehicle),
-    network: cloneJson(source.network ?? {}),
-    profile: cloneJson(source.profile ?? {}),
-    link: cloneJson(source.link ?? {}),
+    network: source.network ?? {},
+    profile: source.profile ?? {},
+    link: source.link ?? {},
     freshness: compactFreshness(source.freshness),
   };
 }
@@ -33,22 +36,22 @@ function compactPlayer(player) {
 function compactVehicle(vehicle) {
   if (!vehicle || typeof vehicle !== "object") return {};
   const { raw: _raw, ...rest } = vehicle;
-  return cloneJson(rest);
+  return rest;
 }
 
 function compactFreshness(freshness) {
   if (!freshness || typeof freshness !== "object") return {};
   const { generatedAt: _generatedAt, ...rest } = freshness;
-  return cloneJson(rest);
+  return rest;
 }
 
 function compactDiagnostics(diagnostics) {
   if (!diagnostics || typeof diagnostics !== "object") return {};
   return {
-    unlinkedRconPlayers: cloneJson(diagnostics.unlinkedRconPlayers ?? []),
-    unlinkedBzssPlayers: cloneJson(diagnostics.unlinkedBzssPlayers ?? []),
-    stalePlayers: cloneJson(diagnostics.stalePlayers ?? []),
-    sourceErrors: cloneJson(diagnostics.sourceErrors ?? []),
+    unlinkedRconPlayers: diagnostics.unlinkedRconPlayers ?? [],
+    unlinkedBzssPlayers: diagnostics.unlinkedBzssPlayers ?? [],
+    stalePlayers: diagnostics.stalePlayers ?? [],
+    sourceErrors: diagnostics.sourceErrors ?? [],
   };
 }
 
@@ -117,11 +120,3 @@ function stableJson(value) {
   return JSON.stringify(value ?? null);
 }
 
-function cloneJson(value) {
-  if (value == null) return value;
-  try {
-    return JSON.parse(JSON.stringify(value));
-  } catch {
-    return value;
-  }
-}
