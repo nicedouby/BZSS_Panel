@@ -26,7 +26,11 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
   const restoreSquadCreationOrder = squadReplayConfig.enabled !== false && squadReplayConfig.restoreCreationOrder !== false;
   const serverId = String(moduleConfig.serverId ?? config?.get?.("serverId", "") ?? core.webStatus?.serverId ?? "BZSS_Main") || "BZSS_Main";
   const storeDirectory = path.resolve(moduleConfig.storeDirectory ?? `./data/combat-events/${safeSegment(serverId)}`);
-  const store = new CombatEventStore({ directory: storeDirectory, logger: moduleLogger });
+  const store = new CombatEventStore({
+    directory: storeDirectory,
+    logger: moduleLogger,
+    maxInMemoryRecords: moduleConfig.maxInMemoryRecords ?? 10_000,
+  });
   const unsubscribers = [];
   let worker = null;
   let messageQueue = Promise.resolve();
@@ -41,6 +45,7 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
     getReplayStatus: () => clone(replayStatus),
     getRecords: (filter = {}) => store.query(filter),
     getCombatRecords: (filter = {}) => store.query(filter),
+    queryRecords: (filter = {}) => store.queryDisk(filter),
     getOverview,
     getAll: () => store.getAll(),
     readCacheSnapshot: async () => ({ records: store.getAll(), stats: store.getStats() }),
