@@ -639,7 +639,8 @@ function paginateLines(lines, maxChars, mode) {
   }
   if (current.length) chunks.push(current);
 
-  // 分片仅是 RCON 传输实现；不要把 (1/2) 之类的批次编号显示给玩家。\n  return chunks.map((chunk) => encodeLines(chunk, mode));
+  // 分片仅是 RCON 传输实现；不要把 (1/2) 之类的批次编号显示给玩家。
+  return chunks.map((chunk) => encodeLines(chunk, mode));
 }
 
 function encodeLines(lines, mode) { return lines.join(lineSeparator(mode)); }
