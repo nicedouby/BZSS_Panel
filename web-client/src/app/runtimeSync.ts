@@ -306,7 +306,7 @@ async function fetchSharedSystemStatus(options: { scheduleNext: boolean; immedia
 
   systemStatusInFlight = true;
   try {
-    const response = await fetch(\`/api/system/status?_=\\1787671866160\`, {
+    const response = await fetch(`/api/system/status?_=${Date.now()}`, {
       cache: "no-store",
       credentials: "same-origin",
       headers: {
