@@ -13,7 +13,7 @@
 
     <!-- The fallback image is activated only after the page has painted. -->
     <img
-      v-if="resourceActive && fallbackImage"
+      v-if="showFallbackImage"
       :src="fallbackImage"
       alt="Tactical Map"
       class="map-image-fallback"
@@ -111,6 +111,14 @@ const tileLayers = ref<TileLayer[]>([]);
 const renderedTiles = computed(() => tileLayers.value.flatMap((layer) => (
   layer.tiles.map((tile) => ({ layerId: layer.id, pending: layer.pending, tile }))
 )));
+const hasCommittedTiles = computed(() => tileLayers.value.some((layer) => (
+  !layer.pending && layer.tiles.length > 0
+)));
+const showFallbackImage = computed(() => Boolean(
+  resourceActive.value
+  && props.fallbackImage
+  && (!tilesActive.value || !hasCommittedTiles.value)
+));
 const loadedTileSources = new Set<string>();
 const pendingSources = new Set<string>();
 
@@ -331,7 +339,8 @@ defineExpose({ currentTileZoom, resourceState });
 }
 
 .map-tile--pending {
-  visibility: hidden;
+  /* Paint each incoming tile as soon as it decodes. */
+  visibility: visible;
 }
 
 .tiled-map-renderer.is-interacting .map-tile {
