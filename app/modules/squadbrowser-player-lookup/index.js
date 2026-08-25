@@ -233,12 +233,18 @@ async function persistLookupResult(playerDatabase, result) {
     result.player,
     fetchedAt,
   );
+  const ranking = await playerDatabase.replaceSquadBrowserServerRankings?.(
+    dbPlayer.id,
+    player.favoriteServers,
+    fetchedAt,
+  );
   const detail = await playerDatabase.getPlayerDetail?.(dbPlayer.id);
   const profile = detail?.steamProfile ?? {};
   return {
     playerId: dbPlayer.id,
     avatar: profile.avatar_medium ?? profile.avatar_full ?? dbPlayer.steam_avatar ?? null,
     savedSessions: Number(saved?.inserted ?? 0),
+    savedServerRankings: Number(ranking?.saved ?? 0),
   };
 }
 
