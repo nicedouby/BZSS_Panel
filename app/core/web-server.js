@@ -5169,7 +5169,7 @@ export class WebServer {
       this.logger?.warn(`[large-slow-json] url=${urlStr} sizeBytes=${sizeBytes} durationMs=${durationMs.toFixed(2)}ms`);
     }
 
-    const acceptsGzip = /(?:^|,)\\s*gzip(?:;|,|$)/i.test(String(req?.headers?.["accept-encoding"] ?? ""));
+    const acceptsGzip = /(?:^|,)\s*gzip(?:;|,|$)/i.test(String(req?.headers?.["accept-encoding"] ?? ""));
     const shouldCompress = acceptsGzip && sizeBytes >= 1024;
     const responseBody = shouldCompress
       ? gzipSync(data, { level: zlibConstants.Z_BEST_SPEED })
