@@ -473,12 +473,18 @@ async function testRoutePermissions() {
             return { username: "admin", role: "SuperAdmin", isSuperAdmin: true };
           }
           if (req.headers.authorization === "user") {
-            return { username: "viewer", role: "Operator" };
+            return { username: "viewer", role: "Operator", permissions: [] };
+          }
+          if (req.headers.authorization === "manager") {
+            return { username: "manager", role: "Operator", permissions: ["reserve_slots.view", "reserve_slots.manage"] };
           }
           return null;
         },
         hasEverything(user) {
           return Boolean(user?.isSuperAdmin);
+        },
+        hasPermission(user, permission) {
+          return Boolean(user?.isSuperAdmin) || Boolean(user?.permissions?.includes(permission));
         },
       },
       config: module.config,
@@ -507,11 +513,36 @@ async function testRoutePermissions() {
   }, allowed.res);
   assert.equal(allowed.state.status, 200);
 
+  const managerView = createRecorder();
+  await server.handleRequest({
+    method: "GET",
+    url: "/api/reserve-slots",
+    headers: { host: "localhost", authorization: "manager" },
+    socket: {},
+  }, managerView.res);
+  assert.equal(managerView.state.status, 200);
+
+  const managerMemberUpdate = createRecorder();
+  await server.handleRequest({
+    method: "POST",
+    url: "/api/reserve-slots/members",
+    headers: { host: "localhost", authorization: "manager", "content-type": "application/json" },
+    socket: {},
+    [Symbol.asyncIterator]: async function* () {
+      yield Buffer.from(JSON.stringify({
+        steamId: "76561198377609640",
+        group: "BZSSVIP",
+        durationDays: 1,
+      }));
+    },
+  }, managerMemberUpdate.res);
+  assert.equal(managerMemberUpdate.state.status, 200);
+
   const exportForbidden = createRecorder();
   await server.handleRequest({
     method: "GET",
     url: "/api/reserve-slots/export-csv",
-    headers: { host: "localhost", authorization: "user" },
+    headers: { host: "localhost", authorization: "manager" },
     socket: {},
   }, exportForbidden.res);
   assert.equal(exportForbidden.state.status, 403);
