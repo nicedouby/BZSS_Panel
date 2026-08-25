@@ -21,10 +21,10 @@ export async function handleBlackEdgePrivilegeRoutes({
   }
 
   if (url.pathname === "/api/black-edge-privilege/cdk/state" && req.method === "GET") {
-    if (!core.authManager?.hasEverything?.(user)) {
+    if (!core.authManager?.hasPermission?.(user, "black_edge_privilege.manage")) {
       json(403, {
         error: "Forbidden",
-        message: "SuperAdmin permission is required.",
+        message: "black_edge_privilege.manage permission is required.",
       });
       return true;
     }
@@ -35,10 +35,10 @@ export async function handleBlackEdgePrivilegeRoutes({
 
   const batchActivationsMatch = url.pathname.match(/^\/api\/black-edge-privilege\/cdk\/batches\/([^/]+)\/activations$/);
   if (batchActivationsMatch && req.method === "GET") {
-    if (!core.authManager?.hasEverything?.(user)) {
+    if (!core.authManager?.hasPermission?.(user, "black_edge_privilege.manage")) {
       json(403, {
         error: "Forbidden",
-        message: "SuperAdmin permission is required.",
+        message: "black_edge_privilege.manage permission is required.",
       });
       return true;
     }
@@ -52,10 +52,10 @@ export async function handleBlackEdgePrivilegeRoutes({
   }
 
   if (url.pathname === "/api/black-edge-privilege/cdk/batches" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
+    if (!core.authManager?.hasPermission?.(user, "black_edge_privilege.manage")) {
       json(403, {
         error: "Forbidden",
-        message: "SuperAdmin permission is required.",
+        message: "black_edge_privilege.manage permission is required.",
       });
       return true;
     }
@@ -72,10 +72,10 @@ export async function handleBlackEdgePrivilegeRoutes({
 
   const deactivateBatchMatch = url.pathname.match(/^\/api\/black-edge-privilege\/cdk\/batches\/([^/]+)\/deactivate$/);
   if (deactivateBatchMatch && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
+    if (!core.authManager?.hasPermission?.(user, "black_edge_privilege.manage")) {
       json(403, {
         error: "Forbidden",
-        message: "SuperAdmin permission is required.",
+        message: "black_edge_privilege.manage permission is required.",
       });
       return true;
     }
