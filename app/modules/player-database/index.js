@@ -292,6 +292,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listSquadBrowserRefreshCandidates(options);
     },
 
+    async replaceSquadBrowserServerRankings(playerId, rankings = [], fetchedAt = Date.now()) {
+      return repo.replaceSquadBrowserServerRankings(playerId, rankings, fetchedAt);
+    },
+
     async listSteamFriends(playerId) {
       return repo.listSteamFriends(playerId);
     },
