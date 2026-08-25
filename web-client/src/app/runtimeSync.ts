@@ -350,6 +350,16 @@ function normalizeRuntimeSnapshot(input: any) {
   const squads = payload?.squads ?? match?.squads ?? {};
   const rcon = payload?.rcon ?? {};
   const webStatus = server?.webStatus ?? {};
+  const activePlayers = Array.isArray(players?.active) ? players.active : [];
+  const squadList = Array.isArray(squads?.list) ? squads.list : [];
+  const suppliedTeams = Array.isArray(match?.teams)
+    ? match.teams
+    : Array.isArray(payload?.teams)
+      ? payload.teams
+      : [];
+  const teams = suppliedTeams.length > 0
+    ? suppliedTeams
+    : deriveRuntimeTeams(activePlayers, squadList);
   const matchState = payload?.matchState ?? {
     serverStatus: {
       ...(match?.server ?? {}),
@@ -357,14 +367,14 @@ function normalizeRuntimeSnapshot(input: any) {
       lastUpdatedAt: server?.updatedAt ?? match?.updatedAt ?? payload?.updatedAt ?? Date.now(),
     },
     players: {
-      list: Array.isArray(players?.active) ? players.active : [],
+      list: activePlayers,
       lastUpdatedAt: players?.updatedAt ?? payload?.updatedAt ?? Date.now(),
     },
     squads: {
-      list: Array.isArray(squads?.list) ? squads.list : [],
+      list: squadList,
       lastUpdatedAt: squads?.updatedAt ?? payload?.updatedAt ?? Date.now(),
     },
-    teams: Array.isArray(match?.teams) ? match.teams : Array.isArray(payload?.teams) ? payload.teams : [],
+    teams,
     rconStatus: {
       ...rcon,
       connected: Boolean(rcon?.connected ?? webStatus?.rconConnected ?? false),
@@ -400,4 +410,61 @@ function normalizeRuntimeSnapshot(input: any) {
   }
 
   return normalized;
+}
+
+
+function deriveRuntimeTeams(players: any[], squads: any[]) {
+  const teams = new Map<any, any>();
+  const squadMap = new Map<string, any>();
+
+  for (const teamID of [1, 2]) {
+    teams.set(teamID, {
+      teamID,
+      teamName: `Team ${teamID}`,
+      squads: [],
+      unassignedPlayers: [],
+      playerCount: 0,
+    });
+  }
+
+  for (const squad of squads) {
+    const teamID = squad?.teamID;
+    const squadID = squad?.squadID;
+    if (teamID == null || squadID == null) continue;
+    if (!teams.has(teamID)) {
+      teams.set(teamID, {
+        teamID,
+        teamName: squad?.teamName || `Team ${teamID}`,
+        squads: [],
+        unassignedPlayers: [],
+        playerCount: 0,
+      });
+    }
+    const entry = { ...squad, members: [] as any[] };
+    teams.get(teamID).squads.push(entry);
+    squadMap.set(`${teamID}:${squadID}`, entry);
+  }
+
+  for (const player of players) {
+    const teamID = player?.teamID ?? "unknown";
+    if (!teams.has(teamID)) {
+      teams.set(teamID, {
+        teamID,
+        teamName: teamID === "unknown" ? "Unknown / Unassigned" : `Team ${teamID}`,
+        squads: [],
+        unassignedPlayers: [],
+        playerCount: 0,
+      });
+    }
+    const team = teams.get(teamID);
+    const squad = player?.squadID == null ? null : squadMap.get(`${teamID}:${player.squadID}`);
+    if (squad) squad.members.push(player);
+    else team.unassignedPlayers.push(player);
+    team.playerCount += 1;
+  }
+
+  return [...teams.values()].map((team) => ({
+    ...team,
+    squads: [...team.squads].sort((left, right) => Number(left.squadID) - Number(right.squadID)),
+  }));
 }
