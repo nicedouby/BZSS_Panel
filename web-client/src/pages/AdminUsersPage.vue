@@ -400,6 +400,13 @@ const pagePermissionLabels = new Map([
   ["debug.welcome_join_warning.view", "入服欢迎警告"],
   ["debug.squad_name_policy.view", "队名规范"],
   ["audit.view", "操作记录"],
+  ["astrbot.manage", "AstrBot 网关管理"],
+  ["nzcd.manage", "NZCD 娱乐插件管理"],
+  ["warmup_reserve_grant.manage", "暖服赠送预留位管理"],
+  ["debug.tools", "调试工具"],
+  ["match_end_snapshots.manage", "对局结束快照管理"],
+  ["squad_leader_impeachment.manage", "弹劾队长管理"],
+  ["death_quote_warning.manage", "死亡名言警告管理"],
 ]);
 
 const pagePermissionOptions = buildPagePermissionOptions();
@@ -408,6 +415,12 @@ const reserveSlotPermissionOptions: PermissionOption[] = [
   { value: "reserve_slots.cdk.manage", label: "管理 CDK 批次" },
   { value: "reserve_slots.export", label: "导出 CSV" },
   { value: "reserve_slots.config.manage", label: "修改系统设置" },
+];
+
+const featurePermissionOptions: PermissionOption[] = [
+  { value: "black_edge_privilege.manage", label: "黑边特权 CDK 管理" },
+  { value: "tactical_replay.manage", label: "战术回放录制控制" },
+  { value: "tank_battle.execute", label: "坦克大战执行" },
 ];
 
 const systemPermissionOptions: PermissionOption[] = [
@@ -430,6 +443,12 @@ const permissionSections: PermissionSection[] = [
     label: "预留位操作",
     description: "页面访问中先勾选“预留位：查看”，再按需分配下面的具体操作。",
     options: reserveSlotPermissionOptions,
+  },
+  {
+    key: "features",
+    label: "功能操作",
+    description: "按功能整体授予日常运营能力，避免把单个按钮拆成过多权限。",
+    options: featurePermissionOptions,
   },
   {
     key: "rcon",
