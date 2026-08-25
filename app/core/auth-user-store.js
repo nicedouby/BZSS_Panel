@@ -552,6 +552,11 @@ export const ALLOWED_ADMIN_PERMISSIONS = Object.freeze([
   "rcon.kick",
   "rcon.disband",
   "rcon.remove",
+  "rcon.settickets",
+  // These are selectable from the administrator permission screen but do not
+  // correspond to a route in WEB_PAGE_PERMISSION_MATRIX.
+  "tactical_map_replay.view",
+  "tactical_map_replay.export",
   "settings.manage",
   "admin_users.manage",
   "bzss_core.use",
