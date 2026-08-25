@@ -384,7 +384,7 @@ const pagePermissionLabels = new Map([
   ["admin_warn.view", "警告记录"],
   ["scheduled_broadcast.view", "定时广播"],
   ["squad_management.view", "小队管理"],
-  ["plugin:panel-ban:view", "面板封禁"],
+  ["panel_ban.manage", "面板封禁管理"],
   ["group_report.view", "抱团报备"],
   ["plugin:tactical-report:view", "战术报点页面"],
   ["plugin:tactical-report:update", "战术报点配置"],
