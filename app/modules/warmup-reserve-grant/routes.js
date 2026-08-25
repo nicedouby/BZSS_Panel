@@ -20,10 +20,10 @@ export async function handleWarmupReserveGrantRoutes({
     return true;
   }
 
-  if (!core.authManager?.hasEverything?.(user)) {
+  if (!core.authManager?.hasPermission?.(user, "warmup_reserve_grant.manage")) {
     json(403, {
       error: "Forbidden",
-      message: "SuperAdmin permission is required.",
+      message: "warmup_reserve_grant.manage permission is required.",
     });
     return true;
   }
