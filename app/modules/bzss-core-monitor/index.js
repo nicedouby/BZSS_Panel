@@ -690,6 +690,20 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
     };
   }
 
+  function getTacticalAssetsSnapshot() {
+    return {
+      status: state.status,
+      revision: state.revision,
+      updatedAt: state.updatedAt,
+      captureZones: state.captureZones.map(clonePlainObject),
+      fobs: state.fobs.map(clonePlainObject),
+      mainZones: state.mainZones.map(clonePlainObject),
+      vehicles: state.vehicles.map(clonePlainObject),
+      vehicleTypes: getObservedVehicleTypes(state),
+      explosions: (state.explosions ?? []).map(clonePlainObject),
+    };
+  }
+
   function getRawSnapshot() {
     pruneExpiredPlayers(state, { core, modules });
     const coverage = buildBzssCoverageState(state, { core, modules });
@@ -1058,6 +1072,7 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
       getVehicleDiagnostics,
       getPlayers,
       getTelemetryPlayers,
+      getTacticalAssetsSnapshot,
       getRawSnapshot,
       subscribe,
       ingestLogLine,
