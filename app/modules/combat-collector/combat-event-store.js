@@ -13,13 +13,16 @@ import {
 } from "./combat-event-normalizer.js";
 
 export class CombatEventStore {
-  constructor({ directory, logger = null } = {}) {
+  constructor({ directory, logger = null, maxInMemoryRecords = 10_000 } = {}) {
     this.directory = path.resolve(directory ?? "./data/combat-events/BZSS_Main");
     this.dataPath = path.join(this.directory, "combat-events.jsonl");
     this.statePath = path.join(this.directory, "collector-state.json");
     this.logger = logger;
+    this.maxInMemoryRecords = Math.max(500, Number(maxInMemoryRecords) || 10_000);
     this.records = [];
     this.identityIndex = new Map();
+    this.durableIdentityKeys = new Set();
+    this.totals = createEmptyTotals();
     this.state = {};
     this.writeQueue = Promise.resolve();
   }
@@ -30,17 +33,20 @@ export class CombatEventStore {
     await cacheHandle.close();
     this.records.splice(0);
     this.identityIndex.clear();
+    this.durableIdentityKeys.clear();
+    this.totals = createEmptyTotals();
     if (fs.existsSync(this.dataPath)) {
       const input = fs.createReadStream(this.dataPath, { encoding: "utf8" });
       const lines = readline.createInterface({ input, crlfDelay: Infinity });
       for await (const line of lines) {
         if (!line.trim()) continue;
         try {
-          this.insertInMemory(normalizeCombatEvent(JSON.parse(line), { observedMode: "cache" }));
+          this.registerRecord(normalizeCombatEvent(JSON.parse(line), { observedMode: "cache" }));
         } catch (error) {
           this.logger?.warn?.(`战斗缓存忽略损坏记录: ${error?.message ?? error}`);
         }
       }
+      this.trimRecentRecords();
     }
     try {
       this.state = JSON.parse(await fsp.readFile(this.statePath, "utf8"));
@@ -52,8 +58,11 @@ export class CombatEventStore {
 
   findDuplicate(record) {
     for (const key of combatIdentityKeys(record)) {
-      const index = this.identityIndex.get(key);
-      if (index !== undefined) return { index, record: this.records[index] };
+      const recentRecord = this.identityIndex.get(key);
+      if (recentRecord) return { record: recentRecord, recent: true };
+    }
+    for (const key of durableKeys(record)) {
+      if (this.durableIdentityKeys.has(key)) return { record: null, recent: false };
     }
     return null;
   }
@@ -70,13 +79,17 @@ export class CombatEventStore {
       const duplicate = this.findDuplicate(record);
       if (duplicate) {
         duplicates += 1;
-        mergeObservation(duplicate.record, record);
-        for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, duplicate.index);
+        if (duplicate.record) {
+          mergeObservation(duplicate.record, record);
+          for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, duplicate.record);
+        }
+        for (const key of durableKeys(record)) this.durableIdentityKeys.add(key);
         continue;
       }
-      this.insertInMemory(record);
+      this.registerRecord(record);
       inserted.push(record);
     }
+    this.trimRecentRecords();
     if (inserted.length) {
       const payload = inserted.map((record) => `${JSON.stringify(record)}\n`).join("");
       this.writeQueue = this.writeQueue.then(async () => {
@@ -88,26 +101,58 @@ export class CombatEventStore {
     return { inserted: inserted.length, duplicates };
   }
 
-  insertInMemory(record) {
+  registerRecord(record) {
     if (this.findDuplicate(record)) return false;
-    const index = this.records.length;
     this.records.push(record);
-    for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, index);
+    for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, record);
+    for (const key of durableKeys(record)) this.durableIdentityKeys.add(key);
+    updateTotals(this.totals, record, 1);
     return true;
   }
 
-  query({ serverId = "", search = "", type = "all", sourceMode = "all", offset = 0, limit = 300 } = {}) {
-    const normalizedType = type === "all" ? "all" : normalizeCombatType(type);
-    const query = String(search ?? "").trim().toLowerCase();
-    let result = this.records;
-    if (serverId) result = result.filter((record) => record.serverId === String(serverId));
-    if (normalizedType !== "all") result = result.filter((record) => record.type === normalizedType);
-    if (sourceMode !== "all") result = result.filter((record) => record.observedModes.includes(String(sourceMode)));
-    if (query) result = result.filter((record) => matchesSearch(record, query));
-    const start = Math.max(0, Number(offset) || 0);
-    const size = Math.max(1, Math.min(5000, Number(limit) || 300));
-    const sorted = result.slice().sort(sortNewestFirst);
-    return { total: sorted.length, records: sorted.slice(start, start + size).map(clone) };
+  trimRecentRecords() {
+    const overflow = this.records.length - this.maxInMemoryRecords;
+    if (overflow <= 0) return;
+    const removed = this.records.splice(0, overflow);
+    for (const record of removed) {
+      for (const key of combatIdentityKeys(record)) {
+        if (this.identityIndex.get(key) === record) this.identityIndex.delete(key);
+      }
+    }
+  }
+
+  query(filter = {}) {
+    return queryRecords(this.records, filter);
+  }
+
+  async queryDisk(filter = {}) {
+    await this.writeQueue;
+    const start = Math.max(0, Math.min(100_000, Number(filter.offset) || 0));
+    const size = Math.max(1, Math.min(5000, Number(filter.limit) || 300));
+    const keep = start + size;
+    let total = 0;
+    let window = [];
+
+    if (!fs.existsSync(this.dataPath)) return { total: 0, records: [] };
+    const input = fs.createReadStream(this.dataPath, { encoding: "utf8" });
+    const lines = readline.createInterface({ input, crlfDelay: Infinity });
+    for await (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const record = JSON.parse(line);
+        if (!recordMatches(record, filter)) continue;
+        total += 1;
+        window.push(record);
+        if (window.length > Math.max(keep * 2, 1000)) {
+          window.sort(sortNewestFirst);
+          window.length = keep;
+        }
+      } catch {
+        // Damaged cache lines are ignored consistently with startup loading.
+      }
+    }
+    window.sort(sortNewestFirst);
+    return { total, records: window.slice(start, start + size).map(clone) };
   }
 
   getAll() {
@@ -116,12 +161,9 @@ export class CombatEventStore {
 
   getStats() {
     return {
-      count: this.records.length,
-      damage: this.records.filter((record) => record.type === "damage").length,
-      wound: this.records.filter((record) => record.type === "wound").length,
-      death: this.records.filter((record) => record.type === "death").length,
-      nullptrActors: this.records.filter((record) => record.attacker?.nameState === "nullptr" || record.victim?.nameState === "nullptr").length,
-      nullptrWeapons: this.records.filter((record) => record.weaponState === "nullptr").length,
+      ...this.totals,
+      retained: this.records.length,
+      maxInMemoryRecords: this.maxInMemoryRecords,
       state: clone(this.state),
     };
   }
@@ -133,9 +175,11 @@ export class CombatEventStore {
   }
 
   async clear() {
-    const cleared = this.records.length;
+    const cleared = this.totals.count;
     this.records.splice(0);
     this.identityIndex.clear();
+    this.durableIdentityKeys.clear();
+    this.totals = createEmptyTotals();
     this.state = {};
     await this.writeQueue;
     await fsp.mkdir(this.directory, { recursive: true });
@@ -151,6 +195,44 @@ export class CombatEventStore {
   async flush() {
     await this.writeQueue;
   }
+}
+
+function createEmptyTotals() {
+  return { count: 0, damage: 0, wound: 0, death: 0, nullptrActors: 0, nullptrWeapons: 0 };
+}
+
+function updateTotals(totals, record, direction) {
+  const delta = direction >= 0 ? 1 : -1;
+  totals.count = Math.max(0, totals.count + delta);
+  if (record.type === "damage") totals.damage = Math.max(0, totals.damage + delta);
+  if (record.type === "wound") totals.wound = Math.max(0, totals.wound + delta);
+  if (record.type === "death") totals.death = Math.max(0, totals.death + delta);
+  if (record.attacker?.nameState === "nullptr" || record.victim?.nameState === "nullptr") {
+    totals.nullptrActors = Math.max(0, totals.nullptrActors + delta);
+  }
+  if (record.weaponState === "nullptr") totals.nullptrWeapons = Math.max(0, totals.nullptrWeapons + delta);
+}
+
+function durableKeys(record) {
+  const keys = combatIdentityKeys(record);
+  const preferred = keys.filter((key) => /^(?:position|offset-raw|event|raw-fallback):/.test(key));
+  return (preferred.length ? preferred : keys).slice(0, 2);
+}
+
+function queryRecords(records, filter = {}) {
+  const start = Math.max(0, Number(filter.offset) || 0);
+  const size = Math.max(1, Math.min(5000, Number(filter.limit) || 300));
+  const result = records.filter((record) => recordMatches(record, filter)).slice().sort(sortNewestFirst);
+  return { total: result.length, records: result.slice(start, start + size).map(clone) };
+}
+
+function recordMatches(record, { serverId = "", search = "", type = "all", sourceMode = "all" } = {}) {
+  const normalizedType = type === "all" ? "all" : normalizeCombatType(type);
+  const query = String(search ?? "").trim().toLowerCase();
+  if (serverId && record.serverId !== String(serverId)) return false;
+  if (normalizedType !== "all" && record.type !== normalizedType) return false;
+  if (sourceMode !== "all" && !(record.observedModes ?? []).includes(String(sourceMode))) return false;
+  return !query || matchesSearch(record, query);
 }
 
 function mergeObservation(target, incoming) {
