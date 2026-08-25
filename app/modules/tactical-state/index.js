@@ -99,7 +99,10 @@ export function createTacticalStateModule({ core, modules, config, logger }) {
       }
     }
 
-    const payload = clonePlainObject(snapshot);
+    // Internal subscribers (for example tactical-feed-writer) are read-only.
+    // Sharing the committed snapshot avoids keeping a second full tactical
+    // graph alive on every update. Public read APIs still clone their result.
+    const payload = snapshot;
     for (const listener of subscribers) {
       try {
         listener(payload);
