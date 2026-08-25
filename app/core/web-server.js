@@ -6655,8 +6655,12 @@ function cleanSquadsForClient(squads) {
 
 function cleanSnapshotAllForClient(all) {
   if (!all) return all;
+  // Teams contain the same player records again under squads[].members. The
+  // Vue runtime derives that presentation structure from players + squads, so
+  // never send this duplicate copy in the shared two-second snapshot.
+  const { teams: _teams, ...snapshot } = all;
   return {
-    ...all,
+    ...snapshot,
     players: cleanPlayersForClient(all.players),
     squads: cleanSquadsForClient(all.squads),
     match: all.match ? {
