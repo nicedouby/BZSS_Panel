@@ -55,6 +55,14 @@
           {{ persistentPlayerBadge.label }}
         </span>
         <span
+          v-if="props.loyalPlayer"
+          class="loyal-player-badge"
+          title="忠诚玩家：步战鼠鼠是最常玩服务器，且占排行榜总时长超过 50%"
+        >
+          <span class="loyal-player-mark">◆</span>
+          <span>忠诚玩家</span>
+        </span>
+        <span
           v-if="bzssCoreFtBadge"
           class="bzss-core-ft-badge"
           :class="bzssCoreFtBadge.tone"
@@ -141,6 +149,7 @@ const props = defineProps<{
   steamAvatar?: string | null;
   serverPlaytimeSeconds?: number | null;
   warmupPlaytimeSeconds?: number | null;
+  loyalPlayer?: boolean;
   groupReport?: { id: string; number: number; name: string; color: string };
 }>();
 
@@ -642,6 +651,32 @@ function displayRole(role: string | null | undefined) {
   background: rgba(168, 85, 247, 0.18);
   border-color: rgba(192, 132, 252, 0.46);
   box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
+}
+
+.loyal-player-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+  min-height: 16px;
+  padding: 0 7px;
+  border: 1px solid rgba(251, 191, 36, 0.48);
+  border-radius: 999px;
+  color: #fef3c7;
+  background: linear-gradient(135deg, rgba(120, 53, 15, 0.78), rgba(245, 158, 11, 0.18));
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.14);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+  font-weight: 850;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.loyal-player-mark {
+  color: #fbbf24;
+  font-size: 8px;
+  line-height: 1;
+  filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.65));
 }
 
 .squad-player-row .role-chip,
