@@ -10,7 +10,7 @@ const ALLOWED_DIRECTIVES = new Set([
   "SetFobResourceRegeneration",
   "SetAutomaticHeal",
   "SetAutomaticHealValue",
-  "CreateVehicle",
+  "SpawnVehicle",
   "AdminTrack",
   "RemoveAdminTrack",
   "DragCapturePoint",
@@ -126,8 +126,8 @@ export class BzssCoreCommandService {
           "EnableLocalVOIP has been replaced by PATCH /api/bzss-core/variables.",
         );
       }
-      if (match?.[1] === "CreateVehicle") {
-        const validation = this.validateCreateVehicleParameter(match[2]);
+      if (match?.[1] === "SpawnVehicle") {
+        const validation = this.validateSpawnVehicleParameter(match[2]);
         if (!validation.ok) return validation;
       }
       if (match?.[1] === "DragCapturePoint") {
@@ -175,8 +175,8 @@ export class BzssCoreCommandService {
     if (normalizedDirective === "SetWeather" && !/^(?:[0-9]|1[0-2]),\d+$/.test(text)) {
       return invalid("InvalidWeatherParameter", "SetWeather requires WeatherIndex 0-12 and a non-negative transition in seconds.");
     }
-    if (normalizedDirective === "CreateVehicle") {
-      const validation = this.validateCreateVehicleParameter(text);
+    if (normalizedDirective === "SpawnVehicle") {
+      const validation = this.validateSpawnVehicleParameter(text);
       if (!validation.ok) return validation;
     }
     if (normalizedDirective === "DragCapturePoint") {
@@ -263,16 +263,26 @@ export class BzssCoreCommandService {
     return { ok: true };
   }
 
-  validateCreateVehicleParameter(parameter) {
+  validateSpawnVehicleParameter(parameter) {
     const parts = String(parameter ?? "").split(",").map((part) => part.trim());
-    if (parts.length !== 2 && parts.length !== 3) {
-      return invalid("InvalidCreateVehicleParameter", "CreateVehicle requires player, vehicle asset path, and optional team id.");
+    if (parts.length !== 4) {
+      return invalid("InvalidSpawnVehicleParameter", "SpawnVehicle requires vehicle class path, X, Y, and Z.");
     }
-    if (!parts[0] || !parts[1]) {
-      return invalid("InvalidCreateVehicleParameter", "CreateVehicle requires player and vehicle asset path.");
+    const [assetPath, ...coordinates] = parts;
+    if (
+      !/^\/Game\/[A-Za-z0-9_./-]+\.[A-Za-z0-9_-]+_C$/.test(assetPath)
+      || /[\u0000-\u001f\u007f]/.test(assetPath)
+    ) {
+      return invalid(
+        "InvalidSpawnVehicleAssetPath",
+        "SpawnVehicle asset path must use /Game/.../Asset.Asset_C class format.",
+      );
     }
-    if (parts.length === 3 && !["0", "1", "2"].includes(parts[2])) {
-      return invalid("InvalidCreateVehicleTeamId", "CreateVehicle team id must be 0, 1, or 2.");
+    if (coordinates.some((value) => !value || !Number.isFinite(Number(value)))) {
+      return invalid("InvalidSpawnVehicleCoordinates", "SpawnVehicle X, Y, and Z must be finite numbers.");
+    }
+    if (coordinates.some((value) => Math.abs(Number(value)) > 100_000_000)) {
+      return invalid("InvalidSpawnVehicleCoordinates", "SpawnVehicle coordinates are outside the supported world range.");
     }
     return { ok: true };
   }
