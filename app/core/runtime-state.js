@@ -175,17 +175,15 @@ export class RuntimeState {
     const key = String(bucket || "").trim();
     if (!this.state.events[key]) return;
 
-    // Avoid retaining full player/squad lists in event logs
-    const cleanedEvent = cloneJsonSafe(event);
+    // Strip high-volume lists before cloning. Cloning a 100-player RCON
+    // event only to delete the list immediately creates large short-lived
+    // allocations and keeps RSS high under frequent polling.
+    const sourceEvent = event && typeof event === "object" ? event : {};
+    const { players, squads, ...eventWithoutLists } = sourceEvent;
+    const cleanedEvent = cloneJsonSafe(eventWithoutLists);
     if (cleanedEvent && typeof cleanedEvent === "object") {
-      if (cleanedEvent.players) {
-        cleanedEvent.playerCount = Array.isArray(cleanedEvent.players) ? cleanedEvent.players.length : 0;
-        delete cleanedEvent.players;
-      }
-      if (cleanedEvent.squads) {
-        cleanedEvent.squadCount = Array.isArray(cleanedEvent.squads) ? cleanedEvent.squads.length : 0;
-        delete cleanedEvent.squads;
-      }
+      if (Array.isArray(players)) cleanedEvent.playerCount = players.length;
+      if (Array.isArray(squads)) cleanedEvent.squadCount = squads.length;
     }
 
     this.state.events[key].push(cleanedEvent);
