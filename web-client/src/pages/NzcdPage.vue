@@ -84,14 +84,17 @@ async function request(url: string, init?: RequestInit) {
 async function load() {
   error.value = "";
   try {
-    const plugins = await request("/api/plugins");
-    const plugin = (plugins?.plugins ?? plugins ?? []).find((item: any) => item.id === "plugin.nzcd");
-    const config = plugin?.config ?? {};
+    const state = await request("/api/plugins/plugin.nzcd/state");
+    const config = state?.config ?? {};
     form.enabled = config.enabled !== false;
     form.defaultMin = Number(config.defaultMin ?? 1);
     form.defaultMax = Number(config.defaultMax ?? 30);
-    form.ranges = Array.isArray(config.ranges) ? config.ranges.map((item: any) => ({ playerKey: String(item.playerKey ?? ""), min: Number(item.min ?? form.defaultMin), max: Number(item.max ?? form.defaultMax), enabled: item.enabled !== false })) : [];
-    const state = await request("/api/plugins/plugin.nzcd/state");
+    form.ranges = Array.isArray(config.ranges) ? config.ranges.map((item: any) => ({
+      playerKey: String(item.playerKey ?? ""),
+      min: Number(item.min ?? form.defaultMin),
+      max: Number(item.max ?? form.defaultMax),
+      enabled: item.enabled !== false,
+    })) : [];
     players.value = state.players ?? [];
   } catch (err: any) {
     error.value = err?.message ?? "加载 NZCD 设置失败。";
