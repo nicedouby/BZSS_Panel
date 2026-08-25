@@ -1,5 +1,8 @@
 import assert from "assert";
-import { createSquadBrowserPlayerLookupModule } from "../modules/squadbrowser-player-lookup/index.js";
+import {
+  createSquadBrowserPlayerLookupModule,
+  evaluateLoyalPlayer,
+} from "../modules/squadbrowser-player-lookup/index.js";
 
 async function main() {
   console.log("Running SquadBrowser Player Lookup module tests...");
@@ -12,6 +15,21 @@ async function main() {
   assert.strictEqual(module.manifest.id, "module.squadBrowserPlayerLookup");
   assert.strictEqual(module.apiName, "squadBrowserPlayerLookup");
   assert.strictEqual(typeof module.api.lookup, "function");
+
+  // Loyalty requires BZSS to rank first and exceed 50% of the saved top-15 total.
+  assert.strictEqual(evaluateLoyalPlayer([
+    { serverId: "LICENSED-1008168", serverName: "[CN]步战鼠鼠", playtimeMinutes: 51 },
+    { serverId: "OTHER", serverName: "其他服务器", playtimeMinutes: 49 },
+  ]).qualified, true);
+  assert.strictEqual(evaluateLoyalPlayer([
+    { serverId: "LICENSED-1008168", serverName: "[CN]步战鼠鼠", playtimeMinutes: 50 },
+    { serverId: "OTHER", serverName: "其他服务器", playtimeMinutes: 50 },
+  ]).qualified, false);
+  assert.strictEqual(evaluateLoyalPlayer([
+    { serverId: "LICENSED-1008168", serverName: "[CN]步战鼠鼠", playtimeMinutes: 40 },
+    { serverId: "OTHER-1", serverName: "其他服务器一", playtimeMinutes: 30 },
+    { serverId: "OTHER-2", serverName: "其他服务器二", playtimeMinutes: 30 },
+  ]).qualified, false);
 
   // Test invalid Steam64
   await assert.rejects(
