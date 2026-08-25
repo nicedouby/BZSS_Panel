@@ -163,6 +163,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.replacePlayerTags(playerId, tagType, tagValues);
     },
 
+    async setPlayerTagPresence(playerId, tagType, tagValue, enabled) {
+      return repo.setPlayerTagPresence(playerId, tagType, tagValue, enabled);
+    },
+
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
