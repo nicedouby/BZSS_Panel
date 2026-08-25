@@ -5812,8 +5812,8 @@ export class WebServer {
     };
   }
 
-  validateCreateVehicleParameter(parameter) {
-    return this.bzssCoreCommandService.validateCreateVehicleParameter(parameter);
+  validateSpawnVehicleParameter(parameter) {
+    return this.bzssCoreCommandService.validateSpawnVehicleParameter(parameter);
   }
 
   summarizePlaytimeJobForAudit(job) {
