@@ -306,10 +306,12 @@ async function fetchSharedSystemStatus(options: { scheduleNext: boolean; immedia
 
   systemStatusInFlight = true;
   try {
-    const response = await fetch("/api/system/status", {
+    const response = await fetch(\`/api/system/status?_=\\1787671866160\`, {
+      cache: "no-store",
       credentials: "same-origin",
       headers: {
         Accept: "application/json",
+        "Cache-Control": "no-cache",
       },
       signal: controller.signal,
     });
