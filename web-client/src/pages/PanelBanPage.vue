@@ -1,87 +1,98 @@
 <template>
-  <section class="panel-ban-page">
-    <PageHeader
-      title="面板封禁"
-      subtitle="维护全局封禁列表。玩家加入时按 Steam64 或 EOS 命中后踢出，并附带封禁原因与到期时间。"
-      eyebrow="Moderation"
-    >
-      <template #actions>
-        <StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>
-          {{ state.lastError ? "状态异常" : "运行正常" }}
-        </StatusBadge>
-        <AppButton size="sm" variant="ghost" :loading="refreshing || loading" @click="refreshState">
-          刷新
-        </AppButton>
-        <AppButton size="sm" variant="ghost" :loading="reloading" @click="reloadStore">
-          重载
-        </AppButton>
-        <AppButton size="sm" variant="ghost" :loading="rescanning" @click="rescanNow">
-          扫描在线玩家
-        </AppButton>
-      </template>
-    </PageHeader>
+  <section class="panel-ban-page workspace-page">
+    <div class="page-overview">
+      <PageHeader
+        class="panel-ban-header"
+        title="面板封禁"
+        subtitle="维护全局封禁列表。玩家加入时按 Steam64 或 EOS 命中后踢出，并附带封禁原因与到期时间。"
+        eyebrow="Moderation"
+      >
+        <template #actions>
+          <StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>
+            {{ state.lastError ? "状态异常" : "运行正常" }}
+          </StatusBadge>
+          <AppButton size="sm" variant="ghost" :loading="refreshing || loading" @click="refreshState">
+            刷新
+          </AppButton>
+          <AppButton size="sm" variant="ghost" :loading="reloading" @click="reloadStore">
+            重载
+          </AppButton>
+          <AppButton size="sm" variant="ghost" :loading="rescanning" @click="rescanNow">
+            扫描在线玩家
+          </AppButton>
+        </template>
+      </PageHeader>
 
-    <StatGrid :items="summaryItems" :loading="loading && !state" />
+      <StatGrid class="panel-ban-stats" :items="summaryItems" :loading="loading && !state" />
 
-    <div v-if="pageError || error || state?.lastError" class="notice notice--danger">
-      <strong>异常</strong>
-      <span>{{ pageError || error || state?.lastError }}</span>
+      <div v-if="pageError || error || state?.lastError" class="notice notice--danger panel-ban-notice">
+        <strong>异常</strong>
+        <span>{{ pageError || error || state?.lastError }}</span>
+      </div>
     </div>
 
     <div class="layout-dashboard">
       <div class="top-row-grid">
-        <PageCard title="新增 / 编辑封禁" description="必须填写到期时间。也可以输入时长，由页面自动换算到期时间。">
+        <PageCard
+          class="workspace-card form-card"
+          title="新增 / 编辑封禁"
+          description="必须填写到期时间。也可以输入时长，由页面自动换算到期时间。"
+          overflow="clip"
+          body-mode="fill"
+        >
           <form class="ban-form" @submit.prevent="submitDraft">
-            <div class="form-grid">
-              <div class="field field--wide">
-                <span>玩家 (自动匹配 Steam64 / EOS / 名字)</span>
-                <PlayerSelect
-                  v-model="targetPlayerInput"
-                  @select="handlePlayerSelect"
-                  placeholder="输入 玩家名 / Steam64 / EOS ID 自动检索"
-                />
+            <div class="ban-form-scroll">
+              <div class="form-grid">
+                <div class="field field--wide">
+                  <span>玩家 (自动匹配 Steam64 / EOS / 名字)</span>
+                  <PlayerSelect
+                    v-model="targetPlayerInput"
+                    @select="handlePlayerSelect"
+                    placeholder="输入 玩家名 / Steam64 / EOS ID 自动检索"
+                  />
+                </div>
+                <label class="field field--wide">
+                  <span>原因</span>
+                  <textarea v-model.trim="draft.reason" rows="3" placeholder="填写踢出时展示的原因" />
+                </label>
+                <label class="field">
+                  <span>状态</span>
+                  <select v-model="draft.status">
+                    <option value="active">有效</option>
+                    <option value="disabled">禁用</option>
+                    <option value="expired">已过期</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>到期时间</span>
+                  <input v-model="draft.expiresAt" type="datetime-local" />
+                </label>
+                <label class="field">
+                  <span>时长值</span>
+                  <input v-model.number="draft.durationValue" type="number" min="1" step="1" placeholder="例如 7" />
+                </label>
+                <label class="field">
+                  <span>时长单位</span>
+                  <select v-model="draft.durationUnit">
+                    <option value="minutes">分钟</option>
+                    <option value="hours">小时</option>
+                    <option value="days">天</option>
+                    <option value="weeks">周</option>
+                  </select>
+                </label>
               </div>
-              <label class="field field--wide">
-                <span>原因</span>
-                <textarea v-model.trim="draft.reason" rows="3" placeholder="填写踢出时展示的原因" />
-              </label>
-              <label class="field">
-                <span>状态</span>
-                <select v-model="draft.status">
-                  <option value="active">有效</option>
-                  <option value="disabled">禁用</option>
-                  <option value="expired">已过期</option>
-                </select>
-              </label>
-              <label class="field">
-                <span>到期时间</span>
-                <input v-model="draft.expiresAt" type="datetime-local" />
-              </label>
-              <label class="field">
-                <span>时长值</span>
-                <input v-model.number="draft.durationValue" type="number" min="1" step="1" placeholder="例如 7" />
-              </label>
-              <label class="field">
-                <span>时长单位</span>
-                <select v-model="draft.durationUnit">
-                  <option value="minutes">分钟</option>
-                  <option value="hours">小时</option>
-                  <option value="days">天</option>
-                  <option value="weeks">周</option>
-                </select>
-              </label>
-            </div>
 
-            <div class="form-meta">
-              <div class="preview">
-                <span class="preview-label">到期预览</span>
-                <strong>{{ expiryPreview.label }}</strong>
-                <span>{{ expiryPreview.hint }}</span>
-              </div>
-              <div class="preview">
-                <span class="preview-label">当前模式</span>
-                <strong>{{ editingId ? "编辑中" : "新建" }}</strong>
-                <span>{{ editingId ? `编辑条目 ${editingId}` : "将创建新的封禁条目" }}</span>
+              <div class="form-meta">
+                <div class="preview">
+                  <span class="preview-label">到期预览</span>
+                  <strong>{{ expiryPreview.label }}</strong>
+                  <span>{{ expiryPreview.hint }}</span>
+                </div>
+                <div class="preview">
+                  <span class="preview-label">当前模式</span>
+                  <strong>{{ editingId ? "编辑中" : "新建" }}</strong>
+                  <span>{{ editingId ? `编辑条目 ${editingId}` : "将创建新的封禁条目" }}</span>
+                </div>
               </div>
             </div>
 
@@ -96,7 +107,13 @@
           </form>
         </PageCard>
 
-        <PageCard title="安全审计日志" description="展示最近的封禁踢出命中记录与系统事件。">
+        <PageCard
+          class="workspace-card audit-card"
+          title="安全审计日志"
+          description="展示最近的封禁踢出命中记录与系统事件。"
+          overflow="clip"
+          body-mode="fill"
+        >
           <template #actions>
             <div class="event-tabs">
               <button
@@ -171,7 +188,13 @@
       </div>
 
       <div class="bottom-row-full">
-        <PageCard title="封禁列表" description="支持搜索、按状态过滤，以及逐条编辑、禁用、启用 and 删除。">
+        <PageCard
+          class="workspace-card list-card"
+          title="封禁列表"
+          description="支持搜索、按状态过滤，以及逐条编辑、禁用、启用和删除。"
+          overflow="clip"
+          body-mode="fill"
+        >
           <template #actions>
             <label class="search-box">
               <span>搜索</span>
@@ -191,21 +214,22 @@
             </div>
           </template>
 
-          <div class="table-wrap">
-            <table class="ban-table">
-              <thead>
-                <tr>
-                  <th>状态</th>
-                  <th>身份</th>
-                  <th>原因</th>
-                  <th>到期</th>
-                  <th>命中</th>
-                  <th>最近命中</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="entry in visibleEntries" :key="entry.id" :class="`row--${entry.status}`">
+          <div class="ban-list-body">
+            <div class="table-wrap">
+              <table class="ban-table">
+                <thead>
+                  <tr>
+                    <th>状态</th>
+                    <th>身份</th>
+                    <th>原因</th>
+                    <th>到期</th>
+                    <th>命中</th>
+                    <th>最近命中</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="entry in visibleEntries" :key="entry.id" :class="`row--${entry.status}`">
                   <td>
                     <StatusBadge :tone="entryStatusTone(entry.status)" size="sm">
                       {{ entryStatusLabel(entry.status) }}
@@ -298,17 +322,18 @@
                       </AppButton>
                     </div>
                   </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </tr>
+                </tbody>
+              </table>
 
-          <EmptyState
-            v-if="!visibleEntries.length && !loading"
-            compact
-            title="没有匹配的封禁"
-            description="当前筛选条件下没有可显示的条目。"
-          />
+              <EmptyState
+                v-if="!visibleEntries.length && !loading"
+                compact
+                title="没有匹配的封禁"
+                description="当前筛选条件下没有可显示的条目。"
+              />
+            </div>
+          </div>
         </PageCard>
       </div>
     </div>
@@ -830,24 +855,106 @@ function expiryLabelClass(entry: BanEntry) {
 <style scoped>
 .panel-ban-page {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page-overview {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.panel-ban-header {
+  min-width: 0;
+}
+
+.panel-ban-header :deep(.eyebrow) {
+  margin-bottom: 5px;
+}
+
+.panel-ban-header :deep(.subtitle) {
+  margin-top: 5px;
+}
+
+.panel-ban-stats {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.panel-ban-stats :deep(.stat-card) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  gap: 4px 10px;
+  height: 76px;
+  padding: 10px 13px;
+}
+
+.panel-ban-stats :deep(.stat-card__value) {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: center;
+  font-size: 23px;
+}
+
+.panel-ban-stats :deep(.stat-card__description) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.panel-ban-notice {
+  max-height: 72px;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .layout-dashboard {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 46%) minmax(0, 54%);
   gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .top-row-grid {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   gap: 16px;
-  align-items: start;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .bottom-row-full {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   width: 100%;
+}
+
+.workspace-card {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-card :deep(.card-header) {
+  flex: none;
+  min-width: 0;
+}
+
+.workspace-card :deep(.card-body) {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Event tab buttons styling */
@@ -884,7 +991,23 @@ function expiryLabelClass(entry: BanEntry) {
 
 .ban-form {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ban-form-scroll {
+  display: grid;
+  align-content: start;
   gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding-right: 6px;
 }
 
 .form-grid {
@@ -967,6 +1090,9 @@ function expiryLabelClass(entry: BanEntry) {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  flex: none;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border-soft, var(--color-border-default));
 }
 
 .search-box {
@@ -1004,15 +1130,27 @@ function expiryLabelClass(entry: BanEntry) {
 }
 
 .table-wrap {
-  max-height: 560px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
-  margin-top: 12px;
   overscroll-behavior: contain;
-  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.ban-list-body {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .ban-table {
   width: 100%;
+  min-width: 1120px;
+  table-layout: fixed;
   border-collapse: collapse;
 }
 
@@ -1024,10 +1162,27 @@ function expiryLabelClass(entry: BanEntry) {
 }
 
 .ban-table th {
+  position: sticky;
+  z-index: 2;
+  top: 0;
   text-align: left;
   font-size: 12px;
   color: var(--color-text-muted);
   white-space: nowrap;
+  background: color-mix(in srgb, var(--color-bg-card) 94%, #000 6%);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-border-default) 80%, transparent);
+}
+
+.ban-table th:nth-child(1) { width: 86px; }
+.ban-table th:nth-child(2) { width: 250px; }
+.ban-table th:nth-child(3) { width: 220px; }
+.ban-table th:nth-child(4) { width: 168px; }
+.ban-table th:nth-child(5) { width: 68px; }
+.ban-table th:nth-child(6) { width: 150px; }
+.ban-table th:nth-child(7) { width: 210px; }
+
+.ban-table td {
+  overflow: hidden;
 }
 
 .identity-cell,
@@ -1069,10 +1224,15 @@ function expiryLabelClass(entry: BanEntry) {
 
 .event-list {
   display: grid;
+  align-content: start;
   gap: 10px;
-  max-height: 400px;
-  overflow-y: auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding-right: 6px;
 }
 
@@ -1309,13 +1469,48 @@ function expiryLabelClass(entry: BanEntry) {
   background-color: rgba(255, 255, 255, 0.01) !important;
 }
 
-@media (max-width: 1160px) {
+@media (max-width: 840px) {
+  .panel-ban-page {
+    display: grid;
+    grid-template-rows: auto auto;
+    align-content: start;
+    height: 100%;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  .panel-ban-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel-ban-stats :deep(.stat-card) {
+    height: 76px;
+  }
+
+  .layout-dashboard {
+    grid-template-rows: auto 560px;
+    height: auto;
+    overflow: visible;
+  }
+
   .top-row-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: 520px 420px;
+    height: auto;
+    overflow: visible;
+  }
+
+  .bottom-row-full {
+    height: 560px;
+  }
+
+  .search-box {
+    min-width: min(260px, 100%);
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 620px) {
   .form-grid,
   .form-meta {
     grid-template-columns: 1fr;
@@ -1324,30 +1519,66 @@ function expiryLabelClass(entry: BanEntry) {
   .reason-cell {
     max-width: none;
   }
+
+  .panel-ban-header :deep(.actions) {
+    justify-content: flex-start;
+  }
+
+  .panel-ban-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-card :deep(.card-header) {
+    flex-direction: column;
+  }
+
+  .workspace-card :deep(.card-actions) {
+    width: 100%;
+  }
+
+  .list-card :deep(.card-actions) {
+    display: grid;
+  }
+
+  .search-box {
+    width: 100%;
+  }
 }
 
 /* Custom Styled Scrollbars for Panel Ban Page Elements */
 .table-wrap::-webkit-scrollbar,
-.event-list::-webkit-scrollbar {
+.event-list::-webkit-scrollbar,
+.ban-form-scroll::-webkit-scrollbar,
+.panel-ban-notice::-webkit-scrollbar,
+.panel-ban-page::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 .table-wrap::-webkit-scrollbar-track,
-.event-list::-webkit-scrollbar-track {
+.event-list::-webkit-scrollbar-track,
+.ban-form-scroll::-webkit-scrollbar-track,
+.panel-ban-notice::-webkit-scrollbar-track,
+.panel-ban-page::-webkit-scrollbar-track {
   background: rgba(0, 0, 0, 0.05);
   border-radius: 3px;
 }
 
 .table-wrap::-webkit-scrollbar-thumb,
-.event-list::-webkit-scrollbar-thumb {
+.event-list::-webkit-scrollbar-thumb,
+.ban-form-scroll::-webkit-scrollbar-thumb,
+.panel-ban-notice::-webkit-scrollbar-thumb,
+.panel-ban-page::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
   transition: background 0.15s ease;
 }
 
 .table-wrap::-webkit-scrollbar-thumb:hover,
-.event-list::-webkit-scrollbar-thumb:hover {
+.event-list::-webkit-scrollbar-thumb:hover,
+.ban-form-scroll::-webkit-scrollbar-thumb:hover,
+.panel-ban-notice::-webkit-scrollbar-thumb:hover,
+.panel-ban-page::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
 </style>

@@ -122,4 +122,24 @@ describe("PanelBanPage", () => {
     expect(wrapper.text()).toContain("命中历史");
     wrapper.unmount();
   });
+
+  it("keeps every workspace section inside its own scroll boundary", async () => {
+    const wrapper = mount(PanelBanPage, {
+      global: {
+        plugins: [createPinia()],
+        stubs: {
+          PlayerSelect: true,
+        },
+      },
+    });
+    await vi.runOnlyPendingTimersAsync();
+    await flushPromises();
+
+    expect(wrapper.classes()).toContain("workspace-page");
+    expect(wrapper.findAll(".workspace-card")).toHaveLength(3);
+    expect(wrapper.find(".ban-form-scroll").exists()).toBe(true);
+    expect(wrapper.find(".event-list").exists()).toBe(true);
+    expect(wrapper.find(".ban-list-body .table-wrap").exists()).toBe(true);
+    wrapper.unmount();
+  });
 });
