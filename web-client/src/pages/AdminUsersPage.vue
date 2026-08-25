@@ -378,7 +378,8 @@ const pagePermissionLabels = new Map([
   ["console.view", "控制台"],
   ["chat_monitor.view", "聊天监控"],
   ["player_session_records.view", "进出服记录"],
-  ["player_database.view", "玩家数据库 / 预留位"],
+  ["player_database.view", "玩家数据库"],
+  ["reserve_slots.view", "预留位：查看"],
   ["combat_manager.view", "战斗管理 / 战斗日志"],
   ["admin_warn.view", "警告记录"],
   ["scheduled_broadcast.view", "定时广播"],
@@ -402,6 +403,14 @@ const pagePermissionLabels = new Map([
 ]);
 
 const pagePermissionOptions = buildPagePermissionOptions();
+const reserveSlotPermissionOptions: PermissionOption[] = [
+  { value: "reserve_slots.view", label: "查看预留位" },
+  { value: "reserve_slots.manage", label: "管理成员 / 时长" },
+  { value: "reserve_slots.cdk.manage", label: "管理 CDK 批次" },
+  { value: "reserve_slots.export", label: "导出 CSV" },
+  { value: "reserve_slots.config.manage", label: "修改系统设置" },
+];
+
 const systemPermissionOptions: PermissionOption[] = [
   { value: "settings.manage", label: "系统设置 / 插件订阅" },
   { value: "admin_users.manage", label: "管理员账号" },
@@ -416,6 +425,12 @@ const permissionSections: PermissionSection[] = [
     label: "页面访问",
     description: "控制账号能看到哪些页面入口，并限制直接访问对应路由。",
     options: pagePermissionOptions,
+  },
+  {
+    key: "reserve-slots",
+    label: "预留位操作",
+    description: "先授予“查看预留位”，再按需分配成员、CDK、导出和设置权限。",
+    options: reserveSlotPermissionOptions,
   },
   {
     key: "rcon",
