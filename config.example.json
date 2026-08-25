@@ -331,7 +331,7 @@
         "path": "plugins.fairSquadGuard.enforcementPlayerThreshold",
         "label": "Fair Squad Guard Player Threshold",
         "type": "number",
-        "min": 1,
+        "min": 0,
         "max": 100,
         "restartRequired": true
       },
@@ -571,7 +571,7 @@
     },
     "squadRuleChain": {
       "directory": "./data/squad-rule-chain",
-      "enforcementPlayerThreshold": 50
+      "enforcementPlayerThreshold": 0
     },
     "squadManagement": {
       "enabled": true,
@@ -842,7 +842,7 @@
     "fairSquadGuard": {
       "enabled": true,
       "directory": "./data/fair-squad-guard",
-      "enforcementPlayerThreshold": 50,
+      "enforcementPlayerThreshold": 0,
       "noSquadCreationSeconds": 20,
       "infantryOnlyUntilSeconds": 50,
       "maxViolationCountBeforeKick": 15,
