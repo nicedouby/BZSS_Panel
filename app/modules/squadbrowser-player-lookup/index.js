@@ -222,7 +222,8 @@ export function evaluateLoyalPlayer(rankings = []) {
   const totalMinutes = normalized.reduce((sum, server) => sum + server.minutes, 0);
   const bzss = normalized.find((server) => (
     String(server?.serverId ?? "").trim() === BZSS_SERVER_LICENSE_ID
-    || String(server?.serverName ?? "").includes("步战鼠鼠")
+    || (String(server?.serverName ?? "").includes("步战鼠鼠")
+      || String(server?.serverName ?? "").toUpperCase().includes("BZSS"))
   ));
   const highestMinutes = normalized.reduce((highest, server) => Math.max(highest, server.minutes), 0);
   const share = totalMinutes > 0 && bzss ? bzss.minutes / totalMinutes : 0;
