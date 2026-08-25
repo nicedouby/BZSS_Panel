@@ -29,7 +29,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/plugins/server-info-statistics", requiredPermission: "server_stats.view" },
   { route: "/debug/udp-forwarder", requiredPermission: "debug.udp_forwarder.view" },
   { route: "/debug/match-snapshots", requiredPermission: "debug.match_snapshots.view" },
-  { route: "/match-end-snapshots", requiredPermission: "settings.manage", superAdminOnly: true },
+  { route: "/match-end-snapshots", requiredPermission: "match_end_snapshots.manage" },
   { route: "/debug/pjsc-average-duration", requiredPermission: "debug.pjsc_average_duration.view" },
   { route: "/debug/draw-vote-guard", requiredPermission: "debug.draw_vote_guard.view" },
   { route: "/debug/welcome-join-warning", requiredPermission: "debug.welcome_join_warning.view" },
@@ -39,18 +39,16 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/plugins/stepwise-squad-playtime-guard", requiredPermission: "squad_management.view" },
   { route: "/plugins/fair-squad-guard", requiredPermission: "squad_management.view" },
   { route: "/system/status", requiredPermission: "settings.manage" },
-  { route: "/system/logpost", requiredPermission: "settings.manage", superAdminOnly: true },
+  { route: "/system/logpost", requiredPermission: "debug.tools" },
   { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
   { route: "/system/audit-records", requiredPermission: "audit.view" },
   { route: "/system/astrbot", requiredPermission: "astrbot.manage" },
   { route: "/plugins/nzcd", requiredPermission: "nzcd.manage" },
   { route: "/warmup-reserve-grant", requiredPermission: "warmup_reserve_grant.manage" },
   { route: "/debug/squad-restriction-enforcement", requiredPermission: "debug.tools" },
-  { route: "/match-end-snapshots", requiredPermission: "match_end_snapshots.manage" },
   { route: "/debug/victim-damage-display", requiredPermission: "debug.tools" },
   { route: "/plugins/squad-leader-impeachment", requiredPermission: "squad_leader_impeachment.manage" },
   { route: "/plugins/death-quote-warning", requiredPermission: "death_quote_warning.manage" },
-  { route: "/system/logpost", requiredPermission: "debug.tools" },
 ]);
 
 const WEB_PAGE_PERMISSION_MAP = new Map(
