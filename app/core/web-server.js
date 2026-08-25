@@ -458,7 +458,7 @@ export class WebServer {
     if (url.pathname === "/api/astrbot/panel-status" && req.method === "GET") {
       const panelUser = this.core.authManager?.getUserFromRequest(req);
       if (!panelUser) return this.json(res, 401, { error: "AuthenticationRequired" });
-      if (!this.requireSuperAdmin(panelUser, res)) return;
+      if (!this.requirePermission(panelUser, "astrbot.manage", res)) return;
       const bridge = this.modules.astrbotBridge;
       if (!bridge?.getState) return this.json(res, 404, { error: "AstrBotBridgeUnavailable" });
       return this.json(res, 200, {
@@ -501,9 +501,9 @@ export class WebServer {
           snapshotId: result?.event?.data?.snapshotId ?? null,
         }),
       };
-      if (!this.core.authManager?.hasEverything?.(panelUser)) {
-        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
-        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      if (!this.core.authManager?.hasPermission?.(panelUser, "astrbot.manage")) {
+        await this.auditForbidden(auditContext, "astrbot.manage permission is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "astrbot.manage permission is required." });
       }
 
       const bridge = this.modules.astrbotBridge;
@@ -1770,11 +1770,11 @@ export class WebServer {
       if (!nzcdApi) {
         return this.json(res, 404, { error: "NzcdUnavailable", message: "NZCD plugin is not loaded." });
       }
+      if (!this.requirePermission(user, "nzcd.manage", res)) return;
       if (url.pathname === "/api/plugins/plugin.nzcd/state" && req.method === "GET") {
         return this.json(res, 200, nzcdApi.getState?.() ?? {});
       }
       if (url.pathname === "/api/plugins/plugin.nzcd/config" && req.method === "PATCH") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         if (!body?.config || typeof body.config !== "object" || Array.isArray(body.config)) {
           return this.json(res, 400, { error: "InvalidBody", message: "config must be object" });
@@ -2203,9 +2203,9 @@ export class WebServer {
           commands: Array.isArray(result?.commands) ? result.commands : [],
         }),
       };
-      if (!this.core.authManager?.hasEverything?.(user)) {
-        await this.auditForbidden(auditContext, "SuperAdmin role is required.");
-        return this.json(res, 403, { error: "Forbidden", message: "SuperAdmin role is required." });
+      if (!this.core.authManager?.hasPermission?.(user, "tank_battle.execute")) {
+        await this.auditForbidden(auditContext, "tank_battle.execute permission is required.");
+        return this.json(res, 403, { error: "Forbidden", message: "tank_battle.execute permission is required." });
       }
       if (!commands.length) {
         await this.auditInvalid(auditContext, "InvalidTankBattleCommands", "At least one command is required.");
@@ -2912,6 +2912,7 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/victim-damage-display")) {
+      if (!this.requirePermission(user, "debug.tools", res)) return;
       const pluginApi = this.getPluginApi("plugin.victimDamageDisplay");
       if (!pluginApi) {
         return this.json(res, 404, {
@@ -2928,7 +2929,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/victim-damage-display/debug/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.clearDebugRecords?.() ?? null,
@@ -2937,6 +2937,7 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/squad-leader-impeachment")) {
+      if (!this.requirePermission(user, "squad_leader_impeachment.manage", res)) return;
       const pluginApi = this.getPluginApi("plugin.squadLeaderImpeachment");
       if (!pluginApi) {
         return this.json(res, 404, {
@@ -2950,30 +2951,27 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/squad-leader-impeachment/cancel" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, { ok: true, data: await pluginApi.cancelVote?.(body?.voteId) });
       }
 
       if (url.pathname === "/api/plugins/squad-leader-impeachment/cooldowns/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, { ok: true, data: pluginApi.clearCooldowns?.() ?? null });
       }
     }
 
     if (url.pathname.startsWith("/api/plugins/death-quote-warning")) {
+      if (!this.requirePermission(user, "death_quote_warning.manage", res)) return;
       const pluginApi = this.getPluginApi("plugin.death-quote-warning");
       if (!pluginApi) return this.json(res, 404, { error: "DeathQuoteWarningUnavailable", message: "Death quote warning plugin is not loaded." });
       if (url.pathname === "/api/plugins/death-quote-warning/state" && req.method === "GET") {
         return this.json(res, 200, { ok: true, data: pluginApi.getState?.() ?? null });
       }
       if (url.pathname === "/api/plugins/death-quote-warning/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, { ok: true, data: await pluginApi.updateConfig?.(body ?? {}) });
       }
       if (url.pathname === "/api/plugins/death-quote-warning/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, { ok: true, data: pluginApi.clearHistory?.() ?? null });
       }
     }
@@ -3002,7 +3000,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/welcome-join-warning/simulate" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3011,7 +3008,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/welcome-join-warning/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.clearHistory?.() ?? null,
@@ -3019,7 +3015,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/welcome-join-warning/clear-events" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.clearRecentEvents?.() ?? null,
@@ -3027,7 +3022,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/welcome-join-warning/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3060,7 +3054,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/tactical-report/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3069,7 +3062,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/tactical-report/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.clearHistory?.() ?? null,
@@ -3102,7 +3094,6 @@ export class WebServer {
 
       const deleteUserCodeMatch = url.pathname.match(/^\/api\/plugins\/tactical-report\/user-codes\/([^/]+)\/([^/]+)$/);
       if (deleteUserCodeMatch && req.method === "DELETE") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: pluginApi.deleteUserCode?.(
@@ -3115,7 +3106,6 @@ export class WebServer {
 
     if (url.pathname.startsWith("/api/plugins/stepwise-squad-playtime-guard")) {
       if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/enabled" && req.method === "PATCH") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         if (typeof body?.enabled !== "boolean") {
           return this.json(res, 400, { error: "InvalidBody", message: "enabled must be boolean" });
@@ -3127,7 +3117,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/config" && req.method === "PATCH") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         if (!body || typeof body !== "object" || Array.isArray(body)) {
           return this.json(res, 400, { error: "InvalidBody", message: "body must be object" });
@@ -3155,7 +3144,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/stepwise-squad-playtime-guard/simulate" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3193,7 +3181,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/panel-ban/load" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: await pluginApi.load?.(),
@@ -3201,7 +3188,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/panel-ban/reload" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: await pluginApi.reload?.(),
@@ -3209,7 +3195,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/panel-ban/rescan" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3218,7 +3203,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3240,8 +3224,7 @@ export class WebServer {
         }
 
         if (req.method === "PATCH") {
-          if (!this.requireSuperAdmin(user, res)) return;
-          const body = await this.readJsonBody(req);
+            const body = await this.readJsonBody(req);
           return this.json(res, 200, {
             ok: true,
             data: await pluginApi.updateEntry?.(entryId, {
@@ -3253,8 +3236,7 @@ export class WebServer {
         }
 
         if (req.method === "DELETE") {
-          if (!this.requireSuperAdmin(user, res)) return;
-          return this.json(res, 200, {
+            return this.json(res, 200, {
             ok: true,
             data: await pluginApi.deleteEntry?.(entryId, {
               actor: user,
@@ -3291,7 +3273,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/network-block/load" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: await pluginApi.load?.(),
@@ -3299,7 +3280,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/network-block/reload" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: await pluginApi.reload?.(),
@@ -3307,7 +3287,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/network-block/reconcile" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: await pluginApi.reconcile?.(),
@@ -3315,7 +3294,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/network-block/resolve-player-ip" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         const playerDatabase = this.modules.playerDatabase;
         if (!playerDatabase?.findByIdentity) {
@@ -3340,7 +3318,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/network-block/entries" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3362,8 +3339,7 @@ export class WebServer {
         }
 
         if (req.method === "PATCH") {
-          if (!this.requireSuperAdmin(user, res)) return;
-          const body = await this.readJsonBody(req);
+            const body = await this.readJsonBody(req);
           return this.json(res, 200, {
             ok: true,
             data: await pluginApi.updateEntry?.(entryId, {
@@ -3375,8 +3351,7 @@ export class WebServer {
         }
 
         if (req.method === "DELETE") {
-          if (!this.requireSuperAdmin(user, res)) return;
-          return this.json(res, 200, {
+            return this.json(res, 200, {
             ok: true,
             data: await pluginApi.deleteEntry?.(entryId, {
               actor: user,
@@ -3416,7 +3391,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/modules/player-session-records/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, {
           ok: true,
           data: moduleApi.clearRecords?.() ?? null,
@@ -3441,7 +3415,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/infantry-combat-enhancer/config" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         const body = await this.readJsonBody(req);
         return this.json(res, 200, {
           ok: true,
@@ -3467,7 +3440,6 @@ export class WebServer {
       }
 
       if (url.pathname === "/api/plugins/infantry-combat-enhancer/clear" && req.method === "POST") {
-        if (!this.requireSuperAdmin(user, res)) return;
         return this.json(res, 200, infantryCombatEnhancer.clear?.() ?? { ok: true, cleared: 0 });
       }
     }
@@ -4090,7 +4062,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/list" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.listSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
       return this.json(res, 200, await pluginApi.listSnapshots({
@@ -4108,7 +4080,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/statistics" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.getStatistics) return this.json(res, 404, { error: "PluginNotLoaded" });
       return this.json(res, 200, await pluginApi.getStatistics({
@@ -4117,7 +4089,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/capture" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const body = await this.readJsonBody(req);
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.takeManualSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
@@ -4128,7 +4100,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/debug/capture" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.takeDebugSnapshot) return this.json(res, 404, { error: "PluginNotLoaded" });
       try {
@@ -4144,14 +4116,14 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/debug/list" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const pluginApi = this.getPluginApi("match-end-snapshot");
       if (!pluginApi?.listDebugSnapshots) return this.json(res, 404, { error: "PluginNotLoaded" });
       return this.json(res, 200, await pluginApi.listDebugSnapshots());
     }
 
     if (url.pathname === "/api/match-end-snapshot/regenerate" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const body = await this.readJsonBody(req);
       const id = String(body?.id ?? "").trim();
       if (!id) return this.json(res, 400, { error: "MissingId" });
@@ -4190,7 +4162,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/delete" && req.method === "DELETE") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const id = url.searchParams.get("id");
       if (!id) return this.json(res, 400, { error: "MissingId" });
       const pluginApi = this.getPluginApi("match-end-snapshot");
@@ -4203,7 +4175,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/delete-batch" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const body = await this.readJsonBody(req);
       const records = Array.isArray(body?.records)
         ? body.records
@@ -4218,7 +4190,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/image" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const id = url.searchParams.get("id");
       if (!id) return this.json(res, 400, { error: "MissingId" });
       const pluginApi = this.getPluginApi("match-end-snapshot");
@@ -4257,7 +4229,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/thumbnail" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const id = url.searchParams.get("id");
       if (!id) return this.json(res, 400, { error: "MissingId" });
       const pluginApi = this.getPluginApi("match-end-snapshot");
@@ -4283,7 +4255,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/match-end-snapshot/view" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const id = url.searchParams.get("id");
       if (!id) return this.json(res, 400, { error: "MissingId" });
       const pluginApi = this.getPluginApi("match-end-snapshot");
@@ -4383,17 +4355,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/state" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.getLogPostState());
     }
 
     if (url.pathname === "/api/logpost/v2/state" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.getLogPostState());
     }
 
     if (url.pathname === "/api/logpost/raw" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.queryLogPostRawArchive({
         date: url.searchParams.get("date") ?? "",
         start: url.searchParams.get("start") ?? "",
@@ -4405,7 +4377,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/v2/raw" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.queryLogPostRawArchive({
         date: url.searchParams.get("date") ?? "",
         start: url.searchParams.get("start") ?? "",
@@ -4417,7 +4389,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/events" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.queryLogPostStructuredEvents({
         date: url.searchParams.get("date") ?? "",
         event: url.searchParams.get("event") ?? "",
@@ -4430,7 +4402,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/v2/events" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.queryLogPostStructuredEvents({
         date: url.searchParams.get("date") ?? "",
         event: url.searchParams.get("event") ?? "",
@@ -4443,17 +4415,17 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/gaps" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, this.getLogPostGapState());
     }
 
     if (url.pathname === "/api/logpost/v2/gaps" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, this.getLogPostGapState());
     }
 
     if (url.pathname === "/api/logpost/v2/outbox" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.queryLogPostOutbox({
         date: url.searchParams.get("date") ?? "",
         kind: url.searchParams.get("kind") ?? "",
@@ -4464,7 +4436,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/v2/safety" && req.method === "GET") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       return this.json(res, 200, await this.queryLogPostSafety({
         date: url.searchParams.get("date") ?? "",
         kind: url.searchParams.get("kind") ?? "",
@@ -4475,7 +4447,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/v2/replay" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const body = await this.readJsonBody(req);
       await this.writeLogPostAuditRecord("replay-requested", {
         requestedAt: new Date().toISOString(),
@@ -4489,7 +4461,7 @@ export class WebServer {
     }
 
     if (url.pathname === "/api/logpost/v2/checkpoint/repair" && req.method === "POST") {
-      if (!this.requireSuperAdmin(user, res)) return;
+      if (!this.requirePermission(user, "match_end_snapshots.manage", res)) return;
       const body = await this.readJsonBody(req);
       await this.writeLogPostAuditRecord("checkpoint-repair-requested", {
         requestedAt: new Date().toISOString(),
@@ -6239,6 +6211,12 @@ export class WebServer {
       throw error;
     }
     return groupId;
+  }
+
+  requirePermission(user, permission, res) {
+    if (this.core.authManager?.hasPermission?.(user, permission)) return true;
+    this.json(res, 403, { error: "Forbidden", message: `${permission} permission is required.` });
+    return false;
   }
 
   requireSuperAdmin(user, res) {
