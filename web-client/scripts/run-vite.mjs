@@ -15,7 +15,9 @@ try {
     label: "Vite production build",
     entry: vitePath,
     args: process.argv.slice(2),
-    maxOldSpaceSizeMb: 8192,
+    // Keep the old-space cap modest; very large caps have been linked to native
+    // crashes in large Windows Vite builds.
+    maxOldSpaceSizeMb: 4096,
   });
 
 

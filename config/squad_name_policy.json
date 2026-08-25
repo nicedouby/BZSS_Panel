@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 14,
+  "revision": 16,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-08-23T11:06:12.788Z",
+  "updatedAt": "2026-08-25T12:31:45.001Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -723,6 +723,23 @@
     }
   ],
   "entries": [
+    {
+      "id": "rule:manual_mt8lhvl7",
+      "name": "鼠鼠新人",
+      "aliases": [],
+      "keywords": [],
+      "typeId": "infantry",
+      "faction": "",
+      "asset": "",
+      "maxPlayersOverride": null,
+      "allowSquadSuffix": true,
+      "enabled": true,
+      "priority": 100,
+      "source": "manual",
+      "notes": "",
+      "legacyVehicleType": "",
+      "searchTokens": []
+    },
     {
       "id": "rule:manual_mt5pblsu",
       "name": "世一萌 后藤独",
@@ -2347,7 +2364,7 @@
         "BRDMUB",
         "BRDMUB32"
       ],
-      "typeId": "artillery_vehicle",
+      "typeId": "matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/BRDM-2/Weapons/BP_BRDM2_GFI_UB32.BP_BRDM2_GFI_UB32",
       "maxPlayersOverride": null,

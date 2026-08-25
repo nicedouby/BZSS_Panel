@@ -1004,16 +1004,28 @@
       },
       "nzcd": {
         "enabled": true,
-        "defaultMin": 1,
+        "defaultMin": -18,
         "defaultMax": 30,
         "ranges": [
           {
             "playerKey": "76561199666599666",
             "min": 180,
-            "max": 300000,
+            "max": 10000,
             "enabled": true
           }
         ]
+      },
+      "steam-playtime-publicity-reminder": {
+        "enabled": true,
+        "featureEnabled": false,
+        "startAfterSeconds": 300,
+        "pollIntervalMs": 1000,
+        "leaderWarningIntervalMs": 10000,
+        "broadcastBatchSize": 5,
+        "broadcastBatchIntervalMs": 120000,
+        "broadcastCycleCooldownMs": 600000,
+        "warningMessage": "你的steam个人资料尚未公开\n为了其他玩家的游戏体验，请公开你的steam个人资料",
+        "broadcastPrefix": "当前未公开steam个人资料的玩家有"
       }
     },
     "welcome-join-warning": {
@@ -1132,11 +1144,14 @@
       "maxWarningChars": 180,
       "splitWarningDelayMs": 500,
       "liveLookupWhenMissing": false,
-      "persistState": true
+      "persistState": true,
+      "stateFile": "./data/round-playtime-roster-warning/state.json",
+      "manualSquadTriggerNonce": "1787643874951-24bba80bead04",
+      "manualLeaderTriggerNonce": "1787643883986-2b8d4806a83b4"
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",

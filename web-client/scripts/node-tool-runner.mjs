@@ -2,10 +2,21 @@ import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import process from "node:process";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-const STABLE_NODE_MAJOR = 24;
+const STABLE_NODE_MAJOR = 26;
+const FALLBACK_NODE_MAJOR = 24;
+const EMERGENCY_NODE_MAJOR = 20;
+const SUPPORTED_NODE_MAJORS = [
+  STABLE_NODE_MAJOR,
+  FALLBACK_NODE_MAJOR,
+  EMERGENCY_NODE_MAJOR,
+];
+const SUPPORTED_NODE_PATTERNS = SUPPORTED_NODE_MAJORS.map(
+  (major) => new RegExp(`^(?:node-)?v?${major}\\.`, "i"),
+);
 
 export function createStableNodeToolEnv(source = process.env) {
   const env = { ...source };
@@ -43,12 +54,6 @@ export function createNodeToolExecArgs({
 
   const runtimeArgs = [`--max-old-space-size=${heapSize}`];
 
-  // Windows 上的 Vite/Rollup 大型构建可能触发 V8 原生访问冲突（3221225477）。
-  // Node 24 也支持该兼容参数，因此所有 Windows 构建运行时统一启用。
-  if (process.platform === "win32") {
-    runtimeArgs.push("--no-maglev");
-  }
-
   for (const arg of extraNodeArgs) {
     if (!runtimeArgs.includes(arg)) {
       runtimeArgs.push(arg);
@@ -76,43 +81,59 @@ export async function runNodeTool({
   const toolLabel = String(label || "Node tool");
   const startedAt = Date.now();
 
-  const runtime = await resolveBuildNodeRuntime();
+  const runtimes = await resolveBuildNodeRuntimes();
 
-  const execArgs = createNodeToolExecArgs({
-    entry,
-    args,
-    nodeArgs,
-    maxOldSpaceSizeMb,
-    nodeMajor: runtime.major,
-  });
+  let lastCode = 1;
 
-  const entryIndex = execArgs.indexOf(String(entry));
+  for (const [index, runtime] of runtimes.entries()) {
+    const execArgs = createNodeToolExecArgs({
+      entry,
+      args,
+      nodeArgs,
+      maxOldSpaceSizeMb,
+      nodeMajor: runtime.major,
+    });
 
-  console.log(
-    `[client-build] Starting ${toolLabel} with ${runtime.version} at ${runtime.path}`,
-  );
+    const entryIndex = execArgs.indexOf(String(entry));
 
-  console.log(
-    `[client-build] Runtime flags: ${
-      entryIndex > 0
-        ? execArgs.slice(0, entryIndex).join(" ")
-        : ""
-    }`,
-  );
-
-  const code = await runNodeToolProcess({
-    toolLabel,
-    executable: runtime.path,
-    execArgs,
-  });
-
-  const elapsed = Date.now() - startedAt;
-
-  if (code === 0) {
     console.log(
-      `[client-build] Finished ${toolLabel} in ${elapsed} ms`,
+      `[client-build] Starting ${toolLabel} with ${runtime.version} at ${runtime.path}`,
     );
-  } else {
+
+    console.log(
+      `[client-build] Runtime flags: ${
+        entryIndex > 0
+          ? execArgs.slice(0, entryIndex).join(" ")
+          : ""
+      }`,
+    );
+
+    const code = await runNodeToolProcess({
+      toolLabel,
+      executable: runtime.path,
+      execArgs,
+    });
+
+    lastCode = code;
+
+    if (code === 0) {
+      const elapsed = Date.now() - startedAt;
+      console.log(
+        `[client-build] Finished ${toolLabel} in ${elapsed} ms`,
+      );
+      return code;
+    }
+
+    const nextRuntime = runtimes[index + 1];
+
+    if (isNativeCrashCode(code) && nextRuntime) {
+      console.error(
+        `[client-build] ${toolLabel} hit a native crash (exit ${code}); retrying with ${nextRuntime.version}...`,
+      );
+      continue;
+    }
+
+    const elapsed = Date.now() - startedAt;
     console.error(
       `[client-build] ${toolLabel} failed with exit code ${code} after ${elapsed} ms.`,
     );
@@ -120,43 +141,86 @@ export async function runNodeTool({
     console.error(
       `[client-build] Runtime: ${runtime.version}, platform ${process.platform} ${process.arch}`,
     );
+
+    return code;
   }
 
-  return code;
+  return lastCode;
 }
 
-async function resolveBuildNodeRuntime() {
+async function resolveBuildNodeRuntimes() {
   const currentMajor = getNodeMajor(process.version);
 
-  // 当前进程就是 Node 24，直接使用
-  if (currentMajor === STABLE_NODE_MAJOR) {
-    return {
-      major: currentMajor,
-      path: process.execPath,
-      version: process.version,
-    };
-  }
+  const runtimes = [];
 
-  const candidates = getNodeRuntimeCandidates();
-
-  for (const candidate of candidates) {
+  for (const candidate of getNodeRuntimeCandidates()) {
     const runtime = await inspectNodeRuntime(candidate);
 
-    if (
-      runtime &&
-      runtime.major === STABLE_NODE_MAJOR
-    ) {
-      return runtime;
+    if (runtime) {
+      runtimes.push(runtime);
     }
   }
 
-  throw new Error(
-    [
-      "A stable Node 24 LTS runtime is required for client builds.",
-      `The current process is ${process.version} at ${process.execPath}.`,
-      "Install Node 24 LTS or set BZSS_NODE_RUNTIME to the full path of node.exe.",
-    ].join(" "),
-  );
+  const ordered = [];
+  const seenPaths = new Set();
+
+  const addRuntime = (runtime) => {
+    if (!runtime || seenPaths.has(runtime.path)) {
+      return;
+    }
+
+    seenPaths.add(runtime.path);
+    ordered.push(runtime);
+  };
+
+  if (currentMajor === STABLE_NODE_MAJOR) {
+    addRuntime({
+      major: currentMajor,
+      path: process.execPath,
+      version: process.version,
+    });
+  }
+
+  for (const major of SUPPORTED_NODE_MAJORS) {
+    const runtime = runtimes.find(
+      (candidate) => candidate.major === major,
+    );
+
+    if (runtime) {
+      addRuntime(runtime);
+    }
+  }
+
+  if (ordered.length === 0 && currentMajor >= EMERGENCY_NODE_MAJOR) {
+    addRuntime({
+      major: currentMajor,
+      path: process.execPath,
+      version: process.version,
+    });
+  }
+
+  if (ordered.length === 0) {
+    throw new Error(
+      [
+        `A supported Node runtime is required for client builds.`,
+        `The current process is ${process.version} at ${process.execPath}.`,
+        `Install Node ${STABLE_NODE_MAJOR} or set BZSS_NODE_RUNTIME to the full path of node.exe.`,
+      ].join(" "),
+    );
+  }
+
+  return ordered;
+}
+
+function isNativeCrashCode(code) {
+  const value = typeof code === "number" ? code >>> 0 : 0;
+
+  return [
+    0xC0000005,
+    0x80000003,
+    0xC0000409,
+    0xC0000374,
+  ].includes(value);
 }
 
 function getNodeRuntimeCandidates() {
@@ -179,6 +243,11 @@ function getNodeRuntimeCandidates() {
     process.env.BZSS_NODE_PATH;
 
   add(configuredRuntime);
+
+  const localNodeRoot = fileURLToPath(
+    new URL("../.node/", import.meta.url),
+  );
+  addNodeVersionDirectories(localNodeRoot, add);
 
   if (process.platform === "win32") {
     const nvmRoots = [
@@ -225,8 +294,11 @@ function addNodeVersionDirectories(root, add) {
 
   try {
     for (const name of readdirSync(normalizedRoot)) {
-      // 注意：这里必须使用单反斜杠
-      if (/^v?24\./i.test(name)) {
+      if (
+        SUPPORTED_NODE_PATTERNS.some((pattern) =>
+          pattern.test(name),
+        )
+      ) {
         add(
           join(
             normalizedRoot,

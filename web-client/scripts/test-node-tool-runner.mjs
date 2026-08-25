@@ -32,11 +32,6 @@ export function createNodeToolExecArgs({
 
   const runtimeArgs = [];
 
-  const nodeMajor = Number.parseInt(String(process.versions.node).split(".")[0], 10);
-  if (process.platform === "win32" && nodeMajor >= 26) {
-    runtimeArgs.push("--no-maglev");
-  }
-
 
   const heapSize = Number(maxOldSpaceSizeMb);
 
