@@ -10,7 +10,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/match/squad-creation-order", requiredPermission: "squad_management.view" },
   { route: "/player-session-records", requiredPermission: "player_session_records.view" },
   { route: "/player-database", requiredPermission: "player_database.view" },
-  { route: "/reserve-slots", requiredPermission: "player_database.view" },
+  { route: "/reserve-slots", requiredPermission: "reserve_slots.view" },
   { route: "/admin-warns", requiredPermission: "admin_warn.view" },
   { route: "/scheduled-broadcasts", requiredPermission: "scheduled_broadcast.view" },
   { route: "/squad-management", requiredPermission: "squad_management.view" },
