@@ -169,7 +169,7 @@ class BzssLogParserApp:
         # Keep this independent from generic raw-log sampling so state remains
         # available even when raw output is disabled.
         self._bzss_state_forward_times: deque[float] = deque()
-        self.bzss_state_max_per_second = max(1, min(max_per_second, 20))
+        self.bzss_state_max_per_second = max(1, min(self.raw_log_output_max_per_second, 20))
 
         console_config = self.config.get("console", {})
         self.console = ConsolePrinter(
