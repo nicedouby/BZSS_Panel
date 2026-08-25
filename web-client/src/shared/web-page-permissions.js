@@ -24,7 +24,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/plugins/tactical-report/config", requiredPermission: "plugin:tactical-report:update" },
   { route: "/plugins/tactical-report/logs", requiredPermission: "plugin:tactical-report:logs" },
   { route: "/plugins/tactical-report/user-codes", requiredPermission: "plugin:tactical-report:user-codes" },
-  { route: "/plugins/panel-ban", requiredPermission: "plugin:panel-ban:view" },
+  { route: "/plugins/panel-ban", requiredPermission: "panel_ban.manage" },
   { route: "/plugins/network-block", requiredPermission: "plugin:network-block:view" },
   { route: "/plugins/server-info-statistics", requiredPermission: "server_stats.view" },
   { route: "/debug/udp-forwarder", requiredPermission: "debug.udp_forwarder.view" },
