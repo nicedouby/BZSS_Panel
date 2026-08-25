@@ -124,7 +124,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "system",
     refreshPolicy: "polling",
     nav: { section: "system", label: "AstrBot 网关", icon: "🤖", order: 25 },
-    superAdminOnly: true,
+    requiredPermission: "astrbot.manage",
     ...workspacePage,
   },
   {
@@ -220,7 +220,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "plugin",
     refreshPolicy: "polling",
     nav: { section: "entertainment", label: "NZCD 娱乐插件", icon: "📏", order: 10 },
-    superAdminOnly: true,
+    requiredPermission: "nzcd.manage",
     ...workspacePage,
   },
   {
@@ -231,7 +231,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "polling",
     nav: { section: "players", label: "暖服赠送预留位", icon: "🔥", order: 25 },
-    superAdminOnly: true,
+    requiredPermission: "warmup_reserve_grant.manage",
     ...workspacePage,
   },
   {
@@ -406,7 +406,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "debug",
     refreshPolicy: "polling",
     nav: { section: "players", label: "锁队处罚调试", icon: "🧭", order: 55 },
-    superAdminOnly: true,
+    requiredPermission: "debug.tools",
     ...workspacePage,
   },
   {
@@ -510,7 +510,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "core",
     refreshPolicy: "manual",
     nav: { section: "analytics", label: "对局结束快照", icon: "📚", order: 21 },
-    superAdminOnly: true,
+    requiredPermission: "match_end_snapshots.manage",
     ...workspacePage,
   },
   {
@@ -551,7 +551,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "debug",
     refreshPolicy: "polling",
     nav: { section: "combat", label: "伤害显示调试", icon: "🩸", order: 80 },
-    superAdminOnly: true,
+    requiredPermission: "debug.tools",
     ...documentPage,
   },
   {
@@ -563,7 +563,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "plugin",
     refreshPolicy: "polling",
     nav: { section: "players", label: "弹劾队长", icon: "⚖️", order: 84 },
-    superAdminOnly: true,
+    requiredPermission: "squad_leader_impeachment.manage",
     ...documentPage,
   },
   {
@@ -574,7 +574,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "plugin",
     refreshPolicy: "polling",
     nav: { section: "broadcast", label: "死亡名言警告", icon: "💬", order: 41 },
-    superAdminOnly: true,
+    requiredPermission: "death_quote_warning.manage",
     ...workspacePage,
   },
   {
@@ -615,7 +615,7 @@ export const pageRegistry: PageDefinition[] = [
     category: "system",
     refreshPolicy: "manual",
     nav: { section: "system", label: "LogPost v2 审计", icon: "🔎", order: 15 },
-    superAdminOnly: true,
+    requiredPermission: "debug.tools",
     ...documentPage,
   },
   {
