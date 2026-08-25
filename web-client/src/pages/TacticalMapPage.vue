@@ -603,8 +603,10 @@
         :has-combat-hotspot="combatHotspotVisible && combatHotspot != null"
         :kill-mode-active="killModeEnabled"
         :can-use-kill-mode="canUseKillMode"
+        :can-spawn-vehicle="canEditCapturePoints"
         @close="closeMapCommandMenu"
         @toggle-kill-mode="toggleKillMode"
+        @spawn-vehicle="openVehicleSpawnDialog(mapCommandMenu)"
         @start-measure="onStartMeasure(mapCommandMenu)"
         @add-point="onAddPoint(mapCommandMenu)"
         @undo-point="onUndoPoint"
@@ -615,6 +617,14 @@
         @calculate-hotspot="calculateCombatHotspot"
         @clear-hotspot="clearCombatHotspot"
         @toggle-layer="onToggleLayer"
+      />
+
+      <VehicleSpawnDialog
+        v-if="vehicleSpawnTarget"
+        :target="vehicleSpawnTarget"
+        :pending="vehicleSpawnPending"
+        @close="closeVehicleSpawnDialog"
+        @confirm="spawnVehicleAtTarget"
       />
 
       <header class="tactical-command-bar">
@@ -833,6 +843,7 @@ import PressureZoneSettingsPage from "./PressureZoneSettingsPage.vue";
 import MapContextMenu from "../components/tactical-map/MapContextMenu.vue";
 import PlayerInfoPanel from "../components/tactical-map/PlayerInfoPanel.vue";
 import PlayerActionMenu from "../components/tactical-map/PlayerActionMenu.vue";
+import VehicleSpawnDialog from "../components/tactical-map/VehicleSpawnDialog.vue";
 import FloatingPlayerWindow from "../components/squad-admin/FloatingPlayerWindow.vue";
 import { useMapCamera } from "../composables/useMapCamera";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
@@ -1749,6 +1760,13 @@ const mapCommandMenu = ref<{
   gameX: number;
   gameY: number;
 } | null>(null);
+const vehicleSpawnTarget = ref<{
+  x: number;
+  y: number;
+  z: number;
+  heightNote: string;
+} | null>(null);
+const vehicleSpawnPending = ref(false);
 const activeTool = ref<"none" | "measure" | "future">("none");
 const singleClickTimer = ref<any>(null);
 const pendingPlayerMarkerClick = {
@@ -2247,6 +2265,75 @@ function handleMapRightClick(e: MouseEvent) {
   // Close player panels/menus
   playerInfoPanel.value = null;
   playerActionMenu.value = null;
+}
+
+function estimateVehicleSpawnHeight(gameX: number, gameY: number) {
+  const unitsPerMeter = Math.max(1, Number(activeMapConfig.value.worldUnitsPerMeter) || 100);
+  let nearest: { distance: number; z: number; label: string } | null = null;
+
+  for (const player of positionedPlayers.value) {
+    const position = getPlayerPosition(player);
+    const x = Number(position?.x);
+    const y = Number(position?.y);
+    const z = Number(position?.z);
+    if (![x, y, z].every(Number.isFinite)) continue;
+    const distance = Math.hypot(x - gameX, y - gameY);
+    if (!nearest || distance < nearest.distance) {
+      nearest = { distance, z, label: getPlayerLabel(player) };
+    }
+  }
+
+  if (!nearest) {
+    return {
+      z: 0,
+      note: "当前没有可参考的玩家高度，Z 默认为 0；请按目标地形手动修改。",
+    };
+  }
+
+  const z = Math.round(nearest.z + unitsPerMeter);
+  const distanceMeters = Math.round(nearest.distance / unitsPerMeter);
+  return {
+    z,
+    note: `Z 参考最近玩家 ${nearest.label}（约 ${distanceMeters}m），并向上增加 1m；可手动修改。`,
+  };
+}
+
+function openVehicleSpawnDialog(menu: typeof mapCommandMenu.value) {
+  if (!menu || !canEditCapturePoints.value) return;
+  const height = estimateVehicleSpawnHeight(menu.gameX, menu.gameY);
+  vehicleSpawnTarget.value = {
+    x: Math.round(menu.gameX),
+    y: Math.round(menu.gameY),
+    z: height.z,
+    heightNote: height.note,
+  };
+  closeMapCommandMenu();
+}
+
+function closeVehicleSpawnDialog() {
+  if (!vehicleSpawnPending.value) vehicleSpawnTarget.value = null;
+}
+
+async function spawnVehicleAtTarget(payload: { assetPath: string; x: number; y: number; z: number }) {
+  if (vehicleSpawnPending.value || !canEditCapturePoints.value) return;
+  vehicleSpawnPending.value = true;
+  const parameter = `${payload.assetPath},${payload.x},${payload.y},${payload.z}`;
+  setKillModeFeedback("info", `正在创建载具：SpawnVehicle:${parameter}`, 60_000);
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "SpawnVehicle",
+      parameter,
+    });
+    if (!result?.ok) {
+      throw new Error(result?.message || "BZSS-Core 未确认载具创建指令");
+    }
+    vehicleSpawnTarget.value = null;
+    setKillModeFeedback("ok", `载具创建指令已提交 · X ${payload.x} Y ${payload.y} Z ${payload.z}`, 5_000);
+  } catch (error) {
+    setKillModeFeedback("error", error instanceof Error ? error.message : String(error), 8_000);
+  } finally {
+    vehicleSpawnPending.value = false;
+  }
 }
 
 // Player Click / DblClick / RightClick Differentiators
@@ -4348,6 +4435,8 @@ function deactivateMapPage() {
   playerInfoPanel.value = null;
   playerActionMenu.value = null;
   mapCommandMenu.value = null;
+  vehicleSpawnTarget.value = null;
+  vehicleSpawnPending.value = false;
   hoveredPlayer.value = null;
   hoverCoords.value = null;
 }
