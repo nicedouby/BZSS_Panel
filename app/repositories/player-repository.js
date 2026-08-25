@@ -979,6 +979,51 @@ export class PlayerRepository {
     );
   }
 
+  async replaceSquadBrowserServerRankings(playerId, rankings = [], fetchedAt = now()) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return { saved: 0 };
+    const timestamp = Number(fetchedAt) || now();
+    const top15 = (Array.isArray(rankings) ? rankings : []).slice(0, 15);
+
+    await this.db.run("DELETE FROM squadbrowser_server_rankings WHERE player_id = ?", id);
+    let saved = 0;
+    for (const [index, item] of top15.entries()) {
+      const serverName = cleanText(item?.serverName);
+      if (!serverName) continue;
+      const minutes = Math.max(0, Math.floor(Number(item?.playtimeMinutes) || 0));
+      const lastPlayedAt = Date.parse(String(item?.lastPlayedAt ?? ""));
+      await this.db.run(
+        `INSERT INTO squadbrowser_server_rankings (
+           player_id, rank_position, server_id, server_name, playtime_minutes, last_played_at, fetched_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        index + 1,
+        cleanText(item?.serverId),
+        serverName,
+        minutes,
+        Number.isFinite(lastPlayedAt) ? lastPlayedAt : null,
+        timestamp,
+      );
+      saved += 1;
+    }
+    return { saved };
+  }
+
+  async listSquadBrowserServerRankings(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const limit = Math.max(1, Math.min(15, Number(options.limit ?? 15) || 15));
+    return this.db.all(
+      `SELECT rank_position, server_id, server_name, playtime_minutes, last_played_at, fetched_at
+       FROM squadbrowser_server_rankings
+       WHERE player_id = ?
+       ORDER BY rank_position ASC
+       LIMIT ?`,
+      id,
+      limit,
+    );
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -986,7 +1031,7 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, sessions, steamProfile, containers, tags, squadBrowserServerPlaytime] = await Promise.all([
+    const [aliases, ips, sessions, steamProfile, containers, tags, squadBrowserServerPlaytime, squadBrowserServerRankings] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSessionHistory(id, { limit: 20 }),
@@ -994,6 +1039,7 @@ export class PlayerRepository {
       this.getPlayerContainerSummary(id, player),
       this.listPlayerTags(id),
       this.listSquadBrowserServerPlaytime(id),
+      this.listSquadBrowserServerRankings(id),
     ]);
 
     return {
@@ -1003,6 +1049,7 @@ export class PlayerRepository {
       sessionHistory: sessions,
       squadBrowserSessions: await this.listSquadBrowserSessions(id, { limit: 20 }),
       squadBrowserServerPlaytime,
+      squadBrowserServerRankings,
       steamProfile,
       containers,
       tags,
