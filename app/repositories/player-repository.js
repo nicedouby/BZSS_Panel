@@ -587,7 +587,8 @@ export class PlayerRepository {
 
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, current_ip, steam_game_seconds, game_seconds, game_seconds_override, server_seconds, warmup_seconds, steam_avatar, updated_at, assets_json
+      `SELECT id, current_name, steam_id, eos_id, current_ip, steam_game_seconds, game_seconds, game_seconds_override, server_seconds, warmup_seconds, steam_avatar, updated_at, assets_json,
+              EXISTS (SELECT 1 FROM player_tags pt WHERE pt.player_id = players.id AND pt.tag_type = 'automatic' AND pt.tag_value = '忠诚玩家') AS is_loyal_player
        FROM players
        WHERE steam_id IN (${placeholders})`,
       ...ids,
