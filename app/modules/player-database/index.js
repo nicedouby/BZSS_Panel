@@ -280,6 +280,18 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listSquadBrowserSessions(playerId, options);
     },
 
+    async upsertSquadBrowserProfile(playerId, licenseId, profile = {}, fetchedAt = Date.now(), lastError = null) {
+      return repo.upsertSquadBrowserProfile(playerId, licenseId, profile, fetchedAt, lastError);
+    },
+
+    async recordSquadBrowserLookupFailure(playerId, licenseId, error) {
+      return repo.recordSquadBrowserLookupFailure(playerId, licenseId, error);
+    },
+
+    async listSquadBrowserRefreshCandidates(options = {}) {
+      return repo.listSquadBrowserRefreshCandidates(options);
+    },
+
     async listSteamFriends(playerId) {
       return repo.listSteamFriends(playerId);
     },
