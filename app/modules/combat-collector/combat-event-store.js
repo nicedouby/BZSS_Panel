@@ -215,8 +215,12 @@ function updateTotals(totals, record, direction) {
 
 function durableKeys(record) {
   const keys = combatIdentityKeys(record);
-  const preferred = keys.filter((key) => /^(?:position|offset-raw|event|raw-fallback):/.test(key));
-  return (preferred.length ? preferred : keys).slice(0, 2);
+  const preferred = keys.find((key) => /^(?:position|offset-raw|event|raw-fallback):/.test(key));
+  const key = preferred ?? keys[0];
+  if (!key) return [];
+  // Keep one fixed-size token per on-disk record. Recent records retain their
+  // full flexible keys, while historical replay dedupe stays memory-bounded.
+  return [crypto.createHash("sha1").update(key).digest("base64url").slice(0, 12)];
 }
 
 function queryRecords(records, filter = {}) {
