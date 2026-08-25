@@ -1198,6 +1198,28 @@ export class PlayerRepository {
     return this.getPlayerDetail(id);
   }
 
+  async setPlayerTagPresence(playerId, tagType, tagValue, enabled) {
+    const id = Number(playerId);
+    const type = cleanText(tagType);
+    const value = cleanText(tagValue);
+    if (!Number.isFinite(id) || !type || !value) return false;
+    if (!enabled) {
+      await this.db.run(
+        "DELETE FROM player_tags WHERE player_id = ? AND tag_type = ? AND tag_value = ?",
+        id, type, value,
+      );
+      return false;
+    }
+    const ts = now();
+    await this.db.run(
+      `INSERT INTO player_tags (player_id, tag_type, tag_value, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(player_id, tag_type, tag_value) DO UPDATE SET updated_at = excluded.updated_at`,
+      id, type, value, ts, ts,
+    );
+    return true;
+  }
+
   async setPermissionGroup(playerId, permissionGroup) {
     await this.db.run(
       "UPDATE players SET permission_group = ?, updated_at = ? WHERE id = ?",
