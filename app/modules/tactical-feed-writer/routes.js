@@ -23,8 +23,8 @@ export async function handleTacticalFeedWriterRoutes({
   }
 
   if (url.pathname === "/api/tactical-feed-writer/recording" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, { error: "Forbidden", message: "SuperAdmin permission is required." });
+    if (!core.authManager?.hasPermission?.(user, "tactical_replay.manage")) {
+      json(403, { error: "Forbidden", message: "tactical_replay.manage permission is required." });
       return true;
     }
     const body = await readJsonBody(req);
