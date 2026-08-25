@@ -382,6 +382,20 @@ ON squadbrowser_player_profiles(license_id);
 CREATE INDEX IF NOT EXISTS idx_squadbrowser_player_profiles_fetched
 ON squadbrowser_player_profiles(fetched_at ASC);
 
+CREATE TABLE IF NOT EXISTS squadbrowser_server_rankings (
+    player_id INTEGER NOT NULL,
+    rank_position INTEGER NOT NULL,
+    server_id TEXT,
+    server_name TEXT NOT NULL,
+    playtime_minutes INTEGER NOT NULL DEFAULT 0,
+    last_played_at INTEGER,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY(player_id, rank_position),
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_squadbrowser_server_rankings_player
+ON squadbrowser_server_rankings(player_id, rank_position ASC);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
@@ -624,6 +638,25 @@ DROP TABLE IF EXISTS kill_stats;
     // 服务器名经常变化且长度很长；游玩记录只保留稳定的 server_id。
     await db.run("UPDATE squadbrowser_player_sessions SET server_name = NULL WHERE server_name IS NOT NULL");
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 11, Date.now());
+  }
+
+  if (!appliedSet.has(12)) {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS squadbrowser_server_rankings (
+          player_id INTEGER NOT NULL,
+          rank_position INTEGER NOT NULL,
+          server_id TEXT,
+          server_name TEXT NOT NULL,
+          playtime_minutes INTEGER NOT NULL DEFAULT 0,
+          last_played_at INTEGER,
+          fetched_at INTEGER NOT NULL,
+          PRIMARY KEY(player_id, rank_position),
+          FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_squadbrowser_server_rankings_player
+      ON squadbrowser_server_rankings(player_id, rank_position ASC);
+    `);
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 12, Date.now());
   }
 }
 
