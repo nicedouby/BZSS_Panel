@@ -368,6 +368,20 @@ ON squadbrowser_player_sessions(player_id, joined_at DESC);
 CREATE INDEX IF NOT EXISTS idx_squadbrowser_player_sessions_server
 ON squadbrowser_player_sessions(server_id, joined_at DESC);
 
+CREATE TABLE IF NOT EXISTS squadbrowser_player_profiles (
+    player_id INTEGER PRIMARY KEY,
+    license_id TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    last_attempt_at INTEGER NOT NULL,
+    last_error TEXT,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_squadbrowser_player_profiles_license
+ON squadbrowser_player_profiles(license_id);
+CREATE INDEX IF NOT EXISTS idx_squadbrowser_player_profiles_fetched
+ON squadbrowser_player_profiles(fetched_at ASC);
+
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
@@ -588,6 +602,28 @@ DROP TABLE IF EXISTS kill_stats;
       ON CONFLICT(player_id) DO NOTHING
     `);
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 10, Date.now());
+  }
+
+  if (!appliedSet.has(11)) {
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS squadbrowser_player_profiles (
+          player_id INTEGER PRIMARY KEY,
+          license_id TEXT NOT NULL,
+          fetched_at INTEGER NOT NULL,
+          last_attempt_at INTEGER NOT NULL,
+          last_error TEXT,
+          raw_json TEXT NOT NULL DEFAULT '{}',
+          FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_squadbrowser_player_profiles_license
+      ON squadbrowser_player_profiles(license_id);
+      CREATE INDEX IF NOT EXISTS idx_squadbrowser_player_profiles_fetched
+      ON squadbrowser_player_profiles(fetched_at ASC);
+    `);
+
+    // 服务器名经常变化且长度很长；游玩记录只保留稳定的 server_id。
+    await db.run("UPDATE squadbrowser_player_sessions SET server_name = NULL WHERE server_name IS NOT NULL");
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 11, Date.now());
   }
 }
 
