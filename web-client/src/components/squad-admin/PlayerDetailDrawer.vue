@@ -279,6 +279,28 @@
                     </span>
                   </div>
                 </div>
+
+                <div class="hud-pane-section hud-server-ranking">
+                  <div class="hud-section-header">
+                    <span class="hud-section-title">常玩服务器 / PLAYTIME RANKING</span>
+                    <span class="hud-section-subtitle">TOP 10</span>
+                  </div>
+                  <div v-if="databaseLoading" class="server-ranking-state">
+                    <span class="loader-dot"></span> 正在读取排行榜…
+                  </div>
+                  <div v-else-if="databaseError" class="server-ranking-state error">{{ databaseError }}</div>
+                  <div v-else-if="!favoriteServerRankings.length" class="server-ranking-state">暂无常玩服务器数据</div>
+                  <ol v-else class="server-ranking-list">
+                    <li v-for="server in favoriteServerRankings" :key="server.rank_position" class="server-ranking-row">
+                      <span class="server-ranking-index">{{ server.rank_position }}</span>
+                      <div class="server-ranking-main">
+                        <strong :title="server.server_name">{{ server.server_name }}</strong>
+                        <small>{{ server.server_id || "未知服务器 ID" }}</small>
+                      </div>
+                      <b>{{ formatPlaytimeMinutes(server.playtime_minutes) }}</b>
+                    </li>
+                  </ol>
+                </div>
               </div>
 
               <!-- RIGHT COLUMN: Action Controls and Session Context -->
@@ -923,6 +945,12 @@ const ipSourceHint = computed(() => t("common.none"));
 
 const playerDatabaseRecord = computed(() => databaseDetail.value?.player ?? null);
 const playerDatabaseSummary = computed(() => databaseDetail.value?.summary ?? null);
+const favoriteServerRankings = computed(() => {
+  const rankings = Array.isArray(databaseDetail.value?.squadBrowserServerRankings)
+    ? databaseDetail.value.squadBrowserServerRankings
+    : [];
+  return rankings.slice(0, 10);
+});
 
 const rawDataText = computed(() => (showAdvanced.value ? safeStringify(props.player?.raw) : ""));
 
@@ -1031,6 +1059,14 @@ function formatHours(value: unknown) {
   const seconds = Number(value ?? 0);
   if (!Number.isFinite(seconds) || seconds < 0) return "--";
   return `${(seconds / 3600).toFixed(1)}h`;
+}
+
+function formatPlaytimeMinutes(value: unknown) {
+  const minutes = Math.max(0, Math.floor(Number(value) || 0));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours <= 0) return `${rest}分钟`;
+  return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
 function firstFiniteNumber(...values: unknown[]) {
@@ -4155,6 +4191,105 @@ onUnmounted(() => {
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.035);
+}
+
+.hud-server-ranking {
+  min-height: 360px;
+  align-content: start;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.76), rgba(30, 41, 59, 0.48));
+}
+
+.server-ranking-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.server-ranking-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 43px;
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.11);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.server-ranking-row:hover {
+  border-color: rgba(251, 146, 60, 0.3);
+  background: rgba(251, 146, 60, 0.055);
+}
+
+.server-ranking-index {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.13);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.server-ranking-main {
+  min-width: 0;
+}
+
+.server-ranking-main strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.server-ranking-main small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-ranking-row > b {
+  color: #7dd3fc;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.server-ranking-state {
+  min-height: 270px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+}
+
+.server-ranking-state.error {
+  color: #fca5a5;
+}
+
+.player-detail-floating .hud-server-ranking {
+  min-height: 330px;
+}
+
+.player-detail-floating .server-ranking-row {
+  min-height: 39px;
+  padding: 5px 7px;
 }
 
 @media (max-width: 540px) {
