@@ -132,10 +132,12 @@ describe("runtimeSync", () => {
       },
       signal: expect.any(AbortSignal),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/system/status", {
+    expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringMatching(/^\/api\/system\/status\?_=[0-9]+$/), {
+      cache: "no-store",
       credentials: "same-origin",
       headers: {
         Accept: "application/json",
+        "Cache-Control": "no-cache",
       },
       signal: expect.any(AbortSignal),
     });
