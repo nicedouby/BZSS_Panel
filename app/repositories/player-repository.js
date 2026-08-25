@@ -960,6 +960,25 @@ export class PlayerRepository {
     );
   }
 
+  async listSquadBrowserServerPlaytime(playerId, options = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    const limit = Math.max(1, Math.min(100, Number(options.limit ?? 12) || 12));
+    return this.db.all(
+      `SELECT server_id,
+              COUNT(*) AS session_count,
+              COALESCE(SUM(duration_minutes), 0) AS total_minutes,
+              MAX(joined_at) AS last_played_at
+       FROM squadbrowser_player_sessions
+       WHERE player_id = ? AND server_id IS NOT NULL AND TRIM(server_id) <> ''
+       GROUP BY server_id
+       ORDER BY total_minutes DESC, last_played_at DESC
+       LIMIT ?`,
+      id,
+      limit,
+    );
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -967,13 +986,14 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, sessions, steamProfile, containers, tags] = await Promise.all([
+    const [aliases, ips, sessions, steamProfile, containers, tags, squadBrowserServerPlaytime] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSessionHistory(id, { limit: 20 }),
       this.getSteamProfile(id, player),
       this.getPlayerContainerSummary(id, player),
       this.listPlayerTags(id),
+      this.listSquadBrowserServerPlaytime(id),
     ]);
 
     return {
@@ -982,6 +1002,7 @@ export class PlayerRepository {
       ips,
       sessionHistory: sessions,
       squadBrowserSessions: await this.listSquadBrowserSessions(id, { limit: 20 }),
+      squadBrowserServerPlaytime,
       steamProfile,
       containers,
       tags,
