@@ -6637,6 +6637,7 @@ function normalizePlaytimeRow(row, playerTimeRow = null) {
     lastSeenName: row?.last_seen_name ?? row?.lastSeenName ?? null,
     steam_avatar: row?.steam_avatar ?? row?.steamAvatar ?? playerTimeRow?.steam_avatar ?? playerTimeRow?.steamAvatar ?? null,
     steamAvatar: row?.steam_avatar ?? row?.steamAvatar ?? playerTimeRow?.steam_avatar ?? playerTimeRow?.steamAvatar ?? null,
+    loyalPlayer: Boolean(playerTimeRow?.is_loyal_player ?? playerTimeRow?.isLoyalPlayer),
   };
 }
 
