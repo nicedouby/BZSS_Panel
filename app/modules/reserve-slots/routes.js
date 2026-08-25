@@ -1,5 +1,13 @@
 import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_SOURCE_PAGES } from "../../core/audit/audit-actions.js";
 
+const RESERVE_SLOT_PERMISSIONS = Object.freeze({
+  VIEW: "reserve_slots.view",
+  MANAGE: "reserve_slots.manage",
+  CDK_MANAGE: "reserve_slots.cdk.manage",
+  EXPORT: "reserve_slots.export",
+  CONFIG_MANAGE: "reserve_slots.config.manage",
+});
+
 export async function handleReserveSlotsRoutes({
   core,
   modules,
@@ -24,11 +32,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots" && req.method === "GET") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.VIEW, json)) {
       return true;
     }
     json(200, await reserveSlots.getState());
@@ -36,11 +40,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/cdk/state" && req.method === "GET") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.VIEW, json)) {
       return true;
     }
 
@@ -50,11 +50,7 @@ export async function handleReserveSlotsRoutes({
 
   const batchActivationsMatch = url.pathname.match(/^\/api\/reserve-slots\/cdk\/batches\/([^/]+)\/activations$/);
   if (batchActivationsMatch && req.method === "GET") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.VIEW, json)) {
       return true;
     }
 
@@ -68,11 +64,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/cdk/batches" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.CDK_MANAGE, json)) {
       return true;
     }
 
@@ -112,11 +104,7 @@ export async function handleReserveSlotsRoutes({
 
   const deactivateBatchMatch = url.pathname.match(/^\/api\/reserve-slots\/cdk\/batches\/([^/]+)\/deactivate$/);
   if (deactivateBatchMatch && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.CDK_MANAGE, json)) {
       return true;
     }
 
@@ -149,11 +137,7 @@ export async function handleReserveSlotsRoutes({
 
   const reserveMemberDeleteMatch = url.pathname.match(/^\/api\/reserve-slots\/members\/([^/]+)$/);
   if (reserveMemberDeleteMatch && req.method === "DELETE") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.MANAGE, json)) {
       return true;
     }
 
@@ -186,11 +170,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/members" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.MANAGE, json)) {
       return true;
     }
 
@@ -227,11 +207,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/delete-expired" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.MANAGE, json)) {
       return true;
     }
 
@@ -262,11 +238,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/import-from-admin" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.MANAGE, json)) {
       return true;
     }
 
@@ -281,11 +253,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/export-csv" && req.method === "GET") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.EXPORT, json)) {
       return true;
     }
     const csv = await reserveSlots.exportCsv();
@@ -299,11 +267,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/reserve-slots/import-csv" && req.method === "POST") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.MANAGE, json)) {
       return true;
     }
 
@@ -327,11 +291,7 @@ export async function handleReserveSlotsRoutes({
   }
 
   if (url.pathname === "/api/settings/reserve-slots" && req.method === "PUT") {
-    if (!core.authManager?.hasEverything?.(user)) {
-      json(403, {
-        error: "Forbidden",
-        message: "SuperAdmin permission is required.",
-      });
+    if (!requireReserveSlotPermission(core, user, RESERVE_SLOT_PERMISSIONS.CONFIG_MANAGE, json)) {
       return true;
     }
 
@@ -351,6 +311,15 @@ export async function handleReserveSlotsRoutes({
     return true;
   }
 
+  return false;
+}
+
+function requireReserveSlotPermission(core, user, permission, json) {
+  if (core.authManager?.hasPermission?.(user, permission)) return true;
+  json(403, {
+    error: "Forbidden",
+    message: `Missing permission: ${permission}`,
+  });
   return false;
 }
 
