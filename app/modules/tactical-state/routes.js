@@ -24,7 +24,11 @@ export async function handleTacticalStateRoutes({ modules, url, req, res, user, 
 
   if (url.pathname === "/api/tactical-state/players" && req.method === "GET") {
     const players = await tacticalState.getPlayers?.({ user });
-    json(200, { ok: true, players });
+    const summaryOnly = url.searchParams.get("summary") === "1";
+    json(200, {
+      ok: true,
+      players: summaryOnly ? compactTacticalPlayers(players) : players,
+    });
     return true;
   }
 
@@ -236,4 +240,28 @@ function decodePathSegment(value) {
   } catch {
     return String(value ?? "");
   }
+}
+
+
+function compactTacticalPlayers(players) {
+  return (Array.isArray(players) ? players : []).map((player) => {
+    const telemetry = { ...(player?.telemetry ?? {}) };
+    const vehicle = { ...(player?.vehicle ?? {}) };
+    delete telemetry.position;
+    delete telemetry.rotation;
+    delete telemetry.yaw;
+    delete vehicle.raw;
+
+    return {
+      identity: player?.identity ?? {},
+      presence: player?.presence ?? {},
+      match: player?.match ?? {},
+      telemetry,
+      combat: player?.combat ?? {},
+      vehicle,
+      network: player?.network ?? {},
+      profile: player?.profile ?? {},
+      freshness: player?.freshness ?? {},
+    };
+  });
 }
