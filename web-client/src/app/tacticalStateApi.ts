@@ -53,7 +53,7 @@ export async function fetchTacticalStateSnapshot() {
 }
 
 export async function fetchTacticalStatePlayers() {
-  return apiGet<TacticalStatePlayersResponse>("/api/tactical-state/players");
+  return apiGet<TacticalStatePlayersResponse>("/api/tactical-state/players?summary=1");
 }
 
 export async function fetchTacticalStatePlayerHealth() {
