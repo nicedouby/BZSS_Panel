@@ -522,6 +522,7 @@ await testUserStorePersistsAdminProfileFieldsAndSteamBinding();
 await testUserStoreProtectsLastSuperAdminDowngrade();
 await testPermissionGroupsPersistAndResolveForAdminUser();
 await testUserStorePersistsPanelBanPermission();
+await testUserStoreAcceptsAllPermissionEditorOptions();
 await testPermissionGroupDeleteRejectsAssignedUsers();
 await testAuthWatcherLifecycleAndExternalRefresh();
 
