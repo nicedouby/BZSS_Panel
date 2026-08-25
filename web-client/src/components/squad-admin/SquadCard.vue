@@ -73,6 +73,7 @@
           :steam-avatar="getPlayerSteamAvatar(squad.leader.steamId)"
           :server-playtime-seconds="getPlayerServerSeconds(squad.leader.steamId)"
           :warmup-playtime-seconds="getPlayerWarmupSeconds(squad.leader.steamId)"
+          :loyal-player="isPlayerLoyal(squad.leader.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
@@ -94,6 +95,7 @@
           :steam-avatar="getPlayerSteamAvatar(member.steamId)"
           :server-playtime-seconds="getPlayerServerSeconds(member.steamId)"
           :warmup-playtime-seconds="getPlayerWarmupSeconds(member.steamId)"
+          :loyal-player="isPlayerLoyal(member.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
@@ -228,6 +230,12 @@ function getPlayerServerSeconds(steamId: string | null | undefined): number | nu
 
 function getPlayerWarmupSeconds(steamId: string | null | undefined): number | null {
   return getCachedDurationSeconds(steamId, "warmupSeconds", "warmup_seconds");
+}
+
+function isPlayerLoyal(steamId: string | null | undefined): boolean {
+  if (!steamId) return false;
+  const record = props.playtimes[steamId];
+  return Boolean(record?.loyalPlayer ?? record?.loyal_player ?? record?.is_loyal_player);
 }
 
 function getCachedDurationSeconds(
