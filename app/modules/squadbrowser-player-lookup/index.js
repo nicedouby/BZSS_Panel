@@ -7,6 +7,8 @@ const CACHE_TTL_MS = 60_000;
 const AUTO_REFRESH_TTL_MS = 36 * 60 * 60 * 1000;
 const AUTO_REFRESH_INTERVAL_MS = 12_000;
 const AUTO_REFRESH_BATCH_SIZE = 50;
+const BZSS_SERVER_LICENSE_ID = "LICENSED-1008168";
+const LOYAL_PLAYER_TAG = "忠诚玩家";
 
 let actionCache = {
   profile: "404fee0c709081e101437b42eca9a7480cf839f19e",
@@ -211,6 +213,27 @@ function buildLookupPayload(profile, sessionData, steam64) {
   };
 }
 
+export function evaluateLoyalPlayer(rankings = []) {
+  const servers = (Array.isArray(rankings) ? rankings : []).slice(0, 15);
+  const normalized = servers.map((server) => ({
+    ...server,
+    minutes: Math.max(0, Number(server?.playtimeMinutes) || 0),
+  }));
+  const totalMinutes = normalized.reduce((sum, server) => sum + server.minutes, 0);
+  const bzss = normalized.find((server) => (
+    String(server?.serverId ?? "").trim() === BZSS_SERVER_LICENSE_ID
+    || String(server?.serverName ?? "").includes("步战鼠鼠")
+  ));
+  const highestMinutes = normalized.reduce((highest, server) => Math.max(highest, server.minutes), 0);
+  const share = totalMinutes > 0 && bzss ? bzss.minutes / totalMinutes : 0;
+  return {
+    qualified: Boolean(bzss && bzss.minutes === highestMinutes && share > 0.5),
+    bzssMinutes: bzss?.minutes ?? 0,
+    totalMinutes,
+    share,
+  };
+}
+
 async function persistLookupResult(playerDatabase, result) {
   if (!playerDatabase?.upsertFromPresence) return null;
   const player = result?.player ?? {};
@@ -238,6 +261,13 @@ async function persistLookupResult(playerDatabase, result) {
     player.favoriteServers,
     fetchedAt,
   );
+  const loyalty = evaluateLoyalPlayer(player.favoriteServers);
+  await playerDatabase.setPlayerTagPresence?.(
+    dbPlayer.id,
+    "automatic",
+    LOYAL_PLAYER_TAG,
+    loyalty.qualified,
+  );
   const detail = await playerDatabase.getPlayerDetail?.(dbPlayer.id);
   const profile = detail?.steamProfile ?? {};
   return {
@@ -245,6 +275,7 @@ async function persistLookupResult(playerDatabase, result) {
     avatar: profile.avatar_medium ?? profile.avatar_full ?? dbPlayer.steam_avatar ?? null,
     savedSessions: Number(saved?.inserted ?? 0),
     savedServerRankings: Number(ranking?.saved ?? 0),
+    loyalPlayer: loyalty,
   };
 }
 
