@@ -1516,6 +1516,57 @@ let resizeObserver: ResizeObserver | null = null;
 let fitViewportTimeout: number | null = null;
 let mapPageActive = false;
 const tilesReady = ref(false);
+const OFFSCREEN_PLAYER_REFRESH_MS = 1500;
+const PLAYER_VIEWPORT_MARGIN_PX = 112;
+let viewportPlayerRefreshFrame: number | null = null;
+
+function isMapPointInViewport(mapX: number, mapY: number, marginPx = PLAYER_VIEWPORT_MARGIN_PX) {
+  if (!(vpWidth.value > 0) || !(vpHeight.value > 0)) return true;
+  const screen = camera.worldToScreen(mapX * 10, mapY * 10);
+  return screen.x >= -marginPx
+    && screen.y >= -marginPx
+    && screen.x <= vpWidth.value + marginPx
+    && screen.y <= vpHeight.value + marginPx;
+}
+
+function isPlayerInViewport(player: TacticalLinkedPlayer) {
+  const position = getPlayerPosition(player);
+  if (!position) return false;
+  const bounds = activeMapConfig.value.bounds;
+  return isMapPointInViewport(
+    project(position.x, bounds.minX, bounds.maxX),
+    project(position.y, bounds.minY, bounds.maxY),
+  );
+}
+
+function refreshVisiblePlayersFromLatestState() {
+  viewportPlayerRefreshFrame = null;
+  if (!mapPageActive) return;
+
+  const now = Date.now();
+  let changed = false;
+  for (const player of players.value ?? []) {
+    const key = getPlayerKey(player);
+    if (!key || !hasValidPosition(player) || shouldSuppressPlayerMarker(player) || !isPlayerInViewport(player)) continue;
+    const cached = cachedPlayers.value.get(key);
+    if (cached?.player !== player) {
+      cachedPlayers.value.set(key, { player, lastSeen: now });
+      changed = true;
+    }
+  }
+  if (changed) triggerRef(cachedPlayers);
+}
+
+function scheduleViewportPlayerRefresh() {
+  if (!mapPageActive || viewportPlayerRefreshFrame !== null) return;
+  viewportPlayerRefreshFrame = requestAnimationFrame(refreshVisiblePlayersFromLatestState);
+}
+
+watch(
+  () => [camera.x.value, camera.y.value, camera.zoom.value, vpWidth.value, vpHeight.value] as const,
+  scheduleViewportPlayerRefresh,
+  { flush: "post" },
+);
 const pressureObjectivePoints = computed(() => (Array.isArray(captureZones.value) ? captureZones.value : [])
   .map((zone: any) => ({ x: Number(zone?.x ?? zone?.position?.x), y: Number(zone?.y ?? zone?.position?.y) }))
   .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
@@ -2004,7 +2055,10 @@ watch(
 
       if (hasValidPosition(player)) {
         const cached = cachedPlayers.value.get(key);
-        if (cached?.player !== player) {
+        const shouldRefresh = !cached
+          || isPlayerInViewport(player)
+          || now - cached.lastSeen >= OFFSCREEN_PLAYER_REFRESH_MS;
+        if (shouldRefresh && cached?.player !== player) {
           cachedPlayers.value.set(key, { player, lastSeen: now });
           changed = true;
         }
@@ -3072,12 +3126,15 @@ const filteredPlayers = computed(() => {
   }
   return list;
 });
+const viewportPlayers = computed(() => (
+  filteredPlayers.value.filter((player) => isMapPointInViewport(player.mapX, player.mapY))
+));
 const renderedPlayerLimit = ref(0);
 let markerBatchFrame: number | null = null;
 let tilesEnableFrame: number | null = null;
 
 const renderedPlayers = computed(() => (
-  filteredPlayers.value.slice(0, renderedPlayerLimit.value)
+  viewportPlayers.value.slice(0, renderedPlayerLimit.value)
 ));
 
 /**
@@ -3129,7 +3186,7 @@ function cancelMarkerBatch() {
 
 function scheduleMarkerBatch() {
   cancelMarkerBatch();
-  const target = filteredPlayers.value.length;
+  const target = viewportPlayers.value.length;
   if (!mapPageActive || target === 0) {
     renderedPlayerLimit.value = 0;
     return;
@@ -3149,7 +3206,7 @@ function scheduleMarkerBatch() {
 }
 
 watch(
-  () => filteredPlayers.value.length,
+  () => viewportPlayers.value.length,
   () => scheduleMarkerBatch(),
 );
 
@@ -3160,6 +3217,7 @@ watch(
     cached: positionedPlayers.value.length,
     markers: markers.value.length,
     filtered: filteredPlayers.value.length,
+    visible: viewportPlayers.value.length,
   }),
   (stats) => {
     if (isDev) {
@@ -4408,6 +4466,10 @@ function deactivateMapPage() {
   if (tilesEnableFrame !== null) {
     cancelAnimationFrame(tilesEnableFrame);
     tilesEnableFrame = null;
+  }
+  if (viewportPlayerRefreshFrame !== null) {
+    cancelAnimationFrame(viewportPlayerRefreshFrame);
+    viewportPlayerRefreshFrame = null;
   }
   if (pressureZoneFetchTimer != null) {
     window.clearTimeout(pressureZoneFetchTimer);
