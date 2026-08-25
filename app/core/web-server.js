@@ -2487,14 +2487,17 @@ export class WebServer {
       if (!combatCollector) {
         return this.json(res, 404, { ok: false, error: "CombatCollectorUnavailable" });
       }
-      const result = combatCollector.getRecords({
+      const filter = {
         serverId: url.searchParams.get("serverId") ?? "",
         sourceMode: url.searchParams.get("sourceMode") ?? url.searchParams.get("source") ?? "all",
         type: url.searchParams.get("type") ?? "all",
         search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
         offset: url.searchParams.get("offset") ?? "0",
         limit: url.searchParams.get("limit") ?? "200",
-      });
+      };
+      const result = combatCollector.queryRecords
+        ? await combatCollector.queryRecords(filter)
+        : combatCollector.getRecords(filter);
       return this.json(res, 200, {
         ok: true,
         records: result.records,
@@ -2523,7 +2526,7 @@ export class WebServer {
       if (!killRecords) {
         return this.json(res, 404, { ok: false, error: "KillRecordsUnavailable" });
       }
-      const result = killRecords.getRecords({
+      const filter = {
         serverId: url.searchParams.get("serverId") ?? "",
         source: url.searchParams.get("source") ?? "all",
         sourceMode: url.searchParams.get("source") ?? "all",
@@ -2531,7 +2534,10 @@ export class WebServer {
         search: url.searchParams.get("search") ?? url.searchParams.get("q") ?? "",
         offset: url.searchParams.get("offset") ?? "0",
         limit: url.searchParams.get("limit") ?? "200",
-      });
+      };
+      const result = killRecords.queryRecords
+        ? await killRecords.queryRecords(filter)
+        : killRecords.getRecords(filter);
       return this.json(res, 200, {
         ok: true,
         records: result.records,
