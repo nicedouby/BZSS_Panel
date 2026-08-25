@@ -404,7 +404,6 @@ const pagePermissionLabels = new Map([
 
 const pagePermissionOptions = buildPagePermissionOptions();
 const reserveSlotPermissionOptions: PermissionOption[] = [
-  { value: "reserve_slots.view", label: "查看预留位" },
   { value: "reserve_slots.manage", label: "管理成员 / 时长" },
   { value: "reserve_slots.cdk.manage", label: "管理 CDK 批次" },
   { value: "reserve_slots.export", label: "导出 CSV" },
@@ -429,7 +428,7 @@ const permissionSections: PermissionSection[] = [
   {
     key: "reserve-slots",
     label: "预留位操作",
-    description: "先授予“查看预留位”，再按需分配成员、CDK、导出和设置权限。",
+    description: "页面访问中先勾选“预留位：查看”，再按需分配下面的具体操作。",
     options: reserveSlotPermissionOptions,
   },
   {
