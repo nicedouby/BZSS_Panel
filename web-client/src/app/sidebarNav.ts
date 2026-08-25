@@ -17,6 +17,7 @@ export type NavSectionKey =
   | "broadcast"
   | "analytics"
   | "system"
+  | "entertainment"
   | "other";
 
 export interface NavItem {
@@ -58,6 +59,7 @@ export const sectionOrder: NavSectionKey[] = [
   "broadcast",
   "analytics",
   "system",
+  "entertainment",
   "other",
 ];
 
@@ -69,6 +71,7 @@ export const sectionMeta: Record<NavSectionKey, { label: string; description: st
   broadcast: { label: "通知广播", description: "公告、警告与阶段提示",     icon: "📢" },
   analytics: { label: "数据分析", description: "统计、快照与诊断数据",     icon: "📊" },
   system:    { label: "系统维护", description: "运行状态、权限与审计",     icon: "🔧" },
+  entertainment: { label: "娱乐", description: "服务器娱乐功能与玩家互动", icon: "🎮" },
   other:     { label: "其他工具", description: "暂未归类的页面",           icon: "🧩" },
 };
 
@@ -249,6 +252,7 @@ function resolveSection(route: string, page: RegisteredWebPage): NavSectionKey {
   if (route === "/player-database" || route === "/reserve-slots" || route === "/black-edge-privilege" || route === "/player-session-records" || route === "/squad-management") return "players";
   if (route.includes("group-report") || route.includes("squad-rule-chain") || route.includes("fair-squad") || route.includes("stepwise-squad") || route.includes("lianban")) return "players";
   if (route.includes("tactical-report")) return "broadcast";
+  if (route.includes("nzcd") || id.includes("entertainment") || title.includes("娱乐")) return "entertainment";
   if (route.includes("steam-playtime-publicity-reminder")) return "broadcast";
   if (route.includes("squad-name-classifier") || id.includes("player") || id.includes("squad")) return "players";
   if (route === "/admin-warns" || route === "/scheduled-broadcasts") return "broadcast";
@@ -270,6 +274,7 @@ function normalizeDynamicOrder(section: NavSectionKey, order: number) {
     broadcast: 100,
     analytics: 100,
     system: 100,
+    entertainment: 100,
     other: 100,
   };
   return Math.max(sectionFloor[section], order);
