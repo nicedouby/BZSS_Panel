@@ -22,6 +22,10 @@ async function main() {
     { serverId: "OTHER", serverName: "其他服务器", playtimeMinutes: 49 },
   ]).qualified, true);
   assert.strictEqual(evaluateLoyalPlayer([
+    { serverId: "OTHER", serverName: "BZSS 公益服", playtimeMinutes: 60 },
+    { serverId: "OTHER-2", serverName: "其他服务器", playtimeMinutes: 40 },
+  ]).qualified, true);
+  assert.strictEqual(evaluateLoyalPlayer([
     { serverId: "LICENSED-1008168", serverName: "[CN]步战鼠鼠", playtimeMinutes: 50 },
     { serverId: "OTHER", serverName: "其他服务器", playtimeMinutes: 50 },
   ]).qualified, false);
