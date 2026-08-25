@@ -227,15 +227,15 @@ function readConfig(config) {
 function normalizeConfig(value = {}) {
   let defaultMin = toInteger(value.defaultMin, DEFAULT_MIN);
   let defaultMax = toInteger(value.defaultMax, DEFAULT_MAX);
-  defaultMin = Math.max(0, Math.min(defaultMin, 10000));
-  defaultMax = Math.max(0, Math.min(defaultMax, 10000));
+  defaultMin = Math.max(-10000, Math.min(defaultMin, 10000));
+  defaultMax = Math.max(-10000, Math.min(defaultMax, 10000));
   if (defaultMax < defaultMin) [defaultMin, defaultMax] = [defaultMax, defaultMin];
 
   const ranges = Array.isArray(value.ranges)
     ? value.ranges.map((item) => ({
         playerKey: normalizeText(item?.playerKey ?? item?.steamId ?? item?.steamID),
-        min: Math.max(0, Math.min(toInteger(item?.min, defaultMin), 10000)),
-        max: Math.max(0, Math.min(toInteger(item?.max, defaultMax), 10000)),
+        min: Math.max(-10000, Math.min(toInteger(item?.min, defaultMin), 10000)),
+        max: Math.max(-10000, Math.min(toInteger(item?.max, defaultMax), 10000)),
         enabled: item?.enabled !== false,
       })).filter((item) => item.playerKey)
     : [];
