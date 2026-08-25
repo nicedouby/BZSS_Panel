@@ -4,11 +4,13 @@ import os from "node:os";
 import path from "node:path";
 
 import { createCombatCollectorModule } from "../modules/combat-collector/index.js";
+import { CombatEventStore } from "../modules/combat-collector/combat-event-store.js";
 import { normalizeReplayCombatEvent } from "../modules/combat-collector/combat-event-normalizer.js";
 import { parseReplayCombatLine } from "../modules/kill-records/kill-record-normalizer.js";
 
 await testNullptrFieldsAreCollected();
 await testStartupReplayCacheAndLiveIngest();
+await testDiskBackedStoreBoundsResidentRecords();
 console.log("[run-combat-collector-tests] OK");
 
 async function testNullptrFieldsAreCollected() {
@@ -108,6 +110,39 @@ async function testStartupReplayCacheAndLiveIngest() {
 
     const cachedAfterRestart = (await fsp.readFile(cachePath, "utf8")).trim().split("\n");
     assert.equal(cachedAfterRestart.length, 4);
+  });
+}
+
+async function testDiskBackedStoreBoundsResidentRecords() {
+  await withTemp(async (root) => {
+    const store = new CombatEventStore({ directory: root, maxInMemoryRecords: 500 });
+    await store.load();
+    const records = Array.from({ length: 600 }, (_, index) => ({
+      type: "damage",
+      serverId: "BZSS_Main",
+      time: new Date(Date.UTC(2026, 7, 14, 7, 0, index)).toISOString(),
+      sourceFile: "SquadGame.log",
+      sourceFileId: "bounded-store",
+      sourceOffset: index * 100,
+      rawLog: `damage-${index}`,
+      attacker: { name: `Attacker-${index}` },
+      victim: { name: `Victim-${index}` },
+      weapon: "BP_Rifle_C",
+    }));
+    await store.insertBatch(records, { observedMode: "replay" });
+
+    assert.equal(store.getStats().count, 600);
+    assert.equal(store.getStats().retained, 500);
+    assert.equal(store.query({ limit: 1000 }).total, 500);
+
+    const diskResult = await store.queryDisk({ limit: 1000 });
+    assert.equal(diskResult.total, 600);
+    assert.equal(diskResult.records.length, 600);
+
+    const reloaded = new CombatEventStore({ directory: root, maxInMemoryRecords: 500 });
+    await reloaded.load();
+    assert.equal(reloaded.getStats().count, 600);
+    assert.equal(reloaded.getStats().retained, 500);
   });
 }
 
