@@ -48,7 +48,7 @@
       </template>
     </div>
 
-    <!-- Main Radial Action Buttons (8 Sectors) -->
+    <!-- Main Radial Action Buttons (9 Sectors) -->
     <div v-if="!showLayerRing" class="radial-sector-group">
       <!-- 0 deg: Measure -->
       <button
@@ -68,7 +68,7 @@
         type="button"
         class="radial-btn"
         :class="{ 'is-active': capturePointEditMode, 'is-disabled': capturePointCommandPending }"
-        style="--angle: 45deg;"
+        style="--angle: 40deg;"
         title="开启/退出点位编辑模式"
         @click.stop="!capturePointCommandPending && handleAction('toggle-capture-point-edit')"
       >
@@ -82,7 +82,7 @@
         type="button"
         class="radial-btn"
         :class="{ 'is-active': hasCombatHotspot }"
-        style="--angle: 90deg;"
+        style="--angle: 80deg;"
         title="计算/更新交战集中热点"
         @click.stop="handleAction('calculate-hotspot')"
       >
@@ -95,7 +95,7 @@
       <button
         type="button"
         class="radial-btn"
-        style="--angle: 135deg;"
+        style="--angle: 120deg;"
         title="地图视角聚焦于此"
         @click.stop="handleAction('focus-here')"
       >
@@ -107,7 +107,7 @@
       <button
         type="button"
         class="radial-btn"
-        style="--angle: 180deg;"
+        style="--angle: 160deg;"
         title="展开地图图层显示开关"
         @click.stop="showLayerRing = true"
       >
@@ -121,7 +121,7 @@
         type="button"
         class="radial-btn"
         :class="{ 'is-disabled': !hasPoints }"
-        style="--angle: 225deg;"
+        style="--angle: 200deg;"
         title="清空所有测距点"
         @click.stop="hasPoints && handleAction('clear-measure')"
       >
@@ -133,7 +133,7 @@
       <button
         type="button"
         class="radial-btn"
-        style="--angle: 270deg;"
+        style="--angle: 240deg;"
         title="复制 Squad 主格、九宫格和子九宫格坐标"
         @click.stop="handleAction('copy-coords')"
       >
@@ -146,12 +146,24 @@
         type="button"
         class="radial-btn kill-btn"
         :class="{ 'is-active': killModeActive, 'is-disabled': !canUseKillMode }"
-        style="--angle: 315deg;"
+        style="--angle: 280deg;"
         :title="killModeActive ? '退出击杀模式' : (canUseKillMode ? '开启击杀模式：随后单击玩家执行 Kill:X' : '缺少 bzss_core.use 权限')"
         @click.stop="canUseKillMode && emit('toggle-kill-mode')"
       >
         <span class="radial-btn-icon">☠</span>
         <span class="radial-btn-label">{{ killModeActive ? '退出击杀' : '击杀模式' }}</span>
+      </button>
+
+      <button
+        v-if="canSpawnVehicle"
+        type="button"
+        class="radial-btn spawn-vehicle-btn"
+        style="--angle: 320deg;"
+        title="在当前地图坐标创建载具"
+        @click.stop="emit('spawn-vehicle')"
+      >
+        <span class="radial-btn-icon">▣</span>
+        <span class="radial-btn-label">创建载具</span>
       </button>
     </div>
 
@@ -267,6 +279,7 @@ const props = defineProps<{
   hasCombatHotspot: boolean;
   killModeActive?: boolean;
   canUseKillMode?: boolean;
+  canSpawnVehicle?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -284,6 +297,7 @@ const emit = defineEmits<{
   (e: "clear-hotspot"): void;
   (e: "toggle-layer", payload: "alive" | "names" | "coords" | "fobs" | "zones" | "grid"): void;
   (e: "toggle-kill-mode"): void;
+  (e: "spawn-vehicle"): void;
 }>();
 
 const menuRef = ref<HTMLElement | null>(null);
@@ -617,6 +631,18 @@ function handleAction(
   border-color: #ef4444;
   color: #ffffff;
   box-shadow: 0 0 24px rgba(239, 68, 68, 0.78);
+}
+
+.radial-btn.spawn-vehicle-btn {
+  border-color: rgba(52, 211, 153, 0.62);
+  background: rgba(6, 78, 59, 0.9);
+  color: #a7f3d0;
+}
+
+.radial-btn.spawn-vehicle-btn:hover:not(.is-disabled) {
+  border-color: #34d399;
+  background: rgba(6, 95, 70, 0.96);
+  box-shadow: 0 0 24px rgba(52, 211, 153, 0.72);
 }
 
 .radial-btn.is-active {
