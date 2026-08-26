@@ -3474,6 +3474,16 @@ export class WebServer {
       return this.json(res, 200, result);
     }
 
+    if (url.pathname === "/api/squadbrowser/refresh-online" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const lookup = this.modules.squadBrowserPlayerLookup;
+      if (!lookup?.refreshOnline) return this.json(res, 503, { error: "SquadBrowserLookupUnavailable" });
+      const body = await this.readJsonBody(req);
+      const job = this.createLocalJob("squadbrowser-refresh-online", { force: Boolean(body?.force) });
+      this.runLocalJob(job, async () => await lookup.refreshOnline({ force: Boolean(body?.force) }));
+      return this.json(res, 202, job);
+    }
+
     if (url.pathname === "/api/squadbrowser/player" && req.method === "GET") {
       const lookup = this.modules.squadBrowserPlayerLookup;
       if (!lookup?.lookup) {
