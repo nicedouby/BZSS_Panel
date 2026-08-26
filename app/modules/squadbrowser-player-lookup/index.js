@@ -7,6 +7,7 @@ const CACHE_TTL_MS = 60_000;
 const AUTO_REFRESH_TTL_MS = 36 * 60 * 60 * 1000;
 const AUTO_REFRESH_INTERVAL_MS = 12_000;
 const AUTO_REFRESH_BATCH_SIZE = 50;
+const ONLINE_REFRESH_BATCH_SIZE = 8;
 const BZSS_SERVER_LICENSE_ID = "LICENSED-1008168";
 const LOYAL_PLAYER_TAG = "忠诚玩家";
 
@@ -321,16 +322,32 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
     if (refreshInFlight || !modules?.playerDatabase?.listSquadBrowserRefreshCandidates) return;
     refreshInFlight = true;
     try {
+      // 先把当前局内全部玩家写入候选库。此前新进入后始终在线的玩家若未被其他模块落库，
+      // 就永远不会出现在数据库候选中，因此不会被 SquadBrowser 自动查询。
+      const serverId = core?.webStatus?.serverId;
+      const onlinePlayers = modules?.playerState?.getOnlinePlayers?.(serverId) ?? [];
+      await Promise.all(onlinePlayers.map(async (player) => {
+        const steamID = String(player?.steamID ?? player?.steam64 ?? player?.steam_id ?? "").trim();
+        if (!/^\d{17}$/.test(steamID)) return;
+        await modules?.playerDatabase?.upsertFromPresence?.({
+          name: player?.name ?? player?.playerName ?? null,
+          steamID,
+          eosID: player?.eosID ?? player?.eos ?? player?.eos_id ?? null,
+        });
+      }));
+
       const candidates = await modules.playerDatabase.listSquadBrowserRefreshCandidates({
         limit: AUTO_REFRESH_BATCH_SIZE,
         staleBefore: Date.now() - AUTO_REFRESH_TTL_MS,
       });
       if (!candidates.length) return;
 
-      // 对局中的玩家永远优先；其余玩家按未查询、最久未刷新的顺序由数据库返回。
+      // 在线玩家必须优先，并在一轮内连续处理多个，避免百人服务器按 12 秒/人排队过久。
       const online = onlineSteamIds();
       candidates.sort((a, b) => Number(online.has(String(b.steam_id))) - Number(online.has(String(a.steam_id))));
-      await refreshOneCandidate(candidates[0]);
+      const onlineCandidates = candidates.filter((candidate) => online.has(String(candidate?.steam_id ?? "").trim()));
+      const selected = onlineCandidates.slice(0, ONLINE_REFRESH_BATCH_SIZE);
+      await Promise.all(selected.map((candidate) => refreshOneCandidate(candidate)));
     } finally {
       refreshInFlight = false;
     }
