@@ -1,9 +1,26 @@
 <template>
   <section class="db-page">
+    <header class="db-hero">
+      <div>
+        <div class="eyebrow">{{ t("database.dataCenter") }}</div>
+        <h1>{{ t("database.title") }}</h1>
+        <p>{{ t("database.pageDescription") }}</p>
+      </div>
+      <div class="hero-status">
+        <span class="status-dot" :class="{ loading: statsLoading }"></span>
+        <div>
+          <small>{{ t("database.lastStatsUpdate") }}</small>
+          <strong>{{ statsUpdatedAt }}</strong>
+        </div>
+      </div>
+    </header>
+
     <PlayerDatabaseStats :stats="overviewCards" />
 
     <PlayerDatabaseToolbar
       :model-value="filters"
+      :total="resultTotal"
+      :loading="listFetching"
       @update:model-value="onFiltersChange"
       @open-stats="openStatsModal"
     />
@@ -22,7 +39,7 @@
       <section v-if="!isMobile || selectedId !== null" class="db-content">
         <div v-if="isMobile && selectedId !== null" class="db-mobile-backbar">
           <button type="button" class="db-back-btn" @click="closePlayerDetail">Back</button>
-          <strong>Player Detail</strong>
+          <strong>{{ t("database.playerDetail") }}</strong>
         </div>
         <PlayerDatabaseDetail
           :id="selectedId"
@@ -57,7 +74,6 @@ import { useRoute } from "vue-router";
 import { ApiError, apiGet } from "../app/apiClient";
 import { queryClient } from "../app/queryClient";
 import { renderApiError } from "../app/errors";
-import { useServerStore } from "../stores/server.store";
 import { useIsMobile } from "../composables/useMediaQuery";
 import { usePlayerDatabaseQuery } from "../composables/usePlayerDatabaseQuery";
 import PlayerDatabaseStats from "../components/player-database/PlayerDatabaseStats.vue";
@@ -81,7 +97,6 @@ const statsLoading = ref(false);
 const statsError = ref("");
 const stats = ref<any | null>(null);
 const route = useRoute();
-const server = useServerStore();
 const isMobile = useIsMobile(1024);
 
 const statsSubtitle = computed(() => {
@@ -99,8 +114,13 @@ const { query } = usePlayerDatabaseQuery(filters);
 
 const rowsRaw = computed(() => query.data.value?.items ?? query.data.value?.players ?? []);
 const rows = computed(() => sortRows(rowsRaw.value, filters.sort));
+const resultTotal = computed(() => Number(query.data.value?.total ?? rowsRaw.value.length));
 const listLoading = computed(() => query.isLoading.value && !rowsRaw.value.length);
+const listFetching = computed(() => query.isFetching.value);
 const listError = computed(() => (query.error.value && !rowsRaw.value.length ? renderApiError(query.error.value, t("common.error")) : ""));
+const statsUpdatedAt = computed(() => stats.value?.generatedAt
+  ? formatRelativeTime(stats.value.generatedAt)
+  : t("common.notLoaded"));
 
 const detailQuery = useQuery({
   queryKey: computed(() => ["player-database-detail", selectedId.value]),
@@ -125,18 +145,52 @@ const detailError = computed(() => {
 
 const overviewCards = computed(() => {
   const overview = stats.value?.overview ?? null;
+  const activity = stats.value?.activity ?? null;
+  const engagement = stats.value?.engagement ?? null;
   const playerStats7d = stats.value?.playerStats7d ?? null;
   return [
-    { label: t("database.title"), value: overview ? formatNumber(overview.totalPlayers ?? 0) : "--" },
-    { label: t("database.active"), value: overview ? formatNumber(overview.activePlayersInWindow ?? 0) : "--" },
-    { label: t("database.matches"), value: overview ? formatNumber(overview.totalMatches ?? 0) : "--" },
-    { label: t("database.gameTime"), value: overview ? formatHoursFromSeconds(overview.totalGameSeconds ?? 0) : "--" },
-    { label: t("database.serverTime"), value: overview ? formatHoursFromSeconds(overview.totalServerSeconds ?? 0) : "--" },
-    { label: "暖服时长", value: overview ? formatHoursFromSeconds(overview.totalWarmupSeconds ?? 0) : "--" },
-    { label: "暖服分", value: overview ? formatNumber(overview.totalWarmupPoints ?? 0) : "--" },
-    { label: t("database.activePlayers7d"), value: playerStats7d ? formatNumber(playerStats7d.activePlayers ?? 0) : "--" },
-    { label: t("database.repeatPlayers7d"), value: playerStats7d ? formatNumber(playerStats7d.repeatPlayers ?? 0) : "--" },
-    { label: t("database.repeatRate7d"), value: playerStats7d ? formatPercent(playerStats7d.repeatRate ?? 0) : "--" },
+    {
+      label: t("database.totalPlayers"),
+      value: overview ? formatNumber(overview.totalPlayers ?? 0) : "--",
+      hint: activity ? t("database.active24hHint", "", { count: formatNumber(activity.active24h ?? 0) }) : "",
+      icon: "人",
+      tone: "blue" as const,
+    },
+    {
+      label: t("database.activePlayers7d"),
+      value: activity ? formatNumber(activity.active7d ?? 0) : "--",
+      hint: activity ? t("database.active30dHint", "", { count: formatNumber(activity.active30d ?? 0) }) : "",
+      icon: "活",
+      tone: "green" as const,
+    },
+    {
+      label: t("database.newPlayers7d"),
+      value: playerStats7d ? formatNumber(playerStats7d.newPlayers ?? 0) : "--",
+      hint: playerStats7d ? t("database.repeatRateHint", "", { rate: formatPercent(playerStats7d.repeatRate ?? 0) }) : "",
+      icon: "新",
+      tone: "violet" as const,
+    },
+    {
+      label: t("database.totalPlaytime"),
+      value: overview ? formatCompactHours(overview.totalGameSeconds ?? 0) : "--",
+      hint: engagement ? t("database.averagePlaytimeHint", "", { hours: formatHours(engagement.averageGameSeconds ?? 0) }) : "",
+      icon: "时",
+      tone: "blue" as const,
+    },
+    {
+      label: t("database.matches"),
+      value: overview ? formatNumber(overview.totalMatches ?? 0) : "--",
+      hint: engagement ? t("database.averageMatchesHint", "", { count: Number(engagement.averageMatches ?? 0).toFixed(1) }) : "",
+      icon: "局",
+      tone: "amber" as const,
+    },
+    {
+      label: t("database.warmupContribution"),
+      value: overview ? formatCompactHours(overview.totalWarmupSeconds ?? 0) : "--",
+      hint: engagement ? t("database.warmupPlayersHint", "", { count: formatNumber(engagement.warmupPlayers ?? 0) }) : "",
+      icon: "暖",
+      tone: "amber" as const,
+    },
   ];
 });
 
@@ -227,8 +281,15 @@ function formatTime(value: unknown) {
   return new Date(time).toLocaleString(currentLocale.value);
 }
 
-function formatHoursFromSeconds(value: unknown) {
-  return `${(Math.max(0, Number(value ?? 0)) / 3600).toFixed(1)} h`;
+function formatHours(value: unknown) {
+  return (Math.max(0, Number(value ?? 0)) / 3600).toFixed(1);
+}
+
+function formatCompactHours(value: unknown) {
+  const hours = Math.max(0, Number(value ?? 0)) / 3600;
+  if (hours >= 1_000_000) return `${(hours / 1_000_000).toFixed(1)}M h`;
+  if (hours >= 1_000) return `${(hours / 1_000).toFixed(1)}k h`;
+  return `${hours.toFixed(1)} h`;
 }
 
 function formatNumber(value: unknown) {
@@ -241,6 +302,15 @@ function formatPercent(value: unknown) {
   return `${(Math.max(0, ratio) * 100).toFixed(1)}%`;
 }
 
+function formatRelativeTime(value: unknown) {
+  const time = Number(value ?? 0);
+  if (!time) return "--";
+  const deltaSeconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+  if (deltaSeconds < 60) return t("database.justNow");
+  if (deltaSeconds < 3600) return t("database.minutesAgo", "", { count: Math.floor(deltaSeconds / 60) });
+  return formatTime(time);
+}
+
 function sortRows(input: any[], sort: string) {
   const rows = Array.isArray(input) ? [...input] : [];
   if (!rows.length) return rows;
@@ -251,6 +321,16 @@ function sortRows(input: any[], sort: string) {
       const bName = String(b?.current_name ?? b?.name ?? "");
       return aName.localeCompare(bName, currentLocale.value, { sensitivity: "base" });
     });
+  }
+
+  if (sort === "playtime_desc") {
+    return rows.sort((a, b) =>
+      Number(b?.game_seconds ?? b?.gameSeconds ?? 0) - Number(a?.game_seconds ?? a?.gameSeconds ?? 0));
+  }
+
+  if (sort === "matches_desc") {
+    return rows.sort((a, b) =>
+      Number(b?.total_matches ?? b?.totalMatches ?? 0) - Number(a?.total_matches ?? a?.totalMatches ?? 0));
   }
 
   return rows.sort((a, b) => getSortTime(b) - getSortTime(a));
@@ -271,7 +351,7 @@ function getSortTime(row: any) {
 .db-page {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   height: 100%;
   min-height: 0;
   padding: clamp(12px, 1.2vw, 20px);
@@ -279,14 +359,79 @@ function getSortTime(row: any) {
   background: var(--app-background, var(--color-bg-page));
 }
 
+.db-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 2px 2px 4px;
+}
+
+.eyebrow {
+  margin-bottom: 4px;
+  color: #6cb8f3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.db-hero h1 {
+  margin: 0;
+  color: var(--color-text-primary);
+  font-size: clamp(22px, 2vw, 30px);
+  letter-spacing: -.035em;
+  line-height: 1.1;
+}
+
+.db-hero p {
+  margin: 6px 0 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.hero-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 11px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 11px;
+  background: var(--color-bg-panel);
+}
+
+.hero-status small,
+.hero-status strong {
+  display: block;
+  white-space: nowrap;
+}
+
+.hero-status small { color: var(--color-text-muted); font-size: 9px; }
+.hero-status strong { margin-top: 2px; color: var(--color-text-secondary); font-size: 11px; }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fcf8e;
+  box-shadow: 0 0 0 4px rgba(63, 207, 142, .1);
+}
+
+.status-dot.loading {
+  background: #f2b84b;
+  animation: db-status-pulse 1s infinite alternate;
+}
+
 .db-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 360px minmax(0, 1fr);
+  grid-template-columns: minmax(330px, 370px) minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
   overflow: hidden;
 }
+
+@keyframes db-status-pulse { to { opacity: .35; } }
 
 .db-sidebar {
   display: flex;
@@ -346,6 +491,14 @@ function getSortTime(row: any) {
   .db-main {
     grid-template-rows: minmax(0, 1fr);
   }
+
+  .db-hero { align-items: flex-start; }
+  .db-hero p { max-width: 520px; }
+}
+
+@media (max-width: 620px) {
+  .db-hero { display: block; }
+  .hero-status { display: none; }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {

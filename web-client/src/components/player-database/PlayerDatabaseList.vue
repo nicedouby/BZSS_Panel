@@ -7,7 +7,7 @@
       v-else
       class="db-list-scroller"
       :items="rows"
-      :item-size="92"
+      :item-size="106"
       key-field="id"
       v-slot="{ item: player }"
     >
@@ -32,15 +32,22 @@
             {{ String(player.current_name || player.name || "?").slice(0, 1).toUpperCase() }}
           </div>
           <div class="item-main">
-            <span class="player-name">{{ player.current_name || player.name || t("common.unknown") }}</span>
-            <span class="player-group">{{ player.permission_group || "default" }}</span>
+            <div class="name-line">
+              <span class="player-name">{{ player.current_name || player.name || t("common.unknown") }}</span>
+              <span class="player-group">{{ player.permission_group || "default" }}</span>
+            </div>
+            <strong class="playtime">{{ formatDuration(player.game_seconds ?? player.gameSeconds) }}</strong>
           </div>
-          <div v-if="player.qq_number || player.qqNumber" class="item-qq">
-            QQ: {{ player.qq_number || player.qqNumber }}
+          <div class="identity-line">
+            <span :class="{ present: player.steam_id || player.steamID || player.steam64 }">Steam</span>
+            <span :class="{ present: player.eos_id || player.eosID || player.eos }">EOS</span>
+            <span :class="{ present: player.qq_number || player.qqNumber }">QQ</span>
           </div>
           <div class="item-meta">
-            <span>{{ formatTime(player.updated_at) }}</span>
-            <span v-if="player.current_ip || player.ip" class="player-ip">{{ player.current_ip || player.ip }}</span>
+            <span>{{ t("database.lastActive") }} {{ formatTime(player.updated_at ?? player.updatedAt) }}</span>
+            <span v-if="Number(player.total_matches ?? player.totalMatches ?? 0) > 0">
+              {{ formatNumber(player.total_matches ?? player.totalMatches) }} {{ t("database.matches") }}
+            </span>
           </div>
         </div>
       </div>
@@ -73,6 +80,16 @@ function formatTime(value: unknown) {
     minute: "2-digit",
   });
 }
+
+function formatDuration(value: unknown) {
+  const hours = Math.max(0, Number(value ?? 0)) / 3600;
+  if (hours >= 1000) return `${(hours / 1000).toFixed(1)}k h`;
+  return `${hours.toFixed(hours >= 10 ? 0 : 1)} h`;
+}
+
+function formatNumber(value: unknown) {
+  return new Intl.NumberFormat(currentLocale.value).format(Number(value ?? 0));
+}
 </script>
 
 <style scoped>
@@ -92,7 +109,7 @@ function formatTime(value: unknown) {
 }
 
 .player-item-wrap {
-  height: 92px;
+  height: 106px;
   padding-bottom: 8px;
 }
 
@@ -105,40 +122,49 @@ function formatTime(value: unknown) {
 
 .player-item {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  column-gap: 10px;
-  row-gap: 4px;
-  padding: 12px;
+  grid-template-columns: 46px minmax(0, 1fr);
+  column-gap: 11px;
+  row-gap: 6px;
+  height: 98px;
+  padding: 11px 12px;
   border: 1px solid var(--color-border-default);
-  border-radius: 10px;
-  background: var(--color-bg-panel);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg-panel) 96%, transparent);
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
   contain: layout paint style;
 }
 
 .player-item:hover {
-  border-color: var(--color-border-soft);
-  background: var(--color-bg-hover);
+  border-color: rgba(74, 168, 255, .38);
+  background: color-mix(in srgb, var(--color-bg-hover) 88%, transparent);
 }
 
 .player-item.active {
-  border-color: var(--color-status-online);
-  background: rgba(34, 197, 94, 0.08);
+  border-color: #4aa8ff;
+  background: rgba(74, 168, 255, 0.1);
+  box-shadow: inset 3px 0 #4aa8ff;
 }
 
 .item-main {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   min-width: 0;
+}
+
+.name-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .player-avatar {
   grid-row: span 3;
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   object-fit: cover;
   background: rgba(255, 255, 255, 0.06);
 }
@@ -149,12 +175,6 @@ function formatTime(value: unknown) {
   font-size: 16px;
   font-weight: 700;
   color: var(--color-text-muted);
-}
-
-.item-qq {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums;
 }
 
 .player-name {
@@ -172,8 +192,36 @@ function formatTime(value: unknown) {
   font-size: 11px;
   background: rgba(255, 255, 255, 0.05);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: 5px;
   color: var(--color-text-muted);
+}
+
+.playtime {
+  flex: 0 0 auto;
+  color: #8acaff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.identity-line {
+  display: flex;
+  gap: 5px;
+}
+
+.identity-line span {
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, .035);
+  color: var(--color-text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  opacity: .48;
+}
+
+.identity-line span.present {
+  background: rgba(63, 207, 142, .1);
+  color: #72dca8;
+  opacity: 1;
 }
 
 .item-meta {
@@ -183,13 +231,6 @@ function formatTime(value: unknown) {
   min-width: 0;
   font-size: 11px;
   color: var(--color-text-muted);
-}
-
-.player-ip {
-  overflow: hidden;
-  opacity: 0.8;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 @media (prefers-reduced-motion: reduce) {
