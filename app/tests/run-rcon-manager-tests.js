@@ -416,6 +416,11 @@ async function testMultipleConnectionOptInUsesConfiguredPoolSize() {
   assert.equal(manager.enforcementPoolSize, 2);
 }
 
+async function testMultipleConnectionDefaultsToEightEnforcementWorkers() {
+  const { manager } = createHarness({ allowMultipleConnections: true });
+  assert.equal(manager.enforcementPoolSize, 8);
+}
+
 async function testEnforcementLaneDoesNotWaitForBlockedNotification() {
   let markNotificationStarted;
   const notificationStarted = new Promise((resolve) => {
@@ -785,6 +790,7 @@ async function testLaneFailureDoesNotBlockOtherLane() {
 await testResolveRconPermissionAliases();
 await testDefaultUsesSinglePhysicalConnection();
 await testMultipleConnectionOptInUsesConfiguredPoolSize();
+await testMultipleConnectionDefaultsToEightEnforcementWorkers();
 await testEnforcementLaneDoesNotWaitForBlockedNotification();
 await testDispatchCommandRejectsMissingPermission();
 await testDispatchCommandAllowsMatchingPermission();

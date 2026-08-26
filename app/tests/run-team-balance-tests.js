@@ -425,7 +425,7 @@ await testHandleTbRoutesCreatesShufflePlan();
 await testHandleTbRoutesUnauthorizedAndForbidden();
 
 
-async function testBatchManagerSerializesItemsAndIsIdempotent() {
+async function testBatchManagerRunsItemsConcurrentlyAndIsIdempotent() {
   const calls = [];
   let active = 0;
   let maxActive = 0;
@@ -458,8 +458,52 @@ async function testBatchManagerSerializesItemsAndIsIdempotent() {
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   assert.deepEqual(calls, ["steam-1", "steam-2"]);
-  assert.equal(maxActive, 1);
+  assert.equal(maxActive, 2);
   assert.equal(manager.get(first.batch.id).status, "completed");
+}
+
+async function testBatchManagerCompletesOneHundredPlayersWithEightWorkers() {
+  let active = 0;
+  let maxActive = 0;
+  const manager = new TeamBalanceBatchManager({
+    itemConcurrency: 8,
+    resolveCurrentPlayer: async (player) => ({ teamID: player.fromTeamId }),
+    executeOnePlayer: async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      active -= 1;
+      return { ok: true, message: "OK" };
+    },
+  });
+  const startedAt = Date.now();
+  const created = manager.create({
+    clientRequestId: "batch-100-players",
+    players: Array.from({ length: 100 }, (_, index) => ({
+      steamId: `steam-${index}`,
+      fromTeamId: index % 2 === 0 ? 1 : 2,
+      targetTeamId: index % 2 === 0 ? 2 : 1,
+    })),
+  });
+
+  const batch = await waitForBatch(manager, created.batch.id);
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.equal(batch.status, "completed");
+  assert.equal(batch.succeeded, 100);
+  assert.equal(batch.concurrency, 8);
+  assert.equal(maxActive, 8);
+  assert.ok(elapsedMs < 2_000, `Expected 100 simulated switches under 2s, got ${elapsedMs}ms.`);
+}
+
+async function waitForBatch(manager, batchId, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const batch = manager.get(batchId);
+    if (batch && batch.status !== "queued" && batch.status !== "running") return batch;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for batch ${batchId}.`);
 }
 
 async function testBatchManagerSkipsStateAndDoesNotRetryTimeout() {
@@ -576,7 +620,8 @@ async function testBatchRouteReturnsAcceptedBeforeExecution() {
   assert.equal(recorder.body.batch.completed, 0);
 }
 
-await testBatchManagerSerializesItemsAndIsIdempotent();
+await testBatchManagerRunsItemsConcurrentlyAndIsIdempotent();
+await testBatchManagerCompletesOneHundredPlayersWithEightWorkers();
 await testBatchManagerSkipsStateAndDoesNotRetryTimeout();
 await testBatchManagerCancellationStopsRemainingItems();
 await testBatchRouteReturnsAcceptedBeforeExecution();

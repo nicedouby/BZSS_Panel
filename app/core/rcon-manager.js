@@ -62,7 +62,7 @@ export class RconManager {
       ? parsePositiveInteger(this.config.notificationPoolSize, 2)
       : 1;
     this.enforcementPoolSize = this.allowMultipleConnections
-      ? parsePositiveInteger(this.config.enforcementPoolSize, 1)
+      ? parsePositiveInteger(this.config.enforcementPoolSize, 8)
       : 1;
     this.notificationTimeoutMs = Math.max(
       500,
