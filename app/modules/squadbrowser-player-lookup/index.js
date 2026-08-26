@@ -336,18 +336,26 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
         });
       }));
 
+      const staleBefore = Date.now() - AUTO_REFRESH_TTL_MS;
+      const online = onlineSteamIds();
+      // 在线队列独立查询：数据库中排在前面的离线历史记录不能再挤占当前对局玩家。
+      const onlineCandidates = await modules.playerDatabase.listSquadBrowserRefreshCandidatesBySteamIDs?.(
+        [...online],
+        { staleBefore },
+      ) ?? [];
+      if (onlineCandidates.length) {
+        await Promise.all(onlineCandidates
+          .slice(0, ONLINE_REFRESH_BATCH_SIZE)
+          .map((candidate) => refreshOneCandidate(candidate)));
+        return;
+      }
+
+      // 没有待刷新的在线玩家后，才把带宽留给离线的历史补全。
       const candidates = await modules.playerDatabase.listSquadBrowserRefreshCandidates({
         limit: AUTO_REFRESH_BATCH_SIZE,
-        staleBefore: Date.now() - AUTO_REFRESH_TTL_MS,
+        staleBefore,
       });
-      if (!candidates.length) return;
-
-      // 在线玩家必须优先，并在一轮内连续处理多个，避免百人服务器按 12 秒/人排队过久。
-      const online = onlineSteamIds();
-      candidates.sort((a, b) => Number(online.has(String(b.steam_id))) - Number(online.has(String(a.steam_id))));
-      const onlineCandidates = candidates.filter((candidate) => online.has(String(candidate?.steam_id ?? "").trim()));
-      const selected = onlineCandidates.slice(0, ONLINE_REFRESH_BATCH_SIZE);
-      await Promise.all(selected.map((candidate) => refreshOneCandidate(candidate)));
+      if (candidates.length) await refreshOneCandidate(candidates[0]);
     } finally {
       refreshInFlight = false;
     }
