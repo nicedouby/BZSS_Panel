@@ -277,7 +277,7 @@
         "plugin:tactical-report:update",
         "plugin:tactical-report:logs",
         "plugin:tactical-report:user-codes",
-        "plugin:panel-ban:view",
+        "panel_ban.manage",
         "plugin:network-block:view",
         "server_stats.view",
         "debug.udp_forwarder.view",
@@ -295,7 +295,9 @@
         "reserve_slots.cdk.manage",
         "reserve_slots.export",
         "reserve_slots.config.manage",
+        "black_edge_privilege.manage",
         "tactical_replay.manage",
+        "tank_battle.execute",
         "rcon.tb",
         "rcon.warn",
         "rcon.broadcast",
@@ -309,7 +311,7 @@
         "tactical_map_replay.export"
       ],
       "createdAt": 1781241936876,
-      "updatedAt": 1787663710439
+      "updatedAt": 1787747696719
     },
     {
       "id": "group:mqkuexptsdztzqxi",

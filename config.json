@@ -1013,8 +1013,8 @@
       },
       "nzcd": {
         "enabled": true,
-        "defaultMin": -18,
-        "defaultMax": 30,
+        "defaultMin": -30,
+        "defaultMax": 120,
         "ranges": [
           {
             "playerKey": "76561199666599666",
@@ -1160,7 +1160,7 @@
     }
   },
   "warmup": {
-    "enabled": true
+    "enabled": false
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
