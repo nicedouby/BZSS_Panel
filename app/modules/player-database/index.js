@@ -300,6 +300,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listSquadBrowserRefreshCandidates(options);
     },
 
+    async listSquadBrowserRefreshCandidatesBySteamIDs(steamIDs = [], options = {}) {
+      return repo.listSquadBrowserRefreshCandidatesBySteamIDs(steamIDs, options);
+    },
+
     async replaceSquadBrowserServerRankings(playerId, rankings = [], fetchedAt = Date.now()) {
       return repo.replaceSquadBrowserServerRankings(playerId, rankings, fetchedAt);
     },
