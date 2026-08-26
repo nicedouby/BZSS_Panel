@@ -82,6 +82,13 @@
             <ErrorBlock v-if="playtimeError" :message="playtimeError" />
           </div>
 
+          <div v-if="!isMobile || mobileTab === 'teams'" class="match-loyalty-summary">
+            <span class="match-loyalty-summary__mark">◆</span>
+            <strong>步战鼠鼠游玩最长</strong>
+            <span class="match-loyalty-summary__count">{{ bzssLongestOnlineCount }}</span>
+            <span class="match-loyalty-summary__unit">/ {{ onlineSteamIdCount }} 名当前玩家</span>
+            <small>已根据 SquadBrowser 已刷新排行榜统计</small>
+          </div>
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
             <TeamColumn
               v-for="team in viewModels.teams"
@@ -739,6 +746,21 @@ const staleText = computed(() => {
 const stablePlaytimes = ref<Record<string, any>>({});
 const squadLifecycleLookup = computed(() => buildSquadLifecycleLookup(squadLifecycleCurrent.value));
 const playtimes = computed(() => stablePlaytimes.value);
+const onlineSteamIdCount = computed(() => new Set(
+  (players.active ?? [])
+    .map((player: any) => String(player?.steamID ?? player?.steam64 ?? "").trim())
+    .filter(Boolean),
+).size);
+const bzssLongestOnlineCount = computed(() => {
+  const online = new Set((players.active ?? [])
+    .map((player: any) => String(player?.steamID ?? player?.steam64 ?? "").trim())
+    .filter(Boolean));
+  return [...online].filter((steamID) => Boolean(
+    stablePlaytimes.value[steamID]?.loyalPlayer
+    ?? stablePlaytimes.value[steamID]?.loyal_player
+    ?? stablePlaytimes.value[steamID]?.is_loyal_player,
+  )).length;
+});
 
 provide("selectedPlayerId", computed(() => pageState.selectedPlayerId));
 
@@ -3280,6 +3302,24 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
   width: 100%;
   height: 100%;
 }
+
+.match-loyalty-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 203, 92, 0.32);
+  border-radius: 9px;
+  background: linear-gradient(90deg, rgba(255, 191, 63, 0.12), rgba(255, 191, 63, 0.03));
+  color: rgba(255, 239, 191, 0.94);
+  font-size: 13px;
+}
+.match-loyalty-summary__mark { color: #ffd166; }
+.match-loyalty-summary__count { color: #ffd166; font-size: 18px; font-weight: 850; }
+.match-loyalty-summary__unit, .match-loyalty-summary small { color: rgba(230, 239, 250, 0.68); }
+.match-loyalty-summary small { margin-left: auto; }
+@media (max-width: 720px) { .match-loyalty-summary { flex-wrap: wrap; } .match-loyalty-summary small { margin-left: 0; width: 100%; } }
 
 .match-status-data-state {
   grid-row: 3;
