@@ -87,7 +87,7 @@
             <strong>步战鼠鼠游玩最长</strong>
             <span class="match-loyalty-summary__count">{{ bzssLongestOnlineCount }}</span>
             <span class="match-loyalty-summary__unit">/ {{ onlineSteamIdCount }} 名当前玩家</span>
-            <small>已根据 SquadBrowser 已刷新排行榜统计</small>
+            <small>只统计已完成 SquadBrowser 排行榜刷新的玩家</small>
           </div>
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
             <TeamColumn
@@ -756,9 +756,8 @@ const bzssLongestOnlineCount = computed(() => {
     .map((player: any) => String(player?.steamID ?? player?.steam64 ?? "").trim())
     .filter(Boolean));
   return [...online].filter((steamID) => Boolean(
-    stablePlaytimes.value[steamID]?.loyalPlayer
-    ?? stablePlaytimes.value[steamID]?.loyal_player
-    ?? stablePlaytimes.value[steamID]?.is_loyal_player,
+    stablePlaytimes.value[steamID]?.bzssTopServer
+    ?? stablePlaytimes.value[steamID]?.bzss_top_server,
   )).length;
 });
 
