@@ -390,6 +390,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       executedAt: null,
       executedBatchId: "",
       batchSnapshot: null,
+      groups: shuffleGroups,
       plan: plan.plan,
     });
 
@@ -538,8 +539,9 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
           }))
         : rawRoster,
     );
+    const protectedRoster = enforceAtomicGroupTargets(roster, planEntry.groups);
     const moves = interleaveShuffleMoves(
-      roster
+      protectedRoster
         .map((player) => ({
           ...player,
           targetTeamId: normalizeTeamId(player.targetTeamId ?? player.targetTeamID),
@@ -1060,9 +1062,44 @@ function normalizeShuffleGroups(groups, players) {
     if (playerId) playerMap.set(`pid:${playerId}`, player);
   }
 
-  return groups
+  const normalized = groups
     .map((group, index) => normalizeShuffleGroup(group, index, playerMap))
     .filter((group) => group && group.members.length > 0 && group.anchorPlayerKey);
+  return mergeOverlappingShuffleGroups(normalized);
+}
+
+function mergeOverlappingShuffleGroups(groups) {
+  const pending = (Array.isArray(groups) ? groups : []).map((group) => ({
+    ...group,
+    members: [...group.members],
+  }));
+  const merged = [];
+
+  while (pending.length > 0) {
+    const component = pending.shift();
+    const memberKeys = new Set(component.members.map((member) => member.playerKey));
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let index = pending.length - 1; index >= 0; index -= 1) {
+        const candidate = pending[index];
+        if (!candidate.members.some((member) => memberKeys.has(member.playerKey))) continue;
+        pending.splice(index, 1);
+        for (const member of candidate.members) {
+          if (memberKeys.has(member.playerKey)) continue;
+          memberKeys.add(member.playerKey);
+          component.members.push(member);
+        }
+        changed = true;
+      }
+    }
+    if (!memberKeys.has(component.anchorPlayerKey)) {
+      component.anchorPlayerKey = component.members[0]?.playerKey || "";
+    }
+    merged.push(component);
+  }
+
+  return merged;
 }
 
 function normalizeShuffleGroup(group, index, playerMap) {
@@ -1170,7 +1207,7 @@ function buildPlaytimeShufflePlanWithGroups(players, groups = [], algorithm = "p
   }
 
   // --- Phase 2: 2-opt swap improvement (fixed team sizes) ---
-  improveKnownAssignment(assigned);
+  if (validGroups.length === 0) improveKnownAssignment(assigned);
 
   // --- Phase 3: fill unknown players to maintain team sizes ---
   for (const player of unknownPlayers) {
@@ -1257,13 +1294,7 @@ function buildRandomEvenShufflePlan(players, groups = [], algorithm = "random_ev
       .filter(Boolean);
     if (!members.length) continue;
     const preferred = assigned[1].length <= assigned[2].length ? 1 : 2;
-    const fallback = preferred === 1 ? 2 : 1;
-    const targetTeamId = teamSizes[preferred] - assigned[preferred].length >= members.length
-      ? preferred
-      : teamSizes[fallback] - assigned[fallback].length >= members.length
-        ? fallback
-        : null;
-    if (!targetTeamId) continue;
+    const targetTeamId = chooseAtomicGroupTarget({ members, assigned, teamSizes, preferredTeamId: preferred });
     for (const player of members) {
       assigned[targetTeamId].push({
         ...player,
@@ -1286,7 +1317,27 @@ function buildRandomEvenShufflePlan(players, groups = [], algorithm = "random_ev
 
 function buildMirrorShufflePlan(players, groups = [], algorithm = "mirror") {
   const assigned = { 1: [], 2: [] };
-  for (const player of players) {
+  const groupedKeys = new Set();
+  for (const group of Array.isArray(groups) ? groups : []) {
+    const members = group.members
+      .map((member) => findRosterPlayer(players, member))
+      .filter(Boolean);
+    if (!members.length) continue;
+    const anchor = members.find((member) => resolveShufflePlayerKey(member) === group.anchorPlayerKey) ?? members[0];
+    const targetTeamId = anchor.teamId === 1 ? 2 : 1;
+    for (const player of members) {
+      groupedKeys.add(resolveShufflePlayerKey(player));
+      assigned[targetTeamId].push({
+        ...player,
+        targetTeamId,
+        groupId: group.id,
+        groupName: group.name,
+        groupColor: group.color || "",
+        anchorPlayerKey: group.anchorPlayerKey,
+      });
+    }
+  }
+  for (const player of players.filter((item) => !groupedKeys.has(resolveShufflePlayerKey(item)))) {
     const targetTeamId = player.teamId === 1 ? 2 : 1;
     assigned[targetTeamId].push({ ...player, targetTeamId });
   }
@@ -1367,12 +1418,10 @@ function assignGroupedPlayers(group, players, assigned, knownTotals, teamSizes) 
   if (!members.length) return null;
 
   const anchor = members.find((member) => resolveShufflePlayerKey(member) === group.anchorPlayerKey) ?? members[0];
-  const targetTeamId = normalizeTeamId(anchor?.teamId);
-  if (targetTeamId == null) return null;
-
+  const preferredTeamId = normalizeTeamId(anchor?.teamId);
+  if (preferredTeamId == null) return null;
+  const targetTeamId = chooseAtomicGroupTarget({ members, assigned, teamSizes, preferredTeamId });
   const otherTeamId = targetTeamId === 1 ? 2 : 1;
-  const targetRemaining = teamSizes[targetTeamId] - assigned[targetTeamId].length;
-  if (members.length > targetRemaining) return null;
 
   for (const player of members) {
     const playtimeSeconds = Number.isFinite(player.playtimeSeconds) ? Number(player.playtimeSeconds) : 0;
@@ -1393,6 +1442,46 @@ function assignGroupedPlayers(group, players, assigned, knownTotals, teamSizes) 
     targetTeamId,
     otherTeamId,
   };
+}
+
+function chooseAtomicGroupTarget({ members, assigned, teamSizes, preferredTeamId }) {
+  const memberCount = members.length;
+  const score = (targetTeamId) => {
+    const nextSize1 = assigned[1].length + (targetTeamId === 1 ? memberCount : 0);
+    const nextSize2 = assigned[2].length + (targetTeamId === 2 ? memberCount : 0);
+    return [
+      Math.max(0, nextSize1 - teamSizes[1]) + Math.max(0, nextSize2 - teamSizes[2]),
+      Math.abs(nextSize1 - nextSize2),
+      targetTeamId === preferredTeamId ? 0 : 1,
+    ];
+  };
+  return compareScore(score(1), score(2)) <= 0 ? 1 : 2;
+}
+
+function compareScore(left, right) {
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const difference = Number(left[index] ?? 0) - Number(right[index] ?? 0);
+    if (difference !== 0) return difference;
+  }
+  return 0;
+}
+
+function enforceAtomicGroupTargets(players, groups) {
+  if (!Array.isArray(groups) || groups.length === 0) return players;
+  const protectedPlayers = players.map((player) => ({ ...player }));
+  for (const group of groups) {
+    const members = group.members
+      .map((member) => findRosterPlayer(protectedPlayers, member))
+      .filter(Boolean);
+    if (!members.length) continue;
+    const anchor = members.find((member) => resolveShufflePlayerKey(member) === group.anchorPlayerKey) ?? members[0];
+    const targetTeamId = normalizeTeamId(anchor.targetTeamId)
+      ?? normalizeTeamId(members.find((member) => normalizeTeamId(member.targetTeamId))?.targetTeamId)
+      ?? normalizeTeamId(anchor.teamId);
+    if (targetTeamId == null) continue;
+    for (const member of members) member.targetTeamId = targetTeamId;
+  }
+  return protectedPlayers;
 }
 
 function findRosterPlayer(players, member) {

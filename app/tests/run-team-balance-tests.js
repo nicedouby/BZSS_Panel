@@ -733,7 +733,114 @@ async function testShuffleCanSubmitAfterMatchStart() {
   assert.ok(result.batch?.id);
 }
 
+async function testAllShuffleAlgorithmsKeepReportedGroupTogether() {
+  const state = {
+    serverId: "server-1",
+    match: { map: "Map", layer: "Layer", phase: "warmup", playtime: 0 },
+    serverStatus: { map: "Map", layer: "Layer", playtime: 0 },
+    round: { current: { worldPath: "round-grouped" }, lastAcceptedAt: "round-grouped" },
+  };
+  const group = {
+    id: "group-7",
+    name: "Group 7",
+    anchorPlayerKey: "steam:steam-1",
+    members: [
+      { playerKey: "steam:steam-1", steamId: "steam-1" },
+      { playerKey: "steam:steam-2", steamId: "steam-2" },
+      { playerKey: "steam:steam-3", steamId: "steam-3" },
+    ],
+  };
+  const service = createService({
+    modules: { matchState: { api: { getState: () => state } } },
+    core: {
+      logger: createNoopLogger(),
+      webStatus: { serverId: "server-1" },
+      groupReport: { getShuffleGroups: () => [group] },
+    },
+  });
+  const operator = { id: "admin", name: "Admin", username: "Admin", isSuperAdmin: true, permissions: ["*"] };
+  const players = [
+    { steamId: "steam-1", playerName: "One", teamId: 1, playtimeSeconds: 9000 },
+    { steamId: "steam-2", playerName: "Two", teamId: 2, playtimeSeconds: 7000 },
+    { steamId: "steam-3", playerName: "Three", teamId: 2, playtimeSeconds: 5000 },
+    { steamId: "steam-4", playerName: "Four", teamId: 1, playtimeSeconds: 3000 },
+    { steamId: "steam-5", playerName: "Five", teamId: 1, playtimeSeconds: 2000 },
+    { steamId: "steam-6", playerName: "Six", teamId: 2, playtimeSeconds: 1000 },
+  ];
+
+  for (const algorithm of ["playtime_balanced", "random_even", "mirror"]) {
+    const result = await service.api.createPlaytimeShufflePlan({ operator, algorithm, players });
+    assert.equal(result.ok, true);
+    assert.equal(result.plan.players.length, players.length);
+    const groupedPlayers = result.plan.players.filter((player) => ["steam-1", "steam-2", "steam-3"].includes(player.steamId));
+    assert.equal(groupedPlayers.length, 3);
+    assert.equal(new Set(groupedPlayers.map((player) => player.targetTeamId)).size, 1, `${algorithm} split a reported group.`);
+    assert.equal(groupedPlayers.every((player) => player.groupId === "group-7"), true);
+  }
+}
+
+async function testExecutionRepairsManualGroupSplit() {
+  const commands = [];
+  const state = {
+    serverId: "server-1",
+    match: { map: "Map", layer: "Layer", phase: "warmup", playtime: 0 },
+    serverStatus: { map: "Map", layer: "Layer", playtime: 0 },
+    round: { current: { worldPath: "round-execution-group" }, lastAcceptedAt: "round-execution-group" },
+  };
+  const group = {
+    id: "group-8",
+    name: "Group 8",
+    anchorPlayerKey: "steam:steam-1",
+    members: [
+      { playerKey: "steam:steam-1", steamId: "steam-1" },
+      { playerKey: "steam:steam-2", steamId: "steam-2" },
+    ],
+  };
+  const service = createService({
+    modules: { matchState: { api: { getState: () => state } } },
+    core: {
+      logger: createNoopLogger(),
+      webStatus: { serverId: "server-1" },
+      groupReport: { getShuffleGroups: () => [group] },
+      rconManager: {
+        async dispatchCommand(payload) {
+          commands.push(payload);
+          return { success: true, rconExecuted: true, rconResponse: "OK", message: "OK" };
+        },
+      },
+    },
+  });
+  const operator = { id: "admin", name: "Admin", username: "Admin", isSuperAdmin: true, permissions: ["*"] };
+  const players = [
+    { steamId: "steam-1", playerName: "One", teamId: 1, playtimeSeconds: 10 },
+    { steamId: "steam-2", playerName: "Two", teamId: 1, playtimeSeconds: 20 },
+    { steamId: "steam-3", playerName: "Three", teamId: 2, playtimeSeconds: 30 },
+    { steamId: "steam-4", playerName: "Four", teamId: 2, playtimeSeconds: 40 },
+  ];
+  const plan = await service.api.createPlaytimeShufflePlan({ operator, algorithm: "mirror", players });
+  const manuallySplit = plan.plan.players.map((player) => ({
+    ...player,
+    teamId: player.fromTeamId,
+    targetTeamId: player.steamId === "steam-2" ? 1 : player.targetTeamId,
+  }));
+  const accepted = await service.api.executeShufflePlan({
+    operator,
+    planId: plan.plan.planId,
+    roundKey: plan.plan.roundKey,
+    players: manuallySplit,
+  });
+
+  assert.equal(accepted.ok, true);
+  const groupedBatchPlayers = accepted.batch.players.filter((player) => ["steam-1", "steam-2"].includes(player.steamId));
+  assert.equal(groupedBatchPlayers.length, 2);
+  assert.equal(groupedBatchPlayers.every((player) => player.targetTeamId === 2), true);
+  await waitForBatch({ get: (id) => service.api.getForceTeamChangeBatch(id) }, accepted.batch.id);
+  assert.equal(commands.length, accepted.batch.total);
+}
+
 await testShufflePlanHasIdentityAndAsyncExecution();
 await testShuffleCanSubmitAfterMatchStart();
+await testAllShuffleAlgorithmsKeepReportedGroupTogether();
+await testExecutionRepairsManualGroupSplit();
 
 console.log("team balance tests passed");
