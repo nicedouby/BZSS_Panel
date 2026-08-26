@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 16,
+  "revision": 17,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-08-25T12:31:45.001Z",
+  "updatedAt": "2026-08-25T14:35:55.288Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -930,7 +930,7 @@
         "M1151",
         "TOW"
       ],
-      "typeId": "matv",
+      "typeId": "atgm_matv",
       "faction": "ADF",
       "asset": "/Game/Vehicles/M1151/BP_M1151_TOW.BP_M1151_TOW",
       "maxPlayersOverride": null,

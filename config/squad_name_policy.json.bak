@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "revision": 15,
+  "revision": 16,
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
@@ -592,7 +592,7 @@
     }
   ],
   "importedAt": "2026-06-17T09:50:53.381Z",
-  "updatedAt": "2026-08-25T11:42:28.842Z",
+  "updatedAt": "2026-08-25T12:31:45.001Z",
   "suggestionLimit": 5,
   "defaultNamePatterns": [
     "^squad\\s*\\d+$",
@@ -2364,7 +2364,7 @@
         "BRDMUB",
         "BRDMUB32"
       ],
-      "typeId": "artillery_vehicle",
+      "typeId": "matv",
       "faction": "GFI",
       "asset": "/Game/Vehicles/BRDM-2/Weapons/BP_BRDM2_GFI_UB32.BP_BRDM2_GFI_UB32",
       "maxPlayersOverride": null,
