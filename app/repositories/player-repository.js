@@ -950,6 +950,25 @@ export class PlayerRepository {
     return { playerId: id, licenseId: license, lastAttemptAt: timestamp };
   }
 
+  async listSquadBrowserRefreshCandidatesBySteamIDs(steamIDs = [], { staleBefore = now() } = {}) {
+    const ids = [...new Set((Array.isArray(steamIDs) ? steamIDs : [])
+      .map((id) => String(id ?? "").trim()).filter((id) => /^\d{17}$/.test(id)))];
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => "?").join(", ");
+    const staleAt = Number(staleBefore) || now();
+    return this.db.all(
+      `SELECT players.id, players.current_name, players.steam_id, players.eos_id,
+              profiles.fetched_at AS squadbrowser_fetched_at
+       FROM players
+       LEFT JOIN squadbrowser_player_profiles profiles ON profiles.player_id = players.id
+       WHERE players.steam_id IN (${placeholders})
+         AND (profiles.fetched_at IS NULL OR profiles.fetched_at < ?)
+       ORDER BY CASE WHEN profiles.fetched_at IS NULL OR profiles.fetched_at = 0 THEN 0 ELSE 1 END,
+                profiles.fetched_at ASC`,
+      ...ids, staleAt,
+    );
+  }
+
   async listSquadBrowserRefreshCandidates({ limit = 50, staleBefore = now() } = {}) {
     const take = Math.max(1, Math.min(500, Number(limit) || 50));
     const staleAt = Number(staleBefore) || now();
