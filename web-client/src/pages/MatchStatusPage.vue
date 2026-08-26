@@ -88,6 +88,9 @@
             <span class="match-loyalty-summary__count">{{ bzssLongestOnlineCount }}</span>
             <span class="match-loyalty-summary__unit">/ {{ onlineSteamIdCount }} 名当前玩家</span>
             <small>只统计已完成 SquadBrowser 排行榜刷新的玩家</small>
+            <AppButton size="sm" variant="soft" :disabled="squadBrowserRefreshLoading" @click="refreshOnlineSquadBrowser">
+              {{ squadBrowserRefreshLoading ? "刷新中…" : "刷新游玩记录" }}
+            </AppButton>
           </div>
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
             <TeamColumn
@@ -744,6 +747,20 @@ const staleText = computed(() => {
 });
 
 const stablePlaytimes = ref<Record<string, any>>({});
+const squadBrowserRefreshLoading = ref(false);
+async function refreshOnlineSquadBrowser() {
+  if (squadBrowserRefreshLoading.value) return;
+  squadBrowserRefreshLoading.value = true;
+  try {
+    await apiPost("/api/squadbrowser/refresh-online", {});
+    ui.pushToast({ title: "游玩记录刷新已启动", message: "正在优先刷新当前对局中缺少或过期的玩家数据。" });
+  } catch (error) {
+    ui.pushToast({ title: "游玩记录刷新失败", message: renderApiError(error, "无法启动 SquadBrowser 刷新任务。") });
+  } finally {
+    squadBrowserRefreshLoading.value = false;
+  }
+}
+
 const squadLifecycleLookup = computed(() => buildSquadLifecycleLookup(squadLifecycleCurrent.value));
 const playtimes = computed(() => stablePlaytimes.value);
 const onlineSteamIdCount = computed(() => new Set(
