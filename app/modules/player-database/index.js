@@ -260,6 +260,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.listPlayersBySteamIDs(steamIDs);
     },
 
+    async listSquadBrowserBzssTopBySteamIDs(steamIDs = []) {
+      return repo.listSquadBrowserBzssTopBySteamIDs(steamIDs);
+    },
+
     async listPlayersByIdentities(identities = {}) {
       return repo.listPlayersByIdentities(identities);
     },
