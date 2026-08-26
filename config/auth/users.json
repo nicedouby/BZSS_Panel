@@ -278,6 +278,7 @@
         "plugin:tactical-report:logs",
         "plugin:tactical-report:user-codes",
         "plugin:panel-ban:view",
+        "panel_ban.ban",
         "plugin:network-block:view",
         "server_stats.view",
         "debug.udp_forwarder.view",
