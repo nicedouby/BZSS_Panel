@@ -3172,7 +3172,22 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/panel-ban")) {
-      if (!this.requirePermission(user, "panel_ban.manage", res)) return;
+      const panelBanMutation =
+        (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "POST")
+        || (url.pathname.startsWith("/api/plugins/panel-ban/entries/") && (req.method === "PATCH" || req.method === "DELETE"));
+      if (panelBanMutation) {
+        const canBan = this.core.authManager?.hasPermission?.(user, "panel_ban.ban")
+          || this.core.authManager?.hasPermission?.(user, "panel_ban.manage");
+        if (!canBan) {
+          this.json(res, 403, {
+            error: "Forbidden",
+            message: "panel_ban.ban permission is required.",
+          });
+          return;
+        }
+      } else if (!this.requirePermission(user, "panel_ban.manage", res)) {
+        return;
+      }
       const pluginApi = this.getPluginApi("plugin.panelBan");
       if (!pluginApi) {
         return this.json(res, 404, {
