@@ -3,7 +3,7 @@
 export const MAX_BATCH_PLAYERS = 100;
 export const MAX_BATCH_HISTORY = 50;
 export const ACTIVE_BATCH_CONCURRENCY = 1;
-export const RCON_ITEM_CONCURRENCY = 1;
+export const RCON_ITEM_CONCURRENCY = 8;
 
 const IDEMPOTENCY_TTL_MS = 30 * 60 * 1000;
 
@@ -15,6 +15,7 @@ export class TeamBalanceBatchManager {
     canContinue,
     logger,
     now = () => Date.now(),
+    itemConcurrency = RCON_ITEM_CONCURRENCY,
   } = {}) {
     this.executeOnePlayer = executeOnePlayer;
     this.resolveCurrentPlayer = resolveCurrentPlayer;
@@ -22,6 +23,7 @@ export class TeamBalanceBatchManager {
     this.canContinue = canContinue;
     this.logger = logger;
     this.now = now;
+    this.itemConcurrency = clampInteger(itemConcurrency, 1, RCON_ITEM_CONCURRENCY);
     this.history = [];
     this.queue = [];
     this.byId = new Map();
@@ -71,7 +73,9 @@ export class TeamBalanceBatchManager {
       succeeded: 0,
       failed: 0,
       skipped: 0,
+      concurrency: Math.min(this.itemConcurrency, players.length),
       currentPlayer: null,
+      currentPlayers: [],
       cancelRequested: false,
       cancelReason: "",
       players,
@@ -92,6 +96,7 @@ export class TeamBalanceBatchManager {
       batchId: batch.id,
       status: batch.status,
       total: batch.total,
+      concurrency: batch.concurrency,
       source: batch.source,
       reason: batch.reason,
     })).catch((error) => this.logger?.warn?.(`[TB] batch audit failed: ${error?.message ?? error}`));
@@ -154,13 +159,7 @@ export class TeamBalanceBatchManager {
       batch.cancelReason = normalizeText(reason) || "cancelled";
       batch.status = "cancelled";
       batch.completedAt = new Date(this.now()).toISOString();
-      for (const player of batch.players) {
-        if (!batch.results.some((result) => result.steamId === player.steamId)) {
-          batch.results.push(resultFor(player, "cancelled", `Batch cancelled before execution: ${batch.cancelReason}.`));
-          batch.completed += 1;
-          batch.skipped += 1;
-        }
-      }
+      markRemainingCancelled(batch, `before execution: ${batch.cancelReason}`);
       this.queue = this.queue.filter((item) => item.id !== batch.id);
       return { ok: true, status: "cancelled", batch: snapshotBatch(batch) };
     }
@@ -214,52 +213,53 @@ export class TeamBalanceBatchManager {
 
     batch.status = "running";
     batch.startedAt = new Date(this.now()).toISOString();
+    let nextIndex = 0;
+    const workerCount = Math.min(this.itemConcurrency, batch.players.length);
 
-    for (const player of batch.players) {
-      if (batch.cancelRequested) {
-        markRemainingCancelled(batch, batch.cancelReason || "cancelled");
-        break;
+    const worker = async () => {
+      while (!batch.cancelRequested) {
+        const playerIndex = nextIndex;
+        nextIndex += 1;
+        if (playerIndex >= batch.players.length) return;
+
+        const gate = await this.checkContinue(batch);
+        if (!gate.ok) {
+          batch.cancelRequested = true;
+          batch.cancelReason = gate.reason || "execution_gate_closed";
+          return;
+        }
+        if (batch.cancelRequested) return;
+
+        const player = batch.players[playerIndex];
+        addCurrentPlayer(batch, player);
+        const result = await this.executePlayer(batch, player);
+        removeCurrentPlayer(batch, player);
+        recordPlayerResult(batch, result, playerIndex);
+
+        void Promise.resolve(this.recordAudit?.({
+          action: "player.switch_team",
+          category: "player_management",
+          actor: batch.operator,
+          batchId: batch.id,
+          status: result.status,
+          playerId: result.playerId,
+          playerName: result.playerName,
+          steamId: result.steamId,
+          fromTeamId: result.fromTeamId,
+          targetTeamId: result.targetTeamId,
+          result: result.status,
+        })).catch((error) => this.logger?.warn?.(`[TB] item audit failed: ${error?.message ?? error}`));
+
+        await yieldToEventLoop();
       }
+    };
 
-      const gate = await this.checkContinue(batch);
-      if (!gate.ok) {
-        batch.cancelRequested = true;
-        batch.cancelReason = gate.reason || "execution_gate_closed";
-        markRemainingCancelled(batch, batch.cancelReason);
-        break;
-      }
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+    batch.currentPlayers = [];
+    batch.currentPlayer = null;
 
-      batch.currentPlayer = {
-        steamId: player.steamId,
-        playerName: player.playerName,
-      };
-
-      const result = await this.executePlayer(batch, player);
-      batch.results.push(result);
-      batch.completed += 1;
-      if (result.status === "success") batch.succeeded += 1;
-      else if (result.status === "skipped_offline" || result.status === "already_applied" || result.status === "cancelled") batch.skipped += 1;
-      else batch.failed += 1;
-      batch.currentPlayer = null;
-
-      void Promise.resolve(this.recordAudit?.({
-        action: "player.switch_team",
-        category: "player_management",
-        actor: batch.operator,
-        batchId: batch.id,
-        status: result.status,
-        playerId: result.playerId,
-        playerName: result.playerName,
-        steamId: result.steamId,
-        fromTeamId: result.fromTeamId,
-        targetTeamId: result.targetTeamId,
-        result: result.status,
-      })).catch((error) => this.logger?.warn?.(`[TB] item audit failed: ${error?.message ?? error}`));
-
-      await yieldToEventLoop();
-    }
-
-    if (batch.completed < batch.total) markRemainingCancelled(batch);
+    if (batch.completed < batch.total) markRemainingCancelled(batch, batch.cancelReason || "cancelled");
+    batch.results.sort((left, right) => left._playerIndex - right._playerIndex);
     batch.status = batch.cancelRequested
       ? "cancelled"
       : batch.failed > 0 || batch.skipped > 0
@@ -277,6 +277,7 @@ export class TeamBalanceBatchManager {
       succeeded: batch.succeeded,
       failed: batch.failed,
       skipped: batch.skipped,
+      concurrency: batch.concurrency,
       source: batch.source,
       reason: batch.reason,
     })).catch((error) => this.logger?.warn?.(`[TB] batch completion audit failed: ${error?.message ?? error}`));
@@ -330,7 +331,8 @@ export class TeamBalanceBatchManager {
         ...player,
         source: batch.source,
         reason: batch.reason,
-        priority: "normal",
+        priority: "interactive",
+        maxQueueWaitMs: 10_000,
         batchId: batch.id,
         operator: batch.operator,
         system: false,
@@ -414,17 +416,43 @@ function resultFor(player, status, message, response = null) {
   };
 }
 
+function recordPlayerResult(batch, result, playerIndex) {
+  batch.results.push({ ...result, _playerIndex: playerIndex });
+  batch.completed += 1;
+  if (result.status === "success") batch.succeeded += 1;
+  else if (result.status === "skipped_offline" || result.status === "already_applied" || result.status === "cancelled") batch.skipped += 1;
+  else batch.failed += 1;
+}
+
+function addCurrentPlayer(batch, player) {
+  batch.currentPlayers.push({ steamId: player.steamId, playerName: player.playerName });
+  batch.currentPlayer = batch.currentPlayers[0] ?? null;
+}
+
+function removeCurrentPlayer(batch, player) {
+  batch.currentPlayers = batch.currentPlayers.filter((item) => item.steamId !== player.steamId);
+  batch.currentPlayer = batch.currentPlayers[0] ?? null;
+}
+
 function markRemainingCancelled(batch, reason = "cancelled") {
-  for (const player of batch.players) {
-    if (batch.results.some((result) => result.steamId === (player.steamId || null))) continue;
-    batch.results.push(resultFor(player, "cancelled", `Batch cancelled: ${reason}.`));
-    batch.completed += 1;
-    batch.skipped += 1;
-  }
+  const completedIndexes = new Set(batch.results.map((result) => result._playerIndex));
+  batch.players.forEach((player, playerIndex) => {
+    if (completedIndexes.has(playerIndex)) return;
+    recordPlayerResult(batch, resultFor(player, "cancelled", cancellationMessage(reason)), playerIndex);
+  });
+}
+
+function cancellationMessage(reason) {
+  const normalized = normalizeText(reason);
+  if (!normalized || normalized === "cancelled") return "Batch cancelled.";
+  if (normalized.startsWith("before execution:")) return `Batch cancelled ${normalized}.`;
+  return `Batch cancelled: ${normalized}.`;
 }
 
 function snapshotBatch(batch) {
-  return JSON.parse(JSON.stringify(batch));
+  const snapshot = JSON.parse(JSON.stringify(batch));
+  snapshot.results = snapshot.results.map(({ _playerIndex, ...result }) => result);
+  return snapshot;
 }
 
 function normalizeText(value) {
@@ -434,6 +462,12 @@ function normalizeText(value) {
 function normalizeTeamId(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function clampInteger(value, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return min;
+  return Math.max(min, Math.min(max, parsed));
 }
 
 function yieldToEventLoop() {

@@ -38,6 +38,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
     canContinue: canContinueBatch,
     recordAudit: recordBatchAudit,
     logger: moduleLogger,
+    itemConcurrency: moduleConfig.batchConcurrency ?? moduleConfig.workers,
   });
 
   const api = {
@@ -85,6 +86,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       return {
         enabled,
         switchPermission,
+        batchConcurrency: batchManager.itemConcurrency,
       };
     },
   };

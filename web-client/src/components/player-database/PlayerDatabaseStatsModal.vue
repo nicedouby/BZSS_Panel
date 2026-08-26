@@ -24,6 +24,49 @@
         <div v-if="loading && !stats" class="modal-placeholder">{{ t("database.loadingStats") }}</div>
         <div v-else-if="error" class="modal-placeholder error">{{ error }}</div>
         <div v-else-if="stats" class="analytics-content">
+          <section class="analytics-section">
+            <div class="section-heading">
+              <div>
+                <span class="section-kicker">{{ t("database.snapshot") }}</span>
+                <h3>{{ t("database.operationsOverview") }}</h3>
+              </div>
+            </div>
+            <div class="insight-grid">
+              <article class="insight-card">
+                <header>
+                  <span>{{ t("database.activityDistribution") }}</span>
+                  <strong>{{ stats.activity?.active7d ?? 0 }}</strong>
+                </header>
+                <div class="metric-row"><span>24h</span><b>{{ stats.activity?.active24h ?? 0 }}</b></div>
+                <div class="metric-row"><span>7 {{ t("database.days") }}</span><b>{{ stats.activity?.active7d ?? 0 }}</b></div>
+                <div class="metric-row"><span>30 {{ t("database.days") }}</span><b>{{ stats.activity?.active30d ?? 0 }}</b></div>
+                <div class="metric-row muted"><span>{{ t("database.dormant30d") }}</span><b>{{ stats.activity?.dormant30d ?? 0 }}</b></div>
+              </article>
+
+              <article class="insight-card">
+                <header>
+                  <span>{{ t("database.playerComposition") }}</span>
+                  <strong>{{ formatHours(stats.engagement?.averageGameSeconds ?? 0) }}h</strong>
+                </header>
+                <div class="metric-row"><span>{{ t("database.veteranPlayers") }}</span><b>{{ stats.engagement?.veteranPlayers ?? 0 }}</b></div>
+                <div class="metric-row"><span>{{ t("database.regularPlayers") }}</span><b>{{ stats.engagement?.regularPlayers ?? 0 }}</b></div>
+                <div class="metric-row"><span>{{ t("database.newcomerPlayers") }}</span><b>{{ stats.engagement?.newcomerPlayers ?? 0 }}</b></div>
+                <div class="metric-row"><span>{{ t("database.warmupPlayers") }}</span><b>{{ stats.engagement?.warmupPlayers ?? 0 }}</b></div>
+              </article>
+
+              <article class="insight-card">
+                <header>
+                  <span>{{ t("database.dataCompleteness") }}</span>
+                  <strong>{{ formatPercent(completenessAverage) }}</strong>
+                </header>
+                <div v-for="item in completenessRows" :key="item.label" class="health-row">
+                  <div><span>{{ item.label }}</span><b>{{ item.value }} / {{ totalPlayers }}</b></div>
+                  <div class="health-track"><i :style="{ width: `${item.rate * 100}%` }"></i></div>
+                </div>
+              </article>
+            </div>
+          </section>
+
           <!-- Leaderboards -->
           <section class="analytics-section">
             <h3>{{ t("database.leaderboards") }}</h3>
@@ -41,9 +84,9 @@
               </div>
 
               <div class="leaderboard-card">
-                <h4>暖服分</h4>
+                <h4>{{ t("database.warmupPoints") }}</h4>
                 <ol class="rank-list">
-                  <li v-for="item in stats.leaderboards?.byPlaytime" :key="`warmup-${item.id}`">
+                  <li v-for="item in stats.leaderboards?.byWarmupPoints" :key="`warmup-${item.id}`">
                     <span class="player-name" @click="$emit('jump', item.id)">
                       {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
                     </span>
@@ -60,6 +103,30 @@
                       {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
                     </span>
                     <span class="rank-value">{{ item.totalViolations }}</span>
+                  </li>
+                </ol>
+              </div>
+
+              <div class="leaderboard-card">
+                <h4>{{ t("database.matchVeterans") }}</h4>
+                <ol class="rank-list">
+                  <li v-for="item in stats.leaderboards?.byMatches" :key="`matches-${item.id}`">
+                    <span class="player-name" @click="$emit('jump', item.id)">
+                      {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
+                    </span>
+                    <span class="rank-value">{{ item.totalMatches }} · {{ formatPercent(item.winRate) }}</span>
+                  </li>
+                </ol>
+              </div>
+
+              <div class="leaderboard-card">
+                <h4>{{ t("database.commandTime") }}</h4>
+                <ol class="rank-list">
+                  <li v-for="item in stats.leaderboards?.byCommand" :key="`command-${item.id}`">
+                    <span class="player-name" @click="$emit('jump', item.id)">
+                      {{ item.currentName || item.steamID || item.eosID || t("common.unknown") }}
+                    </span>
+                    <span class="rank-value">{{ formatHours(item.commandSeconds) }}h</span>
                   </li>
                 </ol>
               </div>
@@ -194,6 +261,22 @@ const maxMatches = computed(() => {
   return Math.max(...counts, 1);
 });
 
+const totalPlayers = computed(() => Math.max(0, Number(props.stats?.overview?.totalPlayers ?? 0)));
+const completenessRows = computed(() => {
+  const total = totalPlayers.value;
+  const rows = [
+    { label: "Steam", value: Number(props.stats?.dataHealth?.steamBound ?? 0) },
+    { label: "EOS", value: Number(props.stats?.dataHealth?.eosBound ?? 0) },
+    { label: "QQ", value: Number(props.stats?.dataHealth?.qqBound ?? 0) },
+    { label: "IP", value: Number(props.stats?.dataHealth?.ipKnown ?? 0) },
+  ];
+  return rows.map((row) => ({ ...row, rate: total > 0 ? Math.min(1, row.value / total) : 0 }));
+});
+const completenessAverage = computed(() => {
+  if (!completenessRows.value.length) return 0;
+  return completenessRows.value.reduce((sum, row) => sum + row.rate, 0) / completenessRows.value.length;
+});
+
 function formatHours(seconds: number) {
   return (seconds / 3600).toFixed(1);
 }
@@ -307,6 +390,93 @@ function formatAssetAmount(value: number) {
   display: flex;
   flex-direction: column;
   gap: 32px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.section-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: #6cb8f3;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.insight-card {
+  padding: 16px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 12px;
+  background:
+    linear-gradient(150deg, rgba(74, 168, 255, .07), transparent 52%),
+    rgba(255, 255, 255, .025);
+}
+
+.insight-card header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.insight-card header span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.insight-card header strong {
+  color: #8acaff;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, .07);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.metric-row:last-child { border-bottom: 0; }
+.metric-row b { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.metric-row.muted { color: var(--color-text-muted); }
+
+.health-row { margin-top: 9px; }
+.health-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  color: var(--color-text-secondary);
+  font-size: 10px;
+}
+.health-row b { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.health-track {
+  height: 4px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .06);
+}
+.health-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4aa8ff, #3fcf8e);
 }
 
 .analytics-section h3 {
@@ -473,5 +643,15 @@ function formatAssetAmount(value: number) {
 
 .metric-list strong {
   color: var(--color-text-primary);
+}
+
+@media (max-width: 820px) {
+  .modal-overlay { padding: 8px; }
+  .modal-card { max-height: 90vh; border-radius: 12px; }
+  .modal-header { padding: 15px; display: block; }
+  .modal-actions { margin-top: 12px; flex-wrap: wrap; }
+  .modal-body { padding: 15px; }
+  .insight-grid { grid-template-columns: 1fr; }
+  .leaderboard-grid, .breakdown-grid { grid-template-columns: 1fr; }
 }
 </style>

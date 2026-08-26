@@ -519,6 +519,10 @@ export class PlayerRepository {
       orderBy = "COALESCE(players.current_name, '') COLLATE NOCASE ASC, players.updated_at DESC";
     } else if (sort === "last_login_desc") {
       orderBy = "players.updated_at DESC";
+    } else if (sort === "playtime_desc") {
+      orderBy = "players.game_seconds DESC, players.updated_at DESC";
+    } else if (sort === "matches_desc") {
+      orderBy = "players.total_matches DESC, players.updated_at DESC";
     }
 
     const rows = await this.db.all(
@@ -1316,11 +1320,64 @@ export class PlayerRepository {
       windowStartTs,
     );
 
-    const assetRows = await this.db.all("SELECT assets_json FROM players");
-    const totalWarmupPoints = assetRows.reduce(
-      (sum, row) => sum + normalizeAssetAmount(parseAssets(row.assets_json).warmupPoints),
-      0,
+    const activityRow = await this.db.get(
+      `SELECT SUM(CASE WHEN updated_at >= ? THEN 1 ELSE 0 END) AS active_24h,
+              SUM(CASE WHEN updated_at >= ? THEN 1 ELSE 0 END) AS active_7d,
+              SUM(CASE WHEN updated_at >= ? THEN 1 ELSE 0 END) AS active_30d,
+              SUM(CASE WHEN updated_at < ? THEN 1 ELSE 0 END) AS dormant_30d,
+              SUM(CASE WHEN steam_id IS NOT NULL AND steam_id != '' THEN 1 ELSE 0 END) AS steam_bound,
+              SUM(CASE WHEN eos_id IS NOT NULL AND eos_id != '' THEN 1 ELSE 0 END) AS eos_bound,
+              SUM(CASE WHEN qq_number IS NOT NULL AND qq_number != '' THEN 1 ELSE 0 END) AS qq_bound,
+              SUM(CASE WHEN current_ip IS NOT NULL AND current_ip != '' THEN 1 ELSE 0 END) AS ip_known,
+              SUM(CASE WHEN game_seconds >= 288000 THEN 1 ELSE 0 END) AS veteran_players,
+              SUM(CASE WHEN game_seconds >= 72000 AND game_seconds < 288000 THEN 1 ELSE 0 END) AS regular_players,
+              SUM(CASE WHEN game_seconds < 18000 THEN 1 ELSE 0 END) AS newcomer_players,
+              SUM(CASE WHEN warmup_seconds > 0 THEN 1 ELSE 0 END) AS warmup_players,
+              COALESCE(AVG(game_seconds), 0) AS avg_game_seconds,
+              COALESCE(AVG(server_seconds), 0) AS avg_server_seconds,
+              COALESCE(AVG(total_matches), 0) AS avg_matches
+       FROM players`,
+      nowTs - 24 * 60 * 60 * 1000,
+      nowTs - 7 * 24 * 60 * 60 * 1000,
+      nowTs - 30 * 24 * 60 * 60 * 1000,
+      nowTs - 30 * 24 * 60 * 60 * 1000,
     );
+
+    const assetRows = await this.db.all("SELECT id, assets_json FROM players");
+    let totalWarmupPoints = 0;
+    const topByWarmupPoints = [];
+    for (const row of assetRows) {
+      const warmupPoints = normalizeAssetAmount(parseAssets(row.assets_json).warmupPoints);
+      totalWarmupPoints += warmupPoints;
+      const item = {
+        id: Number(row.id),
+        warmupPoints,
+      };
+      if (item.warmupPoints <= 0) continue;
+      topByWarmupPoints.push(item);
+      topByWarmupPoints.sort((a, b) => b.warmupPoints - a.warmupPoints);
+      if (topByWarmupPoints.length > normalizedTop) topByWarmupPoints.pop();
+    }
+    const topWarmupIdentityRows = topByWarmupPoints.length
+      ? await this.db.all(
+          `SELECT id, current_name, steam_id, eos_id
+           FROM players
+           WHERE id IN (${topByWarmupPoints.map(() => "?").join(",")})`,
+          ...topByWarmupPoints.map((row) => row.id),
+        )
+      : [];
+    const topWarmupIdentityById = new Map(
+      topWarmupIdentityRows.map((row) => [Number(row.id), row]),
+    );
+    const topByWarmup = topByWarmupPoints.map((row) => {
+      const identity = topWarmupIdentityById.get(row.id);
+      return {
+        ...row,
+        currentName: identity?.current_name || null,
+        steamID: identity?.steam_id || null,
+        eosID: identity?.eos_id || null,
+      };
+    });
 
     const permissionGroups = await this.db.all(
       `SELECT permission_group, COUNT(*) AS players
@@ -1338,6 +1395,25 @@ export class PlayerRepository {
        LIMIT ?`,
       normalizedTop,
     );
+
+    const [topByMatches, topByCommand] = await Promise.all([
+      this.db.all(
+        `SELECT id, current_name, steam_id, eos_id, total_matches, total_match_wins, updated_at
+         FROM players
+         WHERE total_matches > 0
+         ORDER BY total_matches DESC, total_match_wins DESC, updated_at DESC
+         LIMIT ?`,
+        normalizedTop,
+      ),
+      this.db.all(
+        `SELECT id, current_name, steam_id, eos_id, commander_seconds, squad_leader_seconds
+         FROM players
+         WHERE commander_seconds > 0 OR squad_leader_seconds > 0
+         ORDER BY (commander_seconds + squad_leader_seconds) DESC, updated_at DESC
+         LIMIT ?`,
+        normalizedTop,
+      ),
+    ]);
 
     const tagStats = await this.db.all(
       `SELECT tag_type, tag_value, COUNT(*) AS players
@@ -1472,6 +1548,27 @@ export class PlayerRepository {
         totalMatchWins: Number(overviewRow?.total_match_wins || 0),
         lastPlayerUpdateAt: Number(overviewRow?.last_player_update_at || 0) || null,
       },
+      activity: {
+        active24h: Number(activityRow?.active_24h || 0),
+        active7d: Number(activityRow?.active_7d || 0),
+        active30d: Number(activityRow?.active_30d || 0),
+        dormant30d: Number(activityRow?.dormant_30d || 0),
+      },
+      dataHealth: {
+        steamBound: Number(activityRow?.steam_bound || 0),
+        eosBound: Number(activityRow?.eos_bound || 0),
+        qqBound: Number(activityRow?.qq_bound || 0),
+        ipKnown: Number(activityRow?.ip_known || 0),
+      },
+      engagement: {
+        veteranPlayers: Number(activityRow?.veteran_players || 0),
+        regularPlayers: Number(activityRow?.regular_players || 0),
+        newcomerPlayers: Number(activityRow?.newcomer_players || 0),
+        warmupPlayers: Number(activityRow?.warmup_players || 0),
+        averageGameSeconds: Number(activityRow?.avg_game_seconds || 0),
+        averageServerSeconds: Number(activityRow?.avg_server_seconds || 0),
+        averageMatches: Number(activityRow?.avg_matches || 0),
+      },
       playerStats7d: {
         windowDays: 7,
         newPlayers: Number(newPlayers7dRow?.new_players_7d || 0),
@@ -1505,6 +1602,7 @@ export class PlayerRepository {
         })),
       },
       leaderboards: {
+        byWarmupPoints: topByWarmup,
         byPlaytime: topByPlaytime.map((row) => ({
           id: Number(row.id),
           currentName: row.current_name || null,
@@ -1537,6 +1635,26 @@ export class PlayerRepository {
           matchCount: Number(row.match_count || 0),
           activeDays: Number(row.active_days || 0),
           lastMatchAt: Number(row.last_match_at || 0) || null,
+        })),
+        byMatches: topByMatches.map((row) => ({
+          id: Number(row.id),
+          currentName: row.current_name || null,
+          steamID: row.steam_id || null,
+          eosID: row.eos_id || null,
+          totalMatches: Number(row.total_matches || 0),
+          totalMatchWins: Number(row.total_match_wins || 0),
+          winRate: Number(row.total_matches || 0) > 0
+            ? Number(row.total_match_wins || 0) / Number(row.total_matches || 0)
+            : 0,
+        })),
+        byCommand: topByCommand.map((row) => ({
+          id: Number(row.id),
+          currentName: row.current_name || null,
+          steamID: row.steam_id || null,
+          eosID: row.eos_id || null,
+          commanderSeconds: Number(row.commander_seconds || 0),
+          squadLeaderSeconds: Number(row.squad_leader_seconds || 0),
+          commandSeconds: Number(row.commander_seconds || 0) + Number(row.squad_leader_seconds || 0),
         })),
       },
       trends: {

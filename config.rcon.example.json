@@ -13,7 +13,7 @@
     "commandPoolSize": 4,
     "notificationPoolSize": 2,
     "notificationTimeoutMs": 3000,
-    "enforcementPoolSize": 1,
+    "enforcementPoolSize": 8,
     "queryPoolSize": 1,
 
     "rateLimit": {
