@@ -551,7 +551,17 @@ function handleCreatePlanClick() {
 }
 
 function switchPlayerTarget(player: ShufflePlayer) {
-  player.targetTeamId = player.targetTeamId === 1 ? 2 : 1;
+  setPlayerTarget(player, player.targetTeamId === 1 ? 2 : 1);
+}
+
+function setPlayerTarget(player: ShufflePlayer, targetTeamId: number) {
+  if (player.groupId) {
+    for (const member of planPlayers.value) {
+      if (member.groupId === player.groupId) member.targetTeamId = targetTeamId;
+    }
+    return;
+  }
+  player.targetTeamId = targetTeamId;
 }
 
 function resetManualAdjustments() {
@@ -723,7 +733,7 @@ function onDrop(event: DragEvent, teamId: number) {
   if (!key) return;
   const player = planPlayers.value.find((p) => playerKey(p) === key);
   if (player && player.targetTeamId !== teamId) {
-    player.targetTeamId = teamId;
+    setPlayerTarget(player, teamId);
   }
 }
 

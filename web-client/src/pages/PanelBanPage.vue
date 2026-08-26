@@ -30,7 +30,7 @@
 
     <div class="layout-dashboard">
       <div class="top-row-grid">
-        <PageCard title="新增 / 编辑封禁" description="必须填写到期时间。也可以输入时长，由页面自动换算到期时间。">
+        <PageCard title="新增 / 编辑封禁" description="必须填写到期时间。也可以输入时长，由页面自动换算到期时间。" :class="{ 'ban-actions-disabled': !canBan }">
           <form class="ban-form" @submit.prevent="submitDraft">
             <div class="form-grid">
               <div class="field field--wide">
@@ -95,7 +95,7 @@
             </div>
 
             <div class="form-actions">
-              <AppButton type="submit" :loading="saving">
+              <AppButton type="submit" :loading="saving" :disabled="!canBan">
                 {{ editingId ? "保存修改" : "创建封禁" }}
               </AppButton>
               <AppButton type="button" variant="ghost" :disabled="saving" @click="resetDraft">
@@ -281,14 +281,14 @@
                   </td>
                   <td>
                     <div class="row-actions">
-                      <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id" @click="editEntry(entry)">
+                      <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">
                         编辑
                       </AppButton>
                       <AppButton
                         v-if="entry.status === 'active'"
                         size="sm"
                         variant="ghost"
-                        :disabled="busyId === entry.id"
+                        :disabled="busyId === entry.id || !canBan"
                         @click="setEntryStatus(entry, 'disabled')"
                       >
                         禁用
@@ -297,12 +297,12 @@
                         v-else-if="entry.status === 'disabled'"
                         size="sm"
                         variant="ghost"
-                        :disabled="busyId === entry.id"
+                        :disabled="busyId === entry.id || !canBan"
                         @click="setEntryStatus(entry, 'active')"
                       >
                         启用
                       </AppButton>
-                      <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id" @click="removeEntry(entry)">
+                      <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">
                         删除
                       </AppButton>
                     </div>
@@ -339,7 +339,9 @@ import PlayerSelect from "../components/common/PlayerSelect.vue";
 import { formatTime } from "../composables/useDateTimeFormat";
 import { usePollingResource } from "../composables/usePollingResource";
 import { copyTextWithToast } from "../utils/clipboard";
+import { hasPermission } from "../shared/web-page-permissions.js";
 import { useUiStore } from "../stores/ui.store";
+import { useAuthStore } from "../stores/auth.store";
 
 type EntryStatus = "active" | "disabled" | "expired";
 type StatusView = "all" | EntryStatus;
@@ -428,6 +430,10 @@ type ApiResponse<T> = {
 };
 
 const ui = useUiStore();
+const auth = useAuthStore();
+const canBan = computed(() => Boolean(auth.user?.isSuperAdmin)
+  || hasPermission(auth.user?.permissions ?? [], "panel_ban.ban")
+  || hasPermission(auth.user?.permissions ?? [], "panel_ban.manage"));
 const pageError = ref("");
 const saving = ref(false);
 const reloading = ref(false);

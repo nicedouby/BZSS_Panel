@@ -3172,7 +3172,22 @@ export class WebServer {
     }
 
     if (url.pathname.startsWith("/api/plugins/panel-ban")) {
-      if (!this.requirePermission(user, "panel_ban.manage", res)) return;
+      const panelBanMutation =
+        (url.pathname === "/api/plugins/panel-ban/entries" && req.method === "POST")
+        || (url.pathname.startsWith("/api/plugins/panel-ban/entries/") && (req.method === "PATCH" || req.method === "DELETE"));
+      if (panelBanMutation) {
+        const canBan = this.core.authManager?.hasPermission?.(user, "panel_ban.ban")
+          || this.core.authManager?.hasPermission?.(user, "panel_ban.manage");
+        if (!canBan) {
+          this.json(res, 403, {
+            error: "Forbidden",
+            message: "panel_ban.ban permission is required.",
+          });
+          return;
+        }
+      } else if (!this.requirePermission(user, "panel_ban.manage", res)) {
+        return;
+      }
       const pluginApi = this.getPluginApi("plugin.panelBan");
       if (!pluginApi) {
         return this.json(res, 404, {
@@ -3472,6 +3487,16 @@ export class WebServer {
         sort: url.searchParams.get("sort") ?? "updated_desc",
       });
       return this.json(res, 200, result);
+    }
+
+    if (url.pathname === "/api/squadbrowser/refresh-online" && req.method === "POST") {
+      if (!this.requireSuperAdmin(user, res)) return;
+      const lookup = this.modules.squadBrowserPlayerLookup;
+      if (!lookup?.refreshOnline) return this.json(res, 503, { error: "SquadBrowserLookupUnavailable" });
+      const body = await this.readJsonBody(req);
+      const job = this.createLocalJob("squadbrowser-refresh-online", { force: Boolean(body?.force) });
+      this.runLocalJob(job, async () => await lookup.refreshOnline({ force: Boolean(body?.force) }));
+      return this.json(res, 202, job);
     }
 
     if (url.pathname === "/api/squadbrowser/player" && req.method === "GET") {

@@ -418,6 +418,7 @@ const reserveSlotPermissionOptions: PermissionOption[] = [
 ];
 
 const featurePermissionOptions: PermissionOption[] = [
+  { value: "panel_ban.ban", label: "封禁玩家 Ban" },
   { value: "black_edge_privilege.manage", label: "黑边特权 CDK 管理" },
   { value: "tactical_replay.manage", label: "战术回放录制控制" },
   { value: "tank_battle.execute", label: "坦克大战执行" },

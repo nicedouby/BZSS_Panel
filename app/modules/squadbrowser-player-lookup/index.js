@@ -386,6 +386,26 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
       logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${enriched.sessions.length} saved=${database?.savedSessions ?? 0}`);
       return enriched;
     },
+    async refreshOnline({ force = false } = {}) {
+      const serverId = core?.webStatus?.serverId;
+      const players = modules?.playerState?.getOnlinePlayers?.(serverId) ?? [];
+      const steamIDs = [...new Set(players
+        .map((player) => String(player?.steamID ?? player?.steam64 ?? player?.steam_id ?? "").trim())
+        .filter((steamID) => /^\d{17}$/.test(steamID)))];
+      const candidates = force
+        ? steamIDs.map((steam_id) => ({ steam_id }))
+        : await modules?.playerDatabase?.listSquadBrowserRefreshCandidatesBySteamIDs?.(
+          steamIDs, { staleBefore: Date.now() - AUTO_REFRESH_TTL_MS },
+        ) ?? [];
+      const result = { total: candidates.length, updated: 0, failed: 0, skipped: steamIDs.length - candidates.length };
+      for (let index = 0; index < candidates.length; index += ONLINE_REFRESH_BATCH_SIZE) {
+        const batch = candidates.slice(index, index + ONLINE_REFRESH_BATCH_SIZE);
+        const outcomes = await Promise.all(batch.map((candidate) => refreshOneCandidate(candidate)));
+        result.updated += outcomes.filter(Boolean).length;
+        result.failed += outcomes.filter((ok) => !ok).length;
+      }
+      return result;
+    },
     getAutoRefreshStatus() {
       return {
         ttlHours: AUTO_REFRESH_TTL_MS / 3_600_000,
