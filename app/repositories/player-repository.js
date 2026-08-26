@@ -604,6 +604,26 @@ export class PlayerRepository {
     });
   }
 
+  async listSquadBrowserBzssTopBySteamIDs(steamIDs = []) {
+    const ids = [...new Set((Array.isArray(steamIDs) ? steamIDs : [])
+      .map((id) => String(id ?? "").trim()).filter(Boolean))];
+    if (!ids.length) return [];
+    const placeholders = ids.map(() => "?").join(", ");
+    return this.db.all(
+      `SELECT p.steam_id,
+              EXISTS (
+                SELECT 1 FROM squadbrowser_server_rankings r
+                WHERE r.player_id = p.id
+                  AND r.rank_position = 1
+                  AND (r.server_id = 'LICENSED-1008168'
+                       OR instr(r.server_name, '步战鼠鼠') > 0
+                       OR instr(upper(r.server_name), 'BZSS') > 0)
+              ) AS bzss_top_server
+       FROM players p WHERE p.steam_id IN (${placeholders})`,
+      ...ids,
+    );
+  }
+
   async listPlayersByIdentities({ steamIDs = [], eosIDs = [] } = {}) {
     const steam = [...new Set(
       (Array.isArray(steamIDs) ? steamIDs : [])
