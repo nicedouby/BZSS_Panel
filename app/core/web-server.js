@@ -1924,8 +1924,8 @@ export class WebServer {
       try {
         squadBrowserTopRows = await this.modules.playerDatabase?.listSquadBrowserBzssTopBySteamIDs?.(steamIDs) ?? [];
       } catch {}
-      const bzssTopBySteamID = new Map(
-        squadBrowserTopRows.map((row) => [String(row?.steam_id ?? row?.steamID ?? "").trim(), Boolean(row?.bzss_top_server)]),
+      const squadBrowserBySteamID = new Map(
+        squadBrowserTopRows.map((row) => [String(row?.steam_id ?? row?.steamID ?? "").trim(), row]),
       );
 
       await Promise.all(steamIDs.map(async (steamID) => {
@@ -1937,7 +1937,10 @@ export class WebServer {
           if (row || playerTimeRow) {
             items[steamID] = {
               ...normalizePlaytimeRow(row ?? playerTimeRow, playerTimeRow),
-              bzssTopServer: Boolean(bzssTopBySteamID.get(steamID)),
+              bzssTopServer: Boolean(squadBrowserBySteamID.get(steamID)?.bzss_top_server),
+              squadBrowserRefreshed: Boolean(squadBrowserBySteamID.get(steamID)?.squadbrowser_refreshed),
+              squadBrowserTotalMinutes: Number(squadBrowserBySteamID.get(steamID)?.squadbrowser_total_minutes ?? 0),
+              squadBrowserBzssMinutes: Number(squadBrowserBySteamID.get(steamID)?.squadbrowser_bzss_minutes ?? 0),
             };
           }
         } catch {}
