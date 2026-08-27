@@ -826,12 +826,10 @@ export class UdpEventForwarderService {
     // or weapons do not need content-based filtering.
     const payload = compactObject({
       combatType,
-      eventName: firstDefined(record.eventName, rawEvent?.eventName),
+      eventName: record.eventName,
 
       time: record.time,
       logTime: record.logTime,
-      sourceMode: record.sourceMode ?? "live",
-
       attacker: normalizeProcessedPlayerRef(record.attacker),
       victim: normalizeProcessedPlayerRef(record.victim),
 
