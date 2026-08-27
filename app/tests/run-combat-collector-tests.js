@@ -75,6 +75,10 @@ async function testStartupReplayCacheAndLiveIngest() {
     });
     assert.equal(first.api.getRecords({ limit: 20 }).total, 3, "live/replay overlap must be idempotent");
     assert.deepEqual(first.api.getRecords({ type: "damage", limit: 1 }).records[0].observedModes.sort(), ["live", "replay"]);
+    assert.equal(firstHarness.emitted, 1, "every live record must emit even when replay already cached it");
+    assert.equal(firstHarness.emittedEvents[0].moduleId, "module.combatCollector");
+    assert.equal(firstHarness.emittedEvents[0].eventName, "combatEvent");
+    assert.equal(firstHarness.emittedEvents[0].event.record.sourceMode, "live");
 
     const liveRaw = deathLine("LiveVictim", "nullptr", "nullptr", "2026.08.14-07.00.01:001");
     firstHarness.emitCore("On_PlayerDied", {
@@ -88,6 +92,11 @@ async function testStartupReplayCacheAndLiveIngest() {
       } },
     });
     await waitFor(() => first.api.getRecords({ limit: 20 }).total === 4);
+    assert.equal(firstHarness.emitted, 2);
+    const forwardedNullptr = firstHarness.emittedEvents.at(-1).event.record;
+    assert.equal(forwardedNullptr.attacker.name, null);
+    assert.equal(forwardedNullptr.weapon, null);
+    assert.equal(forwardedNullptr.sourceMode, "live");
     await first.stop();
 
     const cachePath = path.join(storeDirectory, "combat-events.jsonl");
@@ -150,6 +159,7 @@ function createHarness({ sourcePath, storeDirectory }) {
   const listeners = new Map();
   const harness = {
     emitted: 0,
+    emittedEvents: [],
     registeredPages: [],
     core: {
       webStatus: { serverId: "BZSS_Main" },
@@ -167,7 +177,10 @@ function createHarness({ sourcePath, storeDirectory }) {
           listeners.set(key, handler);
           return () => listeners.delete(key);
         },
-        emitModuleEvent() { harness.emitted += 1; },
+        emitModuleEvent(moduleId, eventName, event) {
+          harness.emitted += 1;
+          harness.emittedEvents.push({ moduleId, eventName, event });
+        },
         emitCoreEvent() { harness.emitted += 1; },
       },
       logger: silentLogger(),

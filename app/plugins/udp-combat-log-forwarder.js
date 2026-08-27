@@ -48,7 +48,10 @@ export function createPlugin({ core, modules }) {
       serverId: record.serverId ?? event.serverId ?? null,
       time: record.time ?? event.time ?? null,
       logTime: record.logTime ?? event.logTime ?? null,
-      sourceEventId: record.sourceEventId ?? event.eventId ?? null,
+      sourceEventId: record.sourceEventId ?? record.provenance?.sourceEventId ?? event.eventId ?? null,
+      sourceMode: record.sourceMode ?? null,
+      observedModes: Array.isArray(record.observedModes) ? record.observedModes : [],
+      isReplay: Boolean(record.isReplay),
       type: record.type ?? null,
       isFriendlyFire: Boolean(record.isFriendlyFire),
       isTeamKill: Boolean(record.isTeamKill ?? record.tk),
@@ -57,22 +60,27 @@ export function createPlugin({ core, modules }) {
       friendlyFireLabel: record.friendlyFireLabel ?? null,
       friendlyFireReason: record.friendlyFireReason ?? null,
       teamKillReason: record.teamKillReason ?? null,
-      attackerTeamID: record.attackerTeamID ?? null,
-      victimTeamID: record.victimTeamID ?? null,
-      attackerName: record.attackerName ?? null,
-      victimName: record.victimName ?? null,
+      attackerTeamID: record.attackerTeamID ?? record.attacker?.teamID ?? null,
+      victimTeamID: record.victimTeamID ?? record.victim?.teamID ?? null,
+      attackerName: record.attackerName ?? record.attacker?.name ?? null,
+      victimName: record.victimName ?? record.victim?.name ?? null,
+      attackerSteam64ID: record.attackerSteam64ID ?? record.attacker?.steam64ID ?? null,
+      attackerEOSID: record.attackerEOSID ?? record.attacker?.eosID ?? null,
+      attackerControllerID: record.attackerControllerID ?? record.attacker?.controllerID ?? null,
+      victimSteam64ID: record.victimSteam64ID ?? record.victim?.steam64ID ?? null,
+      victimEOSID: record.victimEOSID ?? record.victim?.eosID ?? null,
       damage: record.damage ?? null,
       weapon: record.weapon ?? null,
       rawCausedBy: record.rawCausedBy ?? null,
-      causedBy: record.causedBy ?? null,
+      causedBy: record.causedBy ?? record.weapon ?? null,
       causedByCategory: record.causedByCategory ?? null,
-      confidence: record.confidence ?? null,
-      identityConfidence: record.identityConfidence ?? null,
-      parseConfidence: record.parseConfidence ?? null,
-      parseStatus: record.parseStatus ?? null,
-      rawLog: record.rawLog ?? "",
+      confidence: record.confidence ?? record.parse?.confidence ?? null,
+      identityConfidence: record.identityConfidence ?? record.parse?.identityConfidence ?? null,
+      parseConfidence: record.parseConfidence ?? record.parse?.parseConfidence ?? null,
+      parseStatus: record.parseStatus ?? record.parse?.status ?? null,
+      rawLog: record.rawLog ?? record.provenance?.rawLog ?? "",
       rawEvent: runtimeConfig?.includeRawEvent ? (record.rawEvent ?? event.rawEvent ?? null) : undefined,
-      normalized: runtimeConfig?.includeNormalized ? (record.normalized ?? event.normalized ?? null) : undefined,
+      normalized: runtimeConfig?.includeNormalized ? (record.normalized ?? event.normalized ?? record) : undefined,
       params: runtimeConfig?.includeParams ? (record.params ?? event.params ?? null) : undefined,
     };
 
@@ -140,8 +148,8 @@ export function createPlugin({ core, modules }) {
       id: "plugin.udpCombatLogForwarder",
       name: "UDP Combat Log Forwarder",
       kind: "plugin",
-      version: "0.1.0",
-      description: "订阅 module.killManage 的 combatResolved 事件，并将标准化战斗日志以 JSON 形式通过 UDP 转发到指定 IP/端口。",
+      version: "0.2.0",
+      description: "订阅战斗信息收集器的实时 combatEvent，并将每条伤害、击倒、死亡记录通过 UDP 转发；日志溯源不会进入实时通道。",
     },
     apiName: "udpCombatLogForwarder",
     api,
@@ -165,7 +173,7 @@ export function createPlugin({ core, modules }) {
       });
 
       unsubscribers.push(
-        core.eventBus.onModuleEvent("module.combatManager", "KILL_MANAGER_EVENT", (event) => {
+        core.eventBus.onModuleEvent("module.combatCollector", "combatEvent", (event) => {
           handleCombatEvent(event);
         })
       );

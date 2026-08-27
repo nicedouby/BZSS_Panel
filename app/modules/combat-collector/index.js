@@ -60,6 +60,19 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
     const source = payload?.record ?? payload;
     if (!source || !["damage", "wound", "death", "kill", "died"].includes(String(source.type ?? "").toLowerCase())) return null;
     const record = normalizeLiveCombatEvent(source);
+
+    // Live consumers receive every accepted record immediately. Replay data
+    // enters through importReplayBatch(), so startup provenance scans never
+    // reach this real-time channel.
+    core.eventBus.emitModuleEvent(MODULE_ID, "combatEvent", {
+      eventName: `${MODULE_ID}.combatEvent`,
+      layer: "module",
+      source: MODULE_ID,
+      serverId: record.serverId,
+      time: record.time || new Date().toISOString(),
+      record,
+    });
+
     // insert() updates the in-memory index synchronously before its append
     // promise yields, so bursts cannot sit outside the collector's memory.
     const pendingWrite = store.insert(record, { observedMode: "live" });
