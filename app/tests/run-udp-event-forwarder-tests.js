@@ -199,6 +199,11 @@ async function testCollectorForwardsEveryRecordIncludingNullFields() {
     assert.equal(entry.accepted, true, `${entry.type} must enter the UDP queue`);
     assert.equal(entry.payload.attackerName, null);
     assert.equal(entry.payload.victimName, null);
+    assert.deepEqual(Object.keys(entry.payload).sort(), [
+      "attacker", "attackerName", "combatType", "damage", "displayText",
+      "eventName", "logTime", "raw", "relation", "time", "victim",
+      "victimName", "weapon",
+    ]);
     assert.equal(entry.source.eventBusEvent, "module.combatCollector.combatEvent");
   }
   assert.equal(plugin.api.getStatus().sender.oversized, 0);
