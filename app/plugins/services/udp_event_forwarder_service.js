@@ -796,7 +796,10 @@ export class UdpEventForwarderService {
       return;
     }
 
-    const combatType = String(record.type ?? "").trim().toLowerCase() || "damage";
+    const incomingType = String(record.type ?? "").trim().toLowerCase();
+    const combatType = incomingType === "death" || incomingType === "died"
+      ? "kill"
+      : incomingType || "damage";
     const sourceEventId = firstDefined(
       record.raw?.sourceEventId,
       record.provenance?.sourceEventId,
