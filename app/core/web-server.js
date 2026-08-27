@@ -1937,6 +1937,7 @@ export class WebServer {
           if (row || playerTimeRow) {
             items[steamID] = {
               ...normalizePlaytimeRow(row ?? playerTimeRow, playerTimeRow),
+              playtimeKnown: Boolean(row),
               bzssTopServer: Boolean(squadBrowserBySteamID.get(steamID)?.bzss_top_server),
               squadBrowserRefreshed: Boolean(squadBrowserBySteamID.get(steamID)?.squadbrowser_refreshed),
               squadBrowserTotalMinutes: Number(squadBrowserBySteamID.get(steamID)?.squadbrowser_total_minutes ?? 0),
