@@ -1731,6 +1731,18 @@ const focusedPlayerKey = ref("");
 // Draggable Pressure Zone Settings Modal State
 const modalPos = ref<{ x: number; y: number } | null>(null);
 const pressureModalPanelRef = ref<HTMLElement | null>(null);
+let modalDragListeners: {
+  onMouseMove: (event: MouseEvent) => void;
+  onMouseUp: () => void;
+} | null = null;
+
+function stopModalDrag() {
+  if (!modalDragListeners) return;
+  window.removeEventListener("mousemove", modalDragListeners.onMouseMove);
+  window.removeEventListener("mouseup", modalDragListeners.onMouseUp);
+  window.removeEventListener("blur", modalDragListeners.onMouseUp);
+  modalDragListeners = null;
+}
 
 function resetModalPos() {
   modalPos.value = null;
@@ -1741,6 +1753,8 @@ function startModalDrag(event: MouseEvent) {
   event.preventDefault();
   const panelEl = pressureModalPanelRef.value;
   if (!panelEl) return;
+  stopModalDrag();
+
   const rect = panelEl.getBoundingClientRect();
   const startX = event.clientX;
   const startY = event.clientY;
@@ -1754,19 +1768,22 @@ function startModalDrag(event: MouseEvent) {
     const panelHeight = rect.height;
     const maxX = Math.max(10, window.innerWidth - panelWidth - 10);
     const maxY = Math.max(10, window.innerHeight - panelHeight - 10);
-    const newX = Math.max(10, Math.min(maxX, initialLeft + deltaX));
-    const newY = Math.max(10, Math.min(maxY, initialTop + deltaY));
-    modalPos.value = { x: newX, y: newY };
+    modalPos.value = {
+      x: Math.max(10, Math.min(maxX, initialLeft + deltaX)),
+      y: Math.max(10, Math.min(maxY, initialTop + deltaY)),
+    };
   };
+  const onMouseUp = () => stopModalDrag();
 
-  const onMouseUp = () => {
-    window.removeEventListener("mousemove", onMouseMove);
-    window.removeEventListener("mouseup", onMouseUp);
-  };
-
+  modalDragListeners = { onMouseMove, onMouseUp };
   window.addEventListener("mousemove", onMouseMove);
   window.addEventListener("mouseup", onMouseUp);
+  window.addEventListener("blur", onMouseUp);
 }
+
+watch(pressureSettingsOpen, (open) => {
+  if (!open) stopModalDrag();
+});
 
 // Shared activePlayerWindow managed by parent MatchStatusPage
 
@@ -3663,6 +3680,7 @@ function onToggleLayer(layer: "alive" | "names" | "coords" | "fobs" | "zones" | 
 }
 
 onBeforeUnmount(() => {
+  stopModalDrag();
   detachCapturePointDragListeners();
   if (capturePointFeedbackTimer !== null) window.clearTimeout(capturePointFeedbackTimer);
 });
@@ -4444,6 +4462,7 @@ function deactivateMapPage() {
   mapPageActive = false;
   stopTacticalMapViewerPresence();
   stopDrag();
+  stopModalDrag();
   if (capturePointDrag.value) cancelCapturePointDrag();
 
   if (isStandaloneMapRoute.value) {
