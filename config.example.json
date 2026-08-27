@@ -809,7 +809,7 @@
       "./plugins/group-report.js",
       "./plugins/weapon-collector.js",
       "./plugins/player_duration_slow_refresh.js",
-      "./plugins/udp_event_forwarder.js",
+      "./app/plugins/udp_event_forwarder.js",
       "./plugins/match-snapshot.js",
       "./app/plugins/match-end-snapshot.js",
       "./plugins/fair-squad-guard.js",
@@ -914,7 +914,7 @@
       "sendHeartbeat": true,
       "maxQueueSize": 1000,
       "dropPolicy": "drop_oldest",
-      "maxPacketBytes": 1200,
+      "maxPacketBytes": 8192,
       "logSuccess": false,
       "logFailure": true
     },

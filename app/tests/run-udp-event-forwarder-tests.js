@@ -123,6 +123,91 @@ async function testProcessedReviveIsForwarded() {
   await plugin.stop();
 }
 
+async function testCollectorForwardsEveryRecordIncludingNullFields() {
+  const { plugin, listeners } = createHarness({
+    pluginConfig: {
+      enabled: true,
+      host: "127.0.0.1",
+      port: 41234,
+      sendCombatEvents: true,
+      sendMapChanged: false,
+      sendStatus: false,
+      sendHeartbeat: false,
+      includeRawLog: true,
+      maxPacketBytes: 8192,
+      logSuccess: false,
+      logFailure: false,
+    },
+  });
+  await plugin.start();
+
+  const handler = [...(listeners.get("module.combatCollector:combatEvent") ?? [])][0];
+  assert.ok(handler, "combatCollector combatEvent handler should be registered");
+
+  for (const type of ["damage", "wound", "death"]) {
+    handler({
+      eventName: "module.combatCollector.combatEvent",
+      serverId: "BZSS_Main",
+      time: "2026-08-27T08:00:00.000Z",
+      record: {
+        schema: "combat-event.v1",
+        id: `collector:${type}:nullptr`,
+        type,
+        serverId: "BZSS_Main",
+        time: "2026-08-27T08:00:00.000Z",
+        logTime: "2026.08.27-08.00.00:000",
+        attacker: {
+          name: null,
+          nameState: "nullptr",
+          steam64ID: null,
+          eosID: null,
+          controllerID: null,
+          teamID: null,
+        },
+        victim: {
+          name: null,
+          nameState: "nullptr",
+          steam64ID: null,
+          eosID: null,
+          controllerID: null,
+          teamID: null,
+        },
+        weapon: null,
+        weaponState: "nullptr",
+        rawWeapon: "nullptr",
+        damage: null,
+        relation: { known: false, sameTeam: false, reason: "" },
+        source: "combat-collector",
+        sourceMode: "live",
+        observedModes: ["live"],
+        isReplay: false,
+        provenance: {
+          sourceEventId: `source:${type}:nullptr`,
+          rawLog: `raw ${type} nullptr`,
+        },
+      },
+    });
+  }
+
+  const logs = plugin.api.getLogs({ limit: 10 });
+  assert.equal(logs.total, 3);
+  assert.deepEqual(
+    logs.logs.map((entry) => entry.type).sort(),
+    ["combat.damage", "combat.death", "combat.wound"],
+  );
+  for (const entry of logs.logs) {
+    assert.equal(entry.accepted, true, `${entry.type} must enter the UDP queue`);
+    assert.equal(entry.payload.attackerName, null);
+    assert.equal(entry.payload.victimName, null);
+    assert.equal(entry.payload.sourceMode, "live");
+    assert.equal(entry.source.eventBusEvent, "module.combatCollector.combatEvent");
+  }
+  assert.equal(plugin.api.getStatus().sender.oversized, 0);
+
+  await plugin.stop();
+}
+
 await testProcessedReviveIsForwarded();
+await testCollectorForwardsEveryRecordIncludingNullFields();
 
 console.log("udp event forwarder tests passed");

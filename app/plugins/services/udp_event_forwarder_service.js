@@ -357,7 +357,7 @@ function readConfig(sourceConfig = {}, pluginConfigOverride = {}) {
     sendHeartbeat: configBool(pluginConfig.sendHeartbeat, true),
 
     maxQueueSize: configInt(pluginConfig.maxQueueSize, 1000),
-    maxPacketBytes: configInt(pluginConfig.maxPacketBytes, 1200),
+    maxPacketBytes: configInt(pluginConfig.maxPacketBytes, 8192),
     maxLogs: configInt(pluginConfig.maxLogs, DEFAULT_MAX_LOGS),
     dropPolicy: configString(pluginConfig.dropPolicy, "drop_oldest"),
 
@@ -463,10 +463,11 @@ export class UdpEventForwarderService {
     };
 
     this.unsubscribers.push(
-      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "damageResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.damageResolved")),
-      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "woundResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.woundResolved")),
+      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatCollector", name: "combatEvent" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatCollector.combatEvent")),
+      // Revive is not part of combatCollector yet. Keep its existing real-time
+      // source without subscribing to the legacy damage/wound/kill channels,
+      // which would otherwise duplicate collector records.
       subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "reviveResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.reviveResolved")),
-      subscribeEvent(this.eventBus, "module", { moduleId: "module.combatClean", name: "killResolved" }, (event) => this.forwardProcessedCombatEvent(event, "module.combatClean.killResolved")),
       subscribeEvent(this.eventBus, "core", "round.world_bring_up", (event) => this.forwardMapChanged(event, "round.world_bring_up")),
       subscribeEvent(this.eventBus, "core", "On_RawLogLine", (event) => this.forwardMapChanged(event, "On_RawLogLine")),
       subscribeEvent(this.eventBus, "core", "RCON_MATCH_STATE_UPDATED", (event) => this.onMatchStateUpdated(event, "RCON_MATCH_STATE_UPDATED")),
@@ -795,58 +796,62 @@ export class UdpEventForwarderService {
       return;
     }
 
-    const combatType = String(record.type ?? "").trim().toLowerCase();
-    if (!["damage", "wound", "kill", "revive"].includes(combatType)) {
-      return;
-    }
-
+    const incomingType = String(record.type ?? "").trim().toLowerCase();
+    const combatType = incomingType === "kill" || incomingType === "died"
+      ? "death"
+      : incomingType || "unknown";
     const sourceEventId = firstDefined(
       record.raw?.sourceEventId,
+      record.provenance?.sourceEventId,
       record.sourceEventId,
       record.id,
       rawEvent?.eventId,
     );
-    if (this.shouldSuppressDuplicate(sourceEventId, "combat")) {
-      return;
-    }
+    const weaponRecord = record.weapon && typeof record.weapon === "object"
+      ? record.weapon
+      : null;
+    const weaponText = typeof record.weapon === "string"
+      ? record.weapon
+      : firstDefined(record.rawWeapon, weaponRecord?.raw);
+    const rawLog = firstDefined(
+      record.raw?.rawLog,
+      record.provenance?.rawLog,
+      record.rawLog,
+    );
 
-    const udpType = combatType === "damage"
-      ? "combat.damage"
-      : combatType === "wound"
-        ? "combat.wound"
-        : combatType === "revive"
-          ? "combat.revive"
-          : "combat.kill";
-
+    // combatCollector publishes only live ingestion. Replay records enter via
+    // importReplayBatch() and never reach this channel, so incomplete actors
+    // or weapons do not need content-based filtering.
     const payload = compactObject({
       combatType,
-      eventName: record.eventName,
+      eventName: firstDefined(record.eventName, rawEvent?.eventName),
 
       time: record.time,
       logTime: record.logTime,
+      sourceMode: record.sourceMode ?? "live",
 
       attacker: normalizeProcessedPlayerRef(record.attacker),
       victim: normalizeProcessedPlayerRef(record.victim),
 
-      attackerName: record.attacker?.name ?? null,
-      victimName: record.victim?.name ?? null,
+      attackerName: record.attackerName ?? record.attacker?.name ?? null,
+      victimName: record.victimName ?? record.victim?.name ?? null,
 
       damage: toNumberOrNull(record.damage),
 
       weapon: {
-        raw: record.weapon?.raw ?? null,
-        cleaned: record.weapon?.cleaned ?? null,
-        displayName: record.weapon?.displayName ?? null,
-        category: record.weapon?.category ?? null,
-        sourceType: record.weapon?.sourceType ?? null,
+        raw: firstDefined(weaponRecord?.raw, record.rawWeapon, weaponText),
+        cleaned: firstDefined(weaponRecord?.cleaned, weaponText),
+        displayName: firstDefined(weaponRecord?.displayName, weaponText),
+        category: weaponRecord?.category ?? null,
+        sourceType: weaponRecord?.sourceType ?? null,
       },
 
       relation: {
-        attackerTeamID: record.relation?.attackerTeamID ?? null,
-        victimTeamID: record.relation?.victimTeamID ?? null,
+        attackerTeamID: firstDefined(record.relation?.attackerTeamID, record.attacker?.teamID),
+        victimTeamID: firstDefined(record.relation?.victimTeamID, record.victim?.teamID),
         sameTeam: Boolean(record.relation?.sameTeam),
-        isFriendlyFire: Boolean(record.relation?.isFriendlyFire),
-        friendlyFireType: record.relation?.friendlyFireType ?? "",
+        isFriendlyFire: Boolean(record.relation?.isFriendlyFire ?? record.isFriendlyFire),
+        friendlyFireType: record.relation?.friendlyFireType ?? record.friendlyFireType ?? "",
         teamSource: record.relation?.teamSource ?? "",
       },
 
@@ -854,18 +859,18 @@ export class UdpEventForwarderService {
 
       raw: this.config.includeRawLog
         ? {
-            sourceModule: record.raw?.sourceModule ?? "module.combatClean",
+            sourceModule: record.raw?.sourceModule ?? record.source ?? "module.combatCollector",
             sourceEventId,
-            rawLog: record.raw?.rawLog ?? "",
+            rawLog: rawLog ?? "",
           }
         : {
-            sourceModule: record.raw?.sourceModule ?? "module.combatClean",
+            sourceModule: record.raw?.sourceModule ?? record.source ?? "module.combatCollector",
             sourceEventId,
           },
     });
 
     this.state.lastCombatEventAt = new Date().toISOString();
-    this.emitUdp(udpType, payload, {
+    this.emitUdp(`combat.${combatType}`, payload, {
       eventBusEvent,
       sourceEventId,
     });
