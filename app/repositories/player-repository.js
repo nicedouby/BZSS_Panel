@@ -618,8 +618,17 @@ export class PlayerRepository {
                   AND (r.server_id = 'LICENSED-1008168'
                        OR instr(r.server_name, '步战鼠鼠') > 0
                        OR instr(upper(r.server_name), 'BZSS') > 0)
-              ) AS bzss_top_server
-       FROM players p WHERE p.steam_id IN (${placeholders})`,
+              ) AS bzss_top_server,
+              CASE WHEN COALESCE(profile.fetched_at, 0) > 0 THEN 1 ELSE 0 END AS squadbrowser_refreshed,
+              COALESCE((SELECT SUM(r.playtime_minutes) FROM squadbrowser_server_rankings r WHERE r.player_id = p.id), 0) AS squadbrowser_total_minutes,
+              COALESCE((SELECT SUM(r.playtime_minutes) FROM squadbrowser_server_rankings r
+                WHERE r.player_id = p.id
+                  AND (r.server_id = 'LICENSED-1008168'
+                       OR instr(r.server_name, '步战鼠鼠') > 0
+                       OR instr(upper(r.server_name), 'BZSS') > 0)), 0) AS squadbrowser_bzss_minutes
+       FROM players p
+       LEFT JOIN squadbrowser_player_profiles profile ON profile.player_id = p.id
+       WHERE p.steam_id IN (${placeholders})`,
       ...ids,
     );
   }
