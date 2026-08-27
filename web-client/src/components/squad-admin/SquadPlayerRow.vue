@@ -31,6 +31,7 @@
             decoding="async"
           />
           <span v-else class="player-avatar-text" aria-hidden="true">{{ roleIcon.icon }}</span>
+          <span v-if="player.isLeader" class="player-avatar-sl-badge" title="Squad Leader">SL</span>
           <span
             v-if="bzssCorePing != null"
             class="player-avatar-ping-badge"
@@ -47,6 +48,16 @@
       <div class="player-title-line">
         <span class="player-name" :title="displayName">{{ displayName }}</span>
         <span
+          class="bzss-core-ft-badge"
+          :class="bzssCoreFtBadge.tone"
+          :title="bzssCoreFtBadge.title"
+        >
+          {{ bzssCoreFtBadge.label }}
+        </span>
+        <div class="playtime-chip" :class="{ 'is-unknown': playtimeText === '未知' }" :title="playtimeTitle">
+          {{ playtimeText }}
+        </div>
+        <span
           v-if="persistentPlayerBadge"
           class="persistent-player-badge"
           :class="persistentPlayerBadge.tone"
@@ -57,30 +68,14 @@
         <span
           v-if="props.loyalPlayer"
           class="loyal-player-badge"
-          title="忠诚玩家：步战鼠鼠是最常玩服务器，且占排行榜总时长超过 50%"
+          title="忠诚：步战鼠鼠是最常玩服务器，且占排行榜总时长超过 50%"
         >
           <span class="loyal-player-mark">◆</span>
-          <span>忠诚玩家</span>
+          <span>忠诚</span>
         </span>
-        <span
-          v-if="bzssCoreFtBadge"
-          class="bzss-core-ft-badge"
-          :class="bzssCoreFtBadge.tone"
-          :title="bzssCoreFtBadge.title"
-          style="margin-left: 6px;"
-        >
-          {{ bzssCoreFtBadge.label }}
+        <span v-if="props.newcomerPlayer" class="newcomer-player-badge" title="SquadBrowser 已刷新：总游玩记录与步战鼠鼠游玩记录均不足 10 小时">
+          初乍到来
         </span>
-        <span
-          class="role-chip"
-          :class="{ leader: player.isLeader }"
-          :title="player.isLeader ? t('match.squadLeader') : t('match.squadMember')"
-        >
-          {{ player.isLeader ? "队长" : "成员" }}
-        </span>
-        <div v-if="playtimeText" class="playtime-chip" :title="playtimeTitle">
-          {{ playtimeText }}
-        </div>
       </div>
 
       <div v-if="secondaryIdentityText" class="player-sub-line" :title="secondaryIdentityText">
@@ -150,6 +145,8 @@ const props = defineProps<{
   serverPlaytimeSeconds?: number | null;
   warmupPlaytimeSeconds?: number | null;
   loyalPlayer?: boolean;
+  newcomerPlayer?: boolean;
+  playtimeKnown?: boolean;
   groupReport?: { id: string; number: number; name: string; color: string };
 }>();
 
@@ -169,25 +166,19 @@ const avatarUrl = computed(() => props.steamAvatar || props.player.steamAvatar |
 const bzssCorePing = computed(() => props.player.bzssCorePing ?? null);
 const bzssCoreFtBadge = computed(() => {
   const ftIndex = props.player.bzssCoreFtIndex;
-  if (ftIndex == null || !Number.isFinite(Number(ftIndex))) return null;
+  if (ftIndex == null || !Number.isFinite(Number(ftIndex))) {
+    return { label: "A", tone: "ft-neutral", title: "未检测到火力组，按默认 A 组显示" };
+  }
   const index = Math.trunc(Number(ftIndex));
   const badgeMap: Record<number, { label: string; tone: string }> = {
-    0: { label: "A组", tone: "ft-green" },
-    1: { label: "B组", tone: "ft-purple" },
-    2: { label: "C组", tone: "ft-blue" },
+    0: { label: "A", tone: "ft-green" },
+    1: { label: "B", tone: "ft-purple" },
+    2: { label: "C", tone: "ft-blue" },
   };
   const badge = badgeMap[index];
-  if (!badge) {
-    return {
-      label: `FT ${index}`,
-      tone: "ft-neutral",
-      title: `BZSS-Core ftIndex: ${index}`,
-    };
-  }
-  return {
-    ...badge,
-    title: `BZSS-Core ftIndex: ${index}`,
-  };
+  return badge
+    ? { ...badge, title: `火力组 ${badge.label}` }
+    : { label: "A", tone: "ft-neutral", title: `未识别的火力组索引 ${index}，按默认 A 组显示` };
 });
 const pingBadgeClass = computed(() => {
   const ping = Number(bzssCorePing.value ?? 0);
@@ -222,7 +213,7 @@ const persistentPlayerBadge = computed(() => {
   else if (warmupRatio > 0.3) level = 2;
 
   return {
-    label: "常驻玩家" + "|".repeat(level),
+    label: "常驻" + "|".repeat(level),
     tone: "persistent-player-badge--level-" + level,
     title: "本服游玩 " + formatTrackedDuration(serverSeconds) + "｜暖服 " + formatTrackedDuration(safeWarmupSeconds) + "（占比 " + warmupPercent + "%）",
   };
@@ -289,7 +280,7 @@ function pingClass(ping: number, loss?: number | null) {
 
 function formatPlaytime(hours?: number | null) {
   if (typeof hours !== "number" || !Number.isFinite(hours)) {
-    return "未公开";
+    return props.playtimeKnown ? "未公开" : "未知";
   }
 
   if (hours === 0) {
@@ -408,6 +399,22 @@ function displayRole(role: string | null | undefined) {
   overflow: visible;
 }
 
+.player-avatar-sl-badge {
+  position: absolute;
+  z-index: 3;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 4px;
+  border: 1px solid rgba(250, 204, 21, 0.6);
+  border-radius: 4px;
+  background: rgba(62, 45, 8, 0.94);
+  color: #fde68a;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+}
 .player-avatar-ping-badge {
   position: absolute;
   right: -6px;
@@ -447,8 +454,8 @@ function displayRole(role: string | null | undefined) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 42px;
-  padding: 1px 8px;
+  min-width: 18px;
+  padding: 1px 5px;
   border-radius: 999px;
   border: 1px solid transparent;
   font-size: 10px;
@@ -477,7 +484,7 @@ function displayRole(role: string | null | undefined) {
 }
 
 .bzss-core-ft-badge.ft-neutral {
-  color: var(--color-text-secondary);
+  color: #a8b1be;
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
 }
@@ -653,6 +660,19 @@ function displayRole(role: string | null | undefined) {
   box-shadow: 0 0 12px rgba(168, 85, 247, 0.2);
 }
 
+.newcomer-player-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 6px;
+  border: 1px solid rgba(96, 165, 250, .52);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, .16);
+  color: #bfdbfe;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .loyal-player-badge {
   display: inline-flex;
   align-items: center;
