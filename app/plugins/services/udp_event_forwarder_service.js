@@ -796,12 +796,7 @@ export class UdpEventForwarderService {
       return;
     }
 
-    const incomingType = String(record.type ?? "").trim().toLowerCase();
-    // Preserve the existing UDP wire contract: the collector calls this
-    // record type "death", while receivers already consume "combat.kill".
-    const combatType = incomingType === "death" || incomingType === "died"
-      ? "kill"
-      : incomingType || "unknown";
+    const combatType = String(record.type ?? "").trim().toLowerCase() || "damage";
     const sourceEventId = firstDefined(
       record.raw?.sourceEventId,
       record.provenance?.sourceEventId,
@@ -809,68 +804,55 @@ export class UdpEventForwarderService {
       record.id,
       rawEvent?.eventId,
     );
+
+    const attacker = extractIdentity(record, "attacker");
+    const victim = extractIdentity(record, "victim");
     const weaponRecord = record.weapon && typeof record.weapon === "object"
       ? record.weapon
       : null;
-    const weaponText = typeof record.weapon === "string"
-      ? record.weapon
-      : firstDefined(record.rawWeapon, weaponRecord?.raw);
-    const rawLog = firstDefined(
-      record.raw?.rawLog,
-      record.provenance?.rawLog,
-      record.rawLog,
+    const weapon = firstDefined(
+      typeof record.weapon === "string" ? record.weapon : null,
+      weaponRecord?.displayName,
+      weaponRecord?.raw,
+      weaponRecord?.cleaned,
+      record.rawWeapon,
+      record.causedBy,
+      record.rawCausedBy,
+      record.damageCauser,
     );
 
-    // combatCollector publishes only live ingestion. Replay records enter via
-    // importReplayBatch() and never reach this channel, so incomplete actors
-    // or weapons do not need content-based filtering.
-    const payload = compactObject({
-      combatType,
-      eventName: record.eventName,
-
-      time: record.time,
-      logTime: record.logTime,
-      attacker: normalizeProcessedPlayerRef(record.attacker),
-      victim: normalizeProcessedPlayerRef(record.victim),
-
-      attackerName: record.attackerName ?? record.attacker?.name ?? null,
-      victimName: record.victimName ?? record.victim?.name ?? null,
-
+    // Keep the original remote UDP combat payload exactly: no relation,
+    // sourceMode, displayText, or other new-system fields are exposed.
+    const payload = {
+      victimName: victim.name,
+      attackerName: attacker.name,
       damage: toNumberOrNull(record.damage),
+      damageType: firstDefined(record.damageType, record.type, "actual"),
+      weapon,
+      confidence: firstDefined(
+        record.confidence,
+        record.parseConfidence,
+        record.identityConfidence,
+        "unknown",
+      ),
+      rawType: firstDefined(record.rawType, record.type, rawEvent?.eventName),
+      victim: this.config.includeIds ? victim : { name: victim.name },
+      attacker: this.config.includeIds ? attacker : { name: attacker.name },
+    };
 
-      weapon: {
-        raw: firstDefined(weaponRecord?.raw, record.rawWeapon, weaponText),
-        cleaned: firstDefined(weaponRecord?.cleaned, weaponText),
-        displayName: firstDefined(weaponRecord?.displayName, weaponText),
-        category: weaponRecord?.category ?? null,
-        sourceType: weaponRecord?.sourceType ?? null,
-      },
-
-      relation: {
-        attackerTeamID: firstDefined(record.relation?.attackerTeamID, record.attacker?.teamID),
-        victimTeamID: firstDefined(record.relation?.victimTeamID, record.victim?.teamID),
-        sameTeam: Boolean(record.relation?.sameTeam),
-        isFriendlyFire: Boolean(record.relation?.isFriendlyFire ?? record.isFriendlyFire),
-        friendlyFireType: record.relation?.friendlyFireType ?? record.friendlyFireType ?? "",
-        teamSource: record.relation?.teamSource ?? "",
-      },
-
-      displayText: record.displayText ?? "",
-
-      raw: this.config.includeRawLog
-        ? {
-            sourceModule: record.raw?.sourceModule ?? record.source ?? "module.combatCollector",
-            sourceEventId,
-            rawLog: rawLog ?? "",
-          }
-        : {
-            sourceModule: record.raw?.sourceModule ?? record.source ?? "module.combatCollector",
-            sourceEventId,
-          },
-    });
+    if (this.config.includeRawLog) {
+      payload.rawLog = firstDefined(
+        record.rawLog,
+        record.raw?.rawLog,
+        record.provenance?.rawLog,
+        rawEvent?.rawLog,
+        rawEvent?.message,
+        rawEvent?.line,
+      );
+    }
 
     this.state.lastCombatEventAt = new Date().toISOString();
-    this.emitUdp(`combat.${combatType}`, payload, {
+    this.emitUdp("combat." + combatType, payload, {
       eventBusEvent,
       sourceEventId,
     });
