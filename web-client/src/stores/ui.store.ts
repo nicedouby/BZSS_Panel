@@ -35,10 +35,26 @@ export interface WarnPromptOptions {
   targetName: string;
   defaultMessage?: string;
   confirmText?: string;
+  allowViolation?: boolean;
 }
 
 interface WarnPromptState extends Required<WarnPromptOptions> {
   visible: boolean;
+}
+
+export interface WarnPromptViolation {
+  categoryKey: string;
+  categoryLabel: string;
+  violationKey: string;
+  violationLabel: string;
+  warningText: string;
+  detail: string;
+}
+
+export interface WarnPromptResult {
+  kind: "ordinary" | "violation";
+  message: string;
+  violation?: WarnPromptViolation;
 }
 
 export interface DisbandPromptOptions {
@@ -97,6 +113,7 @@ export const useUiStore = defineStore("ui", () => {
     targetName: "",
     defaultMessage: "",
     confirmText: "Send Warning",
+    allowViolation: false,
   });
   const disbandPrompt = ref<DisbandPromptState>({
     visible: false,
@@ -125,7 +142,7 @@ export const useUiStore = defineStore("ui", () => {
     cardGlow.value ? "ui-card-glow" : "ui-card-flat",
   ]);
   let confirmResolver: ((value: boolean) => void) | null = null;
-  let warnPromptResolver: ((value: string | null) => void) | null = null;
+  let warnPromptResolver: ((value: WarnPromptResult | null) => void) | null = null;
   let disbandPromptResolver: ((value: string | null) => void) | null = null;
 
   watch(
@@ -276,16 +293,17 @@ export const useUiStore = defineStore("ui", () => {
       targetName: options.targetName,
       defaultMessage: options.defaultMessage ?? "请遵守服务器规则",
       confirmText: options.confirmText ?? "发送警告",
+      allowViolation: Boolean(options.allowViolation),
     };
 
-    return new Promise<string | null>((resolve) => {
+    return new Promise<WarnPromptResult | null>((resolve) => {
       warnPromptResolver = resolve;
     });
   }
 
-  function resolveWarnPrompt(message: string | null) {
+  function resolveWarnPrompt(result: WarnPromptResult | null) {
     warnPrompt.value.visible = false;
-    warnPromptResolver?.(message);
+    warnPromptResolver?.(result);
     warnPromptResolver = null;
   }
 

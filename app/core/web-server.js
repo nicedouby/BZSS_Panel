@@ -2410,6 +2410,7 @@ export class WebServer {
         targetEosId: url.searchParams.get("targetEosId") ?? "",
         sourceModule: url.searchParams.get("sourceModule") ?? "",
         reason: url.searchParams.get("reason") ?? "",
+        warningType: url.searchParams.get("warningType") ?? "",
         success: parseOptionalBoolean(url.searchParams.get("success")),
         skipped: parseOptionalBoolean(url.searchParams.get("skipped")),
         search: url.searchParams.get("search") ?? "",
@@ -3932,7 +3933,13 @@ export class WebServer {
             steamId: body.targetSteamId ?? body.steamId ?? body.steamID ?? "",
             eosId: body.targetEosId ?? body.eosId ?? body.eosID ?? "",
           },
-          parameters: { message: body.message ?? "" },
+          parameters: {
+            message: body.message ?? "",
+            warningType: body.warningType ?? "ordinary",
+            violationCategoryKey: body.violation?.categoryKey ?? "",
+            violationKey: body.violation?.violationKey ?? "",
+            violationDetail: body.violation?.detail ?? "",
+          },
           resultResolver: (payload) => payload?.success === false ? AUDIT_RESULTS.FAILED : AUDIT_RESULTS.SUCCESS,
         };
         const result = await this.executeAudited(auditContext, ({ requestId }) => api.warnPlayer({

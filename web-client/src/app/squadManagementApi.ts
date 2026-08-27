@@ -276,11 +276,21 @@ export function removePlayerFromSquad(payload: {
 
 export function warnPlayer(payload: {
   targetName: string;
+  targetPlayerId?: string | number;
   message: string;
   reason?: string;
   sourceModule?: string;
   targetSteamId?: string;
   targetEosId?: string;
+  warningType?: "ordinary" | "violation";
+  violation?: {
+    categoryKey: string;
+    categoryLabel: string;
+    violationKey: string;
+    violationLabel: string;
+    warningText: string;
+    detail: string;
+  };
   record?: boolean;
 }) {
   return apiPost<any>("/api/admin-warns/warn", payload);

@@ -167,6 +167,12 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.setPlayerTagPresence(playerId, tagType, tagValue, enabled);
     },
 
+    async recordViolationByIdentity(identity = {}, violation = {}) {
+      const player = await repo.upsertFromPresence(identityFromPlayer(identity));
+      if (!player?.id) return null;
+      return repo.recordViolation(player.id, violation);
+    },
+
     async setPermissionGroup(playerId, permissionGroup) {
       await repo.setPermissionGroup(playerId, permissionGroup);
       return { ok: true };
