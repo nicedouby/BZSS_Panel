@@ -74,6 +74,8 @@
           :server-playtime-seconds="getPlayerServerSeconds(squad.leader.steamId)"
           :warmup-playtime-seconds="getPlayerWarmupSeconds(squad.leader.steamId)"
           :loyal-player="isPlayerLoyal(squad.leader.steamId)"
+          :newcomer-player="isPlayerNewcomer(squad.leader.steamId)"
+          :playtime-known="hasPlaytimeRecord(squad.leader.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
           @select="handlePlayerSelect"
@@ -96,6 +98,8 @@
           :server-playtime-seconds="getPlayerServerSeconds(member.steamId)"
           :warmup-playtime-seconds="getPlayerWarmupSeconds(member.steamId)"
           :loyal-player="isPlayerLoyal(member.steamId)"
+          :newcomer-player="isPlayerNewcomer(member.steamId)"
+          :playtime-known="hasPlaytimeRecord(member.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
           @select="handlePlayerSelect"
@@ -232,10 +236,25 @@ function getPlayerWarmupSeconds(steamId: string | null | undefined): number | nu
   return getCachedDurationSeconds(steamId, "warmupSeconds", "warmup_seconds");
 }
 
+function hasPlaytimeRecord(steamId: string | null | undefined): boolean {
+  return Boolean(steamId && props.playtimes[steamId] !== undefined);
+}
+
 function isPlayerLoyal(steamId: string | null | undefined): boolean {
   if (!steamId) return false;
   const record = props.playtimes[steamId];
   return Boolean(record?.loyalPlayer ?? record?.loyal_player ?? record?.is_loyal_player);
+}
+
+function isPlayerNewcomer(steamId: string | null | undefined): boolean {
+  if (!steamId) return false;
+  const record = props.playtimes[steamId];
+  if (!record || !Boolean(record.squadBrowserRefreshed ?? record.squadbrowser_refreshed)) return false;
+  const totalMinutes = Number(record.squadBrowserTotalMinutes ?? record.squadbrowser_total_minutes);
+  const bzssMinutes = Number(record.squadBrowserBzssMinutes ?? record.squadbrowser_bzss_minutes);
+  return Number.isFinite(totalMinutes) && Number.isFinite(bzssMinutes)
+    && totalMinutes < 10 * 60
+    && bzssMinutes < 10 * 60;
 }
 
 function getCachedDurationSeconds(
