@@ -797,8 +797,10 @@ export class UdpEventForwarderService {
     }
 
     const incomingType = String(record.type ?? "").trim().toLowerCase();
-    const combatType = incomingType === "kill" || incomingType === "died"
-      ? "death"
+    // Preserve the existing UDP wire contract: the collector calls this
+    // record type "death", while receivers already consume "combat.kill".
+    const combatType = incomingType === "death" || incomingType === "died"
+      ? "kill"
       : incomingType || "unknown";
     const sourceEventId = firstDefined(
       record.raw?.sourceEventId,

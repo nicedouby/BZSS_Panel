@@ -193,7 +193,7 @@ async function testCollectorForwardsEveryRecordIncludingNullFields() {
   assert.equal(logs.total, 3);
   assert.deepEqual(
     logs.logs.map((entry) => entry.type).sort(),
-    ["combat.damage", "combat.death", "combat.wound"],
+    ["combat.damage", "combat.kill", "combat.wound"],
   );
   for (const entry of logs.logs) {
     assert.equal(entry.accepted, true, `${entry.type} must enter the UDP queue`);
