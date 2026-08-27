@@ -237,7 +237,9 @@ function getPlayerWarmupSeconds(steamId: string | null | undefined): number | nu
 }
 
 function hasPlaytimeRecord(steamId: string | null | undefined): boolean {
-  return Boolean(steamId && props.playtimes[steamId] !== undefined);
+  if (!steamId) return false;
+  const record = props.playtimes[steamId];
+  return Boolean(record?.playtimeKnown ?? record?.playtime_known);
 }
 
 function isPlayerLoyal(steamId: string | null | undefined): boolean {
