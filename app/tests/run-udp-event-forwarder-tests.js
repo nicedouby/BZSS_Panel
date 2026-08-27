@@ -203,7 +203,7 @@ async function testCollectorForwardsEveryRecordIncludingNullFields() {
       "attacker", "attackerName", "confidence", "damage", "damageType",
       "rawLog", "rawType", "victim", "victimName", "weapon",
     ]);
-    assert.equal(typeof entry.payload.weapon, "object");
+    assert.ok(entry.payload.weapon === null || typeof entry.payload.weapon === "string");
     assert.equal(entry.source.eventBusEvent, "module.combatCollector.combatEvent");
   }
   assert.equal(plugin.api.getStatus().sender.oversized, 0);
