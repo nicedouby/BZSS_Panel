@@ -1347,26 +1347,36 @@ async function handleBan() {
 async function handleWarn() {
   const player = props.player;
   if (!player || actionBusy.value) return;
-  const message = await ui.openWarnPrompt({
+  const warning = await ui.openWarnPrompt({
     title: "发送玩家警告",
     targetName: player.name,
     defaultMessage: "请遵守服务器规则",
+    allowViolation: true,
   });
-  if (message === null) return;
+  if (warning === null) return;
   if (actionBusy.value || !props.player) return;
 
   actionBusy.value = true;
   try {
     const res = await warnPlayer({
       targetName: player.name,
+      targetPlayerId: player.playerId ?? undefined,
       targetSteamId: player.steamId ?? undefined,
       targetEosId: player.eosId ?? undefined,
-      message: message.trim() || "Admin Warning",
-      reason: "manual_warn",
+      message: warning.message,
+      warningType: warning.kind,
+      violation: warning.violation,
+      reason: warning.kind === "violation" ? `violation:${warning.violation?.violationKey ?? "unknown"}` : "manual_warn",
       sourceModule: "web.squadAdmin",
     });
     if (!res.success) throw new Error(res.errorMessage || "警告发送失败");
-    ui.pushToast({ title: "已发送警告", message: `玩家: ${player.name}`, tone: "ok" });
+    ui.pushToast({
+      title: warning.kind === "violation" ? "违规警告已发送" : "已发送警告",
+      message: warning.kind === "violation" && res.violationRecorded === false
+        ? `玩家已收到警告，但违规记录写入失败：${res.errorMessage || "未知错误"}`
+        : `玩家: ${player.name}`,
+      tone: warning.kind === "violation" && res.violationRecorded === false ? "warn" : "ok",
+    });
   } catch (e) {
     ui.pushToast({ title: "警告失败", message: String(e), tone: "error" });
   } finally {

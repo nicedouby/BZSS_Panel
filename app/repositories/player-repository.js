@@ -1084,13 +1084,14 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, sessions, steamProfile, containers, tags, squadBrowserServerPlaytime, squadBrowserServerRankings] = await Promise.all([
+    const [aliases, ips, sessions, steamProfile, containers, tags, violationCounts, squadBrowserServerPlaytime, squadBrowserServerRankings] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSessionHistory(id, { limit: 20 }),
       this.getSteamProfile(id, player),
       this.getPlayerContainerSummary(id, player),
       this.listPlayerTags(id),
+      this.listPlayerViolationCounts(id),
       this.listSquadBrowserServerPlaytime(id),
       this.listSquadBrowserServerRankings(id),
     ]);
@@ -1106,6 +1107,7 @@ export class PlayerRepository {
       steamProfile,
       containers,
       tags,
+      violationCounts,
       summary: {
         gameSeconds: resolveEffectiveGameSeconds(player),
         steamGameSeconds: normalizeSeconds(player.steam_game_seconds ?? player.game_seconds ?? 0),
@@ -1161,7 +1163,7 @@ export class PlayerRepository {
       this.db.get("SELECT COUNT(*) AS count, MAX(joined_at) AS last_at FROM player_session_history WHERE player_id = ?", id),
       this.db.get("SELECT COUNT(*) AS count, MAX(updated_at) AS last_at FROM steam_friends WHERE player_id = ?", id),
       this.db.get("SELECT COUNT(*) AS count, MAX(updated_at) AS last_at FROM player_tags WHERE player_id = ?", id),
-      this.db.get("SELECT COUNT(*) AS count, MAX(last_at) AS last_at FROM player_violation_counts WHERE player_id = ?", id),
+      this.db.get("SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM player_violation_events WHERE player_id = ?", id),
       this.db.get("SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM report_records WHERE reporter_player_id = ? OR target_player_id = ?", id, id),
       this.db.get("SELECT COUNT(*) AS count, MAX(created_at) AS last_at FROM command_logs WHERE player_id = ?", id),
       this.db.get("SELECT COUNT(*) AS count, MAX(mr.started_at) AS last_at FROM player_match_records pmr JOIN match_records mr ON mr.id = pmr.match_id WHERE pmr.player_id = ?", id),
@@ -1174,7 +1176,7 @@ export class PlayerRepository {
         steamID, steamID, steamID, steamID, steamID, steamID, eosID, eosID, eosID, eosID, eosID, eosID),
       this.db.get("SELECT COUNT(*) AS count, MAX(created_at_ms) AS last_at FROM web_action_audit_records WHERE target_id = ?", String(id)),
     ]);
-    const keys = ["aliases", "ips", "sessions", "steam-friends", "tags", "violations", "reports", "commands", "matches", "ladder-history", "squad-records", "audit"];
+    const keys = ["aliases", "ips", "sessions", "steam-friends", "tags", "violations", "reports", "commands", "matches", "ladder-history", "squadbrowser-sessions", "squad-records", "audit"];
     return rows.map((row, index) => ({
       key: keys[index],
       count: Number(row?.count ?? 0),
@@ -1203,7 +1205,9 @@ export class PlayerRepository {
         break;
       }
       case "tags": items = await this.db.all("SELECT tag_type, tag_value, created_at, updated_at FROM player_tags WHERE player_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
-      case "violations": items = await this.db.all("SELECT violation_key, violation_label, count, first_at, last_at FROM player_violation_counts WHERE player_id = ? ORDER BY last_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
+      case "violations": items = await this.db.all(`SELECT id, violation_key, violation_label, category_key, category_label,
+          warning_text, detail, message, delta, operator_name, operator_user_id, operator_role, source_module, request_id, created_at
+          FROM player_violation_events WHERE player_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, id, take, offset); break;
       case "reports": items = await this.db.all(`SELECT id, reporter_player_id, target_player_id, reason, status, created_at,
           CASE WHEN reporter_player_id = ? THEN 'submitted' ELSE 'received' END AS relation
           FROM report_records WHERE reporter_player_id = ? OR target_player_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`, id, id, id, take, offset); break;
@@ -1229,6 +1233,85 @@ export class PlayerRepository {
       ? "SELECT tag_type, tag_value, created_at, updated_at FROM player_tags WHERE player_id = ? AND tag_type = ? ORDER BY tag_value COLLATE NOCASE ASC"
       : "SELECT tag_type, tag_value, created_at, updated_at FROM player_tags WHERE player_id = ? ORDER BY tag_type ASC, tag_value COLLATE NOCASE ASC";
     return type ? this.db.all(sql, id, type) : this.db.all(sql, id);
+  }
+
+  async listPlayerViolationCounts(playerId) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return [];
+    return this.db.all(
+      `SELECT violation_key, violation_label, category_key, category_label, count, first_at, last_at
+       FROM player_violation_counts
+       WHERE player_id = ? AND count > 0
+       ORDER BY count DESC, last_at DESC, violation_key ASC`,
+      id,
+    );
+  }
+
+  async recordViolation(playerId, violation = {}) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return null;
+    const player = await this.getPlayerById(id);
+    if (!player) return null;
+
+    const violationKey = cleanText(violation.key ?? violation.violationKey);
+    const violationLabel = cleanText(violation.label ?? violation.violationLabel);
+    const categoryKey = cleanText(violation.categoryKey);
+    const categoryLabel = cleanText(violation.categoryLabel);
+    const warningText = cleanText(violation.warningText);
+    const detail = cleanText(violation.detail);
+    const message = cleanText(violation.message);
+    if (!violationKey || !violationLabel || !categoryKey || !categoryLabel || !warningText || !detail || !message) {
+      return null;
+    }
+
+    const createdAt = Number(violation.createdAt);
+    const ts = Number.isFinite(createdAt) && createdAt > 0 ? Math.floor(createdAt) : now();
+    await this.db.run(
+      `INSERT INTO player_violation_counts (player_id, violation_key, violation_label, category_key, category_label, count, first_at, last_at)
+       VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+       ON CONFLICT(player_id, violation_key) DO UPDATE SET
+         violation_label = excluded.violation_label,
+         category_key = excluded.category_key,
+         category_label = excluded.category_label,
+         count = player_violation_counts.count + 1,
+         first_at = COALESCE(player_violation_counts.first_at, excluded.first_at),
+         last_at = excluded.last_at`,
+      id,
+      violationKey,
+      violationLabel,
+      categoryKey,
+      categoryLabel,
+      ts,
+      ts,
+    );
+
+    const insert = await this.db.run(
+      `INSERT INTO player_violation_events (
+         player_id, violation_key, violation_label, category_key, category_label,
+         warning_text, detail, message, delta, operator_name, operator_user_id,
+         operator_role, source_module, request_id, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+      id,
+      violationKey,
+      violationLabel,
+      categoryKey,
+      categoryLabel,
+      warningText,
+      detail,
+      message,
+      cleanText(violation.operatorName),
+      cleanText(violation.operatorUserId),
+      cleanText(violation.operatorRole),
+      cleanText(violation.sourceModule),
+      cleanText(violation.requestId),
+      ts,
+    );
+
+    return {
+      player,
+      event: await this.db.get("SELECT * FROM player_violation_events WHERE id = ?", insert.lastID),
+      counts: await this.listPlayerViolationCounts(id),
+    };
   }
 
   async replacePlayerTags(playerId, tagType, tagValues = []) {
@@ -1500,6 +1583,20 @@ export class PlayerRepository {
       normalizedTop,
     );
 
+    const violationCategoryStats = await this.db.all(
+      `SELECT COALESCE(category_key, 'uncategorized') AS category_key,
+              COALESCE(MAX(category_label), '未分类违规') AS category_label,
+              SUM(count) AS total_count,
+              COUNT(DISTINCT player_id) AS affected_players,
+              MAX(last_at) AS last_at
+       FROM player_violation_counts
+       GROUP BY COALESCE(category_key, 'uncategorized')
+       HAVING total_count > 0
+       ORDER BY total_count DESC, category_key ASC
+       LIMIT ?`,
+      normalizedTop,
+    );
+
     const matchTrend = await this.db.all(
       `SELECT strftime('%Y-%m-%d', started_at / 1000, 'unixepoch', 'localtime') AS day,
               COUNT(*) AS match_count,
@@ -1644,6 +1741,13 @@ export class PlayerRepository {
         violationTypes: violationTypeStats.map((row) => ({
           violationKey: row.violation_key,
           violationLabel: row.violation_label || row.violation_key,
+          totalCount: Number(row.total_count || 0),
+          affectedPlayers: Number(row.affected_players || 0),
+          lastAt: Number(row.last_at || 0) || null,
+        })),
+        violationCategories: violationCategoryStats.map((row) => ({
+          categoryKey: row.category_key,
+          categoryLabel: row.category_label || row.category_key,
           totalCount: Number(row.total_count || 0),
           affectedPlayers: Number(row.affected_players || 0),
           lastAt: Number(row.last_at || 0) || null,

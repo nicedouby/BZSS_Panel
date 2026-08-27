@@ -297,6 +297,8 @@ CREATE TABLE IF NOT EXISTS player_violation_counts (
     player_id INTEGER NOT NULL,
     violation_key TEXT NOT NULL,
     violation_label TEXT,
+    category_key TEXT,
+    category_label TEXT,
     count INTEGER NOT NULL DEFAULT 0,
     first_at INTEGER,
     last_at INTEGER,
@@ -311,8 +313,17 @@ CREATE TABLE IF NOT EXISTS player_violation_events (
     player_id INTEGER NOT NULL,
     violation_key TEXT NOT NULL,
     violation_label TEXT,
+    category_key TEXT,
+    category_label TEXT,
+    warning_text TEXT,
+    detail TEXT,
+    message TEXT,
     delta INTEGER NOT NULL,
     operator_name TEXT,
+    operator_user_id TEXT,
+    operator_role TEXT,
+    source_module TEXT,
+    request_id TEXT,
     created_at INTEGER NOT NULL,
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
 );
@@ -702,6 +713,24 @@ async function ensureCompatibleColumns(db) {
   await addColumnIfMissing(db, "player_aliases", "seen_at", "INTEGER NOT NULL DEFAULT 0");
   await addColumnIfMissing(db, "player_ips", "ip", "TEXT");
   await addColumnIfMissing(db, "player_ips", "seen_at", "INTEGER NOT NULL DEFAULT 0");
+
+  const violationEventColumns = {
+    category_key: "TEXT",
+    category_label: "TEXT",
+    warning_text: "TEXT",
+    detail: "TEXT",
+    message: "TEXT",
+    operator_user_id: "TEXT",
+    operator_role: "TEXT",
+    source_module: "TEXT",
+    request_id: "TEXT",
+  };
+  for (const [column, definition] of Object.entries(violationEventColumns)) {
+    await addColumnIfMissing(db, "player_violation_events", column, definition);
+  }
+
+  await addColumnIfMissing(db, "player_violation_counts", "category_key", "TEXT");
+  await addColumnIfMissing(db, "player_violation_counts", "category_label", "TEXT");
 
   const auditColumns = {
     request_id: "TEXT NOT NULL DEFAULT ''",

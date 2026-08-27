@@ -243,12 +243,12 @@ function handleEscape(e: KeyboardEvent) {
 async function handleWarnSquad() {
   const squad = props.squad;
   if (!squad || actionBusy.value) return;
-  const message = await ui.openWarnPrompt({
+  const warning = await ui.openWarnPrompt({
     title: "警告全队",
     targetName: `${squad.squadName} (全体成员)`,
     defaultMessage: "请遵守服务器规则",
   });
-  if (message === null) return;
+  if (warning === null) return;
   if (actionBusy.value || !props.squad) return;
 
   actionBusy.value = true;
@@ -261,7 +261,7 @@ async function handleWarnSquad() {
       targetName: p.name,
       targetSteamId: p.steamId ?? undefined,
       targetEosId: p.eosId ?? undefined,
-      message: message.trim(),
+      message: warning.message,
       reason: "manual_squad_warn",
       sourceModule: "web.squadAdmin",
     }));

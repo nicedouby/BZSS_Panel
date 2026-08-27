@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import os from "node:os";
 
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
 
-function createHarness({ dispatchCommand, moduleConfig, players = [] } = {}) {
+let harnessIndex = 0;
+
+function createHarness({ dispatchCommand, recordViolationByIdentity, moduleConfig, players = [] } = {}) {
   const module = createAdminWarnModule({
     core: {
       logger: { info() {}, warn() {}, error() {} },
@@ -26,6 +30,14 @@ function createHarness({ dispatchCommand, moduleConfig, players = [] } = {}) {
           return { serverId: "test-server", players };
         },
       },
+      playerDatabase: {
+        async recordViolationByIdentity(identity, violation) {
+          if (typeof recordViolationByIdentity === "function") {
+            return recordViolationByIdentity(identity, violation);
+          }
+          return { player: { id: 1, ...identity }, event: { id: 1, ...violation } };
+        },
+      },
     },
     config: {
       get(pathText, defaultValue) {
@@ -34,6 +46,7 @@ function createHarness({ dispatchCommand, moduleConfig, players = [] } = {}) {
             enabled: true,
             maxRecords: 10,
             ttlMs: 1800000,
+            dataDirectory: path.join(os.tmpdir(), `bzss-admin-warn-tests-${process.pid}-${Date.now()}-${++harnessIndex}-${Math.random().toString(16).slice(2)}`),
             ...(moduleConfig ?? {}),
           };
         }
@@ -360,6 +373,98 @@ async function testAggregatedWarningBatch() {
   await module.stop();
 }
 
+async function testViolationWarningUsesServerCatalogAndPersistsAfterSend() {
+  const calls = [];
+  const writes = [];
+  const { module } = createHarness({
+    async dispatchCommand(request) {
+      calls.push(request);
+      return { success: true, message: "ok" };
+    },
+    async recordViolationByIdentity(identity, violation) {
+      writes.push({ identity, violation });
+      return { player: { id: 42 }, event: { id: 88 } };
+    },
+  });
+  await module.start();
+
+  const result = await module.api.warnPlayer({
+    targetName: "RuleBreaker",
+    targetPlayerId: "321",
+    targetSteamId: "76561198000000000",
+    targetEosId: "eos-rule-breaker",
+    warningType: "violation",
+    violation: {
+      categoryKey: "main_camping",
+      violationKey: "severe_main_camping",
+      detail: "在敌方主基地出口持续攻击载具",
+      // Client labels are deliberately untrusted; the server catalog is authoritative.
+      violationLabel: "伪造标签",
+      warningText: "伪造文案",
+    },
+    actor: { id: "admin-1", username: "AdminA", role: "operator" },
+    sourceModule: "web.squadAdmin",
+    requestId: "request-1",
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.violationRecorded, true);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'AdminWarnById 321 "严重压家警告，在敌方主基地出口持续攻击载具"');
+  assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0].identity, {
+    name: "RuleBreaker",
+    steamID: "76561198000000000",
+    eosID: "eos-rule-breaker",
+  });
+  assert.equal(writes[0].violation.key, "severe_main_camping");
+  assert.equal(writes[0].violation.label, "严重压家");
+  assert.equal(writes[0].violation.warningText, "严重压家警告");
+  assert.equal(writes[0].violation.operatorName, "AdminA");
+
+  const records = module.api.getRecent({ targetName: "RuleBreaker" });
+  assert.equal(records[0].warningType, "violation");
+  assert.equal(records[0].violationKey, "severe_main_camping");
+  assert.equal(records[0].violationRecordId, 88);
+  await module.stop();
+}
+
+async function testInvalidOrFailedViolationIsNotPersisted() {
+  let calls = 0;
+  let writes = 0;
+  const { module } = createHarness({
+    async dispatchCommand() {
+      calls += 1;
+      return { success: false, message: "socket closed" };
+    },
+    async recordViolationByIdentity() {
+      writes += 1;
+      return { player: { id: 1 }, event: { id: 1 } };
+    },
+  });
+  await module.start();
+
+  const invalid = await module.api.warnPlayer({
+    targetName: "PlayerA",
+    warningType: "violation",
+    violation: { categoryKey: "main_camping", violationKey: "not-in-catalog", detail: "测试" },
+  });
+  assert.equal(invalid.success, false);
+  assert.equal(invalid.skipReason, "invalid_violation");
+  assert.equal(calls, 0);
+  assert.equal(writes, 0);
+
+  const failed = await module.api.warnPlayer({
+    targetName: "PlayerA",
+    warningType: "violation",
+    violation: { categoryKey: "main_camping", violationKey: "main_camping", detail: "主基地出口" },
+  });
+  assert.equal(failed.success, false);
+  assert.equal(calls, 1);
+  assert.equal(writes, 0);
+  await module.stop();
+}
+
 await testWarnSuccessAndSanitize();
 await testWarnByPlayerIdPreferred();
 await testWarnByNameFallbackForLegacyCallers();
@@ -370,5 +475,8 @@ await testWarnFailureIsRecorded();
 await testTargetWarningsUseRealPlayerIds();
 await testTargetWarningReportsPartialFailure();
 await testBatchWarningsCanSkipHistory();
+await testAggregatedWarningBatch();
+await testViolationWarningUsesServerCatalogAndPersistsAfterSend();
+await testInvalidOrFailedViolationIsNotPersisted();
 
 console.log("broadcast module tests passed");

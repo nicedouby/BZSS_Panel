@@ -1440,11 +1440,12 @@ async function handleTargetWarn(targetScope: "all" | "team1" | "team2", messageO
   const label = targetScope === "all" ? "全体玩家" : targetScope === "team1" ? "TEAM 1" : "TEAM 2";
   let message: string | null = messageOverride ?? null;
   if (message === null) {
-    message = await ui.openWarnPrompt({
+    const warning = await ui.openWarnPrompt({
       title: `AdminWarn ${label}`,
       targetName: label,
       defaultMessage: "请遵守服务器规则",
     });
+    message = warning?.message ?? null;
   }
   if (!message || !message.trim()) return;
   const content = message.trim();
@@ -1465,12 +1466,12 @@ async function handleTargetWarn(targetScope: "all" | "team1" | "team2", messageO
 
 async function handleBatchWarn() {
   if (selectedPlayers.value.length === 0) return;
-  const message = await ui.openWarnPrompt({
+  const warning = await ui.openWarnPrompt({
     title: "????????",
     targetName: `${selectedPlayers.value.length} ?????`,
     defaultMessage: "请遵守服务器规则",
   });
-  if (message === null) return;
+  if (warning === null) return;
 
   const targets = [...selectedPlayers.value];
   let successCount = 0;
@@ -1489,7 +1490,7 @@ async function handleBatchWarn() {
           targetName: player.name,
           targetSteamId: player.steamId ?? undefined,
           targetEosId: player.eosId ?? undefined,
-          message: message.trim() || "Admin Warning",
+          message: warning.message || "Admin Warning",
           reason: "manual_warn",
           sourceModule: "web.squadAdmin",
           record: false,

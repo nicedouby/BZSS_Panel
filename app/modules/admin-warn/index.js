@@ -4,6 +4,8 @@ import fs from "node:fs/promises";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import path from "node:path";
 
+import { resolveViolationWarning } from "./violation-catalog.js";
+
 const DEFAULT_MAX_RECORDS = 3000;
 const DEFAULT_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_DATA_DIRECTORY = "./data/admin-warns";
@@ -80,12 +82,18 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
   async function sendNotification(kind, req) {
     const normalizedKind = normalizeKind(kind);
     const sourceModule = String(req?.sourceModule ?? "unknown");
-    const reason = String(req?.reason ?? defaultReasonForKind(normalizedKind));
+    const requestedWarningType = String(req?.warningType ?? req?.type ?? "ordinary").trim().toLowerCase();
+    const violation = normalizedKind === "warning" && requestedWarningType === "violation"
+      ? resolveViolationWarning(req?.violation ?? req)
+      : null;
+    const warningType = normalizedKind === "warning" && requestedWarningType === "violation" ? "violation" : "ordinary";
+    const reason = violation
+      ? `violation:${violation.key}`
+      : String(req?.reason ?? defaultReasonForKind(normalizedKind));
     const targetScope = normalizedKind === "warning" ? normalizeWarningTarget(req?.targetScope ?? req?.target) : "";
-    // Selection-based batch warnings deliberately avoid one history line per player.
-    const appendRecord = (entry) => req?.record === false
-      ? { ...entry, persisted: false }
-      : memoryStore.push({ ...entry, operationLabel: entry.operationLabel ?? operationLabel });
+    const invalidViolation = normalizedKind === "warning"
+      && requestedWarningType === "violation"
+      && (!violation || Boolean(targetScope));
     const relatedEventId = optionalText(req?.relatedEventId);
     const actor = req?.actor ?? req?.viewer ?? null;
     const system = Boolean(req?.system);
@@ -93,12 +101,31 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
 
     const message = normalizedKind === "broadcast"
       ? sanitizeBroadcastMessage(req?.message)
-      : sanitizeWarningMessage(req?.message);
+      : invalidViolation
+        ? ""
+        : sanitizeWarningMessage(violation?.message ?? req?.message);
 
     const targetName = normalizedKind === "warning"
       ? (targetScope ? targetScope.toUpperCase() : String(req?.targetName ?? "").trim())
       : "";
-    const operationLabel = buildOperationLabel(req, { normalizedKind, targetScope, targetName, reason });
+    const operationLabel = violation
+      ? `违规警告${targetName}：${violation.label}`
+      : buildOperationLabel(req, { normalizedKind, targetScope, targetName, reason });
+    const warningMeta = normalizedKind === "warning"
+      ? {
+          warningType,
+          violationCategoryKey: violation?.categoryKey,
+          violationCategoryLabel: violation?.categoryLabel,
+          violationKey: violation?.key,
+          violationLabel: violation?.label,
+          violationWarningText: violation?.warningText,
+          violationDetail: violation?.detail,
+        }
+      : {};
+    // Selection-based batch warnings deliberately avoid one history line per player.
+    const appendRecord = (entry) => req?.record === false
+      ? { ...entry, ...warningMeta, persisted: false }
+      : memoryStore.push({ ...entry, ...warningMeta, operationLabel: entry.operationLabel ?? operationLabel });
     const targetPlayerId = normalizedKind === "warning" && !targetScope
       ? sanitizeTargetPlayerId(optionalText(req?.targetPlayerId ?? req?.targetPlayerID ?? req?.playerId ?? req?.playerID))
       : undefined;
@@ -140,9 +167,11 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
     }
 
     if (!message || (normalizedKind === "warning" && !targetScope && !targetPlayerId && (!targetName || requireTargetPlayerId))) {
-      const skipReason = normalizedKind === "warning" && !targetPlayerId && requireTargetPlayerId
-        ? "missing_target_player_id"
-        : "invalid_request";
+      const skipReason = invalidViolation
+        ? "invalid_violation"
+        : normalizedKind === "warning" && !targetPlayerId && requireTargetPlayerId
+          ? "missing_target_player_id"
+          : "invalid_request";
       const record = appendRecord({
         ...actorRecord,
         id: makeRecordId("invalid"),
@@ -223,6 +252,38 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
         };
       }
 
+      let violationRecord = null;
+      let violationRecordError = "";
+      if (violation) {
+        try {
+          const playerDatabase = modules?.playerDatabase;
+          if (typeof playerDatabase?.recordViolationByIdentity !== "function") {
+            throw new Error("Player database violation writer is unavailable.");
+          }
+          violationRecord = await playerDatabase.recordViolationByIdentity({
+            name: targetName,
+            steamID: targetSteamId,
+            eosID: targetEosId,
+          }, {
+            ...violation,
+            operatorName: actorRecord.actorUsername,
+            operatorUserId: actorRecord.actorUserId,
+            operatorRole: actorRecord.actorRole,
+            sourceModule,
+            requestId: req?.requestId,
+            createdAt: Date.now(),
+          });
+          if (!violationRecord?.event?.id) {
+            throw new Error("Player violation record was not created.");
+          }
+        } catch (error) {
+          violationRecordError = error instanceof Error ? error.message : String(error);
+          moduleLogger?.error?.(
+            `[BroadcastModule] violation warning sent but persistence failed target=${targetName}: ${violationRecordError}`,
+          );
+        }
+      }
+
       appendRecord({
         ...actorRecord,
         id: makeRecordId("ok"),
@@ -239,12 +300,20 @@ export function createAdminWarnModule({ core, modules, config, logger }) {
         success: true,
         skipped: false,
         relatedEventId,
+        violationRecordId: violationRecord?.event?.id,
+        violationPlayerId: violationRecord?.player?.id,
+        violationRecorded: violation ? !violationRecordError : undefined,
+        violationRecordError: violationRecordError || undefined,
       });
 
       return {
         success: true,
         skipped: false,
         commandText,
+        warningType,
+        violationRecorded: violation ? !violationRecordError : undefined,
+        violationRecord,
+        errorMessage: violationRecordError || undefined,
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -745,6 +814,7 @@ function createRecordPredicate(filter = {}) {
   const skipped = normalizeBooleanFilter(filter.skipped);
   const search = normalizeSearch(filter.search);
   const actorUsername = normalizeSearch(filter.actorUsername);
+  const warningType = normalizeSearch(filter.warningType);
 
   return (item) => {
     if (!item || typeof item !== "object") return false;
@@ -757,6 +827,7 @@ function createRecordPredicate(filter = {}) {
     if (success != null && Boolean(item.success) !== success) return false;
     if (skipped != null && Boolean(item.skipped) !== skipped) return false;
     if (actorUsername && !normalizeSearch(item.actorUsername).includes(actorUsername)) return false;
+    if (warningType && normalizeSearch(item.warningType) !== warningType) return false;
     if (search) {
       const haystack = normalizeSearch([
         item.actorUsername,

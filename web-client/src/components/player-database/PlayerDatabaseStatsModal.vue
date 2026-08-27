@@ -158,6 +158,16 @@
               </div>
 
               <div class="breakdown-card">
+                <h4>违规大类</h4>
+                <div class="chip-cloud">
+                  <div v-for="v in stats.breakdowns?.violationCategories" :key="v.categoryKey" class="stat-chip">
+                    <span class="chip-label">{{ v.categoryLabel || v.categoryKey }}</span>
+                    <span class="chip-count">{{ v.totalCount }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="breakdown-card">
                 <h4>{{ t("database.violationTypes") }}</h4>
                 <div class="chip-cloud">
                   <div v-for="v in stats.breakdowns?.violationTypes" :key="v.violationKey" class="stat-chip">

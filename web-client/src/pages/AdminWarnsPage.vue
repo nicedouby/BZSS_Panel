@@ -50,7 +50,7 @@
               <input v-model="warningForm.sourceModule" type="text" placeholder="来源" />
             </div>
             <button class="send-btn warn" :disabled="warningBusy" @click="sendWarning">
-              {{ warningBusy ? '...' : '发送警告' }}
+              {{ warningBusy ? '...' : '打开警告窗口' }}
             </button>
           </div>
         </div>
@@ -67,7 +67,7 @@
                   <div class="line-status"></div>
                   <div class="line-time">{{ formatTimeOnly(item.createdAt) }}</div>
                   <div class="line-body">
-                    <div class="line-id"><strong>{{ item.operationLabel || item.targetName }}</strong> <span>{{ item.reason }}</span><em v-if="item.actorUsername">管理员：{{ item.actorUsername }}</em></div>
+                    <div class="line-id"><strong>{{ item.operationLabel || item.targetName }}</strong> <span v-if="item.warningType === 'violation'" class="violation-badge">违规</span> <span>{{ item.reason }}</span><em v-if="item.actorUsername">管理员：{{ item.actorUsername }}</em></div>
                     <div class="line-msg">{{ item.message }}</div>
                   </div>
                 </div>
@@ -165,6 +165,8 @@ interface ModuleRecord {
   skipped?: boolean;
   actorUsername?: string;
   system?: boolean;
+  warningType?: "ordinary" | "violation";
+  violationLabel?: string;
 }
 
 interface ModuleRecentResponse {
@@ -269,13 +271,34 @@ function addPrefix(p: string) {
 }
 
 async function sendWarning() {
-  const { targetName, message } = warningForm;
-  if (!targetName.trim() || !message.trim()) { ui.pushToast({ title: "输入不完整", message: "玩家名和内容必填", tone: "warn" }); return; }
+  const { targetName } = warningForm;
+  if (!targetName.trim()) { ui.pushToast({ title: "输入不完整", message: "玩家名必填", tone: "warn" }); return; }
+  const warning = await ui.openWarnPrompt({
+    title: "发送玩家警告",
+    targetName: targetName.trim(),
+    defaultMessage: warningForm.message.trim() || "请遵守服务器规则",
+    allowViolation: true,
+  });
+  if (!warning) return;
   warningBusy.value = true;
   try {
-    const res = await warnPlayer({ ...warningForm });
+    const res = await warnPlayer({
+      ...warningForm,
+      message: warning.message,
+      warningType: warning.kind,
+      violation: warning.violation,
+      reason: warning.kind === "violation" ? `violation:${warning.violation?.violationKey ?? "unknown"}` : warningForm.reason,
+    });
     if (!res.success) throw new Error(res.errorMessage || "RCON ERROR");
-    warningForm.message = ""; ui.pushToast({ title: "警告已发送", message: `已下发警告`, tone: "ok" }); warningQuery.refetch();
+    warningForm.message = "";
+    ui.pushToast({
+      title: warning.kind === "violation" ? "违规警告已发送" : "警告已发送",
+      message: warning.kind === "violation" && res.violationRecorded === false
+        ? `警告已送达，但违规记录写入失败：${res.errorMessage || "未知错误"}`
+        : "已下发警告",
+      tone: warning.kind === "violation" && res.violationRecorded === false ? "warn" : "ok",
+    });
+    warningQuery.refetch();
   } catch (e) { ui.pushToast({ title: "发送失败", message: String(e), tone: "error" }); }
   finally { warningBusy.value = false; }
 }
@@ -344,6 +367,7 @@ function formatTimeOnly(v: any) {
 .dot { width: 6px; height: 6px; border-radius: 50%; }
 .dot.warn { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
 .dot.broadcast { background: #3b82f6; box-shadow: 0 0 8px #3b82f6; }
+.violation-badge{display:inline-flex;padding:1px 5px;border:1px solid rgba(239,68,68,.35);border-radius:999px;background:rgba(239,68,68,.12);color:#fca5a5;font-size:8px;font-weight:900}
 
 /* Op Card: Glassmorphism */
 .op-card {
