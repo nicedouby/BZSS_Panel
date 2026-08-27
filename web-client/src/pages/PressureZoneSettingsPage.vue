@@ -211,8 +211,8 @@ async function loadConfig() {
       fetchDynamicPressureZoneBaseConfig(),
       fetchDynamicPressureZoneState().catch(() => null),
     ]);
-    config.value = clone(configResponse.config);
-    defaults.value = clone(configResponse.defaults);
+    config.value = copyPressureZoneConfig(configResponse.config);
+    defaults.value = copyPressureZoneConfig(configResponse.defaults);
     savedSnapshot.value = JSON.stringify(config.value);
     liveState.value = stateResponse?.state ?? null;
     statusText.value = "";
@@ -225,7 +225,7 @@ async function loadConfig() {
 
 function loadDefaults() {
   if (!defaults.value) return;
-  config.value = clone(defaults.value);
+  config.value = copyPressureZoneConfig(defaults.value);
   statusText.value = "已载入默认值，尚未保存。";
 }
 
@@ -235,7 +235,7 @@ async function saveConfig() {
   statusText.value = "";
   try {
     const response = await saveDynamicPressureZoneBaseConfig(config.value);
-    config.value = clone(response.config);
+    config.value = copyPressureZoneConfig(response.config);
     savedSnapshot.value = JSON.stringify(config.value);
     const stateResponse = await fetchDynamicPressureZoneState().catch(() => null);
     liveState.value = stateResponse?.state ?? liveState.value;
@@ -248,7 +248,63 @@ async function saveConfig() {
   }
 }
 
-function clone<T>(value: T): T { return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)); }
+function readFiniteNumber(value: unknown, fallback: number) {
+  const numeric = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+/**
+ * Only copy the declared config schema. The API response must never put a
+ * reactive proxy, DOM node, or other runtime reference into the edit state.
+ */
+function copyPressureZoneConfig(value: unknown): PressureZoneConfig {
+  const source = asRecord(value);
+  const hard = asRecord(source.hard);
+  const soft = asRecord(source.soft);
+  const combat = asRecord(source.combat);
+  const hotspot = asRecord(source.hotspot);
+  const coordinateScale = source.coordinateScaleMeters;
+
+  return {
+    schemaVersion: readFiniteNumber(source.schemaVersion, 1),
+    referenceMapSizeMeters: readFiniteNumber(source.referenceMapSizeMeters, 4000),
+    mapScaleInfluence: readFiniteNumber(source.mapScaleInfluence, 1),
+    minMapScale: readFiniteNumber(source.minMapScale, 0.5),
+    maxMapScale: readFiniteNumber(source.maxMapScale, 2),
+    coordinateScaleMeters: coordinateScale == null ? null : readFiniteNumber(coordinateScale, 0.01),
+    hard: {
+      baseRadiusMeters: readFiniteNumber(hard.baseRadiusMeters, 400),
+      minRadiusMeters: readFiniteNumber(hard.minRadiusMeters, 100),
+      maxRadiusMeters: readFiniteNumber(hard.maxRadiusMeters, 2000),
+      emergencyMinimumRadiusMeters: readFiniteNumber(hard.emergencyMinimumRadiusMeters, 50),
+      maxBaseToFirstObjectiveRatio: readFiniteNumber(hard.maxBaseToFirstObjectiveRatio, 0.45),
+    },
+    soft: {
+      objectiveSpacingRatio: readFiniteNumber(soft.objectiveSpacingRatio, 0.35),
+      minExtensionMeters: readFiniteNumber(soft.minExtensionMeters, 150),
+      maxExtensionMeters: readFiniteNumber(soft.maxExtensionMeters, 1200),
+      fallbackExtensionMeters: readFiniteNumber(soft.fallbackExtensionMeters, 450),
+      objectiveSafetyMarginMeters: readFiniteNumber(soft.objectiveSafetyMarginMeters, 200),
+    },
+    combat: {
+      gapFactor: readFiniteNumber(combat.gapFactor, 0.35),
+      mapScaleInfluence: readFiniteNumber(combat.mapScaleInfluence, 0.3),
+      lateralFactor: readFiniteNumber(combat.lateralFactor, 0.75),
+      minRadiusMeters: readFiniteNumber(combat.minRadiusMeters, 100),
+      maxRadiusMeters: readFiniteNumber(combat.maxRadiusMeters, 1600),
+      polygonArcSegments: readFiniteNumber(combat.polygonArcSegments, 16),
+    },
+    hotspot: {
+      referenceRadiusMeters: readFiniteNumber(hotspot.referenceRadiusMeters, 500),
+      minRadiusMeters: readFiniteNumber(hotspot.minRadiusMeters, 150),
+      maxRadiusMeters: readFiniteNumber(hotspot.maxRadiusMeters, 2000),
+    },
+  };
+}
 function clamp(value: number, min: number, max: number) { return Math.min(Math.max(Number(value), Number(min)), Number(max)); }
 function formatMeters(value: unknown) { const numeric = Number(value); return Number.isFinite(numeric) ? `${Math.round(numeric)} m` : "—"; }
 function formatScale(value: unknown) { const numeric = Number(value); return Number.isFinite(numeric) ? `${numeric.toFixed(2)}×` : "—"; }
