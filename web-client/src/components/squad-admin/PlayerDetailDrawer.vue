@@ -229,17 +229,8 @@
                   {{ props.player.isOnline ? t("common.online") : t("common.offline") }}
                 </strong>
               </div>
-              <div class="hud-ctx-item">
-                <span class="ctx-lbl">网络延迟</span>
-                <strong class="ctx-val" :class="pingStatusClass">
-                  {{ displayPing != null ? `${displayPing} ms` : "--" }}
-                  <small v-if="displayPacketLoss != null && displayPacketLoss > 0" class="packet-loss-sub">
-                    (丢包 {{ displayPacketLoss }}%)
-                  </small>
-                </strong>
-              </div>
               <div class="hud-ctx-item hud-ctx-item-wide">
-                <span class="ctx-lbl">本服务器游玩时长</span>
+                <span class="ctx-lbl">本服时长</span>
                 <strong class="ctx-val">{{ serverPlaytimeText }}</strong>
               </div>
               <div class="hud-ctx-item hud-ctx-item-wide">
@@ -257,9 +248,26 @@
             <div class="notice-text">{{ props.notice }}</div>
           </div>
 
-          <!-- SCROLLABLE BODY (Unified Dashboard View) -->
+          <!-- SCROLLABLE BODY -->
           <div class="drawer-body-hud">
-            <div class="hud-dashboard-grid">
+            <nav class="player-detail-tabs" aria-label="玩家详情内容">
+              <button
+                type="button"
+                class="player-detail-tab"
+                :class="{ active: activeDetailTab === 'overview' }"
+                :aria-selected="activeDetailTab === 'overview'"
+                @click="activeDetailTab = 'overview'"
+              >概览</button>
+              <button
+                type="button"
+                class="player-detail-tab"
+                :class="{ active: activeDetailTab === 'tags' }"
+                :aria-selected="activeDetailTab === 'tags'"
+                @click="activeDetailTab = 'tags'"
+              >成分标记</button>
+            </nav>
+
+            <div v-if="activeDetailTab === 'overview'" class="hud-dashboard-grid">
               
               <!-- LEFT COLUMN: Combat Statistics and Timeline Graph -->
               <div class="hud-column left">
@@ -318,6 +326,18 @@
                   <div class="actions-grid-hud">
                     <button
                       type="button"
+                      class="hud-action-btn-styled warn-btn warn-btn--primary"
+                      @click="handleWarn"
+                      :disabled="actionBusy || !canWarnPlayer"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon btn-icon--warn" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg></span>
+                        <span class="btn-text">{{ t("player.warn") }}</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
                       class="hud-action-btn-styled ban-btn"
                       @click="handleBan"
                       :disabled="actionBusy || !canBanPlayer"
@@ -325,18 +345,6 @@
                       <div class="btn-inner">
                         <span class="btn-icon btn-icon--ban" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><path d="m7 7 10 10"/></svg></span>
                         <span class="btn-text">BAN / 封禁</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      class="hud-action-btn-styled warn-btn"
-                      @click="handleWarn"
-                      :disabled="actionBusy || !canWarnPlayer"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon btn-icon--warn" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3 2.8 20h18.4L12 3Z"/><path d="M12 9v5M12 17h.01"/></svg></span>
-                        <span class="btn-text">{{ t("player.warn") }}</span>
                       </div>
                     </button>
 
@@ -387,35 +395,6 @@
                         <span class="btn-text">强制跳边</span>
                       </div>
                     </button>
-                  </div>
-                </div>
-
-                <div class="hud-pane-section hud-component-tags">
-                  <div class="hud-section-header">
-                    <span class="hud-section-title">成分标记 / PLAYER TAGS</span>
-                    <span class="hud-section-subtitle">爱好</span>
-                  </div>
-                  <div class="component-tag-list">
-                    <button
-                      v-for="tag in hobbyTags"
-                      :key="tag"
-                      type="button"
-                      class="component-tag-chip"
-                      :class="{ active: selectedHobbyTags.includes(tag) }"
-                      :disabled="!canEditPlayerTags || tagsSaving || !playerDatabaseRecord"
-                      @click="toggleHobbyTag(tag)"
-                    >{{ tag }}</button>
-                  </div>
-                  <div class="component-tag-actions">
-                    <span v-if="!canEditPlayerTags" class="component-tag-note">仅超级管理员可编辑</span>
-                    <span v-else-if="!playerDatabaseRecord" class="component-tag-note">正在加载玩家数据库记录…</span>
-                    <button
-                      v-else
-                      type="button"
-                      class="hud-mini-btn save-btn"
-                      :disabled="tagsSaving"
-                      @click="saveHobbyTags"
-                    >{{ tagsSaving ? "保存中…" : "保存成分标记" }}</button>
                   </div>
                 </div>
 
@@ -479,6 +458,36 @@
               </div>
 
             </div>
+
+            <section v-else class="hud-pane-section hud-component-tags player-tags-page">
+              <div class="hud-section-header">
+                <span class="hud-section-title">成分标记 / PLAYER TAGS</span>
+                <span class="hud-section-subtitle">爱好标记</span>
+              </div>
+              <p class="player-tags-description">为该玩家标记已观察到的游戏倾向；保存后会写入玩家数据库。</p>
+              <div class="component-tag-list">
+                <button
+                  v-for="tag in hobbyTags"
+                  :key="tag"
+                  type="button"
+                  class="component-tag-chip"
+                  :class="{ active: selectedHobbyTags.includes(tag) }"
+                  :disabled="!canEditPlayerTags || tagsSaving || !playerDatabaseRecord"
+                  @click="toggleHobbyTag(tag)"
+                >{{ tag }}</button>
+              </div>
+              <div class="component-tag-actions">
+                <span v-if="!canEditPlayerTags" class="component-tag-note">仅超级管理员可编辑</span>
+                <span v-else-if="!playerDatabaseRecord" class="component-tag-note">正在加载玩家数据库记录…</span>
+                <button
+                  v-else
+                  type="button"
+                  class="hud-mini-btn save-btn"
+                  :disabled="tagsSaving"
+                  @click="saveHobbyTags"
+                >{{ tagsSaving ? "保存中…" : "保存成分标记" }}</button>
+              </div>
+            </section>
           </div>
         </aside>
       </div>
@@ -669,6 +678,7 @@ const showAdvanced = ref(false);
 const showPlaytimeOverride = ref(false);
 const showCombatTimeline = ref(false);
 const showFriendsCollapsed = ref(true);
+const activeDetailTab = ref<"overview" | "tags">("overview");
 const actionBusy = ref(false);
 const steamProfileRefreshing = ref(false);
 const databaseDetail = ref<any | null>(null);
@@ -1002,8 +1012,10 @@ watch(
       showAdvanced.value = false;
       showPlaytimeOverride.value = false;
       showCombatTimeline.value = false;
+      activeDetailTab.value = "overview";
       return;
     }
+    activeDetailTab.value = "overview";
     void auth.restoreSession().catch(() => {});
     void loadDatabaseDetail();
   },
@@ -4373,6 +4385,126 @@ onUnmounted(() => {
 
   .hud-admin-console .balance-btn {
     grid-column: auto;
+  }
+}
+
+/* ── Player detail information hierarchy ───────────────────────────────── */
+.player-detail-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.player-detail-tab {
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.player-detail-tab:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.player-detail-tab.active {
+  color: #f8fafc;
+  background: color-mix(in srgb, var(--glow-color, #38bdf8) 24%, rgba(15, 23, 42, 0.9));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--glow-color, #38bdf8) 42%, transparent);
+}
+
+.player-detail-floating .hud-session-ctx-grid {
+  grid-template-columns: repeat(8, minmax(0, 1fr)) !important;
+  gap: 1px !important;
+  padding-top: 0 !important;
+}
+
+.player-detail-floating .hud-ctx-item,
+.hud-session-ctx-grid .hud-ctx-item {
+  min-height: 44px !important;
+  padding: 6px 8px !important;
+}
+
+.player-detail-floating .hud-ctx-item .ctx-lbl {
+  font-size: 8px !important;
+  letter-spacing: .04em;
+}
+
+.player-detail-floating .hud-ctx-item .ctx-val {
+  font-size: 11px !important;
+}
+
+.player-detail-floating .hud-header-identities {
+  display: flex;
+  flex-wrap: nowrap !important;
+  width: 100%;
+}
+
+.player-detail-floating .hud-header-ident {
+  flex: 1 1 0;
+  max-width: none;
+}
+
+.hud-admin-console .actions-grid-hud {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hud-admin-console .warn-btn--primary {
+  grid-column: 1 / -1;
+  min-height: 52px !important;
+  color: #fef3c7;
+  border-color: rgba(251, 191, 36, 0.42) !important;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(146, 64, 14, 0.16)) !important;
+  box-shadow: inset 0 1px 0 rgba(254, 243, 199, 0.13), 0 7px 16px rgba(146, 64, 14, 0.18) !important;
+}
+
+.hud-admin-console .warn-btn--primary .btn-inner {
+  flex-direction: row;
+  justify-content: center;
+  gap: 9px;
+}
+
+.hud-admin-console .warn-btn--primary .btn-icon {
+  color: #fbbf24;
+}
+
+.player-tags-page {
+  min-height: 270px;
+  align-content: start;
+}
+
+.player-tags-description {
+  margin: -2px 0 2px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 860px), (max-height: 700px) {
+  .player-detail-floating .hud-session-ctx-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 540px) {
+  .player-detail-floating .hud-session-ctx-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .player-detail-tabs {
+    margin-bottom: 10px;
   }
 }
 
