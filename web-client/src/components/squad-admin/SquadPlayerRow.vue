@@ -5,6 +5,7 @@
     @click="handleSelect"
   >
     <span v-if="groupReport" class="group-report-tag" :data-group-report-id="groupReport.id" :data-group-report-color="groupReport.color" :style="{ '--group-report-color': groupReport.color }" :title="`抱团 #${groupReport.number}｜${groupReport.name}`">#{{ groupReport.number }}</span>
+    <div v-if="normalizedHealth != null" class="player-health-rail" :class="healthLiquidClass" :style="{ '--health-percent': `${normalizedHealth}%` }" :title="`生命值 ${normalizedHealth.toFixed(0)}%`" aria-hidden="true" />
     <div class="player-side">
       <div v-if="multiSelectMode" class="player-checkbox-container">
         <div class="player-checkbox-custom" :class="{ 'is-checked': checked }"></div>
@@ -57,29 +58,15 @@
         <div class="playtime-chip" :class="{ 'is-unknown': playtimeText === '未知' }" :title="playtimeTitle">
           {{ playtimeText }}
         </div>
-        <span
-          v-if="persistentPlayerBadge"
-          class="persistent-player-badge"
-          :class="persistentPlayerBadge.tone"
-          :title="persistentPlayerBadge.title"
-        >
-          {{ persistentPlayerBadge.label }}
-        </span>
-        <span
-          v-if="props.loyalPlayer"
-          class="loyal-player-badge"
-          title="忠诚：步战鼠鼠是最常玩服务器，且占排行榜总时长超过 50%"
-        >
-          <span class="loyal-player-mark">◆</span>
-          <span>忠诚</span>
-        </span>
-        <span v-if="props.newcomerPlayer" class="newcomer-player-badge" title="SquadBrowser 已刷新：总游玩记录与步战鼠鼠游玩记录均不足 10 小时">
-          初乍到来
-        </span>
       </div>
 
-      <div v-if="secondaryIdentityText" class="player-sub-line" :title="secondaryIdentityText">
-        {{ secondaryIdentityText }}
+      <div class="player-labels-line">
+        <span v-if="secondaryIdentityText" class="player-sub-line" :title="secondaryIdentityText">
+          {{ secondaryIdentityText }}
+        </span>
+        <span v-if="persistentPlayerBadge" class="persistent-player-badge" :class="persistentPlayerBadge.tone" :title="persistentPlayerBadge.title">{{ persistentPlayerBadge.label }}</span>
+        <span v-if="props.loyalPlayer" class="loyal-player-badge" title="忠诚：步战鼠鼠是最常玩服务器，且占排行榜总时长超过 50%"><span class="loyal-player-mark">◆</span><span>忠诚</span></span>
+        <span v-if="props.newcomerPlayer" class="newcomer-player-badge" title="SquadBrowser 已刷新：总游玩记录与步战鼠鼠游玩记录均不足 10 小时">初乍到来</span>
       </div>
 
       <div class="player-stat-line scoreboard-line">
@@ -111,6 +98,7 @@
         :title="`查看 ${displayName} 的 Steam 个人资料`"
         @click.stop
       >
+        <img v-if="avatarUrl" class="player-steam-bg-glow" :src="avatarUrl" alt="" aria-hidden="true" loading="lazy" decoding="async" />
         <img
           class="player-steam-bg-img"
           :src="avatarUrl"
@@ -1671,6 +1659,82 @@ function displayRole(role: string | null | undefined) {
 .squad-player-row .player-time-tag--server { border-color: color-mix(in srgb, var(--color-brand-primary) 38%, var(--color-border-soft)); }
 .squad-player-row .player-time-tag--warmup { border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-soft)); }
 
+/* Three deliberate information rows: identity, labels, combat scoreboard. */
+.squad-player-row .player-main {
+  grid-template-rows: auto auto auto;
+  gap: 3px;
+}
+
+.squad-player-row .player-title-line,
+.squad-player-row .player-labels-line,
+.squad-player-row .scoreboard-line {
+  min-width: 0;
+  min-height: 18px;
+}
+
+.squad-player-row .player-labels-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.squad-player-row .player-labels-line .player-sub-line {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Health is now a full-height rail, not a fill trapped inside the role icon. */
+.squad-player-row .player-health-rail {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 6;
+  width: 4px;
+  pointer-events: none;
+  background: linear-gradient(to top, #39dc8a var(--health-percent), rgba(255,255,255,.08) var(--health-percent));
+  box-shadow: 1px 0 7px rgba(57,220,138,.28);
+}
+
+.squad-player-row .player-health-rail.hp-mid {
+  background: linear-gradient(to top, #f3b33e var(--health-percent), rgba(255,255,255,.08) var(--health-percent));
+  box-shadow: 1px 0 7px rgba(243,179,62,.28);
+}
+
+.squad-player-row .player-health-rail.hp-low {
+  background: linear-gradient(to top, #f05454 var(--health-percent), rgba(255,255,255,.08) var(--health-percent));
+  box-shadow: 1px 0 8px rgba(240,84,84,.34);
+}
+
+/* Soft avatar bloom: a blurred duplicate expands outward behind the crisp image. */
+.squad-player-row .player-steam-profile .player-steam-bg {
+  overflow: visible !important;
+}
+
+.squad-player-row .player-steam-bg-glow {
+  position: absolute;
+  inset: -11px;
+  z-index: 0;
+  width: calc(100% + 22px);
+  height: calc(100% + 22px);
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: .48;
+  filter: blur(11px) saturate(1.25);
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+.squad-player-row .player-steam-profile .player-steam-bg-img {
+  position: relative;
+  z-index: 1;
+  border-radius: inherit;
+}
+
 .squad-player-row:hover .player-steam-profile .player-steam-bg {
   width: 72px !important;
   transform: scale(1.035) !important;
@@ -1703,6 +1767,10 @@ function displayRole(role: string | null | undefined) {
   .squad-player-row .player-time-tags {
     top: 19px;
     width: 50px;
+  }
+
+  .squad-player-row .player-main {
+    gap: 2px;
   }
 
   .squad-player-row .player-time-tag,
