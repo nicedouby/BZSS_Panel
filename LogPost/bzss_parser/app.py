@@ -55,7 +55,7 @@ def resolve_log_file(configured: str) -> str:
     copied to another machine, that path may no longer exist; in that case
     allow an explicit environment override and common local log locations.
     """
-    configured_text = str(configured or "").strip() or "./Squad.log"
+    configured_text = str(configured or "").strip() or "./SquadGame.log"
     configured_path = Path(configured_text)
     if configured_path.exists():
         return configured_text
@@ -65,13 +65,11 @@ def resolve_log_file(configured: str) -> str:
         if override and Path(override).exists():
             return override
 
-    file_name = configured_path.name or "Squad.log"
+    file_name = configured_path.name or "SquadGame.log"
     candidates = [
         Path.cwd() / file_name,
-        Path.cwd() / "Squad.log",
         Path.cwd() / "SquadGame.log",
         Path.cwd().parent / file_name,
-        Path.cwd().parent / "Squad.log",
         Path.cwd().parent / "SquadGame.log",
     ]
     for candidate in candidates:
@@ -232,7 +230,7 @@ class BzssLogParserApp:
                 )
             )
         )
-        configured_log_file = str(self.config.get("log_file", "./Squad.log"))
+        configured_log_file = str(self.config.get("log_file", "./SquadGame.log"))
         resolved_log_file = resolve_log_file(configured_log_file)
         if resolved_log_file != configured_log_file:
             print(f"[INFO] Configured log file is unavailable; using discovered log file: {resolved_log_file}")

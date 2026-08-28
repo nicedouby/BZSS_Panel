@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "server_id": "BZSS_Main",
-    "log_file": "./Squad.log",
+    "log_file": "./SquadGame.log",
     "output_dir": "./LogPost",
     "transport_only": False,
     "poll_interval_ms": 200,
@@ -100,10 +100,23 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
 
 
 def load_config(config_path: str = "config.json") -> Dict[str, Any]:
-    path = Path(config_path)
+    requested_path = Path(config_path)
+    path = requested_path
+
+    # The panel starts Python with an absolute path, while older batch files
+    # pass only ``config.json``. Resolve both forms from the parser directory
+    # before falling back to defaults, so a valid historical config is never
+    # silently replaced by the Squad.log default.
+    if not path.exists():
+        parser_dir = Path(__file__).resolve().parents[1]
+        candidates = [
+            parser_dir / requested_path.name,
+            parser_dir.parent / requested_path.name,
+        ]
+        path = next((candidate for candidate in candidates if candidate.exists()), path)
 
     if not path.exists():
-        print("[WARN] config.json not found. Using default config.")
+        print(f"[WARN] LogPost config not found: {config_path}. Using defaults.")
         return DEFAULT_CONFIG
 
     with path.open("r", encoding="utf-8") as f:
