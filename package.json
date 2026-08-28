@@ -7,6 +7,8 @@
   "scripts": {
     "check:encoding": "node scripts/check-encoding.mjs",
     "start": "node app/main.js",
+    "config:migrate": "node app/scripts/config/migrate.js",
+    "config:validate": "node app/scripts/config/validate.js",
     "release:portable": "node app/scripts/release/build-portable.mjs",
     "auth:user:add": "node app/scripts/auth-users.js add",
     "auth:user:list": "node app/scripts/auth-users.js list",

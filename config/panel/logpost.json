@@ -1,0 +1,38 @@
+{
+  "udp": {
+    "host": "0.0.0.0",
+    "port": 12345,
+    "maxMessageBytes": 65535,
+    "recvBufferBytes": 8388608,
+    "ingressWorker": {
+      "enabled": true,
+      "batchMaxEvents": 128,
+      "batchMaxDelayMs": 5,
+      "maxInFlightBatches": 4,
+      "maxQueueEvents": 100000,
+      "fallbackToMainThread": false
+    }
+  },
+  "pythonLogParser": {
+    "enabled": true,
+    "pythonExecutable": "python",
+    "workingDirectory": "./LogPost",
+    "scriptPath": "./main.py",
+    "configPath": "./config.json",
+    "autoStart": true,
+    "killDuplicates": true,
+    "restartOnExit": false,
+    "pipeOutput": true
+  },
+  "logPostFileBridge": {
+    "enabled": true,
+    "workingDirectory": "./LogPost",
+    "eventName": "On_RawLogLine",
+    "pollIntervalMs": 250,
+    "replayRecentLines": 120,
+    "fromEnd": true,
+    "serverId": "BZSS_Main",
+    "checkpointPath": "./data/logpost-consumer/BZSS_Main.json",
+    "deadLetterDirectory": "./LogPost/dead-letter"
+  }
+}

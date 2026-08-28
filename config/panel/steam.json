@@ -1,0 +1,23 @@
+{
+  "steam": {
+    "appId": 393380,
+    "maxConcurrent": 2,
+    "requestTimeoutMs": 20000,
+    "defaultWaitMs": 15000,
+    "retryCount": 4,
+    "retryDelayMs": 3000,
+    "usePythonScript": true,
+    "pythonScript": "./support/runtime-assets/steam-playtime/FetchGameDuration.py",
+    "pythonConfigPath": "./support/runtime-assets/steam-playtime/config.json",
+    "scriptTimeoutMs": 12000,
+    "scriptFallbackToApi": false,
+    "onlineRefreshFreshnessWindowMinutes": 240,
+    "autoRefreshEnabled": false
+  },
+  "ipLookup": {
+    "enabled": true,
+    "provider": "none",
+    "cacheTtlHours": 168,
+    "requestTimeoutMs": 3000
+  }
+}

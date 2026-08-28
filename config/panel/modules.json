@@ -1,0 +1,178 @@
+{
+  "modules": {
+    "networkStats": {
+      "enabled": true,
+      "localPingIp": "",
+      "pingIntervalSeconds": 15,
+      "pingTimeoutMs": 1500,
+      "historySize": 10,
+      "allowPrivateIps": true
+    },
+    "pluginSubscriptions": {
+      "enabled": true
+    },
+    "audit": {
+      "enabled": true
+    },
+    "playerState": {
+      "enabled": true
+    },
+    "matchState": {
+      "enabled": true,
+      "polling": {
+        "serverInfoIntervalMs": 15000,
+        "playersIntervalMs": 2000,
+        "squadsIntervalMs": 4999,
+        "dynamic": {
+          "enabled": false,
+          "fastUntilSeconds": 90,
+          "mediumUntilSeconds": 180,
+          "fastPlayersIntervalMs": 500,
+          "fastSquadsIntervalMs": 500,
+          "mediumPlayersIntervalMs": 1500,
+          "mediumSquadsIntervalMs": 1500
+        },
+        "currentMapIntervalMs": 30000,
+        "nextMapIntervalMs": 30000
+      }
+    },
+    "console": {
+      "enabled": true,
+      "maxLines": 500
+    },
+    "combatState": {
+      "enabled": true,
+      "maxEvents": 5000
+    },
+    "playerDatabase": {
+      "enabled": true
+    },
+    "astrbotBridge": {
+      "enabled": true,
+      "trustedIps": [],
+      "allowedActions": [
+        "bindProfile",
+        "setWarmup",
+        "toggleWarmup"
+      ],
+      "websocket": {
+        "enabled": true,
+        "path": "/ws/astrbot",
+        "heartbeatIntervalMs": 30000
+      },
+      "matchFinished": {
+        "enabled": true,
+        "snapshotWaitMs": 30000,
+        "dedupeTtlMs": 86400000,
+        "dedupeMax": 500,
+        "allowTextFallback": false
+      },
+      "deliveryAck": {
+        "enabled": true,
+        "maxRecent": 100
+      }
+    },
+    "playerTimeStats": {
+      "enabled": true,
+      "tickMs": 10000,
+      "maxDeltaSeconds": 60,
+      "warmupPointsMultiplier": 1
+    },
+    "killManage": {
+      "enabled": true
+    },
+    "combatCollector": {
+      "enabled": true,
+      "storeDirectory": "./data/combat-events/BZSS_Main",
+      "logPostConfigPath": "./LogPost/config.json",
+      "readChunkBytes": 4194304,
+      "batchSize": 100
+    },
+    "combatClean": {
+      "enabled": true,
+      "maxEvents": 5000,
+      "weaponHistoryBackfill": {
+        "enabled": true,
+        "windowMs": 300000
+      }
+    },
+    "adminWarn": {
+      "enabled": true,
+      "maxRecords": 3000,
+      "ttlMs": 1800000
+    },
+    "remoteTelemetry": {
+      "enabled": true,
+      "host": "0.0.0.0",
+      "port": 12764,
+      "sampleIntervalMs": 2000,
+      "timeoutMultiplier": 3,
+      "commandHost": "",
+      "commandPort": 12765,
+      "commandTimeoutMs": 3000,
+      "freezeSampleThreshold": 15,
+      "recentSampleLimit": 50
+    },
+    "playtime": {
+      "enabled": true
+    },
+    "squadRuleChain": {
+      "directory": "./data/squad-rule-chain",
+      "enforcementPlayerThreshold": 0
+    },
+    "squadManagement": {
+      "enabled": true,
+      "enforcementEnabled": false,
+      "disbandPermission": "squad.disband",
+      "kickPermission": "squad.kick",
+      "removePermission": "squad.remove",
+      "kickThreshold": 10,
+      "noBuildUntilSeconds": 20,
+      "infantryOnlyUntilSeconds": 50,
+      "sweepIntervalMs": 15000,
+      "allowedInfantryNames": [
+        "萌新队",
+        "填线队"
+      ],
+      "defaultSquadNamePattern": "^Squad\\s*\\d+$"
+    },
+    "squadNamePolicyGuard": {
+      "enabled": true,
+      "detectLogCreated": true,
+      "action": "disband_then_warn",
+      "dedupeTtlMs": 300000,
+      "warningRepeatDelayMs": 2000,
+      "warningRepeatCount": 2,
+      "rconPatrol": {
+        "enabled": false,
+        "intervalMs": 15000
+      }
+    },
+    "squadNamePolicyPatrol": {
+      "enabled": false,
+      "intervalMs": 15000,
+      "dedupeTtlMs": 60000
+    },
+    "warmupReserveGrant": {
+      "enabled": true,
+      "grantEveryMinutes": 60,
+      "grantDays": 1,
+      "reminderEveryMinutes": 5,
+      "maxEligiblePlayers": 50,
+      "requireWarmupMode": true,
+      "requireSquad": false,
+      "requireUnlockedSquad": true,
+      "group": "BZSSVIP",
+      "countMode": "accumulate_eligible_squad_member_time",
+      "timeWindows": [
+        {
+          "enabled": true,
+          "start": "00:00",
+          "end": "23:59"
+        }
+      ],
+      "clearOfflineAfterHours": 24,
+      "maxRecentRecords": 500
+    }
+  }
+}

@@ -20,7 +20,11 @@ export function resolveRconPassword(config, logger) {
       return envPassword;
     }
 
-    logger?.warn?.(`RCON password env var ${passwordFromEnv} is missing or empty; falling back to config.password.`);
+    if (String(config?.password ?? "").trim()) {
+      logger?.warn?.(`RCON password env var ${passwordFromEnv} is missing; using legacy config.password.`);
+      return config.password;
+    }
+    throw new Error(`RCON password is missing. Set environment variable ${passwordFromEnv}.`);
   }
 
   return config?.password ?? "";

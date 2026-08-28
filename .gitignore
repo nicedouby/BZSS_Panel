@@ -18,6 +18,11 @@ config.local.*.json
 config.override.json
 config.override.*.json
 config.json.bak
+config/panel/*.bak
+config/panel/*.tmp
+config/panel.local/
+.env
+.env.*
 SquadGame.log
 *.log
 *.zip

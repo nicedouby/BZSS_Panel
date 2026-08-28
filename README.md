@@ -1,5 +1,11 @@
 # BZSS Panel
 
+## 配置
+
+运行配置位于 `config/panel/`，按命名空间拆分；业务代码仍使用 `config.get("rcon.port")` 等统一路径。运行时敏感项必须通过环境变量提供：`BZSS_RCON_PASSWORD`、`BZSS_STEAM_API_KEY`、`BZSS_ASTRBOT_TOKEN`、`BZSS_BOOTSTRAP_ADMIN_PASSWORD`（可选 IPInfo Token：`BZSS_IPINFO_TOKEN`）。
+
+旧部署可先执行 `npm run config:migrate`，确认新目录后再将旧 `config.json` 重命名为 `config.json.legacy`。可通过 `npm run config:validate` 检查命名空间归属与后台设置路径。
+
 BZSS Panel now uses the Vue client in `web-client/` as the primary frontend shell, while the backend code lives under `app/`.
 
 ## Development

@@ -2,7 +2,6 @@
   "rcon": {
     "host": "192.168.0.184",
     "port": 30144,
-    "password": "9290dd2aa02b",
     "autoReconnectDelay": 500,
     "commandTimeoutMs": 15000
   },
@@ -16,7 +15,6 @@
       "bootstrapUser": {
         "username": "DoubyBear",
         "displayName": "DoubyBear",
-        "password": "DoubyBear123++",
         "passwordSalt": "f4c7064dba1e468ea9726a9a2f0f8c57",
         "steamID": "76561198194428818"
       },
@@ -24,7 +22,6 @@
     }
   },
   "steam": {
-    "apiKey": "8384F3B5BEF1D5D181C868A062DC9568",
     "appId": 393380,
     "maxConcurrent": 3,
     "requestTimeoutMs": 20000,

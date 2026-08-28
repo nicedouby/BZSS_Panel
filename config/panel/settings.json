@@ -1,0 +1,476 @@
+{
+  "settingsEditor": {
+    "enabled": true,
+    "exposed": [
+      {
+        "path": "server.name",
+        "label": "Server Name",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "web.title",
+        "label": "Panel Title",
+        "type": "string",
+        "restartRequired": true
+      },
+      {
+        "path": "web.host",
+        "label": "Web Host",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "web.port",
+        "label": "Web Port",
+        "type": "number",
+        "min": 1,
+        "max": 65535,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "web.useVueClient",
+        "label": "Use Vue Client",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "bzssCore.modifyScriptPath",
+        "label": "BZSS-Core Modify Script Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.remoteSaveGamePath",
+        "label": "BZSS-Core Remote Save Path",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "bzssCore.playerInfoPollIntervalMs",
+        "label": "BZSS-Core Player Info Poll Interval Ms",
+        "type": "number",
+        "min": 50,
+        "max": 5000,
+        "advanced": true,
+        "restartRequired": false
+      },
+      {
+        "path": "rcon.enabled",
+        "label": "RCON Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "rcon.host",
+        "label": "RCON Host",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "rcon.port",
+        "label": "RCON Port",
+        "type": "number",
+        "min": 1,
+        "max": 65535,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "ipLookup.enabled",
+        "label": "IP Lookup Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "ipLookup.provider",
+        "label": "IP Lookup Provider",
+        "type": "select",
+        "options": [
+          {
+            "label": "None",
+            "value": "none"
+          },
+          {
+            "label": "Manual",
+            "value": "manual"
+          },
+          {
+            "label": "Local MMDB",
+            "value": "local-mmdb"
+          },
+          {
+            "label": "IP-API",
+            "value": "ip-api"
+          },
+          {
+            "label": "IPinfo",
+            "value": "ipinfo"
+          }
+        ],
+        "restartRequired": true
+      },
+      {
+        "path": "playerIdentityDisplay.showIpInList",
+        "label": "Show IP in List",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "playerIdentityDisplay.showIpInDetail",
+        "label": "Show IP in Detail",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.expected",
+        "label": "Tick Rate Expected",
+        "type": "number",
+        "min": 1,
+        "max": 120,
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.warningBelow",
+        "label": "Tick Rate Warning",
+        "type": "number",
+        "min": 1,
+        "max": 120,
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.criticalBelow",
+        "label": "Tick Rate Critical",
+        "type": "number",
+        "min": 1,
+        "max": 120,
+        "restartRequired": true
+      },
+      {
+        "path": "serverTickRate.staleAfterSeconds",
+        "label": "Tick Rate Stale After",
+        "type": "number",
+        "min": 1,
+        "max": 600,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.serverInfoIntervalMs",
+        "label": "Server Info Refresh Interval",
+        "type": "number",
+        "min": 1000,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.playersIntervalMs",
+        "label": "Players Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.squadsIntervalMs",
+        "label": "Squads Refresh Interval",
+        "type": "number",
+        "min": 1000,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.enabled",
+        "label": "Dynamic Players/Squads Refresh Enabled",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.fastUntilSeconds",
+        "label": "Dynamic Fast Window Seconds",
+        "type": "number",
+        "min": 1,
+        "max": 600,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.mediumUntilSeconds",
+        "label": "Dynamic Medium Window Seconds",
+        "type": "number",
+        "min": 1,
+        "max": 1200,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.fastPlayersIntervalMs",
+        "label": "Fast Players Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.fastSquadsIntervalMs",
+        "label": "Fast Squads Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.mediumPlayersIntervalMs",
+        "label": "Medium Players Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.dynamic.mediumSquadsIntervalMs",
+        "label": "Medium Squads Refresh Interval",
+        "type": "number",
+        "min": 100,
+        "max": 60000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.currentMapIntervalMs",
+        "label": "Current Map Refresh Interval",
+        "type": "number",
+        "min": 3000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.matchState.polling.nextMapIntervalMs",
+        "label": "Next Map Refresh Interval",
+        "type": "number",
+        "min": 3000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.appId",
+        "label": "Steam App ID",
+        "type": "number",
+        "min": 1,
+        "max": 2147483647,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.maxConcurrent",
+        "label": "Steam Lookup Max Concurrent",
+        "type": "number",
+        "min": 1,
+        "max": 20,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.requestTimeoutMs",
+        "label": "Steam Request Timeout",
+        "type": "number",
+        "min": 1000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.defaultWaitMs",
+        "label": "Steam Job Wait Timeout",
+        "type": "number",
+        "min": 0,
+        "max": 30000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.retryCount",
+        "label": "Steam Retry Count",
+        "type": "number",
+        "min": 0,
+        "max": 5,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.retryDelayMs",
+        "label": "Steam Retry Delay",
+        "type": "number",
+        "min": 100,
+        "max": 10000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.usePythonScript",
+        "label": "Steam Use Python Script",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.scriptTimeoutMs",
+        "label": "Steam Script Timeout",
+        "type": "number",
+        "min": 1000,
+        "max": 120000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.scriptFallbackToApi",
+        "label": "Steam Script Fallback To API",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "steam.onlineRefreshFreshnessWindowMinutes",
+        "label": "Steam Refresh Freshness Window",
+        "type": "number",
+        "min": 0,
+        "max": 10080,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.combatClean.weaponHistoryBackfill.enabled",
+        "label": "CombatClean Weapon History Backfill",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.combatClean.weaponHistoryBackfill.windowMs",
+        "label": "CombatClean Weapon History Backfill Window",
+        "type": "number",
+        "min": 1000,
+        "max": 600000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.enabled",
+        "label": "Fair Squad Guard Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.enforcementPlayerThreshold",
+        "label": "Fair Squad Guard Player Threshold",
+        "type": "number",
+        "min": 0,
+        "max": 100,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.noSquadCreationSeconds",
+        "label": "Fair Squad Guard No Create Seconds",
+        "type": "number",
+        "min": 0,
+        "max": 300,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.infantryOnlyUntilSeconds",
+        "label": "Fair Squad Guard Infantry Only Until",
+        "type": "number",
+        "min": 0,
+        "max": 600,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.maxViolationCountBeforeKick",
+        "label": "Fair Squad Guard Kick Threshold",
+        "type": "number",
+        "min": 1,
+        "max": 100,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.disbandCommandNameSuffix",
+        "label": "Fair Squad Guard Disband Command Suffix",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.broadcastOnApproved",
+        "label": "Fair Squad Guard Broadcast Approved",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "plugins.fairSquadGuard.broadcastOnViolation",
+        "label": "Fair Squad Guard Broadcast Violation",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.enabled",
+        "label": "Network Stats Enabled",
+        "type": "boolean",
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.localPingIp",
+        "label": "Local Ping Bind IP (bypasses proxy/TUN)",
+        "type": "string",
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.pingIntervalSeconds",
+        "label": "Ping Interval (seconds)",
+        "type": "number",
+        "min": 5,
+        "max": 300,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.pingTimeoutMs",
+        "label": "Ping Timeout (ms)",
+        "type": "number",
+        "min": 200,
+        "max": 5000,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.historySize",
+        "label": "Loss Rate History Size",
+        "type": "number",
+        "min": 3,
+        "max": 50,
+        "advanced": true,
+        "restartRequired": true
+      },
+      {
+        "path": "modules.networkStats.allowPrivateIps",
+        "label": "Allow Pinging Private IPs",
+        "type": "boolean",
+        "advanced": true,
+        "restartRequired": true
+      }
+    ]
+  }
+}

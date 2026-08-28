@@ -1,0 +1,33 @@
+{
+  "web": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 12864,
+    "staticDirectory": "./web-client/dist",
+    "useVueClient": true,
+    "title": "BZSS Panel",
+    "enableDebugPage": false
+  },
+  "playerIdentityDisplay": {
+    "showIpInList": true,
+    "showIpInDetail": true,
+    "showIpGeo": true
+  },
+  "serverTickRate": {
+    "expected": 30,
+    "warningBelow": 28,
+    "criticalBelow": 20,
+    "staleAfterSeconds": 10
+  },
+  "webModules": {
+    "required": [
+      "web.matchStatus",
+      "web.console",
+      "web.playerDatabase"
+    ],
+    "optional": {
+      "web.killManage": true,
+      "web.combatClean": true
+    }
+  }
+}

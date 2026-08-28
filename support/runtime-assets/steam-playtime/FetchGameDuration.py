@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import ProxyHandler, Request, build_opener
@@ -99,9 +100,9 @@ def main() -> int:
 
     try:
         config = load_config(Path(args.config))
-        api_key = str(((config or {}).get("steam") or {}).get("apiKey") or "").strip()
+        api_key = str(os.getenv("BZSS_STEAM_API_KEY") or ((config or {}).get("steam") or {}).get("apiKey") or "").strip()
         if not api_key:
-            raise ValueError("Missing steam.apiKey in config.json")
+            raise ValueError("Missing Steam API key. Set BZSS_STEAM_API_KEY.")
 
         result = fetch_game_duration(
             api_key,
