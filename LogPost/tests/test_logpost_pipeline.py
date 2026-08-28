@@ -1,5 +1,6 @@
 ﻿import json
 import pathlib
+import os
 import shutil
 import sys
 import unittest
@@ -9,7 +10,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from bzss_parser.app import BzssLogParserApp
+from bzss_parser.app import BzssLogParserApp, resolve_log_file
 from bzss_parser.helpers import today_string
 
 
@@ -52,6 +53,21 @@ class StubConsole:
 
 
 class LogPostPipelineTests(unittest.TestCase):
+    def test_log_file_resolution_keeps_config_and_supports_environment_override(self) -> None:
+        previous = os.environ.get("BZSS_SQUAD_LOG_PATH")
+        fallback = ROOT.parent / "tmp_test_output" / "Squad.log"
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        fallback.write_text("", encoding="utf-8")
+        try:
+            os.environ["BZSS_SQUAD_LOG_PATH"] = str(fallback)
+            self.assertEqual(resolve_log_file(r"E:\missing\SquadGame.log"), str(fallback))
+        finally:
+            if previous is None:
+                os.environ.pop("BZSS_SQUAD_LOG_PATH", None)
+            else:
+                os.environ["BZSS_SQUAD_LOG_PATH"] = previous
+            fallback.unlink(missing_ok=True)
+
     def make_app(self, **overrides) -> BzssLogParserApp:
         base_dir = ROOT.parent / "tmp_test_output"
         base_dir.mkdir(parents=True, exist_ok=True)
