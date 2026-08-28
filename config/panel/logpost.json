@@ -18,7 +18,7 @@
     "pythonExecutable": "python",
     "workingDirectory": "./LogPost",
     "scriptPath": "./main.py",
-    "configPath": "./config/logpost.json",
+    "configPath": "./config.json",
     "autoStart": true,
     "killDuplicates": true,
     "restartOnExit": false,

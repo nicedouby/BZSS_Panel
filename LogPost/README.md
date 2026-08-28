@@ -84,7 +84,7 @@ run.bat
 ## 运行 LogPost 网页查询器
 
 ```bash
-python logpost_web_server.py ../config/logpost.json
+python logpost_web_server.py config.json
 ```
 
 或 Windows 直接运行：
@@ -122,7 +122,7 @@ http://127.0.0.1:7790
 
 ## 测试历史日志
 
-将 `Squad.log` 放到项目目录，然后把 `../config/logpost.json` 改为：
+将 `Squad.log` 放到项目目录，然后把 `config.json` 改为：
 
 ```json
 "tail": {

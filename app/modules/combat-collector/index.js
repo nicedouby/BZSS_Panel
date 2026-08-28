@@ -386,7 +386,7 @@ function pickProgress(message) {
 
 async function resolveSourcePath(moduleConfig) {
   if (String(moduleConfig.sourcePath ?? "").trim()) return path.resolve(String(moduleConfig.sourcePath));
-    const candidates = [path.resolve(moduleConfig.logPostConfigPath ?? "./config/logpost.json"), path.resolve("./config/logpost.example.json")];
+    const candidates = [path.resolve(moduleConfig.logPostConfigPath ?? "./LogPost/config.json"), path.resolve("./LogPost/config.example.json")];
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(await fs.readFile(candidate, "utf8"));

@@ -44,7 +44,7 @@ export class PythonLogParserManager {
     const pythonExecutable = this.config.pythonExecutable ?? "python";
     const workingDirectory = resolveLogPostWorkingDirectory(this.config.workingDirectory ?? "./LogPost");
     const scriptPath = String(this.config.scriptPath ?? "./main.py").trim();
-    const configPath = String(this.config.configPath ?? "./config/logpost.json").trim();
+    const configPath = String(this.config.configPath ?? "./config.json").trim();
     const scriptAbsolutePath = path.resolve(workingDirectory, scriptPath);
     const configAbsolutePath = path.resolve(workingDirectory, configPath);
 

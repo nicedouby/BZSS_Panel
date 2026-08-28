@@ -296,7 +296,7 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
     if (!force && paths && now - pathsLoadedAt < PATH_REFRESH_INTERVAL_MS) return;
     const managerConfig = core.config?.get?.("pythonLogParser", {}) ?? {};
     const workingDirectory = path.resolve(process.cwd(), String(managerConfig.workingDirectory ?? ".").trim());
-    const parserConfigPath = path.resolve(workingDirectory, String(managerConfig.configPath ?? "./config/logpost.json").trim());
+    const parserConfigPath = path.resolve(workingDirectory, String(managerConfig.configPath ?? "./config.json").trim());
     const parserConfig = await safeReadJson(parserConfigPath) ?? {};
     const outputDirectory = path.resolve(workingDirectory, String(parserConfig.output_dir ?? "./LogPost"));
     const sourceLogPath = path.resolve(workingDirectory, String(parserConfig.log_file ?? "./Squad.log"));

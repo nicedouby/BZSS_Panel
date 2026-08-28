@@ -99,7 +99,7 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
     return result
 
 
-def load_config(config_path: str = "../config/logpost.json") -> Dict[str, Any]:
+def load_config(config_path: str = "config.json") -> Dict[str, Any]:
     path = Path(config_path)
 
     if not path.exists():

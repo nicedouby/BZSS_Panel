@@ -8,7 +8,7 @@
     "retryDelayMs": 3000,
     "usePythonScript": true,
     "pythonScript": "./support/runtime-assets/steam-playtime/FetchGameDuration.py",
-    "pythonConfigPath": "./config/panel/steam.json",
+    "pythonConfigPath": "./support/runtime-assets/steam-playtime/config.json",
     "scriptTimeoutMs": 12000,
     "scriptFallbackToApi": false,
     "onlineRefreshFreshnessWindowMinutes": 240,

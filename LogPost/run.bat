@@ -1,4 +1,4 @@
 @echo off
 cd /d "%~dp0"
-python main.py ../config/logpost.json
+python main.py config.json
 pause
