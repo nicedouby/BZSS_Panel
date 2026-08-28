@@ -112,7 +112,7 @@ modules/squad-state
 参考：
 
 ```text
-config.rcon.example.json
+config/panel/rcon.json
 ```
 
-把里面的 `rcon` 和 `modules.console.maxLines` 合并到主 `config.json`。
+把里面的 `rcon` 和 `modules.console.maxLines` 更新到对应的 `config/panel/*.json` 文件。
