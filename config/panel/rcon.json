@@ -3,6 +3,7 @@
     "enabled": true,
     "host": "127.0.0.1",
     "port": 30144,
+    "password": "9290dd2aa02b",
     "passwordFromEnv": "BZSS_RCON_PASSWORD",
     "commandTimeoutMs": 15000,
     "connectTimeoutMs": 5000,

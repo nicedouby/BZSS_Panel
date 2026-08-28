@@ -227,7 +227,8 @@ async function testDirectoryFailureModesAndLegacyFallback() {
 
   const secretDir = path.join(tempDir, "secret");
   await fs.mkdir(secretDir);
-  await fs.writeFile(path.join(secretDir, "rcon.json"), JSON.stringify({ rcon: { password: "not-allowed" } }), "utf8");
+  await fs.writeFile(path.join(secretDir, "rcon.json"), JSON.stringify({ rcon: { password: "test-password" } }), "utf8");
+  await fs.writeFile(path.join(secretDir, "steam.json"), JSON.stringify({ steam: { apiKey: "not-allowed" } }), "utf8");
   await assert.rejects(() => new ConfigManager(secretDir).load(), (cause) => cause.code === "ConfigSecretOnDisk");
 
   const invalidDir = path.join(tempDir, "invalid");
