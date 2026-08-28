@@ -299,7 +299,7 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
     const parserConfigPath = path.resolve(workingDirectory, String(managerConfig.configPath ?? "./config.json").trim());
     const parserConfig = await safeReadJson(parserConfigPath) ?? {};
     const outputDirectory = path.resolve(workingDirectory, String(parserConfig.output_dir ?? "./LogPost"));
-    const sourceLogPath = path.resolve(workingDirectory, String(parserConfig.log_file ?? "./Squad.log"));
+    const sourceLogPath = path.resolve(workingDirectory, String(parserConfig.log_file ?? "./SquadGame.log"));
     const statePath = path.resolve(
       workingDirectory,
       String(parserConfig?.tail?.state_path ?? path.join(outputDirectory, ".state", "tailer-state.json")),

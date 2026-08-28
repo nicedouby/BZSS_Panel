@@ -122,7 +122,7 @@ http://127.0.0.1:7790
 
 ## 测试历史日志
 
-将 `Squad.log` 放到项目目录，然后把 `config.json` 改为：
+将 `SquadGame.log` 放到项目目录，然后把 `config.json` 改为：
 
 ```json
 "tail": {
