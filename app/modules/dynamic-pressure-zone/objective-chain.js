@@ -12,6 +12,7 @@ export function normalizeObjectiveChain(value = []) {
       name: String(objective?.name ?? id).trim() || id,
       x,
       y,
+      isLocked: normalizeLockState(objective?.isLocked ?? objective?.locked),
       topologyIndex: index,
     };
   }).filter(Boolean);
@@ -22,33 +23,59 @@ export function normalizeObjectiveOwnership(objectiveState, chain) {
   if (Array.isArray(objectiveState)) {
     for (const item of objectiveState) {
       const id = String(item?.id ?? item?.name ?? "").trim();
-      if (id) byId.set(id, normalizeTeamId(item?.teamId ?? item?.ownerTeamId ?? item?.owner));
+      if (id) byId.set(id, normalizeObjectiveState(item));
     }
   } else if (objectiveState && typeof objectiveState === "object") {
     for (const [id, state] of Object.entries(objectiveState)) {
-      const owner = state && typeof state === "object"
-        ? state.teamId ?? state.ownerTeamId ?? state.owner
-        : state;
-      byId.set(String(id), normalizeTeamId(owner));
+      byId.set(String(id), normalizeObjectiveState(state));
     }
   }
-  return chain.map((objective) => ({
-    ...objective,
-    ownerTeamId: byId.has(objective.id)
-      ? byId.get(objective.id)
-      : normalizeTeamId(objective.ownerTeamId ?? objective.teamId ?? objective.owner),
-  }));
+  return chain.map((objective) => {
+    const state = byId.get(objective.id);
+    return {
+      ...objective,
+      ownerTeamId: state
+        ? state.ownerTeamId
+        : normalizeTeamId(objective.ownerTeamId ?? objective.teamId ?? objective.owner),
+      isLocked: state?.isLocked ?? normalizeLockState(objective.isLocked ?? objective.locked),
+    };
+  });
 }
 
 export function resolveCombatPair(objectiveChain, objectiveState) {
   const chain = normalizeObjectiveOwnership(objectiveState, normalizeObjectiveChain(objectiveChain));
   const team1Front = [...chain].reverse().find((objective) => objective.ownerTeamId === 1) ?? null;
   const team2Front = chain.find((objective) => objective.ownerTeamId === 2) ?? null;
-  let pair = null;
+  const candidates = [];
   for (let index = 0; index < chain.length - 1; index += 1) {
     if (chain[index].ownerTeamId === 1 && chain[index + 1].ownerTeamId === 2) {
-      pair = { pointA: chain[index], pointB: chain[index + 1], leftIndex: index, rightIndex: index + 1 };
-      break;
+      candidates.push({
+        pointA: chain[index],
+        pointB: chain[index + 1],
+        leftIndex: index,
+        rightIndex: index + 1,
+        unlockedCount: Number(chain[index].isLocked === false) + Number(chain[index + 1].isLocked === false),
+      });
+    }
+  }
+  candidates.sort((left, right) => right.unlockedCount - left.unlockedCount);
+  let pair = candidates[0] ?? null;
+
+  // Ownership can lag by one scene frame while AAS/RAAS unlock state already
+  // identifies the active pair. Prefer two adjacent unlocked flags as a safe
+  // fallback instead of treating a locked objective as the live front.
+  if (!pair) {
+    for (let index = 0; index < chain.length - 1; index += 1) {
+      if (chain[index].isLocked === false && chain[index + 1].isLocked === false) {
+        pair = {
+          pointA: chain[index],
+          pointB: chain[index + 1],
+          leftIndex: index,
+          rightIndex: index + 1,
+          unlockedCount: 2,
+        };
+        break;
+      }
     }
   }
   return {
@@ -56,8 +83,26 @@ export function resolveCombatPair(objectiveChain, objectiveState) {
     team1Front,
     team2Front,
     pair,
-    adjacent: Boolean(pair),
+    adjacent: Boolean(pair && pair.rightIndex === pair.leftIndex + 1),
   };
+}
+
+function normalizeObjectiveState(value) {
+  if (value && typeof value === "object") {
+    return {
+      ownerTeamId: normalizeTeamId(value.teamId ?? value.ownerTeamId ?? value.owner),
+      isLocked: normalizeLockState(value.isLocked ?? value.locked),
+    };
+  }
+  return { ownerTeamId: normalizeTeamId(value), isLocked: null };
+}
+
+function normalizeLockState(value) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (["true", "1", "yes", "locked"].includes(text)) return true;
+  if (["false", "0", "no", "unlocked"].includes(text)) return false;
+  return null;
 }
 
 function normalizeTeamId(value) {
