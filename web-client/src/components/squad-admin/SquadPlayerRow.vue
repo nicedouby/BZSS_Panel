@@ -97,12 +97,11 @@
 
     </div>
 
-    <div class="player-steam-profile">
-      <div class="player-time-tags" aria-label="玩家服务器时长">
-        <span class="player-time-tag player-time-tag--match" title="本局累计在线时长；切图后重置">本局 {{ matchOnlineTimeText }}</span>
-        <span class="player-time-tag player-time-tag--server">游玩 {{ serverPlaytimeText }}</span>
-        <span class="player-time-tag player-time-tag--warmup">暖服 {{ warmupPlaytimeText }}</span>
-      </div>
+    <div
+      class="player-steam-profile"
+      :style="{ '--match-presence': `${matchPresencePercent}%` }"
+      :title="`本局累计在线 ${matchOnlineTimeText}（切图后重置）｜本服游玩 ${serverPlaytimeText}｜暖服 ${warmupPlaytimeText}`"
+    >
       <a
         v-if="avatarUrl"
         class="player-steam-bg"
@@ -124,6 +123,14 @@
         />
       </a>
       <div v-else class="player-steam-bg player-steam-bg--empty" aria-hidden="true">?</div>
+      <span class="player-match-time" title="本局累计在线时长；切图后重置">
+        <span class="player-match-time-label">本局</span>
+        <strong>{{ matchOnlineTimeText }}</strong>
+      </span>
+      <div class="player-time-tags" aria-label="玩家服务器时长">
+        <span class="player-time-tag player-time-tag--server">游玩 {{ serverPlaytimeText }}</span>
+        <span class="player-time-tag player-time-tag--warmup">暖服 {{ warmupPlaytimeText }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -197,6 +204,12 @@ const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
 const matchOnlineTimeText = computed(() => formatTrackedDuration(props.player.matchOnlineSeconds));
 const serverPlaytimeText = computed(() => formatTrackedDuration(props.serverPlaytimeSeconds));
 const warmupPlaytimeText = computed(() => formatTrackedDuration(props.warmupPlaytimeSeconds));
+const matchPresencePercent = computed(() => {
+  const seconds = Number(props.player.matchOnlineSeconds);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  // 90 分钟是普通一局的参考长度；满环表示该玩家几乎全程在场，而不是伪造精确进度。
+  return Math.min(100, Math.round((seconds / (90 * 60)) * 100));
+});
 
 const persistentPlayerBadge = computed(() => {
   const serverSeconds = Number(props.serverPlaytimeSeconds);
@@ -1537,7 +1550,8 @@ function displayRole(role: string | null | undefined) {
 }
 
 
-/* Player time summary: two compact labels above a larger Steam avatar. */
+/* Steam identity is a compact visual anchor.  The current-round time lives on
+   the avatar instead of consuming the player row's text column. */
 .squad-player-row.player-row {
   min-height: 86px !important;
   contain-intrinsic-size: 86px !important;
@@ -1545,60 +1559,17 @@ function displayRole(role: string | null | undefined) {
 
 .squad-player-row .player-main,
 .squad-player-row.has-steam-avatar .player-main {
-  padding-right: 132px !important;
+  padding-right: 88px !important;
 }
 
 .squad-player-row .player-steam-profile {
   position: absolute;
-  top: 7px;
+  top: 9px;
   right: 9px;
   z-index: 3;
-  width: 122px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+  width: 66px;
+  height: 68px;
   pointer-events: none;
-}
-
-.squad-player-row .player-time-tags {
-  width: 100%;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 3px;
-}
-
-.squad-player-row .player-time-tag {
-  display: block;
-  min-width: 0;
-  padding: 1px 4px;
-  overflow: hidden;
-  border: 1px solid var(--color-border-soft);
-  border-radius: 5px;
-  color: var(--color-text-secondary);
-  background: color-mix(in srgb, var(--color-bg-elevated) 92%, transparent);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 8px;
-  font-weight: 750;
-  line-height: 14px;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.squad-player-row .player-time-tag--server {
-  border-color: color-mix(in srgb, var(--color-brand-primary) 38%, var(--color-border-soft));
-}
-
-.squad-player-row .player-time-tag--match {
-  grid-column: 1 / -1;
-  border-color: color-mix(in srgb, var(--color-status-success) 42%, var(--color-border-soft));
-  color: var(--color-text-primary);
-}
-
-.squad-player-row .player-time-tag--warmup {
-  border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-soft));
 }
 
 .squad-player-row .player-steam-profile .player-steam-bg {
@@ -1606,10 +1577,16 @@ function displayRole(role: string | null | undefined) {
   top: auto !important;
   right: auto !important;
   bottom: auto !important;
-  width: 48px !important;
-  height: 48px !important;
+  width: 64px !important;
+  height: 64px !important;
   transform: none !important;
   pointer-events: auto;
+  border: 2px solid transparent !important;
+  border-radius: 50% !important;
+  background:
+    linear-gradient(var(--color-bg-elevated), var(--color-bg-elevated)) padding-box,
+    conic-gradient(from -90deg, #40dca3 var(--match-presence, 0%), rgba(255,255,255,.13) 0) border-box !important;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 3px 12px rgba(0,0,0,.3) !important;
 }
 
 .squad-player-row .player-steam-profile .player-steam-bg--empty {
@@ -1621,9 +1598,76 @@ function displayRole(role: string | null | undefined) {
   pointer-events: none;
 }
 
+.squad-player-row .player-match-time {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  max-width: 66px;
+  padding: 2px 5px;
+  border: 1px solid rgba(64,220,163,.72);
+  border-radius: 999px;
+  color: #eafff6;
+  background: rgba(8, 27, 24, .94);
+  box-shadow: 0 2px 8px rgba(0,0,0,.42);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.squad-player-row .player-match-time-label {
+  color: #7ce9be;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.squad-player-row .player-match-time strong {
+  overflow: hidden;
+  font-size: 10px;
+  text-overflow: ellipsis;
+}
+
+/* Historical time stays accessible without permanently taking horizontal room. */
+.squad-player-row .player-time-tags {
+  position: absolute;
+  right: 70px;
+  bottom: 0;
+  display: flex;
+  gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(4px);
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.squad-player-row:hover .player-time-tags {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.squad-player-row .player-time-tag {
+  padding: 2px 4px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 5px;
+  color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squad-player-row .player-time-tag--server { border-color: color-mix(in srgb, var(--color-brand-primary) 38%, var(--color-border-soft)); }
+.squad-player-row .player-time-tag--warmup { border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-soft)); }
+
 .squad-player-row:hover .player-steam-profile .player-steam-bg {
-  width: 48px !important;
-  transform: scale(1.04) !important;
+  width: 64px !important;
+  transform: scale(1.035) !important;
 }
 
 @media (max-width: 720px) {
@@ -1634,26 +1678,24 @@ function displayRole(role: string | null | undefined) {
 
   .squad-player-row .player-main,
   .squad-player-row.has-steam-avatar .player-main {
-    padding-right: 114px !important;
+    padding-right: 78px !important;
   }
 
   .squad-player-row .player-steam-profile {
     top: 6px;
     right: 7px;
-    width: 106px;
-    gap: 3px;
-  }
-
-  .squad-player-row .player-time-tag {
-    padding-inline: 3px;
-    font-size: 7px;
-    line-height: 13px;
+    width: 58px;
+    height: 62px;
   }
 
   .squad-player-row .player-steam-profile .player-steam-bg,
   .squad-player-row:hover .player-steam-profile .player-steam-bg {
-    width: 42px !important;
-    height: 42px !important;
+    width: 56px !important;
+    height: 56px !important;
+  }
+
+  .squad-player-row .player-time-tags {
+    display: none;
   }
 }
 
