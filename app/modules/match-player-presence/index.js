@@ -320,12 +320,20 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
     applyPlayersSnapshot(state, Array.isArray(event.players) ? event.players : [], normalizeText(event.time ?? new Date().toISOString()));
   }
 
+  function resetForRoundEvent(event = {}) {
+    const serverId = normalizeText(event?.serverId ?? event?.record?.serverId ?? currentServerId());
+    resetState({ serverId });
+    modules?.matchCache?.markDirty?.("playerMatchPresence", serverId);
+  }
+
   function bindListeners() {
     unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", applyEvent));
-    unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "newRoundDetected", (event) => {
-      resetState({ serverId: normalizeText(event?.serverId ?? currentServerId()) });
-      modules?.matchCache?.markDirty?.("playerMatchPresence", normalizeText(event?.serverId ?? currentServerId()));
-    }));
+    // match-state emits roundUpdated after accepting a new world-brought-up record.
+    // The previous newRoundDetected name was never emitted, so presence data
+    // incorrectly survived map changes.
+    unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "roundUpdated", resetForRoundEvent));
+    // Keep compatibility with older match-state implementations.
+    unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "newRoundDetected", resetForRoundEvent));
   }
 
   function registerWithMatchCache() {
