@@ -129,6 +129,7 @@ function createAdminClient() {
     settingsForm.randomMaxDays.value = pick(data.randomMaxDays, 60);
     settingsForm.defaultWeight.value = pick(data.defaultWeight, 50);
     settingsForm.randomWeight.value = pick(data.randomWeight, 50);
+    settingsForm.requiredMatchSeconds.value = pick(data.requiredMatchSeconds, 0);
   }
 
   function renderAdminState(state) {
@@ -172,6 +173,7 @@ function createAdminClient() {
             randomMaxDays: Number(settingsForm.randomMaxDays.value),
             defaultWeight: Number(settingsForm.defaultWeight.value),
             randomWeight: Number(settingsForm.randomWeight.value),
+            requiredMatchSeconds: Number(settingsForm.requiredMatchSeconds.value),
           }),
         });
         adminMessage.textContent = "已保存。";

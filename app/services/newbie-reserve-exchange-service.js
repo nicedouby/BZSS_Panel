@@ -25,6 +25,7 @@ const DEFAULT_SETTINGS = {
   randomMaxDays: 60,
   defaultWeight: 50,
   randomWeight: 50,
+  requiredMatchSeconds: 0,
 };
 
 export class NewbieReserveExchangeService {
@@ -143,6 +144,23 @@ export class NewbieReserveExchangeService {
 
     if (url.pathname === "/api/public/state" && req.method === "GET") {
       return this.sendJson(res, 200, await this.getPublicState());
+    }
+
+    if (url.pathname === "/api/public/eligibility" && req.method === "GET") {
+      const steam64 = normalizeSteam64(url.searchParams.get("steam64"));
+      if (!steam64) {
+        return this.sendJson(res, 400, {
+          ok: false,
+          error: "InvalidInput",
+          message: "Invalid Steam64 format.",
+        });
+      }
+      const settings = await this.readSettings();
+      const eligibility = this.getMatchEligibility(steam64, settings.requiredMatchSeconds);
+      return this.sendJson(res, eligibility.available ? 200 : 503, {
+        ok: eligibility.available,
+        ...eligibility,
+      });
     }
 
     if (url.pathname === "/api/public/claim" && req.method === "POST") {
@@ -306,6 +324,7 @@ export class NewbieReserveExchangeService {
         random_max_days INTEGER NOT NULL DEFAULT 60,
         default_weight INTEGER NOT NULL DEFAULT 50,
         random_weight INTEGER NOT NULL DEFAULT 50,
+        required_match_seconds INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
 
@@ -363,6 +382,11 @@ export class NewbieReserveExchangeService {
       CREATE INDEX IF NOT EXISTS idx_exchange_audits_created_at
       ON exchange_audits(created_at DESC);
     `);
+
+    const settingsColumns = await this.db.all("PRAGMA table_info(exchange_settings)");
+    if (!settingsColumns.some((column) => column?.name === "required_match_seconds")) {
+      await this.db.exec("ALTER TABLE exchange_settings ADD COLUMN required_match_seconds INTEGER NOT NULL DEFAULT 0;");
+    }
   }
 
   async getAdminClientScript() {
@@ -378,8 +402,8 @@ export class NewbieReserveExchangeService {
     const now = Date.now();
     await this.db.run(
       `INSERT INTO exchange_settings (
-        id, enabled, claim_enabled, default_days, random_min_days, random_max_days, default_weight, random_weight, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        id, enabled, claim_enabled, default_days, random_min_days, random_max_days, default_weight, random_weight, required_match_seconds, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       1,
       DEFAULT_SETTINGS.enabled ? 1 : 0,
       DEFAULT_SETTINGS.claimEnabled ? 1 : 0,
@@ -388,6 +412,7 @@ export class NewbieReserveExchangeService {
       DEFAULT_SETTINGS.randomMaxDays,
       DEFAULT_SETTINGS.defaultWeight,
       DEFAULT_SETTINGS.randomWeight,
+      DEFAULT_SETTINGS.requiredMatchSeconds,
       now,
     );
   }
@@ -410,6 +435,7 @@ export class NewbieReserveExchangeService {
            random_max_days = ?,
            default_weight = ?,
            random_weight = ?,
+           required_match_seconds = ?,
            updated_at = ?
        WHERE id = 1`,
       next.enabled ? 1 : 0,
@@ -419,6 +445,7 @@ export class NewbieReserveExchangeService {
       next.randomMaxDays,
       next.defaultWeight,
       next.randomWeight,
+      next.requiredMatchSeconds,
       now,
     );
 
@@ -431,6 +458,7 @@ export class NewbieReserveExchangeService {
       randomMaxDays: next.randomMaxDays,
       defaultWeight: next.defaultWeight,
       randomWeight: next.randomWeight,
+      requiredMatchSeconds: next.requiredMatchSeconds,
     }, "settings");
     return {
       ok: true,
@@ -456,6 +484,7 @@ export class NewbieReserveExchangeService {
         randomMaxDays: settings.randomMaxDays,
         defaultWeight: settings.defaultWeight,
         randomWeight: settings.randomWeight,
+        requiredMatchSeconds: settings.requiredMatchSeconds,
       },
       summary: {
         ...summary,
@@ -734,6 +763,40 @@ export class NewbieReserveExchangeService {
       };
     }
 
+    const matchEligibility = this.getMatchEligibility(steam64, settings.requiredMatchSeconds);
+    if (!matchEligibility.available || !matchEligibility.eligible) {
+      const resultCode = matchEligibility.available ? "insufficient_match_time" : "match_time_unavailable";
+      const resultMessage = matchEligibility.available
+        ? `当前对局累计在线 ${matchEligibility.matchOnlineSeconds} 秒，兑换需要 ${matchEligibility.requiredSeconds} 秒，还差 ${matchEligibility.remainingSeconds} 秒。`
+        : "当前对局在线时长统计暂不可用，请稍后再试。";
+      const auditId = await this.insertAudit({
+        claimId: null,
+        qqNumber,
+        steam64,
+        rawQQ,
+        rawSteam64,
+        status: "failed",
+        resultCode,
+        resultMessage,
+        source,
+        selectedMode: null,
+        selectedDays: null,
+        expireAt: null,
+        metadata: matchEligibility,
+        request,
+      });
+      return {
+        statusCode: matchEligibility.available ? 403 : 503,
+        body: {
+          ok: false,
+          error: matchEligibility.available ? "InsufficientMatchTime" : "MatchTimeUnavailable",
+          message: resultMessage,
+          eligibility: matchEligibility,
+          auditId,
+        },
+      };
+    }
+
     await this.reconcileStaleProcessingClaims();
 
     const activeClaim = await this.findActiveClaimByKey({ qqNumber, steam64 });
@@ -992,6 +1055,29 @@ export class NewbieReserveExchangeService {
         },
       };
     }
+  }
+
+  getMatchEligibility(steam64, requiredSeconds = 0) {
+    const normalizedRequiredSeconds = clampNumber(Number(requiredSeconds ?? 0), 0, 31_536_000);
+    const tracker = this.modules?.matchPlayerPresence;
+    const serverId = String(this.core?.webStatus?.serverId ?? this.core?.webStatus?.state?.serverId ?? "unknown").trim() || "unknown";
+    if (typeof tracker?.getExchangeEligibility === "function") {
+      return {
+        available: true,
+        ...tracker.getExchangeEligibility(
+          { steamID: steam64 },
+          { serverId, requiredSeconds: normalizedRequiredSeconds },
+        ),
+      };
+    }
+    return {
+      available: normalizedRequiredSeconds <= 0,
+      eligible: normalizedRequiredSeconds <= 0,
+      serverId,
+      requiredSeconds: normalizedRequiredSeconds,
+      matchOnlineSeconds: 0,
+      remainingSeconds: normalizedRequiredSeconds,
+    };
   }
 
   async resolveReserveName(steam64, fallbackQQ = "") {
@@ -1472,6 +1558,7 @@ function normalizeSettingsRow(row = {}) {
     randomMaxDays: clampNumber(Number(row?.random_max_days ?? base.randomMaxDays ?? DEFAULT_SETTINGS.randomMaxDays), 1, 3650),
     defaultWeight: clampNumber(Number(row?.default_weight ?? base.defaultWeight ?? DEFAULT_SETTINGS.defaultWeight), 0, 100000),
     randomWeight: clampNumber(Number(row?.random_weight ?? base.randomWeight ?? DEFAULT_SETTINGS.randomWeight), 0, 100000),
+    requiredMatchSeconds: clampNumber(Number(row?.required_match_seconds ?? base.requiredMatchSeconds ?? DEFAULT_SETTINGS.requiredMatchSeconds), 0, 31_536_000),
     updatedAt: Number(row?.updated_at ?? Date.now()),
   };
 }
@@ -1491,6 +1578,7 @@ function normalizeSettingsInput(input = {}, fallback = DEFAULT_SETTINGS) {
     randomMaxDays: maxDays,
     defaultWeight: clampNumber(Number(input?.defaultWeight ?? input?.default_weight ?? fallback.defaultWeight ?? DEFAULT_SETTINGS.defaultWeight), 0, 100000),
     randomWeight: clampNumber(Number(input?.randomWeight ?? input?.random_weight ?? fallback.randomWeight ?? DEFAULT_SETTINGS.randomWeight), 0, 100000),
+    requiredMatchSeconds: clampNumber(Number(input?.requiredMatchSeconds ?? input?.required_match_seconds ?? fallback.requiredMatchSeconds ?? DEFAULT_SETTINGS.requiredMatchSeconds), 0, 31_536_000),
   };
 }
 
@@ -1813,6 +1901,7 @@ function renderPublicPage() {
       var settings = state.settings || {};
       rulesEl.textContent = [
         "兑换开关: " + (settings.claimEnabled ? "开启" : "关闭"),
+        "本局累计在线门槛: " + (pick(settings.requiredMatchSeconds, 0) > 0 ? pick(settings.requiredMatchSeconds, 0) + " 秒" : "不限制"),
         "默认天数: " + pick(settings.defaultDays, 7),
         "随机范围: " + pick(settings.randomMinDays, 3) + " - " + pick(settings.randomMaxDays, 60) + " 天",
         "权重: 默认 " + pick(settings.defaultWeight, 50) + " / 随机 " + pick(settings.randomWeight, 50)
@@ -2040,6 +2129,7 @@ function renderAdminPage(initialState = null, { loginFailed = false } = {}) {
       <form id="settings-form">
         <div class="field"><label><input type="checkbox" name="enabled"> 服务启用</label></div>
         <div class="field"><label><input type="checkbox" name="claimEnabled"> 兑换启用</label></div>
+        <div class="field"><label for="requiredMatchSeconds">本局累计在线门槛（秒，0 为不限制）</label><input id="requiredMatchSeconds" name="requiredMatchSeconds" type="number" min="0" max="31536000"></div>
         <div class="field"><label for="defaultDays">默认天数</label><input id="defaultDays" name="defaultDays" type="number" min="1" max="3650"></div>
         <div class="field"><label for="randomMinDays">随机范围最小天数</label><input id="randomMinDays" name="randomMinDays" type="number" min="1" max="3650"></div>
         <div class="field"><label for="randomMaxDays">随机范围最大天数</label><input id="randomMaxDays" name="randomMaxDays" type="number" min="1" max="3650"></div>
@@ -2093,4 +2183,3 @@ function renderAdminPage(initialState = null, { loginFailed = false } = {}) {
 </body>
 </html>`;
 }
-

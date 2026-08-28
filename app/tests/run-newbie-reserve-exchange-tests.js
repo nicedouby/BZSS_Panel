@@ -152,7 +152,7 @@ function createCaptureLogger() {
   };
 }
 
-async function startService({ failOnce = false } = {}) {
+async function startService({ failOnce = false, requiredMatchSeconds = 0, matchOnlineSeconds = 0 } = {}) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "reserve-exchange-test-"));
   const originalCwd = process.cwd();
   process.chdir(tempDir);
@@ -161,6 +161,7 @@ async function startService({ failOnce = false } = {}) {
   const reserveSlots = createReserveSlotsMock({ failOnce });
   const playerDatabase = createPlayerDatabaseMock();
   const logger = createCaptureLogger();
+  const matchPresenceState = { matchOnlineSeconds };
   const config = createConfig({
     reserveExchange: {
       enabled: true,
@@ -181,12 +182,28 @@ async function startService({ failOnce = false } = {}) {
     modules: {
       reserveSlots: reserveSlots.api,
       playerDatabase,
+      matchPlayerPresence: {
+        getExchangeEligibility(_identity, options = {}) {
+          const requiredSeconds = Math.max(0, Number(options.requiredSeconds ?? 0) || 0);
+          return {
+            eligible: matchPresenceState.matchOnlineSeconds >= requiredSeconds,
+            serverId: String(options.serverId ?? "unknown"),
+            requiredSeconds,
+            matchOnlineSeconds: matchPresenceState.matchOnlineSeconds,
+            remainingSeconds: Math.max(0, requiredSeconds - matchPresenceState.matchOnlineSeconds),
+            player: null,
+          };
+        },
+      },
     },
     config,
     logger,
   });
 
   await service.start();
+  if (requiredMatchSeconds > 0) {
+    await service.updateSettings({ requiredMatchSeconds });
+  }
 
   return {
     tempDir,
@@ -196,6 +213,7 @@ async function startService({ failOnce = false } = {}) {
     playerDatabase,
     config,
     logger,
+    matchPresenceState,
     service,
     async shutdown() {
       await service.stop();
@@ -206,6 +224,38 @@ async function startService({ failOnce = false } = {}) {
       await fs.rm(tempDir, { recursive: true, force: true });
     },
   };
+}
+
+async function testMatchTimeRequirement() {
+  const harness = await startService({ requiredMatchSeconds: 3600, matchOnlineSeconds: 1800 });
+  try {
+    const base = `http://${harness.service.host}:${harness.service.port}`;
+    const eligibility = await fetchJson(`${base}/api/public/eligibility?steam64=76561198000000003`);
+    assert.equal(eligibility.response.status, 200);
+    assert.equal(eligibility.body.eligible, false);
+    assert.equal(eligibility.body.remainingSeconds, 1800);
+
+    const denied = await fetchJson(`${base}/api/public/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qq_number: "88776655", steam64: "76561198000000003" }),
+    });
+    assert.equal(denied.response.status, 403);
+    assert.equal(denied.body.error, "InsufficientMatchTime");
+    assert.equal(denied.body.eligibility.remainingSeconds, 1800);
+
+    harness.matchPresenceState.matchOnlineSeconds = 3600;
+    const granted = await fetchJson(`${base}/api/public/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qq_number: "88776655", steam64: "76561198000000003" }),
+    });
+    assert.equal(granted.response.status, 200);
+    assert.equal(granted.body.ok, true);
+  } finally {
+    await harness.shutdown().catch(() => {});
+    await harness.dispose().catch(() => {});
+  }
 }
 
 async function fetchJson(url, options = {}) {
@@ -582,6 +632,7 @@ async function main() {
   await testFailedGrantCanRetry();
   await testExistingReserveSlotStillAllowsNewGrant();
   await testReserveNameUsesDatabaseName();
+  await testMatchTimeRequirement();
   console.log("reserve exchange tests passed");
 }
 

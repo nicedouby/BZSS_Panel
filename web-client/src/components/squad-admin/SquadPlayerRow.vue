@@ -99,6 +99,7 @@
 
     <div class="player-steam-profile">
       <div class="player-time-tags" aria-label="玩家服务器时长">
+        <span class="player-time-tag player-time-tag--match" title="本局累计在线时长；切图后重置">本局 {{ matchOnlineTimeText }}</span>
         <span class="player-time-tag player-time-tag--server">游玩 {{ serverPlaytimeText }}</span>
         <span class="player-time-tag player-time-tag--warmup">暖服 {{ warmupPlaytimeText }}</span>
       </div>
@@ -193,6 +194,7 @@ const displayName = computed(() => {
 });
 
 const playtimeText = computed(() => formatPlaytime(props.playtimeHours));
+const matchOnlineTimeText = computed(() => formatTrackedDuration(props.player.matchOnlineSeconds));
 const serverPlaytimeText = computed(() => formatTrackedDuration(props.serverPlaytimeSeconds));
 const warmupPlaytimeText = computed(() => formatTrackedDuration(props.warmupPlaytimeSeconds));
 
@@ -1587,6 +1589,12 @@ function displayRole(role: string | null | undefined) {
 
 .squad-player-row .player-time-tag--server {
   border-color: color-mix(in srgb, var(--color-brand-primary) 38%, var(--color-border-soft));
+}
+
+.squad-player-row .player-time-tag--match {
+  grid-column: 1 / -1;
+  border-color: color-mix(in srgb, var(--color-status-success) 42%, var(--color-border-soft));
+  color: var(--color-text-primary);
 }
 
 .squad-player-row .player-time-tag--warmup {

@@ -146,14 +146,14 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
     }
   }
 
-  function exportState(serverId = currentServerId()) {
+  function exportState(serverId = currentServerId(), savedAt = new Date().toISOString()) {
     const state = ensureServerState(serverId);
     return {
       version: state.version,
       updatedAt: state.updatedAt,
       players: Object.fromEntries([...state.players.entries()].map(([playerKey, record]) => [
         playerKey,
-        serializeRecord(record),
+        serializeRecord(record, { snapshotAt: savedAt }),
       ])),
     };
   }
@@ -168,10 +168,11 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
       if (!playerKey) continue;
       const record = normalizeRecord(playerKey, rawRecord);
       if (!record) continue;
+      const wasOnlineAtLastSave = record.onlineAtLastSave || record.online;
       record.online = false;
       record.activeSegmentStartedAt = "";
       record.onlineAtLastSave = false;
-      updateSegmentOnImport(record, context);
+      if (wasOnlineAtLastSave) updateSegmentOnImport(record, context);
       state.players.set(playerKey, record);
     }
 
@@ -206,7 +207,15 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
     };
   }
 
-  function serializeRecord(record) {
+  function serializeRecord(record, options = {}) {
+    const snapshotAtMs = Date.parse(options?.snapshotAt ?? "");
+    const activeSegmentStartedAtMs = Date.parse(record.activeSegmentStartedAt ?? "");
+    const activeSegmentMs = record.online
+      && Number.isFinite(snapshotAtMs)
+      && Number.isFinite(activeSegmentStartedAtMs)
+      && snapshotAtMs >= activeSegmentStartedAtMs
+      ? snapshotAtMs - activeSegmentStartedAtMs
+      : 0;
     return {
       playerKey: record.playerKey,
       steamID: record.steamID,
@@ -215,7 +224,7 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
       lastName: record.lastName,
       firstSeenAt: record.firstSeenAt,
       lastSeenAt: record.lastSeenAt,
-      observedOnlineMs: record.observedOnlineMs,
+      observedOnlineMs: record.observedOnlineMs + activeSegmentMs,
       estimatedGapMs: record.estimatedGapMs,
       online: record.online,
       activeSegmentStartedAt: record.activeSegmentStartedAt,
@@ -233,6 +242,9 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
   }
 
   function resolvePlayerKey(serverState, identity = {}) {
+    const directPlayerKey = normalizeText(identity?.playerKey ?? "");
+    if (directPlayerKey && serverState.players.has(directPlayerKey)) return directPlayerKey;
+
     const steamID = normalizeText(identity?.steamID ?? identity?.steam64ID ?? "");
     if (steamID && [...serverState.players.keys()].some((key) => key === `steam:${steamID}`)) return `steam:${steamID}`;
     const eosID = normalizeText(identity?.eosID ?? "");
@@ -266,11 +278,29 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
   function getMatchOnlineMs(serverId, playerIdentity = {}) {
     const record = getRecord(serverId, playerIdentity);
     if (!record) return 0;
+    const activeSegmentStartedAtMs = Date.parse(record.activeSegmentStartedAt ?? "");
+    const activeSegmentMs = record.online && Number.isFinite(activeSegmentStartedAtMs)
+      ? Math.max(0, Date.now() - activeSegmentStartedAtMs)
+      : 0;
     return Math.max(0, Math.floor(
       record.observedOnlineMs
       + record.estimatedGapMs
-      + (record.online && record.activeSegmentStartedAt ? Date.now() - Date.parse(record.activeSegmentStartedAt) : 0),
+      + activeSegmentMs,
     ));
+  }
+
+  function getExchangeEligibility(playerIdentity = {}, options = {}) {
+    const serverId = normalizeText(options?.serverId ?? currentServerId());
+    const requiredSeconds = normalizePositiveNumber(options?.requiredSeconds, 0);
+    const matchOnlineSeconds = Math.floor(getMatchOnlineMs(serverId, playerIdentity) / 1000);
+    return {
+      eligible: matchOnlineSeconds >= requiredSeconds,
+      serverId,
+      requiredSeconds,
+      matchOnlineSeconds,
+      remainingSeconds: Math.max(0, requiredSeconds - matchOnlineSeconds),
+      player: getPlayer(playerIdentity, serverId),
+    };
   }
 
   function getState(serverId = currentServerId()) {
@@ -292,23 +322,9 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
 
   function bindListeners() {
     unsubscribers.push(core.eventBus.onCoreEvent("RCON_LIST_PLAYERS_UPDATED", applyEvent));
-    unsubscribers.push(core.eventBus.onModuleEvent("module.matchCache", "restored", (event) => {
-      const serverId = normalizeText(event?.serverId ?? currentServerId());
-      const state = ensureServerState(serverId);
-      const payload = event?.match ?? null;
-      if (!payload) return;
-      const exported = event?.namespaces?.playerMatchPresence ?? null;
-      if (exported) importState(exported, {
-        serverId,
-        restoredAt: normalizeText(event.time ?? new Date().toISOString()),
-        savedAt: normalizeText(payload.savedAt ?? event.savedAt ?? ""),
-      });
-    }));
-    unsubscribers.push(core.eventBus.onModuleEvent("module.matchCache", "reset", (event) => {
-      resetState({ serverId: normalizeText(event?.serverId ?? currentServerId()) });
-    }));
     unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "newRoundDetected", (event) => {
       resetState({ serverId: normalizeText(event?.serverId ?? currentServerId()) });
+      modules?.matchCache?.markDirty?.("playerMatchPresence", normalizeText(event?.serverId ?? currentServerId()));
     }));
   }
 
@@ -317,7 +333,12 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
     modules.matchCache.registerProvider({
       id: "playerMatchPresence",
       version: 1,
-      exportState,
+      exportState(context = {}) {
+        return exportState(
+          normalizeText(context?.serverId ?? currentServerId()),
+          normalizeText(context?.savedAt ?? new Date().toISOString()),
+        );
+      },
       importState,
       resetState,
     });
@@ -349,6 +370,8 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
   }
 
   async function stop() {
+    modules?.matchCache?.markDirty?.("playerMatchPresence", currentServerId());
+    await modules?.matchCache?.flush?.(currentServerId(), { force: true });
     for (const unsubscribe of unsubscribers.splice(0)) unsubscribe();
     logWithFallback(moduleLogger, "info", "MatchPlayerPresence stopped.", {
       label: "MODULE",
@@ -361,6 +384,7 @@ export function createMatchPlayerPresenceModule({ core, modules, config, logger 
     getPlayers,
     getOnlinePlayers,
     getMatchOnlineMs,
+    getExchangeEligibility,
     getState,
     reset() {
       resetState();
