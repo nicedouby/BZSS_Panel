@@ -5,6 +5,7 @@ import { DEFAULT_PRESSURE_ZONE_CONFIG, mergePressureZoneConfig } from "./default
 import { createBaseConfigStore } from "./base-config-store.js";
 import { createLayerProfileStore } from "./layer-profile-store.js";
 import { simulatePressureZones } from "./simulator.js";
+import { resolveLiveHotspot as resolveEngagementHotspot } from "./live-hotspot.js";
 import {
   TACTICAL_MAP_CONFIGS,
   getStaticTacticalAssets,
@@ -116,8 +117,8 @@ export function createDynamicPressureZoneModule({ core, modules, config, logger 
       id: "module.dynamicPressureZone",
       name: "Dynamic Pressure Zone",
       kind: "module",
-      version: "0.2.0",
-      description: "Calculates map-size adaptive Hard, Soft and Combat pressure zones for AAS and RAAS layers.",
+      version: "0.3.0",
+      description: "Calculates unlock-aware, live-combat adaptive pressure zones for AAS and RAAS layers.",
     },
     apiName: "dynamicPressureZone",
     api: {
@@ -166,6 +167,8 @@ function buildRelevantSnapshotSignature(snapshot) {
     captureZones: captureZones.map((zone) => [
       zone?.id ?? zone?.name ?? "",
       zone?.ownerTeamId ?? zone?.teamId ?? zone?.captureDirection ?? null,
+      zone?.isLocked ?? zone?.locked ?? null,
+      zone?.capturePercent ?? null,
       zone?.position?.x ?? zone?.x ?? null,
       zone?.position?.y ?? zone?.y ?? null,
     ]),
@@ -182,6 +185,7 @@ function buildRelevantSnapshotSignature(snapshot) {
       player?.telemetry?.inactive ?? player?.inactive ?? null,
       player?.telemetry?.onVehicle ?? player?.vehicle?.onVehicle ?? null,
       player?.presence?.state ?? "",
+      player?.match?.teamId ?? player?.teamId ?? null,
     ]),
   });
 }
@@ -194,45 +198,34 @@ function buildLiveInput(snapshot, profile, baseConfig) {
   const staticAssets = getStaticTacticalAssets(mapKey) ?? {};
   const runtimeObjectives = normalizeRuntimeObjectives(assets.captureZones, staticAssets.captureZones);
   const objectives = profile?.objectives?.length ? profile.objectives : runtimeObjectives;
-  const runtimeByName = new Map(runtimeObjectives.map((objective) => [objective.name, objective]));
+  const runtimeByName = new Map(runtimeObjectives.flatMap((objective) => [
+    [objective.name, objective],
+    [objective.id, objective],
+  ]));
   const objectiveState = Object.fromEntries(objectives.map((objective) => {
     const runtime = runtimeByName.get(objective.name) ?? runtimeByName.get(objective.id) ?? objective;
-    return [objective.id, runtime.ownerTeamId ?? runtime.teamId ?? null];
+    return [objective.id, {
+      ownerTeamId: runtime.ownerTeamId ?? runtime.teamId ?? null,
+      isLocked: runtime.isLocked ?? objective.isLocked ?? null,
+    }];
   }));
+  const mapBounds = profile?.mapBounds ?? mapConfig?.bounds ?? null;
   return {
     mode: firstText(profile?.mode, snapshot?.server?.mode, snapshot?.match?.mode, snapshot?.server?.layer),
     mapKey,
-    mapBounds: profile?.mapBounds ?? mapConfig?.bounds ?? null,
+    mapBounds,
     mapSize: mapConfig?.widthMeters && mapConfig?.heightMeters
       ? { widthMeters: mapConfig.widthMeters, heightMeters: mapConfig.heightMeters }
       : null,
     mains: profile?.mains ?? normalizeRuntimeMains(assets.mainZones),
     objectiveChain: objectives,
     objectiveState,
-    hotspot: resolveLiveHotspot(snapshot?.players),
+    hotspot: resolveEngagementHotspot(snapshot?.players, {
+      mapBounds,
+      coordinateScaleMeters: baseConfig?.coordinateScaleMeters,
+      config: baseConfig?.hotspot,
+    }),
     config: baseConfig,
-  };
-}
-
-function resolveLiveHotspot(players) {
-  const positions = [];
-  for (const player of Array.isArray(players) ? players : []) {
-    const health = finite(player?.telemetry?.health ?? player?.soldierInfo?.health);
-    const inactive = player?.telemetry?.inactive === true
-      || player?.inactive === true
-      || String(player?.presence?.state ?? "").trim().toLowerCase() === "inactive";
-    const noWorldPawn = ["nopawn", "pendingdeployment"].includes(String(player?.presence?.state ?? player?.telemetry?.presenceHint ?? "").trim().toLowerCase());
-    const onVehicle = player?.telemetry?.onVehicle === true || player?.vehicle?.onVehicle === true;
-    if (!(health > 0) || inactive || noWorldPawn || onVehicle) continue;
-    const x = finite(player?.telemetry?.position?.x ?? player?.soldierInfo?.position?.x ?? player?.position?.x);
-    const y = finite(player?.telemetry?.position?.y ?? player?.soldierInfo?.position?.y ?? player?.position?.y);
-    if (x != null && y != null) positions.push({ x, y });
-  }
-  if (!positions.length) return null;
-  return {
-    x: positions.reduce((sum, position) => sum + position.x, 0) / positions.length,
-    y: positions.reduce((sum, position) => sum + position.y, 0) / positions.length,
-    playerCount: positions.length,
   };
 }
 
@@ -247,6 +240,8 @@ function normalizeRuntimeObjectives(zones, staticZones) {
       x: finite(zone?.x ?? zone?.position?.x ?? fallback?.x),
       y: finite(zone?.y ?? zone?.position?.y ?? fallback?.y),
       ownerTeamId: normalizeTeamId(zone?.ownerTeamId ?? zone?.teamId ?? zone?.captureDirection),
+      isLocked: normalizeLockState(zone?.isLocked ?? zone?.locked),
+      capturePercent: finite(zone?.capturePercent),
     };
   }).filter((zone) => zone.x != null && zone.y != null);
 }
@@ -279,6 +274,14 @@ function finite(value) {
 function normalizeTeamId(value) {
   const numeric = Number(value);
   return numeric === 1 || numeric === 2 ? numeric : null;
+}
+
+function normalizeLockState(value) {
+  if (value === true || value === false) return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (["true", "1", "yes", "locked"].includes(text)) return true;
+  if (["false", "0", "no", "unlocked"].includes(text)) return false;
+  return null;
 }
 
 function clone(value) {

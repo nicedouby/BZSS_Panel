@@ -39,6 +39,7 @@ export function calculatePressureZones(input = {}) {
     main: team1Main,
     chain: fronts.chain,
     front: fronts.team1Front,
+    hotspot,
     coordinateScaleMeters,
     mapScale: map.scaleFactor,
     averageObjectiveSpacing,
@@ -50,6 +51,7 @@ export function calculatePressureZones(input = {}) {
     main: team2Main,
     chain: fronts.chain,
     front: fronts.team2Front,
+    hotspot,
     coordinateScaleMeters,
     mapScale: map.scaleFactor,
     averageObjectiveSpacing,
@@ -98,7 +100,11 @@ export function calculatePressureZones(input = {}) {
       combatPairAdjacent: fronts.adjacent,
       team1FrontObjectiveId: fronts.team1Front?.id ?? null,
       team2FrontObjectiveId: fronts.team2Front?.id ?? null,
-      ownership: fronts.chain.map((objective) => ({ id: objective.id, teamId: objective.ownerTeamId })),
+      ownership: fronts.chain.map((objective) => ({
+        id: objective.id,
+        teamId: objective.ownerTeamId,
+        isLocked: objective.isLocked,
+      })),
       warnings,
       config,
     },
@@ -143,6 +149,7 @@ function calculateBaseZone({
   main,
   chain,
   front,
+  hotspot,
   coordinateScaleMeters,
   mapScale,
   averageObjectiveSpacing,
@@ -152,6 +159,7 @@ function calculateBaseZone({
   const distances = chain.map((objective) => ({
     objectiveId: objective.id,
     objectiveName: objective.name,
+    isLocked: objective.isLocked,
     distanceMeters: distance(main, objective) * coordinateScaleMeters,
   }));
   const nearest = distances.reduce((best, item) => !best || item.distanceMeters < best.distanceMeters ? item : best, null);
@@ -164,6 +172,10 @@ function calculateBaseZone({
     ? distance(firstObjective, secondObjective) * coordinateScaleMeters
     : null;
   const currentFrontDistance = front ? distance(main, front) * coordinateScaleMeters : firstObjectiveDistance ?? nearest?.distanceMeters ?? 0;
+  const lockStateKnown = chain.some((objective) => objective.isLocked != null);
+  const nearestUnlocked = distances
+    .filter((objective) => objective.isLocked === false)
+    .reduce((best, item) => !best || item.distanceMeters < best.distanceMeters ? item : best, null);
 
   const hardBaseRadius = positive(config.hard.baseRadiusMeters, 650);
   const hardScaledRadius = hardBaseRadius * mapScale;
@@ -186,15 +198,26 @@ function calculateBaseZone({
       ? "minimum-radius"
       : "map-scale";
 
-  const hardObjectiveLimit = firstObjectiveDistance != null
-    ? firstObjectiveDistance * maxBaseToFirstObjectiveRatio
+  // If runtime unlock data exists, locked flags must not shrink the zone. The
+  // nearest unlocked flag is the first legitimate objective boundary. Legacy
+  // snapshots without lock data keep the old first-objective fallback.
+  const limitingObjective = lockStateKnown ? nearestUnlocked : (
+    firstObjectiveDistance == null ? null : {
+      objectiveId: firstObjective?.id ?? null,
+      objectiveName: firstObjective?.name ?? "",
+      distanceMeters: firstObjectiveDistance,
+      isLocked: null,
+    }
+  );
+  const hardObjectiveLimit = limitingObjective?.distanceMeters != null
+    ? limitingObjective.distanceMeters * maxBaseToFirstObjectiveRatio
     : null;
 
   if (hardObjectiveLimit != null && hardObjectiveLimit < hardRadius) {
     hardRadius = Math.max(emergencyMinimumRadius, hardObjectiveLimit);
     hardLimit = "objective-distance";
     if (hardObjectiveLimit < emergencyMinimumRadius) {
-      warnings.push(`TEAM_${teamId}_FIRST_OBJECTIVE_INSIDE_EMERGENCY_MINIMUM`);
+      warnings.push(`TEAM_${teamId}_ACTIVE_FRONT_INSIDE_EMERGENCY_MINIMUM`);
     }
   }
   hardRadius = Math.min(hardRadius, hardMaxRadius);
@@ -213,20 +236,63 @@ function calculateBaseZone({
       nonNegative(config.soft.maxExtensionMeters, 400),
     ),
   );
-  const softCandidate = hardRadius + softExtension;
   const objectiveSafetyMargin = nonNegative(config.soft.objectiveSafetyMarginMeters, 150);
-  const softObjectiveCap = firstObjectiveDistance != null
-    ? Math.max(hardRadius, firstObjectiveDistance - objectiveSafetyMargin)
-    : Number.POSITIVE_INFINITY;
-  const softRadius = Math.min(softCandidate, softObjectiveCap);
-  const softLimit = softRadius < softCandidate
-    ? "objective-safety-margin"
-    : resolvedSpacing != null
-      ? "objective-spacing"
-      : "fallback-extension";
+  const unlockedObjectiveCap = nearestUnlocked
+    ? nearestUnlocked.distanceMeters - objectiveSafetyMargin
+    : null;
+  const hotspotCenterDistance = hotspot
+    ? distance(main, hotspot.center) * coordinateScaleMeters
+    : null;
+  const hotspotCap = hotspotCenterDistance != null
+    ? hotspotCenterDistance - hotspot.radiusMeters
+    : null;
+  const liveBoundaryCandidates = [
+    unlockedObjectiveCap != null ? { source: "unlocked-objective", value: unlockedObjectiveCap } : null,
+    hotspotCap != null ? { source: "combat-hotspot", value: hotspotCap } : null,
+  ].filter(Boolean);
+  liveBoundaryCandidates.sort((left, right) => left.value - right.value);
+  const liveBoundary = liveBoundaryCandidates[0] ?? null;
+  const maxSoftExtension = Math.max(
+    nonNegative(config.soft.minExtensionMeters, 100),
+    nonNegative(config.soft.maxExtensionMeters, 400),
+  );
+  const softCeiling = hardMaxRadius + maxSoftExtension;
+  let softRadius;
+  let softLimit;
 
-  if (firstObjectiveDistance != null && firstObjectiveDistance <= hardRadius) {
-    warnings.push(`TEAM_${teamId}_FIRST_OBJECTIVE_OVERLAPS_HARD_ZONE`);
+  if (liveBoundary) {
+    // The circle is intentionally expanded to the nearest legitimate fighting
+    // boundary. Combat has higher classification priority, so the live fight
+    // remains exempt even if the minimum-radius fallback overlaps it.
+    softRadius = clamp(liveBoundary.value, emergencyMinimumRadius, softCeiling);
+    const expandedHardRadius = softRadius - softExtension;
+    hardRadius = clamp(expandedHardRadius, emergencyMinimumRadius, hardMaxRadius);
+    if (hardRadius > softRadius) hardRadius = softRadius;
+    hardLimit = liveBoundary.source;
+    softLimit = liveBoundary.value > softCeiling ? "maximum-radius" : liveBoundary.source;
+  } else if (lockStateKnown) {
+    // With authoritative lock data and no unlocked/live-combat boundary, every
+    // known objective is inactive. There is no legitimate front limiting the
+    // home pressure area, so use the configured maximum.
+    hardRadius = hardMaxRadius;
+    softRadius = softCeiling;
+    hardLimit = "all-objectives-locked";
+    softLimit = "maximum-radius";
+  } else {
+    const softCandidate = hardRadius + softExtension;
+    const softObjectiveCap = firstObjectiveDistance != null
+      ? Math.max(hardRadius, firstObjectiveDistance - objectiveSafetyMargin)
+      : Number.POSITIVE_INFINITY;
+    softRadius = Math.min(softCandidate, softObjectiveCap);
+    softLimit = softRadius < softCandidate
+      ? "objective-safety-margin"
+      : resolvedSpacing != null
+        ? "objective-spacing"
+        : "fallback-extension";
+  }
+
+  if (limitingObjective?.distanceMeters != null && limitingObjective.distanceMeters <= hardRadius) {
+    warnings.push(`TEAM_${teamId}_ACTIVE_OBJECTIVE_OVERLAPS_HARD_ZONE`);
   }
 
   return {
@@ -239,6 +305,9 @@ function calculateBaseZone({
     firstObjectiveSpacing,
     nearestObjectiveId: nearest?.objectiveId ?? null,
     nearestObjectiveDistance: nearest?.distanceMeters ?? null,
+    nearestUnlockedObjectiveId: nearestUnlocked?.objectiveId ?? null,
+    nearestUnlockedObjectiveDistance: nearestUnlocked?.distanceMeters ?? null,
+    lockStateKnown,
     objectiveDistances: distances,
     currentFrontObjectiveId: front?.id ?? null,
     currentFrontDistance,
@@ -263,7 +332,12 @@ function calculateBaseZone({
       softExtensionRaw,
       softExtension,
       objectiveSafetyMargin,
-      softObjectiveCap: Number.isFinite(softObjectiveCap) ? softObjectiveCap : null,
+      unlockedObjectiveCap,
+      hotspotCenterDistance,
+      hotspotCap,
+      liveBoundarySource: liveBoundary?.source ?? null,
+      liveBoundaryDistance: liveBoundary?.value ?? null,
+      softCeiling,
       softLimit,
     },
   };
@@ -298,7 +372,8 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
   const scaledRadius = baseRadius * mapModifier;
   const minRadiusMeters = nonNegative(config.combat.minRadiusMeters, 250);
   const maxRadiusMeters = Math.max(minRadiusMeters, nonNegative(config.combat.maxRadiusMeters, 900));
-  const combatRadius = clamp(scaledRadius, minRadiusMeters, maxRadiusMeters);
+  const hotspotRadius = nonNegative(hotspot?.radiusMeters, 0);
+  const combatRadius = clamp(Math.max(scaledRadius, hotspotRadius), minRadiusMeters, maxRadiusMeters);
   const longitudinalRadius = combatRadius;
   const lateralRadius = combatRadius * positive(config.combat.lateralFactor, 1.20);
   const longitudinalWorld = longitudinalRadius * worldUnitsPerMeter;
@@ -343,10 +418,13 @@ function calculateCombatZone({ pair, coordinateScaleMeters, worldUnitsPerMeter, 
       mapInfluence,
       mapModifier,
       scaledRadius,
+      hotspotRadius,
       limitingFactor: combatRadius <= minRadiusMeters && scaledRadius < minRadiusMeters
         ? "minimum-radius"
-        : combatRadius >= maxRadiusMeters && scaledRadius > maxRadiusMeters
+        : combatRadius >= maxRadiusMeters && Math.max(scaledRadius, hotspotRadius) > maxRadiusMeters
           ? "maximum-radius"
+          : hotspotRadius > scaledRadius
+            ? "live-hotspot"
           : "front-gap",
       longitudinalRadius,
       lateralRadius,
@@ -364,14 +442,19 @@ function resolveHotspot(value, map, config) {
   const minRadiusMeters = nonNegative(config.hotspot?.minRadiusMeters, 450);
   const maxRadiusMeters = Math.max(minRadiusMeters, nonNegative(config.hotspot?.maxRadiusMeters, 1600));
   const linearMapScale = map.effectiveSizeMeters / positive(map.referenceMapSizeMeters, 4000);
-  const radiusMeters = clamp(referenceRadiusMeters * linearMapScale, minRadiusMeters, maxRadiusMeters);
+  const reportedRadiusMeters = positiveOrNull(value?.radiusMeters);
+  const radiusMeters = clamp(
+    reportedRadiusMeters ?? (referenceRadiusMeters * linearMapScale),
+    minRadiusMeters,
+    maxRadiusMeters,
+  );
   return {
     center: { x, y },
     radiusMeters,
     radiusWorld: radiusMeters * map.worldUnitsPerMeter,
     playerCount: Math.max(0, Math.trunc(Number(value?.playerCount) || 0)),
-    positionSource: "alive-player-centroid",
-    sizeSource: "map-effective-size",
+    positionSource: String(value?.positionSource ?? "engagement-cluster"),
+    sizeSource: reportedRadiusMeters != null ? "engagement-spread" : "map-effective-size",
     linearMapScale,
   };
 }

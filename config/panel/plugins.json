@@ -1,0 +1,348 @@
+{
+  "plugins": {
+    "enabled": true,
+    "bzss-super-weather": {
+      "enabled": true,
+      "tickIntervalMs": 1000,
+      "maxExtrapolationSeconds": 180,
+      "backwardJitterToleranceSeconds": 15,
+      "persistRuntime": true
+    },
+    "squad-join-playtime-warning": {
+      "enabled": false
+    },
+    "plugin.team-kill-duration-warning": {
+      "enabled": true
+    },
+    "commander-authorized-playtime-warning": {
+      "enabled": false
+    },
+    "fairSquadGuard": {
+      "enabled": true,
+      "directory": "./data/fair-squad-guard",
+      "enforcementPlayerThreshold": 0,
+      "noSquadCreationSeconds": 20,
+      "infantryOnlyUntilSeconds": 50,
+      "maxViolationCountBeforeKick": 15,
+      "disbandCommandNameSuffix": "",
+      "broadcastOnApproved": false,
+      "broadcastOnViolation": false
+    },
+    "stepwiseSquadPlaytimeGuard": {
+      "enabled": true,
+      "directory": "./data/stepwise-squad-playtime-guard",
+      "broadcastOnApproved": false,
+      "broadcastOnViolation": false,
+      "warnOnMissingPlaytime": true,
+      "liveLookupWhenMissing": true,
+      "maxRecentRecords": 300,
+      "rules": {
+        "infantry": [
+          {
+            "startSeconds": 0,
+            "endSeconds": 50,
+            "minHoursExclusive": 500
+          },
+          {
+            "startSeconds": 50,
+            "endSeconds": 70,
+            "minHoursExclusive": 400
+          },
+          {
+            "startSeconds": 70,
+            "endSeconds": 90,
+            "minHoursExclusive": 300
+          },
+          {
+            "startSeconds": 90,
+            "endSeconds": 120,
+            "minHoursExclusive": 200
+          },
+          {
+            "startSeconds": 120,
+            "endSeconds": 150,
+            "minHoursExclusive": 100
+          }
+        ],
+        "vehicle": [
+          {
+            "startSeconds": 0,
+            "endSeconds": 60,
+            "minHoursExclusive": 1200
+          },
+          {
+            "startSeconds": 60,
+            "endSeconds": 90,
+            "minHoursExclusive": 800
+          },
+          {
+            "startSeconds": 90,
+            "endSeconds": 120,
+            "minHoursExclusive": 400
+          }
+        ]
+      }
+    },
+    "fair-team-balance": {
+      "enabled": false
+    },
+    "udpEventForwarder": {
+      "enabled": true,
+      "host": "114.66.18.134",
+      "port": 4000,
+      "serverId": "BZSS_Main",
+      "statusIntervalMs": 5000,
+      "heartbeatIntervalMs": 30000,
+      "includeRawLog": false,
+      "includeIds": true,
+      "sendCombatEvents": true,
+      "sendCombatDamage": true,
+      "sendMapChanged": true,
+      "sendStatus": true,
+      "sendHeartbeat": true,
+      "maxQueueSize": 1000,
+      "dropPolicy": "drop_oldest",
+      "maxPacketBytes": 4096,
+      "logSuccess": false,
+      "logFailure": true
+    },
+    "periodic-teamwork-warning": {
+      "enabled": true,
+      "minIntervalMinutes": 10,
+      "maxIntervalMinutes": 15,
+      "message": "听从队长指挥是战术小队的核心，团队合作才能带来最终的共赢。"
+    },
+    "fob-deploy-warning": {
+      "enabled": true,
+      "refreshSquadsBeforeResolve": true,
+      "dedupeWindowMs": 12000,
+      "messageTemplate": "[FOB预警] ${squadId}队（${squadName}） ${leaderName}队长 已经部署了一个FOB"
+    },
+    "seed-kill-warning": {
+      "enabled": true,
+      "title": "火力侦察自动战绩查询",
+      "intervalMinutes": 3,
+      "messageTemplate": "【${title}】你的击杀数为 ${kills}，感激参与暖服"
+    },
+    "plugin": {
+      "fairSquadGuard": {
+        "enabled": true,
+        "enforcementPlayerThreshold": 0,
+        "noSquadCreationSeconds": 20,
+        "infantryOnlyUntilSeconds": 50,
+        "maxViolationCountBeforeKick": 15,
+        "broadcastOnApproved": false,
+        "broadcastOnViolation": false
+      },
+      "fairTeamBalance": {
+        "enabled": true,
+        "broadcastOnApproved": true,
+        "broadcastOnViolation": true
+      },
+      "stepwiseSquadPlaytimeGuard": {
+        "broadcastOnApproved": false,
+        "broadcastOnViolation": false,
+        "warnOnMissingPlaytime": false,
+        "liveLookupWhenMissing": false,
+        "maxRecentRecords": 300,
+        "rules": {
+          "infantry": [
+            {
+              "startSeconds": 0,
+              "endSeconds": 50,
+              "minHoursExclusive": 500
+            },
+            {
+              "startSeconds": 50,
+              "endSeconds": 70,
+              "minHoursExclusive": 400
+            },
+            {
+              "startSeconds": 70,
+              "endSeconds": 90,
+              "minHoursExclusive": 300
+            },
+            {
+              "startSeconds": 90,
+              "endSeconds": 120,
+              "minHoursExclusive": 200
+            },
+            {
+              "startSeconds": 120,
+              "endSeconds": 150,
+              "minHoursExclusive": 100
+            }
+          ],
+          "vehicle": [
+            {
+              "startSeconds": 0,
+              "endSeconds": 60,
+              "minHoursExclusive": 1200
+            },
+            {
+              "startSeconds": 60,
+              "endSeconds": 90,
+              "minHoursExclusive": 800
+            },
+            {
+              "startSeconds": 90,
+              "endSeconds": 120,
+              "minHoursExclusive": 400
+            }
+          ]
+        }
+      },
+      "squad-creation-broadcast": {
+        "enabled": false,
+        "delaySeconds": 5,
+        "messageTemplate": "[建队播报] 玩家 ${creatorName} 创建了小队: ${squadName} (小队ID: ${squadId})"
+      },
+      "nzcd": {
+        "enabled": true,
+        "defaultMin": -30,
+        "defaultMax": 120,
+        "ranges": [
+          {
+            "playerKey": "76561199666599666",
+            "min": 180,
+            "max": 10000,
+            "enabled": true
+          }
+        ]
+      },
+      "steam-playtime-publicity-reminder": {
+        "enabled": true,
+        "featureEnabled": false,
+        "startAfterSeconds": 300,
+        "pollIntervalMs": 1000,
+        "leaderWarningIntervalMs": 10000,
+        "broadcastBatchSize": 5,
+        "broadcastBatchIntervalMs": 120000,
+        "broadcastCycleCooldownMs": 600000,
+        "warningMessage": "你的steam个人资料尚未公开\n为了其他玩家的游戏体验，请公开你的steam个人资料",
+        "broadcastPrefix": "当前未公开steam个人资料的玩家有"
+      }
+    },
+    "welcome-join-warning": {
+      "enabled": true,
+      "historyLimit": 100,
+      "maxWarningsPerJoin": 5,
+      "defaultIntervalMs": 0,
+      "rules": [
+        {
+          "id": "default-welcome",
+          "name": "默认欢迎",
+          "enabled": true,
+          "priority": 10,
+          "cooldownMs": 0,
+          "mode": "all",
+          "initialDelayMs": 15000,
+          "intervalMs": 0,
+          "conditions": [
+            {
+              "type": "always",
+              "label": ""
+            }
+          ],
+          "steps": [
+            {
+              "id": "welcome",
+              "enabled": true,
+              "message": "欢迎来到 BZSS 服务器，本服服规相较其他服务器较为不同，\n请完整阅读并遵守服务器规则，祝你游戏愉快。\n若没有看到进阵营选择页面，请按J输入kxr"
+            }
+          ]
+        },
+        {
+          "id": "rule-mr1dnzp8",
+          "name": "新规则组",
+          "enabled": true,
+          "priority": 30,
+          "cooldownMs": 0,
+          "mode": "all",
+          "initialDelayMs": 15000,
+          "intervalMs": 0,
+          "conditions": [
+            {
+              "type": "always",
+              "label": ""
+            }
+          ],
+          "steps": [
+            {
+              "id": "step-1",
+              "enabled": true,
+              "message": "我们调整了部分游戏内容优化步兵玩家的体验，望周知。"
+            }
+          ]
+        },
+        {
+          "id": "rule-mr1dowy4",
+          "name": "新规则组",
+          "enabled": true,
+          "priority": 30,
+          "cooldownMs": 0,
+          "mode": "all",
+          "initialDelayMs": 15000,
+          "intervalMs": 0,
+          "conditions": [
+            {
+              "type": "always",
+              "label": ""
+            }
+          ],
+          "steps": [
+            {
+              "id": "step-1",
+              "enabled": true,
+              "message": "步战鼠鼠是一个对步战，萌新玩家友好的服务器社区。欢迎加入我们的社区群聊。长按Tab键，下方就有QQ群聊号码"
+            }
+          ]
+        }
+      ]
+    },
+    "teamKillApology": {
+      "enabled": false,
+      "deadlineSeconds": 600,
+      "reminderSeconds": 60,
+      "timeoutAction": "remove_from_squad",
+      "broadcastOnApology": true
+    },
+    "enemyCombatFeedback": {
+      "enabled": false,
+      "damageEnabled": false,
+      "woundEnabled": false,
+      "deathEnabled": false
+    },
+    "victimDamageDisplay": {
+      "enabled": false,
+      "showWeapon": true,
+      "showVictimDamage": false,
+      "showAttackerDamage": false,
+      "showAttackerName": true,
+      "showFriendlyFireLabel": true,
+      "adminPunishmentDamage": 1000000,
+      "weaponAliasFile": "./config/victim-damage-display-weapons.json"
+    },
+    "squad-members-playtime-warning": {
+      "enabled": false,
+      "firstWarningSeconds": 300,
+      "leaderWarningSeconds": 450,
+      "pollIntervalMs": 1000,
+      "liveLookupWhenMissing": false
+    },
+    "round-playtime-roster-warning": {
+      "enabled": true,
+      "squadWarningSeconds": 300,
+      "leaderWarningSeconds": 450,
+      "pollIntervalMs": 1000,
+      "lineBreakMode": "actual",
+      "maxWarningChars": 180,
+      "splitWarningDelayMs": 500,
+      "liveLookupWhenMissing": false,
+      "persistState": true,
+      "stateFile": "./data/round-playtime-roster-warning/state.json",
+      "manualSquadTriggerNonce": "1787643874951-24bba80bead04",
+      "manualLeaderTriggerNonce": "1787643883986-2b8d4806a83b4"
+    }
+  }
+}

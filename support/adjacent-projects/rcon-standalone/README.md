@@ -11,10 +11,9 @@ npm start
 
 也可以直接双击 `run.bat`，它会读取本目录下的 `config.json`。
 
-## 默认登录
+## 登录
 
-- 用户名: `DoubyBear`
-- 密码: `傻福KK666++`
+用户名默认是 `DoubyBear`。启动前必须设置 `BZSS_RCON_STANDALONE_PASSWORD`；未设置时登录会被拒绝。
 
 ## 环境变量
 
@@ -22,6 +21,7 @@ npm start
 - `RCON_PORT`
 - `RCON_PASSWORD`
 - `RCON_HTTP_PORT`
+- `BZSS_RCON_STANDALONE_PASSWORD`
 
 优先级是：环境变量 > `rcon-standalone/config.json` > 内置默认值。
 如果都不设置，默认监听 `0.0.0.0:3008`，RCON 配置为空时会拒绝执行命令。

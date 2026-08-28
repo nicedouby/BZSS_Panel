@@ -18,7 +18,6 @@ const rootDirectories = [
 ];
 
 const rootCopies = [
-  { source: "config.json", target: "config.json" },
   { source: "config.example.json", target: "config.example.json" },
   { source: "web-client/dist", target: "web-client/dist", required: true },
   { source: "web-client/public", target: "web-client/public" },
@@ -81,7 +80,7 @@ async function main() {
 
 async function ensureRequiredSources() {
   const required = [
-    "config.json",
+    "config/panel",
     "app/main.js",
     "package-lock.json",
     "node_modules",
@@ -155,11 +154,11 @@ async function writePortableReadme() {
     "",
     "Structure:",
     "- run.bat: starts the backend from the release root on logical CPUs 26 and 27",
-    "- config.json, data, LogPost, maps, web-client: runtime files kept at the top level",
+    "- config/panel, data, LogPost, maps, web-client: runtime files kept at the top level",
     "- app/: backend source code, helper scripts, and Node.js dependencies",
     "",
     "Usage:",
-    "1. Edit config.json if needed.",
+    "1. Edit config/panel/*.json and set required BZSS_* environment variables.",
     "2. Double-click run.bat.",
     "",
     "Notes:",

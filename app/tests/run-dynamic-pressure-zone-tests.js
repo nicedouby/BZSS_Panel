@@ -8,6 +8,8 @@ import { normalizeBaseConfig } from "../modules/dynamic-pressure-zone/base-confi
 import { mergePressureZoneConfig } from "../modules/dynamic-pressure-zone/defaults.js";
 import { calculatePressureZones } from "../modules/dynamic-pressure-zone/engine.js";
 import { classifyPoint } from "../modules/dynamic-pressure-zone/geometry.js";
+import { resolveLiveHotspot } from "../modules/dynamic-pressure-zone/live-hotspot.js";
+import { resolveCombatPair } from "../modules/dynamic-pressure-zone/objective-chain.js";
 import { createDynamicPressureZoneModule } from "../modules/dynamic-pressure-zone/index.js";
 import { handleDynamicPressureZoneRoutes } from "../modules/dynamic-pressure-zone/routes.js";
 
@@ -167,6 +169,63 @@ const largeHotspot = calculatePressureZones(baseInput({
 assert.equal(smallHotspot.hotspot.radiusMeters, 500);
 assert.equal(largeHotspot.hotspot.radiusMeters, 1600);
 
+const unlockAware = calculatePressureZones(baseInput({
+  objectiveState: {
+    p1: { ownerTeamId: 1, isLocked: true },
+    p2: { ownerTeamId: 1, isLocked: false },
+    p3: { ownerTeamId: 2, isLocked: false },
+    p4: { ownerTeamId: 2, isLocked: true },
+  },
+}));
+assert.equal(unlockAware.bases.team1.nearestUnlockedObjectiveId, "p2");
+assert.equal(unlockAware.bases.team1.softRadius, 1500);
+assert.equal(unlockAware.bases.team1.hardRadius, 1100);
+assert.equal(unlockAware.bases.team1.formula.liveBoundarySource, "unlocked-objective");
+
+const allLocked = calculatePressureZones(baseInput({
+  objectiveState: Object.fromEntries(["p1", "p2", "p3", "p4"].map((id) => [id, { isLocked: true }])),
+}));
+assert.equal(allLocked.bases.team1.hardRadius, 1100);
+assert.equal(allLocked.bases.team1.softRadius, 1500);
+assert.equal(allLocked.bases.team1.limitingFactor, "all-objectives-locked");
+
+const hotspotLimited = calculatePressureZones(baseInput({
+  objectiveChain: [
+    { id: "p1", x: 800, y: 0 },
+    { id: "p2", x: 1100, y: 100 },
+    { id: "p3", x: 1300, y: 100 },
+    { id: "p4", x: 3000, y: 4000 },
+  ],
+  hotspot: { x: 1200, y: 0, radiusMeters: 450, playerCount: 8 },
+}));
+assert.equal(hotspotLimited.bases.team1.softRadius, 750);
+assert.equal(hotspotLimited.bases.team1.formula.liveBoundarySource, "combat-hotspot");
+assert.equal(hotspotLimited.combat.hotspotRadius, 450);
+assert.equal(hotspotLimited.combat.limitingFactor, "live-hotspot");
+
+const unlockedFallbackPair = resolveCombatPair([
+  { id: "a", x: 0, y: 0, isLocked: true },
+  { id: "b", x: 100, y: 0, isLocked: false },
+  { id: "c", x: 200, y: 0, isLocked: false },
+  { id: "d", x: 300, y: 0, isLocked: true },
+], {});
+assert.equal(unlockedFallbackPair.pair.pointA.id, "b");
+assert.equal(unlockedFallbackPair.pair.pointB.id, "c");
+
+const engagementHotspot = resolveLiveHotspot([
+  tacticalPlayer("t1-a", 1, 1000, 1000),
+  tacticalPlayer("t1-b", 1, 1050, 1000),
+  tacticalPlayer("t2-a", 2, 1200, 1000),
+  tacticalPlayer("t2-b", 2, 1250, 1050),
+  tacticalPlayer("remote-t1", 1, 3900, 3900),
+], { mapBounds: baseInput().mapBounds });
+assert.equal(engagementHotspot.playerCount, 4);
+assert.equal(engagementHotspot.positionSource, "opposing-player-engagement-cluster");
+assert.equal(resolveLiveHotspot([
+  tacticalPlayer("base-t1", 1, 0, 0),
+  tacticalPlayer("base-t2", 2, 4000, 4000),
+], { mapBounds: baseInput().mapBounds }), null);
+
 const overlap = calculatePressureZones(baseInput({
   objectiveChain: [
     { id: "p1", x: 350, y: 0 },
@@ -220,8 +279,8 @@ const liveSnapshot = {
   server: { map: "Al Basrah", layer: "AlBasrah_RAAS_v1", mode: "RAAS" },
   match: {},
   players: [
-    { identity: { key: "p1" }, telemetry: { position: { x: -60000, y: -40000 }, health: 100, inactive: false, onVehicle: false } },
-    { identity: { key: "p2" }, telemetry: { position: { x: -20000, y: 0 }, health: 75, inactive: false, onVehicle: false } },
+    { identity: { key: "p1" }, match: { teamId: 1 }, telemetry: { position: { x: -50000, y: -30000 }, health: 100, inactive: false, onVehicle: false } },
+    { identity: { key: "p2" }, match: { teamId: 2 }, telemetry: { position: { x: -30000, y: -10000 }, health: 75, inactive: false, onVehicle: false } },
     { identity: { key: "dead" }, telemetry: { position: { x: 60000, y: 60000 }, health: 0, inactive: false, onVehicle: false } },
   ],
   assets: {
@@ -237,6 +296,15 @@ const liveSnapshot = {
     ],
   },
 };
+
+function tacticalPlayer(key, teamId, x, y) {
+  return {
+    identity: { key },
+    match: { teamId },
+    presence: { state: "online" },
+    telemetry: { health: 100, position: { x, y }, inactive: false, onVehicle: false },
+  };
+}
 
 let tacticalListener = null;
 const tacticalState = {
@@ -300,4 +368,4 @@ assert.equal(module.api.simulate(baseInput()).diagnostics.config.combat.gapFacto
 await module.stop();
 await rm(testDataDir, { recursive: true, force: true });
 
-console.log("Dynamic pressure zone V2 tests passed.");
+console.log("Dynamic pressure zone V3 tests passed.");

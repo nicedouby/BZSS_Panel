@@ -54,7 +54,10 @@ import { BzssCoreVariableStateService } from "./core/bzss-core-variable-state-se
 import { NewbieReserveExchangeService } from "./services/newbie-reserve-exchange-service.js";
 
 async function main() {
-  const configManager = new ConfigManager("./config.json");
+  const configManager = new ConfigManager(
+    process.env.BZSS_CONFIG_PATH || "./config/panel",
+    { legacyPath: "./config.json" },
+  );
   await configManager.load();
 
   const logger = new Logger(configManager.get("core.logger", { useColor: true }));

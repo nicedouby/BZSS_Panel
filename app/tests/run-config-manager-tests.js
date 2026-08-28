@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { ConfigManager } from "../core/config-manager.js";
+import { ConfigManager, migrateLegacyConfig } from "../core/config-manager.js";
 
 async function createTempConfig(content) {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-config-"));
@@ -189,9 +189,59 @@ async function testQueuedUpdatesRunSequentially() {
   await fs.rm(tempDir, { recursive: true, force: true });
 }
 
+async function testDirectoryOwnershipAndMigration() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-config-directory-"));
+  const panelDir = path.join(tempDir, "panel");
+  await fs.mkdir(panelDir);
+  await fs.writeFile(path.join(panelDir, "web.json"), JSON.stringify({ web: { host: "127.0.0.1", port: 8000 } }), "utf8");
+  await fs.writeFile(path.join(panelDir, "settings.json"), JSON.stringify({ settingsEditor: { enabled: true, exposed: [{ path: "web.port", type: "number", label: "Port" }] } }), "utf8");
+
+  const config = new ConfigManager(panelDir);
+  await config.load();
+  await config.updateExposedSettings({ "web.port": 8001 });
+  assert.equal(JSON.parse(await fs.readFile(path.join(panelDir, "web.json"), "utf8")).web.port, 8001);
+  assert.equal(JSON.parse(await fs.readFile(path.join(panelDir, "settings.json"), "utf8")).settingsEditor.enabled, true);
+  await assert.rejects(
+    () => fs.writeFile(path.join(panelDir, "core.json"), JSON.stringify({ web: {} })).then(() => new ConfigManager(panelDir).load()),
+    (cause) => cause.code === "ConfigNamespaceConflict" || cause.code === "ConfigOwnershipMismatch",
+  );
+
+  const legacyPath = path.join(tempDir, "legacy.json");
+  const migratedDir = path.join(tempDir, "migrated");
+  await fs.writeFile(legacyPath, JSON.stringify({ rcon: { host: "127.0.0.1", password: "do-not-copy" }, web: { port: 12864 } }), "utf8");
+  await migrateLegacyConfig({ sourcePath: legacyPath, targetDirectory: migratedDir });
+  const rcon = JSON.parse(await fs.readFile(path.join(migratedDir, "rcon.json"), "utf8"));
+  assert.equal(rcon.rcon.password, undefined);
+  assert.equal(JSON.parse(await fs.readFile(path.join(migratedDir, "web.json"), "utf8")).web.port, 12864);
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
+async function testDirectoryFailureModesAndLegacyFallback() {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bzss-config-failure-"));
+  const legacyPath = path.join(tempDir, "config.json");
+  await fs.writeFile(legacyPath, `\uFEFF${JSON.stringify({ web: { port: 12864 } })}`, "utf8");
+  const fallback = new ConfigManager(path.join(tempDir, "panel"), { legacyPath });
+  await fallback.load();
+  assert.equal(fallback.mode, "legacy");
+  assert.equal(fallback.get("web.port"), 12864);
+
+  const secretDir = path.join(tempDir, "secret");
+  await fs.mkdir(secretDir);
+  await fs.writeFile(path.join(secretDir, "rcon.json"), JSON.stringify({ rcon: { password: "not-allowed" } }), "utf8");
+  await assert.rejects(() => new ConfigManager(secretDir).load(), (cause) => cause.code === "ConfigSecretOnDisk");
+
+  const invalidDir = path.join(tempDir, "invalid");
+  await fs.mkdir(invalidDir);
+  await fs.writeFile(path.join(invalidDir, "web.json"), "{", "utf8");
+  await assert.rejects(() => new ConfigManager(invalidDir).load(), (cause) => cause.code === "ConfigParseError");
+  await fs.rm(tempDir, { recursive: true, force: true });
+}
+
 await testLoadAndGet();
 await testExposedSettingsAndSave();
 await testValidationAndGuards();
 await testQueuedUpdatesRunSequentially();
+await testDirectoryOwnershipAndMigration();
+await testDirectoryFailureModesAndLegacyFallback();
 
 console.log("config manager tests passed");

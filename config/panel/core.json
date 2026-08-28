@@ -1,0 +1,24 @@
+{
+  "server": {
+    "id": "BZSS_Main",
+    "name": "BZSS Main Server"
+  },
+  "squadNameClassifier": {
+    "rulesPath": "./config/squad_name_nature_rules.json"
+  },
+  "fileIO": {
+    "appendFlushIntervalMs": 50,
+    "appendBatchBytes": 131072,
+    "maxQueuedBytes": 33554432,
+    "statCacheMs": 250,
+    "readCacheMaxBytes": 33554432
+  },
+  "core": {
+    "logger": {
+      "useColor": true
+    }
+  },
+  "warmup": {
+    "enabled": false
+  }
+}

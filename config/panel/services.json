@@ -1,0 +1,25 @@
+{
+  "reserveExchange": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 12865,
+    "sessionTtlMs": 43200000,
+    "databaseFilePath": "./data/reserve-exchange/store.sqlite3",
+    "claimEnabled": true,
+    "claimLockMinutes": 10
+  },
+  "reserveSystem": {
+    "enabled": true,
+    "adminFilePath": "E:\\BZSS_SQ_Server\\SquadGame\\ServerConfig\\Admins.cfg",
+    "localReserveFilePath": "data/reserve-slots/store.json"
+  },
+  "database": {
+    "dir": "./data",
+    "filename": "micepanel.db"
+  },
+  "bzssCore": {
+    "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
+    "remoteSaveGamePath": "E:\\BZSS_SQ_Server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav",
+    "playerInfoPollIntervalMs": 100
+  }
+}

@@ -9,7 +9,7 @@ const SETTINGS = {
   port: Number(process.env.RCON_PORT ?? 0),
   password: String(process.env.RCON_PASSWORD ?? "").trim(),
   username: "DoubyBear",
-  passwordPlain: "傻福KK666++",
+  passwordPlain: String(process.env.BZSS_RCON_STANDALONE_PASSWORD ?? "").trim(),
 };
 
 const COMMAND_GUIDE = [
@@ -862,7 +862,7 @@ const server = http.createServer(async (req, res) => {
 
     const username = String(body.username ?? "").trim();
     const password = String(body.password ?? "");
-    if (username !== SETTINGS.username || password !== SETTINGS.passwordPlain) {
+    if (!SETTINGS.passwordPlain || username !== SETTINGS.username || password !== SETTINGS.passwordPlain) {
       return json(res, 200, { ok: false, error: "InvalidCredentials" });
     }
 
