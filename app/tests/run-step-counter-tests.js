@@ -6,6 +6,7 @@ import path from "node:path";
 import { createBzssCoreMonitorModule } from "../modules/bzss-core-monitor/index.js";
 import { createStepCalculator } from "../modules/step-counter/calculator.js";
 import { createStepCounterModule, getStepRoundKey } from "../modules/step-counter/index.js";
+import { handleStepCounterRoutes } from "../modules/step-counter/routes.js";
 import { createStepStorage } from "../modules/step-counter/storage.js";
 
 const steamID = "76561198000000000";
@@ -222,14 +223,37 @@ async function testOnlyConfirmedRoundEventsResetMatchCounters() {
     assert.equal(stats.sampleDiagnostics.duplicateSamples, 1);
     assert.ok(stats.sampleDiagnostics.validSamples >= 2);
 
+    let resetResponse = null;
+    const handled = await handleStepCounterRoutes({
+      module: module.api,
+      url: new URL("http://localhost/api/step-counter/reset-match"),
+      req: { method: "POST" },
+      json(status, body) { resetResponse = { status, body }; },
+    });
+    assert.equal(handled, true);
+    assert.equal(resetResponse.status, 200);
+    assert.equal(resetResponse.body.ok, true);
+    assert.equal(resetResponse.body.playersReset, 1);
+
+    const afterManualReset = module.api.getPlayer(steamID);
+    assert.equal(afterManualReset.matchSteps, 0);
+    assert.equal(afterManualReset.matchDistanceMeters, 0);
+    assert.equal(afterManualReset.totalSteps, afterTransientChange.totalSteps);
+
+    // Manual reset clears the movement baseline, so the first new sample only warms up.
+    snapshotListener(makeSnapshot({ x: 200, ms: 2000, tick: 102, seq: 3, layer: "Layer_A" }));
+    snapshotListener(makeSnapshot({ x: 300, ms: 3000, tick: 103, seq: 4, layer: "Layer_A" }));
+    const afterResume = module.api.getPlayer(steamID);
+    assert.ok(afterResume.matchSteps > 0);
+
     roundListener({ record: { dedupeKey: "server:round-a" } });
-    assert.equal(module.api.getPlayer(steamID).matchSteps, afterTransientChange.matchSteps);
+    assert.equal(module.api.getPlayer(steamID).matchSteps, afterResume.matchSteps);
 
     roundListener({ record: { dedupeKey: "server:round-b" } });
     const afterConfirmedRound = module.api.getPlayer(steamID);
     assert.equal(afterConfirmedRound.matchSteps, 0);
     assert.equal(afterConfirmedRound.matchDistanceMeters, 0);
-    assert.equal(afterConfirmedRound.totalSteps, afterTransientChange.totalSteps);
+    assert.equal(afterConfirmedRound.totalSteps, afterResume.totalSteps);
     assert.equal(afterConfirmedRound.matches, 1);
   } finally {
     await module.stop();
