@@ -1,0 +1,97 @@
+{
+  "server_id": "BZSS_Main",
+  "log_file": "./Squad.log",
+  "output_dir": "./LogPost",
+  "poll_interval_ms": 200,
+  "tail": {
+    "from_end": true,
+    "reopen_on_truncate": true,
+    "read_chunk_bytes": 1048576,
+    "max_recovery_bytes": 0,
+    "max_line_bytes": 1048576
+  },
+  "udp": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 7788,
+    "max_payload_bytes": 60000
+  },
+  "unknown": {
+    "write_unknown": false
+  },
+  "storage": {
+    "write_v2_events": true,
+    "write_legacy_events": false,
+    "write_v2_raw_archive": true,
+    "write_legacy_raw_archive": false
+  },
+  "preserve": {
+    "enabled": true,
+    "write_file": true,
+    "file_name": "Preserved.jsonl",
+    "contains": [
+      "LogNet: Join succeeded:",
+      "LogNet: PostLogin: NewPlayer:",
+      "LogSquad: PostLogin: NewPlayer:",
+      "LogNet: UNetConnection::Close:"
+    ]
+  },
+  "raw": {
+    "max_raw_chars": 48000
+  },
+  "raw_input_log": {
+    "enabled": true,
+    "output_dir": "./ReceivedLogs",
+    "file_name": "Received.log",
+    "format": "raw"
+  },
+  "raw_log_output": {
+    "enabled": true,
+    "source": "Squad.log",
+    "mode": "business_lossless",
+    "max_per_second": 20,
+    "only_preserved": false,
+    "drop_blacklisted": true,
+    "contains": [
+      "LogWorld: SeamlessTravel to:",
+      "LogSquad: PostLogin:",
+      "LogNet: UNetConnection::Close:",
+      "LogSquadTrace:",
+      "has placed FOB Team:",
+      "CPZ:",
+      "FOBI:",
+      "MainZone:{",
+      "VRI{",
+      "VehicleInfo{",
+      "ApplyExplosiveDamage():"
+    ]
+  },
+  "blacklist_contains": [
+    "GetDefaultPawnClassForController_Implementation()",
+    "IsSpawnpointAllowed()",
+    "FindPlayerStart_Implementation()",
+    "SpawnDefaultPawnFor_Implementation()",
+    "TraceAndMessageClient()",
+    "BeginInactiveState()",
+    "EndInactiveState()",
+    "ServerFireProjectileWithId_Implementation()",
+    "SQVehicle::OnTakeDamage",
+    "SQVehicle::TakeDamage",
+    "VehicleMovementComponent"
+  ],
+  "console": {
+    "enabled": true,
+    "use_color": true,
+    "show_params": true,
+    "max_params": 8,
+    "max_param_chars": 36,
+    "show_log_time": true
+  },
+  "logpost_web": {
+    "host": "127.0.0.1",
+    "port": 12345,
+    "output_dir": "./LogPost",
+    "transport_only": false,
+    "max_lines_per_request": 2000
+  }
+}

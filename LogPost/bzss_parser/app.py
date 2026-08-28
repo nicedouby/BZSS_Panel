@@ -4,11 +4,9 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from collections import deque
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from bzss_parser.blacklist import BlacklistFilter
@@ -47,35 +45,6 @@ BZSS_CORE_VEHICLE_CHUNK_RE = re.compile(
     re.IGNORECASE,
 )
 
-
-def resolve_log_file(configured: str) -> str:
-    """Resolve the configured log without changing the user's config file.
-
-    The historical config uses an absolute Windows path.  When the panel is
-    copied to another machine, that path may no longer exist; in that case
-    allow an explicit environment override and common local log locations.
-    """
-    configured_text = str(configured or "").strip() or "./SquadGame.log"
-    configured_path = Path(configured_text)
-    if configured_path.exists():
-        return configured_text
-
-    for env_name in ("BZSS_SQUAD_LOG_PATH", "SQUAD_LOG_PATH"):
-        override = str(os.environ.get(env_name, "")).strip()
-        if override and Path(override).exists():
-            return override
-
-    file_name = configured_path.name or "SquadGame.log"
-    candidates = [
-        Path.cwd() / file_name,
-        Path.cwd() / "SquadGame.log",
-        Path.cwd().parent / file_name,
-        Path.cwd().parent / "SquadGame.log",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    return configured_text
 
 def is_bzss_core_runtime_line(line: str) -> bool:
     return bool(BZSS_CORE_RUNTIME_LINE_RE.search(str(line or "")))
@@ -230,12 +199,8 @@ class BzssLogParserApp:
                 )
             )
         )
-        configured_log_file = str(self.config.get("log_file", "./SquadGame.log"))
-        resolved_log_file = resolve_log_file(configured_log_file)
-        if resolved_log_file != configured_log_file:
-            print(f"[INFO] Configured log file is unavailable; using discovered log file: {resolved_log_file}")
         self.tail_reader = TailReader(
-            log_file=resolved_log_file,
+            log_file=str(self.config.get("log_file", "./SquadGame.log")),
             from_end=bool(tail_config.get("from_end", True)),
             reopen_on_truncate=bool(tail_config.get("reopen_on_truncate", True)),
             state_store=state_store,
