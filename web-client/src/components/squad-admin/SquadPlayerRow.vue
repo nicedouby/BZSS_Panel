@@ -1553,13 +1553,13 @@ function displayRole(role: string | null | undefined) {
 /* Steam identity is a compact visual anchor.  The current-round time lives on
    the avatar instead of consuming the player row's text column. */
 .squad-player-row.player-row {
-  min-height: 86px !important;
-  contain-intrinsic-size: 86px !important;
+  min-height: 94px !important;
+  contain-intrinsic-size: 94px !important;
 }
 
 .squad-player-row .player-main,
 .squad-player-row.has-steam-avatar .player-main {
-  padding-right: 88px !important;
+  padding-right: 148px !important;
 }
 
 .squad-player-row .player-steam-profile {
@@ -1567,8 +1567,8 @@ function displayRole(role: string | null | undefined) {
   top: 9px;
   right: 9px;
   z-index: 3;
-  width: 66px;
-  height: 68px;
+  width: 136px;
+  height: 76px;
   pointer-events: none;
 }
 
@@ -1577,8 +1577,8 @@ function displayRole(role: string | null | undefined) {
   top: auto !important;
   right: auto !important;
   bottom: auto !important;
-  width: 64px !important;
-  height: 64px !important;
+  width: 72px !important;
+  height: 72px !important;
   transform: none !important;
   pointer-events: auto;
   border: 2px solid transparent !important;
@@ -1600,14 +1600,16 @@ function displayRole(role: string | null | undefined) {
 
 .squad-player-row .player-match-time {
   position: absolute;
-  right: -3px;
-  bottom: -3px;
+  top: 2px;
+  right: 0;
   z-index: 2;
   display: inline-flex;
   align-items: baseline;
   gap: 3px;
-  max-width: 66px;
-  padding: 2px 5px;
+  width: 58px;
+  max-width: 58px;
+  min-height: 18px;
+  padding: 2px 4px;
   border: 1px solid rgba(64,220,163,.72);
   border-radius: 999px;
   color: #eafff6;
@@ -1634,31 +1636,35 @@ function displayRole(role: string | null | undefined) {
 /* Historical time stays accessible without permanently taking horizontal room. */
 .squad-player-row .player-time-tags {
   position: absolute;
-  right: 70px;
-  bottom: 0;
-  display: flex;
-  gap: 3px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(4px);
-  transition: opacity .15s ease, transform .15s ease;
-}
-
-.squad-player-row:hover .player-time-tags {
+  top: 22px;
+  right: 0;
+  width: 58px;
+  display: grid;
   opacity: 1;
-  transform: translateX(0);
+  transform: none;
+  transition: none;
+  gap: 3px;
+  pointer-events: none;
 }
 
 .squad-player-row .player-time-tag {
+  display: block;
+  width: 58px;
+  min-height: 18px;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 2px 4px;
   border: 1px solid var(--color-border-soft);
   border-radius: 5px;
   color: var(--color-text-secondary);
   background: color-mix(in srgb, var(--color-bg-elevated) 96%, transparent);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 750;
+  line-height: 13px;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1666,36 +1672,46 @@ function displayRole(role: string | null | undefined) {
 .squad-player-row .player-time-tag--warmup { border-color: color-mix(in srgb, var(--color-status-warning) 38%, var(--color-border-soft)); }
 
 .squad-player-row:hover .player-steam-profile .player-steam-bg {
-  width: 64px !important;
+  width: 72px !important;
   transform: scale(1.035) !important;
 }
 
 @media (max-width: 720px) {
   .squad-player-row.player-row {
-    min-height: 80px !important;
-    contain-intrinsic-size: 80px !important;
+    min-height: 88px !important;
+    contain-intrinsic-size: 88px !important;
   }
 
   .squad-player-row .player-main,
   .squad-player-row.has-steam-avatar .player-main {
-    padding-right: 78px !important;
+    padding-right: 126px !important;
   }
 
   .squad-player-row .player-steam-profile {
     top: 6px;
     right: 7px;
-    width: 58px;
-    height: 62px;
+    width: 116px;
+    height: 66px;
   }
 
   .squad-player-row .player-steam-profile .player-steam-bg,
   .squad-player-row:hover .player-steam-profile .player-steam-bg {
-    width: 56px !important;
-    height: 56px !important;
+    width: 62px !important;
+    height: 62px !important;
   }
 
   .squad-player-row .player-time-tags {
-    display: none;
+    top: 19px;
+    width: 50px;
+  }
+
+  .squad-player-row .player-time-tag,
+  .squad-player-row .player-match-time {
+    width: 50px;
+    max-width: 50px;
+    min-height: 16px;
+    font-size: 8px;
+    line-height: 12px;
   }
 }
 
