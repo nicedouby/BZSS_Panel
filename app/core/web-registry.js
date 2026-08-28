@@ -274,6 +274,14 @@ export class WebRegistry {
       superAdminOnly: Boolean(page.superAdminOnly ?? resolvedPermission?.superAdminOnly),
     };
 
+    const existingById = this.pages.get(finalPage.id);
+    if (existingById) {
+      this.logger.web(
+        `Duplicate page registration ignored: ${finalPage.id}; keep source=${existingById.source ?? "unknown"}, ignore source=${finalPage.source ?? "unknown"}`,
+      );
+      return existingById;
+    }
+
     for (const existing of this.pages.values()) {
       if (existing.id === finalPage.id) continue;
       if (normalizeRoute(existing.route) !== normalizedRoute) continue;
@@ -281,11 +289,12 @@ export class WebRegistry {
       this.logger.web(
         `Skip duplicate page route ${normalizedRoute}: keep ${existing.id}, ignore ${finalPage.id}`,
       );
-      return;
+      return existing;
     }
 
     this.pages.set(finalPage.id, finalPage);
     this.logger.web(`Registered page ${finalPage.id}`);
+    return finalPage;
   }
 
   /**

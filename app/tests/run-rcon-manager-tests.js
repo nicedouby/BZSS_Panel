@@ -345,6 +345,24 @@ async function testRefreshPlayersSkipsWhenAlreadyInFlight() {
   manager.refreshInFlight.players = false;
 }
 
+async function testStartPollingIsIdempotent() {
+  const { manager } = createHarness({ pollingEnabled: true });
+  const messages = [];
+  manager.logger.info = (message) => messages.push(String(message));
+  manager.pollingKickPending.players = false;
+  manager.pollingKickPending.squads = false;
+  manager.startPolling();
+  const playersTimer = manager.pollingTimers.players;
+  const squadsTimer = manager.pollingTimers.squads;
+  manager.startPolling();
+  manager.startPolling();
+  assert.equal(manager.pollingTimers.players, playersTimer);
+  assert.equal(manager.pollingTimers.squads, squadsTimer);
+  assert.equal(messages.filter((message) => message.includes("RCON polling started.")).length, 1);
+  manager.clearPollingTimer("players");
+  manager.clearPollingTimer("squads");
+}
+
 async function testDisbandLaneDoesNotWaitForBlockedDefaultCommand() {
   let releaseDefault;
   const defaultStarted = new Promise((resolve) => {
@@ -808,6 +826,7 @@ await testLaneFailureDoesNotBlockOtherLane();
 await testDynamicPollingIntervalsFollowLogClock();
 await testSchedulePollingRecomputesNextDelay();
 await testRefreshPlayersSkipsWhenAlreadyInFlight();
+await testStartPollingIsIdempotent();
 await testDisbandLaneDoesNotWaitForBlockedDefaultCommand();
 
 console.log("rcon manager tests passed");

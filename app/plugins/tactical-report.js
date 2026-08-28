@@ -42,6 +42,7 @@ export function createPlugin({ core, modules, config, logger } = {}) {
 
   let runtimeConfig = readConfig(config);
   const unsubscribers = [];
+  let started = false;
   const handledEventIds = new Set();
   const state = {
     enabled: runtimeConfig.enabled,
@@ -810,6 +811,8 @@ export function createPlugin({ core, modules, config, logger } = {}) {
     },
 
     async start() {
+      if (started) return;
+      started = true;
       runtimeConfig = readConfig(config);
       state.enabled = runtimeConfig.enabled;
       state.triggerText = runtimeConfig.triggerText;
@@ -830,24 +833,11 @@ export function createPlugin({ core, modules, config, logger } = {}) {
         }));
       }
 
-      core?.webRegistry?.registerPage?.({
-        id: "web.tacticalReport",
-        title: "战术报点",
-        group: "插件",
-        route: "/plugins/tactical-report",
-        pageModule: "/pages/tactical-report.js",
-        source: PLUGIN_ID,
-        description: "查看战术报点触发记录、个人快捷指令，并编辑 zsbd /0-/9 预设内容。",
-        required: false,
-        enabled: true,
-        order: 140,
-        icon: "TR",
-      });
-
       pluginLogger?.info?.("[TacticalReport] plugin started.");
     },
 
     async stop() {
+      started = false;
       for (const unsubscribe of unsubscribers.splice(0)) {
         try {
           unsubscribe();

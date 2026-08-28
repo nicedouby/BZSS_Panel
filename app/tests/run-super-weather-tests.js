@@ -112,6 +112,8 @@ async function testSchedulerJumpAndCrossing() {
   commands.length = 0;
   scheduler.resetRound("round-c");
   await scheduler.updateRcon(0, "round-c");
+  assert.equal(commands.length, 0, "initial zero must not be accepted as a reliable RCON anchor");
+  await scheduler.updateRcon(1, "round-c");
   assert.equal(commands.at(-1).parameter, "0,0");
   now = 61_000;
   await scheduler.evaluate();
@@ -128,6 +130,30 @@ async function testSchedulerJumpAndCrossing() {
   await scheduler.updateRcon(61, "round-d");
   assert.equal(commands.at(-1).parameter, "5,20",
     "accepted non-jump RCON samples must evaluate a crossed node immediately");
+}
+
+async function testInitialZeroIsNotReportedAsRconJump() {
+  let now = 0;
+  const scheduler = new SuperWeatherScheduler({
+    now: () => now,
+    commandService: { async execute() { return { ok: true }; } },
+  });
+  scheduler.restore({
+    enabled: true,
+    activePresetId: "basic",
+    activeTimeline: { id: "basic", name: "Basic", version: 1, timeline: basicTimeline },
+  });
+  await scheduler.updateRcon(null, "round-anchor");
+  await scheduler.updateRcon(0, "round-anchor");
+  assert.equal(scheduler.getState().rawRconSeconds, null);
+  await scheduler.updateRcon(9373, "round-anchor");
+  now = 30_000;
+  await scheduler.updateRcon(9403, "round-anchor");
+  const reconciles = scheduler.getState().diagnostics
+    .filter((entry) => entry.type === "SUPER_WEATHER_RECONCILE")
+    .map((entry) => entry.message);
+  assert.equal(reconciles.some((message) => message.includes("(rcon-jump)")), false);
+  assert.equal(reconciles.some((message) => message.includes("(initial-sync)")), true);
 }
 
 async function testMultipleSegmentJump() {
@@ -299,6 +325,7 @@ testTimelineCompiler();
 testRconClock();
 await testCommandService();
 await testSchedulerJumpAndCrossing();
+await testInitialZeroIsNotReportedAsRconJump();
 await testMultipleSegmentJump();
 await testRestartRestoreAndStaleRecovery();
 await testCommandFailureRetry();

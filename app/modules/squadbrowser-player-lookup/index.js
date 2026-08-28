@@ -8,6 +8,8 @@ const AUTO_REFRESH_TTL_MS = 36 * 60 * 60 * 1000;
 const AUTO_REFRESH_INTERVAL_MS = 12_000;
 const AUTO_REFRESH_BATCH_SIZE = 50;
 const ONLINE_REFRESH_BATCH_SIZE = 8;
+const FAILURE_BACKOFF_MS = [5 * 60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000];
+const MAX_FAILURE_CACHE_SIZE = 5_000;
 const BZSS_SERVER_LICENSE_ID = "LICENSED-1008168";
 const LOYAL_PLAYER_TAG = "忠诚玩家";
 
@@ -79,8 +81,9 @@ function parseServerActionResponse(text) {
     throw new Error("SquadBrowser 返回了无效数据。");
   }
   if (!payload?.ok) {
-    const error = new Error(String(payload?.error ?? "SquadBrowser 查询失败。"));
+    const error = new Error(describeUnknownValue(payload?.error ?? "SquadBrowser 查询失败。"));
     error.code = "SquadBrowserUpstreamError";
+    error.responseBody = String(text ?? "").slice(0, 2_048);
     throw error;
   }
   return payload.data ?? {};
@@ -103,9 +106,14 @@ async function callServerAction(action, steam64) {
       signal: controller.signal,
     });
     if (!response.ok) {
-      const error = new Error(`SquadBrowser HTTP ${response.status}`);
+      const responseBody = (await response.text().catch(() => "")).slice(0, 2_048);
+      const error = new Error(`SquadBrowser HTTP ${response.status} ${response.statusText || ""}`.trim());
       error.code = "SquadBrowserHttpError";
       error.statusCode = response.status === 404 ? 404 : 502;
+      error.httpStatus = response.status;
+      error.statusText = response.statusText;
+      error.url = response.url || `${SOURCE_URL}/${steam64}`;
+      error.responseBody = responseBody;
       throw error;
     }
 
@@ -139,6 +147,38 @@ async function callServerAction(action, steam64) {
     throw error;
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+export function getSquadBrowserFailureBackoffMs(failureCount) {
+  const index = Math.min(Math.max(Number(failureCount) - 1, 0), FAILURE_BACKOFF_MS.length - 1);
+  return FAILURE_BACKOFF_MS[index];
+}
+
+export function serializeSquadBrowserError(error) {
+  if (error instanceof Error || (error && typeof error === "object")) {
+    return {
+      name: String(error?.name ?? "Error"),
+      message: describeUnknownValue(error?.message ?? error),
+      code: error?.code ?? null,
+      statusCode: Number.isFinite(Number(error?.statusCode)) ? Number(error.statusCode) : null,
+      httpStatus: Number.isFinite(Number(error?.httpStatus)) ? Number(error.httpStatus) : null,
+      statusText: error?.statusText ? String(error.statusText) : null,
+      url: error?.url ? String(error.url) : null,
+      responseBody: error?.responseBody ? String(error.responseBody).slice(0, 2_048) : null,
+      cause: error?.cause ? describeUnknownValue(error.cause) : null,
+    };
+  }
+  return { name: typeof error, message: describeUnknownValue(error) };
+}
+
+function describeUnknownValue(value) {
+  if (typeof value === "string") return value;
+  if (value == null) return String(value ?? "");
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
   }
 }
 
@@ -281,11 +321,19 @@ async function persistLookupResult(playerDatabase, result) {
   };
 }
 
-export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) {
+export function createSquadBrowserPlayerLookupModule({
+  core,
+  logger,
+  modules,
+  lookupFetcher = fetchLookupResult,
+}) {
   const cache = new Map();
+  const lookupInFlight = new Map();
+  const failures = new Map();
   let refreshTimer = null;
   let initialRefreshTimer = null;
   let refreshInFlight = false;
+  let started = false;
   let refreshCount = 0;
   let lastRefreshAt = null;
   let lastRefreshError = null;
@@ -298,16 +346,29 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
       .filter((steam64) => /^\d{17}$/.test(steam64)));
   }
 
-  async function refreshOneCandidate(candidate) {
+  async function refreshOneCandidate(candidate, { force = false } = {}) {
     const steam64 = normalizeSteam64(candidate?.steam_id);
+    const previousFailure = failures.get(steam64);
+    if (!force && previousFailure && Date.now() < previousFailure.nextRetryAt) return null;
     try {
       await api.lookup(steam64, { bypassCache: true });
+      failures.delete(steam64);
       refreshCount += 1;
       lastRefreshAt = Date.now();
       lastRefreshError = null;
       return true;
     } catch (error) {
-      lastRefreshError = error?.message ?? String(error);
+      const serialized = serializeSquadBrowserError(error);
+      lastRefreshError = JSON.stringify(serialized);
+      const count = Number(previousFailure?.count ?? 0) + 1;
+      failures.delete(steam64);
+      failures.set(steam64, {
+        count,
+        lastFailureAt: Date.now(),
+        nextRetryAt: Date.now() + getSquadBrowserFailureBackoffMs(count),
+        lastError: serialized,
+      });
+      while (failures.size > MAX_FAILURE_CACHE_SIZE) failures.delete(failures.keys().next().value);
       await modules?.playerDatabase?.recordSquadBrowserLookupFailure?.(
         candidate?.id,
         steam64,
@@ -365,26 +426,33 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
     async lookup(value, { bypassCache = false } = {}) {
       const steam64 = normalizeSteam64(value);
       const cached = cache.get(steam64);
-      const result = !bypassCache && cached && cached.expiresAt > Date.now()
-        ? cached.value
-        : await fetchLookupResult(steam64);
+      if (!bypassCache && cached && cached.expiresAt > Date.now()) return cached.value;
+      const existing = lookupInFlight.get(steam64);
+      if (existing) return existing;
 
-      const database = await persistLookupResult(modules?.playerDatabase, result);
-      const enriched = {
-        ...result,
-        database,
-        player: {
-          ...result.player,
-          steamAvatar: database?.avatar ?? null,
-        },
-      };
-      cache.set(steam64, { expiresAt: Date.now() + CACHE_TTL_MS, value: enriched });
-      if (cache.size > 100) {
-        const oldest = cache.keys().next().value;
-        if (oldest) cache.delete(oldest);
+      const promise = (async () => {
+        const result = await lookupFetcher(steam64);
+        const database = await persistLookupResult(modules?.playerDatabase, result);
+        const enriched = {
+          ...result,
+          database,
+          player: {
+            ...result.player,
+            steamAvatar: database?.avatar ?? null,
+          },
+        };
+        cache.delete(steam64);
+        cache.set(steam64, { expiresAt: Date.now() + CACHE_TTL_MS, value: enriched });
+        while (cache.size > 100) cache.delete(cache.keys().next().value);
+        logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${enriched.sessions.length} saved=${database?.savedSessions ?? 0}`);
+        return enriched;
+      })();
+      lookupInFlight.set(steam64, promise);
+      try {
+        return await promise;
+      } finally {
+        if (lookupInFlight.get(steam64) === promise) lookupInFlight.delete(steam64);
       }
-      logger?.info?.(`[SquadBrowser] lookup steam64=${steam64} sessions=${enriched.sessions.length} saved=${database?.savedSessions ?? 0}`);
-      return enriched;
     },
     async refreshOnline({ force = false } = {}) {
       const serverId = core?.webStatus?.serverId;
@@ -400,11 +468,15 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
       const result = { total: candidates.length, updated: 0, failed: 0, skipped: steamIDs.length - candidates.length };
       for (let index = 0; index < candidates.length; index += ONLINE_REFRESH_BATCH_SIZE) {
         const batch = candidates.slice(index, index + ONLINE_REFRESH_BATCH_SIZE);
-        const outcomes = await Promise.all(batch.map((candidate) => refreshOneCandidate(candidate)));
+        const outcomes = await Promise.all(batch.map((candidate) => refreshOneCandidate(candidate, { force })));
         result.updated += outcomes.filter(Boolean).length;
-        result.failed += outcomes.filter((ok) => !ok).length;
+        result.failed += outcomes.filter((ok) => ok === false).length;
+        result.skipped += outcomes.filter((ok) => ok === null).length;
       }
       return result;
+    },
+    async runAutoRefresh() {
+      return runAutoRefresh();
     },
     getAutoRefreshStatus() {
       return {
@@ -413,6 +485,8 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
         lastRefreshAt,
         lastRefreshError,
         refreshing: refreshInFlight,
+        inFlightCount: lookupInFlight.size,
+        failureCount: failures.size,
       };
     },
     clearCache() {
@@ -432,12 +506,15 @@ export function createSquadBrowserPlayerLookupModule({ core, logger, modules }) 
     apiName: "squadBrowserPlayerLookup",
     api,
     async start() {
+      if (started) return;
+      started = true;
       // 先稍等模块全部启动，再开始低频后台刷新，避免影响实时事件。
       refreshTimer = setInterval(() => { void runAutoRefresh(); }, AUTO_REFRESH_INTERVAL_MS);
       initialRefreshTimer = setTimeout(() => { void runAutoRefresh(); }, 3_000);
       logger?.info?.("[SquadBrowser] automatic player refresh started (36h TTL).");
     },
     async stop() {
+      started = false;
       if (refreshTimer) clearInterval(refreshTimer);
       if (initialRefreshTimer) clearTimeout(initialRefreshTimer);
       refreshTimer = null;

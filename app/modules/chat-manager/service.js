@@ -3,7 +3,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import EventEmitter from "node:events";
 
 const DEFAULT_MAX_HISTORY = 300;
 const DEFAULT_SPAM_WINDOW_MS = 10_000;
@@ -13,7 +12,7 @@ const DEFAULT_STATS_MINUTES = 60;
 const DEFAULT_DATA_DIRECTORY = "./data/chat";
 
 export function createChatManagerService({ core, config, logger }) {
-  const eventEmitter = new EventEmitter();
+  const listeners = new Map();
   const chatHistory = [];
   const dataDirectory = path.resolve(process.cwd(), String(config?.get?.("modules.chatManager.dataDirectory", DEFAULT_DATA_DIRECTORY)));
   let activeDate = localDateKey(Date.now());
@@ -54,6 +53,7 @@ export function createChatManagerService({ core, config, logger }) {
   const minuteStats = new Map();
   const unsubscribers = [];
   let playerStatsCleanupTimer = null;
+  let started = false;
 
   const api = {
     getHistory(limit = maxHistory) {
@@ -117,8 +117,22 @@ export function createChatManagerService({ core, config, logger }) {
     },
 
     on(type, handler) {
-      eventEmitter.on(type, handler);
-      return () => eventEmitter.off(type, handler);
+      if (typeof handler !== "function") return () => {};
+      const key = String(type ?? "");
+      const subscribers = listeners.get(key) ?? new Set();
+      subscribers.add(handler);
+      listeners.set(key, subscribers);
+      if (subscribers.size === 10) {
+        logger?.warn?.(`[ChatManager] ${key} subscriber count=${subscribers.size}; verify plugin stop/unsubscribe lifecycle.`);
+      }
+      return () => {
+        subscribers.delete(handler);
+        if (!subscribers.size) listeners.delete(key);
+      };
+    },
+
+    getListenerCount(type) {
+      return listeners.get(String(type ?? ""))?.size ?? 0;
     },
 
     registerTrigger(pattern, eventName) {
@@ -127,6 +141,8 @@ export function createChatManagerService({ core, config, logger }) {
   };
 
   async function start() {
+    if (started) return;
+    started = true;
     await loadDailyHistory();
     if (core.eventBus?.onCoreEvent) {
       unsubscribers.push(
@@ -151,6 +167,7 @@ export function createChatManagerService({ core, config, logger }) {
   }
 
   async function stop() {
+    started = false;
     await persistenceChain.catch(() => {});
     for (const un of unsubscribers.splice(0)) {
       try {
@@ -161,7 +178,7 @@ export function createChatManagerService({ core, config, logger }) {
     if (playerStatsCleanupTimer) clearInterval(playerStatsCleanupTimer);
     playerStatsCleanupTimer = null;
     playerStats.clear();
-    eventEmitter.removeAllListeners();
+    listeners.clear();
     logger?.info?.("ChatManager service stopped.");
   }
 
@@ -224,7 +241,7 @@ export function createChatManagerService({ core, config, logger }) {
       frequencyWindowMs,
     });
 
-    eventEmitter.emit("message", cloneChatEntry(entry, { exposeRawLog }));
+    emitToSubscribers("message", cloneChatEntry(entry, { exposeRawLog }));
 
     logger?.debug?.(`[ChatMonitor] parsed chat: ${entry.chatChannel} ${entry.playerName || "Unknown"}`, {
       operation: "chatMessageParsed",
@@ -241,10 +258,22 @@ export function createChatManagerService({ core, config, logger }) {
     });
 
     if (message.startsWith("!")) {
-      eventEmitter.emit("command", {
+      emitToSubscribers("command", {
         ...cloneChatEntry(entry, { exposeRawLog }),
         cmd: message.slice(1).split(/\s+/)[0] || "",
       });
+    }
+  }
+
+  function emitToSubscribers(type, event) {
+    const subscribers = listeners.get(type);
+    if (!subscribers) return;
+    for (const handler of [...subscribers]) {
+      try {
+        handler(event);
+      } catch (error) {
+        logger?.error?.(`[ChatManager] ${type} subscriber failed: ${error?.stack ?? error}`);
+      }
     }
   }
 

@@ -105,6 +105,17 @@ export class SuperWeatherScheduler {
     if (roundChanged) this.resetRound(normalizedRoundKey);
     else if (normalizedRoundKey) this.roundKey = normalizedRoundKey;
 
+    const numericReportedSeconds = Number(reportedSeconds);
+    if (!Number.isFinite(this.clock.rawRconSeconds) && (!Number.isFinite(numericReportedSeconds) || numericReportedSeconds <= 0)) {
+      this.state = this.enabled ? "WAITING_RCON" : this.state;
+      this.log("SUPER_WEATHER_CLOCK_SYNC", "Ignored non-positive initial RCON anchor; waiting for a reliable value.", {
+        reportedSeconds,
+        observedAt: metadata.observedAt ?? "",
+      });
+      this.notify();
+      return this.getState();
+    }
+
     const wasStale = this.clock.clockState === "CLOCK_STALE";
     const update = this.clock.update(reportedSeconds, { jumpThresholdSeconds: this.jumpThresholdSeconds });
     if (update.ignoredJitter) {

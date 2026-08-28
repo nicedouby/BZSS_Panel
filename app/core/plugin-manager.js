@@ -18,6 +18,8 @@ export class PluginManager {
     this.config = config;
     this.instances = [];
     this.catalog = [];
+    this.loadedByPath = new Map();
+    this.loadingByPath = new Map();
   }
 
   /**
@@ -149,6 +151,18 @@ export class PluginManager {
 
   async loadPlugin(pluginPath) {
     const abs = path.resolve(process.cwd(), pluginPath);
+    if (this.loadedByPath.has(abs)) return this.loadedByPath.get(abs);
+    if (this.loadingByPath.has(abs)) return this.loadingByPath.get(abs);
+    const pending = this.loadPluginOnce(pluginPath, abs);
+    this.loadingByPath.set(abs, pending);
+    try {
+      return await pending;
+    } finally {
+      this.loadingByPath.delete(abs);
+    }
+  }
+
+  async loadPluginOnce(pluginPath, abs) {
     this.logger.debug(`Loading plugin from ${pluginPath}`, {
       operation: "loadPlugin",
       data: {
@@ -198,6 +212,7 @@ export class PluginManager {
       if (instance.start) await instance.start();
 
       this.instances.push(instance);
+      this.loadedByPath.set(abs, instance);
       this.modules.pluginSubscriptions?.registerRuntimeItem?.({
         ...(instance.manifest ?? {}),
         status: "running",
@@ -231,6 +246,8 @@ export class PluginManager {
       if (instance.stop) await instance.stop();
     }
     this.instances = [];
+    this.loadedByPath.clear();
+    this.loadingByPath.clear();
   }
   
   getInstances() {

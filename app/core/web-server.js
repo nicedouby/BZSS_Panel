@@ -116,6 +116,10 @@ export class WebServer {
       this.logger.info("WebServer disabled.");
       return;
     }
+    if (this.server) {
+      this.logger.debug?.("WebServer already started; skipping duplicate start.");
+      return;
+    }
 
     await this.warnIfStaticIndexMissing();
 
@@ -168,6 +172,23 @@ export class WebServer {
         const mem = process.memoryUsage();
         const runtimeState = this.core.runtimeState?.state;
         const rcon = this.core.rconManager?.squadRcon;
+        const rconManager = this.core.rconManager;
+        const rconClients = new Set([
+          rconManager?.squadRcon,
+          rconManager?.disbandRcon,
+          ...((rconManager?.commandPool?.lanes ?? []).map((lane) => lane.client)),
+          ...((rconManager?.queryPool?.lanes ?? []).map((lane) => lane.client)),
+          ...((rconManager?.notificationPool?.lanes ?? []).map((lane) => lane.client)),
+          ...((rconManager?.enforcementPool?.lanes ?? []).map((lane) => lane.client)),
+        ].filter(Boolean));
+        const squadBrowserStatus = this.modules.squadBrowserPlayerLookup?.getAutoRefreshStatus?.() ?? {};
+        const activeResources = typeof process.getActiveResourcesInfo === "function"
+          ? process.getActiveResourcesInfo()
+          : [];
+        const activeResourcesByType = activeResources.reduce((summary, type) => {
+          summary[type] = (summary[type] ?? 0) + 1;
+          return summary;
+        }, {});
         let tacticalDiagnostics = {};
         try {
           tacticalDiagnostics = this.modules.tacticalState?.getDiagnostics?.() ?? {};
@@ -199,6 +220,19 @@ export class WebServer {
             fileIOActiveChannels: this.core.fileIO?.getPublicDiagnostics?.()?.activeChannels ?? 0,
             tacticalSubscribers: tacticalDiagnostics.subscriberCount ?? 0,
             tacticalProfileCache: tacticalDiagnostics.profileCacheSize ?? 0,
+            websocketClients: this.consoleConnections.size + this.chatConnections.size,
+            chatMessageListeners: this.modules.chatManager?.getListenerCount?.("message") ?? 0,
+            rconPhysicalConnections: rconClients.size,
+            squadBrowserInFlight: squadBrowserStatus.inFlightCount ?? 0,
+            squadBrowserFailures: squadBrowserStatus.failureCount ?? 0,
+            battleLogCount: this.modules.battleLog?.getOverview?.()?.count
+              ?? this.modules.battleLog?.api?.getOverview?.()?.count
+              ?? 0,
+            combatStateEventCount: this.modules.combatState?.getState?.()?.events?.length
+              ?? this.modules.combatState?.api?.getState?.()?.events?.length
+              ?? 0,
+            activeResources: activeResources.length,
+            activeResourcesByType,
           },
         });
         if (this.memoryHistory.length > this.maxMemoryHistoryPoints) {

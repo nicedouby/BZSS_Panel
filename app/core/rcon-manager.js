@@ -122,6 +122,10 @@ export class RconManager {
     };
     this.rconEventTeardown = [];
     this.nativeLogListeners = new Set();
+    this.started = false;
+    this.startPromise = null;
+    this.password = null;
+    this.pollingStarted = false;
 
     this.status = {
       enabled: this.enabled,
@@ -140,6 +144,19 @@ export class RconManager {
   }
 
   async start() {
+    if (this.started) return;
+    if (this.startPromise) return this.startPromise;
+
+    this.startPromise = this.startInternal();
+    try {
+      await this.startPromise;
+      this.started = true;
+    } finally {
+      this.startPromise = null;
+    }
+  }
+
+  async startInternal() {
     if (!this.enabled) {
       this.webStatus.set("rcon", "disabled");
       this.logger.info("RconManager disabled.", {
@@ -148,10 +165,12 @@ export class RconManager {
       return;
     }
 
+    this.password = resolveRconPassword(this.config, this.logger);
+
     this.squadRcon = new SquadRcon({
       host: this.config.host,
       port: this.config.port,
-      password: resolveRconPassword(this.config, this.logger),
+      password: this.password,
       autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
       commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
       connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
@@ -164,7 +183,7 @@ export class RconManager {
       ? new SquadRcon({
           host: this.config.host,
           port: this.config.port,
-          password: resolveRconPassword(this.config, this.logger),
+          password: this.password,
           autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
           commandTimeoutMs: this.config.commandTimeoutMs ?? 15000,
           connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
@@ -242,6 +261,7 @@ export class RconManager {
     this.clearPollingTimer("squads");
     this.pollingKickPending.players = false;
     this.pollingKickPending.squads = false;
+    this.pollingStarted = false;
 
     for (const dispose of this.rconEventTeardown.splice(0)) {
       try {
@@ -293,6 +313,7 @@ export class RconManager {
     this.logger.info("RconManager stopped.", {
       operation: "stop",
     });
+    this.started = false;
   }
 
   attachSquadRconEvents() {
@@ -414,7 +435,7 @@ export class RconManager {
       const client = new SquadRcon({
         host: this.config.host,
         port: this.config.port,
-        password: resolveRconPassword(this.config, this.logger),
+        password: this.password,
         autoReconnectDelay: this.config.autoReconnectDelay ?? 5000,
         commandTimeoutMs: commandTimeoutMs ?? this.config.commandTimeoutMs ?? 15000,
         connectTimeoutMs: this.config.connectTimeoutMs ?? 5000,
@@ -429,7 +450,10 @@ export class RconManager {
     if (!this.polling.enabled) return;
     const players = this.resolvePollingInterval("players");
     const squads = this.resolvePollingInterval("squads");
-    this.logger.info(`RCON polling started. players=${players}ms squads=${squads}ms`);
+    if (!this.pollingStarted) {
+      this.pollingStarted = true;
+      this.logger.info(`RCON polling started. players=${players}ms squads=${squads}ms`);
+    }
 
     if (this.pollingKickPending.players) {
       this.pollingKickPending.players = false;
