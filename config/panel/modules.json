@@ -84,7 +84,7 @@
     "combatCollector": {
       "enabled": true,
       "storeDirectory": "./data/combat-events/BZSS_Main",
-      "logPostConfigPath": "./LogPost/config.json",
+      "logPostConfigPath": "./config/logpost.json",
       "readChunkBytes": 4194304,
       "batchSize": 100
     },

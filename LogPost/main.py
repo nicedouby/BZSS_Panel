@@ -21,7 +21,7 @@ from bzss_parser.runtime_probe import install_runtime_probe
 
 
 def main() -> None:
-    config_path = "config.json"
+    config_path = "../config/logpost.json"
 
     if len(sys.argv) >= 2:
         config_path = sys.argv[1]

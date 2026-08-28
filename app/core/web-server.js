@@ -6288,7 +6288,7 @@ export class WebServer {
   getLogPostConfigPath() {
     const parserConfig = this.core.config?.get?.("pythonLogParser", {}) ?? {};
     const workingDirectory = path.resolve(process.cwd(), String(parserConfig.workingDirectory ?? "./LogPost").trim());
-    return path.resolve(workingDirectory, String(parserConfig.configPath ?? "./config.json").trim());
+    return path.resolve(workingDirectory, String(parserConfig.configPath ?? "./config/logpost.json").trim());
   }
 
   async readLogPostConfig() {

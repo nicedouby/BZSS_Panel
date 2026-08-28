@@ -369,8 +369,8 @@ function normalizeCombatType(value) {
 async function resolveSourcePath(moduleConfig) {
   if (String(moduleConfig.sourcePath ?? "").trim()) return path.resolve(String(moduleConfig.sourcePath));
   const candidates = [
-    path.resolve(moduleConfig.logPostConfigPath ?? "./LogPost/config.json"),
-    path.resolve("./LogPost/config.example.json"),
+    path.resolve(moduleConfig.logPostConfigPath ?? "./config/logpost.json"),
+    path.resolve("./config/logpost.example.json"),
   ];
   for (const candidate of candidates) {
     try {

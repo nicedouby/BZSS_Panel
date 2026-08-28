@@ -90,7 +90,7 @@ def main() -> int:
     base_dir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Fetch Steam game duration for a single Steam ID.")
     parser.add_argument("steam_id", help="Steam64 ID to query.")
-    parser.add_argument("--config", default=str(base_dir / "config.json"), help="Path to config.json")
+    parser.add_argument("--config", default=str(Path(__file__).resolve().parents[3] / "config" / "panel" / "steam.json"), help="Path to panel steam config")
     parser.add_argument("--app-id", type=int, default=DEFAULT_APP_ID, help="Steam app ID, default is Squad (393380)")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="HTTP timeout in seconds")
     parser.add_argument("--proxy", default="", help="Optional HTTP(S)/SOCKS proxy URL")

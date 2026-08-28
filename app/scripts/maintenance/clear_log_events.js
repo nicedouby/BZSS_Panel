@@ -7,7 +7,7 @@ import { execFileSync } from "node:child_process";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-const DEFAULT_CONFIG_PATH = "./config.json";
+const DEFAULT_CONFIG_PATH = "./config/logpost.json";
 
 main().catch((error) => {
   console.error("[clear-log-events] ERROR:", error?.stack || error?.message || error);

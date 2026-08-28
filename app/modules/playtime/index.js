@@ -1860,7 +1860,7 @@ export function createPlaytimeModule({ core, modules, config, logger }) {
 function resolveSteamConfig(config, moduleConfig = {}) {
   const legacyConfigPath = path.resolve(
     process.cwd(),
-    moduleConfig.legacyConfigPath || moduleConfig.steam?.legacyConfigPath || "./support/runtime-assets/steam-playtime/config.json",
+    moduleConfig.legacyConfigPath || moduleConfig.steam?.legacyConfigPath || "./config/panel/steam.json",
   );
   const legacy = readLegacySteamConfig(legacyConfigPath);
   const explicit = config.get("steam", {});
