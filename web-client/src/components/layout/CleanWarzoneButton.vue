@@ -1,22 +1,37 @@
 <template>
   <Teleport defer to=".topbar-actions">
-    <button
-      v-if="canUse"
-      type="button"
-      class="clean-warzone-button"
-      :data-enabled="warmupState ? 'true' : 'false'"
-      :disabled="!warmupState || busy"
-      :title="buttonTitle"
-      @click="cleanWarzone"
-    >
-      <span class="clean-warzone-icon" aria-hidden="true">⌁</span>
-      <span>{{ busy ? "Cleaning..." : "Clean Warzone" }}</span>
-    </button>
+    <div v-if="canUse" class="clean-warzone-actions">
+      <button
+        type="button"
+        class="clean-warzone-button"
+        data-action="once"
+        :data-enabled="warmupState ? "true" : "false""
+        :disabled="!warmupState || busy"
+        :title="immediateButtonTitle"
+        @click="cleanWarzone"
+      >
+        <span class="clean-warzone-icon" aria-hidden="true">⌁</span>
+        <span>{{ busy ? "Cleaning..." : "Clean Warzone" }}</span>
+      </button>
+
+      <button
+        type="button"
+        class="clean-warzone-button clean-warzone-loop-button"
+        data-action="loop"
+        :data-enabled="loopEnabled && warmupState ? "true" : "false""
+        :disabled="!warmupState || (busy && !loopEnabled)"
+        :title="loopButtonTitle"
+        @click="toggleCleanWarzoneLoop"
+      >
+        <span class="clean-warzone-loop-icon" aria-hidden="true">{{ loopEnabled ? "◉" : "◌" }}</span>
+        <span>{{ loopEnabled ? "Stop Clean Loop" : "Start Clean Loop" }}</span>
+      </button>
+    </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
 import { t } from "../../i18n";
 import { hasPermission } from "../../shared/rcon-permissions.js";
@@ -25,11 +40,14 @@ import { useServerStore } from "../../stores/server.store";
 import { useUiStore } from "../../stores/ui.store";
 
 const CLEAN_WARZONE_COMMAND = "CleanWarzone:1";
+const CLEAN_WARZONE_INTERVAL_MS = 60_000;
 
 const auth = useAuthStore();
 const server = useServerStore();
 const ui = useUiStore();
 const busy = ref(false);
+const loopEnabled = ref(false);
+let loopTimer: ReturnType<typeof setInterval> | null = null;
 
 const userPermissions = computed(() => auth.user?.permissions ?? []);
 const canUse = computed(() => Boolean(
@@ -42,14 +60,21 @@ const warmupState = computed(() => {
   if (typeof snapshot.isWarmup === "boolean") return snapshot.isWarmup;
   return false;
 });
-const buttonTitle = computed(() => {
+
+const immediateButtonTitle = computed(() => {
   if (busy.value) return "CleanWarzone:1 is running.";
   if (!warmupState.value) return "Available only while warmup mode is enabled.";
-  return "Immediately execute CleanWarzone:1 through the BZSS-Core raw command channel.";
+  return "Immediately execute CleanWarzone:1.";
 });
 
-async function cleanWarzone() {
-  if (!warmupState.value || busy.value) return;
+const loopButtonTitle = computed(() => {
+  if (!warmupState.value) return "Available only while warmup mode is enabled.";
+  if (loopEnabled.value) return "Stop the 60-second CleanWarzone cleanup loop.";
+  return "Start the 60-second CleanWarzone cleanup loop.";
+});
+
+async function executeCleanWarzone(showSuccessToast = true) {
+  if (!warmupState.value || busy.value) return false;
 
   busy.value = true;
   try {
@@ -66,12 +91,15 @@ async function cleanWarzone() {
       throw new Error(result.message || output || "CleanWarzone:1 failed.");
     }
 
-    ui.pushToast({
-      title: "Warzone cleaned",
-      message: `${result.command || CLEAN_WARZONE_COMMAND} completed.${output ? ` ${output}` : ""}`,
-      tone: "ok",
-      durationMs: 4200,
-    });
+    if (showSuccessToast) {
+      ui.pushToast({
+        title: "Warzone cleaned",
+        message: `${result.command || CLEAN_WARZONE_COMMAND} completed.${output ? ` ${output}` : ""}`,
+        tone: "ok",
+        durationMs: 4200,
+      });
+    }
+    return true;
   } catch (error: any) {
     ui.pushToast({
       title: t("common.error"),
@@ -79,15 +107,71 @@ async function cleanWarzone() {
       tone: "error",
       durationMs: 7000,
     });
+    return false;
   } finally {
     busy.value = false;
   }
 }
+
+async function cleanWarzone() {
+  await executeCleanWarzone(true);
+}
+
+function stopCleanWarzoneLoop() {
+  if (loopTimer) {
+    clearInterval(loopTimer);
+    loopTimer = null;
+  }
+  loopEnabled.value = false;
+}
+
+async function startCleanWarzoneLoop() {
+  if (!warmupState.value || loopEnabled.value) return;
+
+  loopEnabled.value = true;
+  await executeCleanWarzone(true);
+
+  if (!loopEnabled.value || !warmupState.value) {
+    stopCleanWarzoneLoop();
+    return;
+  }
+
+  loopTimer = setInterval(() => {
+    void executeCleanWarzone(false);
+  }, CLEAN_WARZONE_INTERVAL_MS);
+}
+
+function toggleCleanWarzoneLoop() {
+  if (loopEnabled.value) {
+    stopCleanWarzoneLoop();
+    ui.pushToast({
+      title: "Clean loop stopped",
+      message: "The timed CleanWarzone cleanup loop has been stopped.",
+      tone: "ok",
+      durationMs: 3200,
+    });
+    return;
+  }
+
+  void startCleanWarzoneLoop();
+}
+
+watch(warmupState, (enabled) => {
+  if (!enabled) stopCleanWarzoneLoop();
+});
+
+onBeforeUnmount(stopCleanWarzoneLoop);
 </script>
 
 <style scoped>
-.clean-warzone-button {
+.clean-warzone-actions {
   order: -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clean-warzone-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,21 +207,42 @@ async function cleanWarzone() {
   color: var(--color-text-muted);
 }
 
-.clean-warzone-button[data-enabled="true"] .clean-warzone-icon {
+.clean-warzone-button[data-enabled="true"] .clean-warzone-icon,
+.clean-warzone-button[data-enabled="true"] .clean-warzone-loop-icon {
   color: #fb923c;
   text-shadow: 0 0 8px rgba(251, 146, 60, 0.55);
 }
 
-.clean-warzone-icon {
+.clean-warzone-loop-button[data-enabled="true"] {
+  border-color: rgba(74, 222, 128, 0.56);
+  background: rgba(22, 101, 52, 0.24);
+  color: #bbf7d0;
+}
+
+.clean-warzone-loop-button[data-enabled="true"]:hover:not(:disabled) {
+  border-color: rgba(74, 222, 128, 0.82);
+  background: rgba(22, 101, 52, 0.34);
+}
+
+.clean-warzone-icon,
+.clean-warzone-loop-icon {
   font-size: 15px;
   line-height: 1;
 }
 
 @media (max-width: 780px) {
+  .clean-warzone-actions {
+    gap: 4px;
+  }
+
   .clean-warzone-button {
     min-height: 34px;
     padding: 0 10px;
     font-size: 11px;
+  }
+
+  .clean-warzone-button span:last-child {
+    display: none;
   }
 }
 </style>
