@@ -762,4 +762,17 @@ onMounted(loadList);
     grid-template-columns: minmax(0, 1fr) !important;
   }
 }
+
+@media (max-width: 640px) {
+  .snapshot-split {
+    gap: 10px;
+  }
+
+  .toolbar-status,
+  .toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
 </style>

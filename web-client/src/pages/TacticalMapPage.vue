@@ -4856,7 +4856,7 @@ onBeforeUnmount(deactivateMapPage);
   top: 50px;
   left: max(16px, calc(50vw - 390px));
   width: min(780px, calc(100vw - 32px));
-  height: min(700px, calc(100vh - 70px));
+  height: min(700px, calc(var(--app-viewport-height) - 70px));
   pointer-events: auto;
   overflow: hidden;
   border: 1px solid rgba(94, 234, 212, 0.4);

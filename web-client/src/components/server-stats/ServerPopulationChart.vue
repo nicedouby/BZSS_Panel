@@ -318,7 +318,7 @@ onUnmounted(deactivateChart);
   padding: 16px;
   display: flex;
   flex-direction: column;
-  height: 400px;
+  height: clamp(280px, 40dvh, 400px);
 }
 
 .chart-header {

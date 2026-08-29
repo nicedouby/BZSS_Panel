@@ -450,4 +450,20 @@ dt {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .page-shell {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .metric,
+  .detail-list > div {
+    min-width: 0;
+  }
+
+  .detail-list dd {
+    overflow-wrap: anywhere;
+  }
+}
 </style>

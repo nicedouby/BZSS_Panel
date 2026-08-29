@@ -451,4 +451,33 @@ function formatTimeOnly(v: any) {
   .dashboard-col { height: auto; flex: none; }
   .log-viewport { height: 320px; }
 }
+
+@media (max-width: 640px) {
+  .dashboard-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .header-right {
+    width: 100%;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-col {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .log-viewport {
+    height: 280px;
+  }
+
+  .line-time {
+    width: 46px;
+    font-size: 10px;
+  }
+}
 </style>

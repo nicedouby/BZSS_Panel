@@ -1241,4 +1241,22 @@ function clamp(value: number, min: number, max: number) {
     overflow: visible;
   }
 }
+
+@media (max-width: 640px) {
+  .toolbar-grid,
+  .lab-grid,
+  .dialog-body {
+    gap: 10px;
+  }
+
+  .dialog-root {
+    padding: 8px;
+  }
+
+  .dialog-panel {
+    width: 100%;
+    max-height: calc(var(--app-viewport-height) - 16px);
+    border-radius: 12px;
+  }
+}
 </style>

@@ -601,9 +601,9 @@ function formatLogTime(value: string) { const date = new Date(value); return Num
   z-index: 12000;
   box-sizing: border-box;
   min-width: min(360px, calc(100vw - 8px));
-  min-height: min(300px, calc(100vh - 8px));
+  min-height: min(300px, calc(var(--app-viewport-height) - 8px));
   max-width: calc(100vw - 8px);
-  max-height: calc(100vh - 8px);
+  max-height: calc(var(--app-viewport-height) - 8px);
   resize: none;
   overflow: hidden;
   border: 1px solid rgba(94, 194, 240, .28);

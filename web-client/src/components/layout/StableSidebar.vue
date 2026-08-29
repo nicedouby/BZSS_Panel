@@ -195,7 +195,7 @@ function toggleSidebar() {
   position: relative;
   z-index: var(--z-sidebar);
   width: 248px;
-  height: 100dvh;
+  height: var(--app-viewport-height);
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -205,10 +205,6 @@ function toggleSidebar() {
   box-shadow: 10px 0 28px rgba(0, 0, 0, 0.16);
   transition: width 0.14s ease, transform 0.14s ease;
   isolation: isolate;
-}
-
-@supports not (height: 100dvh) {
-  .sidebar { height: 100vh; }
 }
 
 .sidebar.collapsed { width: 84px; }

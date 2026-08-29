@@ -40,6 +40,8 @@ textarea::placeholder {
 .page {
   display: grid;
   gap: 16px;
+  width: 100%;
+  min-width: 0;
 }
 
 .bz-page {
@@ -58,6 +60,15 @@ textarea::placeholder {
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.bz-page-header > *,
+.page-head > *,
+.bz-card,
+.stat,
+.panel {
+  min-width: 0;
 }
 
 .bz-page-title,
@@ -93,6 +104,7 @@ textarea::placeholder {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .bz-card,
@@ -292,4 +304,24 @@ textarea::placeholder {
 
 .panel {
   overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .page {
+    gap: 10px;
+  }
+
+  .bz-page-header,
+  .page-head {
+    gap: 12px;
+  }
+
+  .bz-page-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .bz-page-actions > * {
+    max-width: 100%;
+  }
 }

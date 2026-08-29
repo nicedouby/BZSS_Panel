@@ -117,6 +117,7 @@ withDefaults(defineProps<{
 }
 
 .card-actions {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -158,5 +159,43 @@ withDefaults(defineProps<{
 
 .card-footer {
   padding: 0 18px 18px;
+}
+
+@media (max-width: 640px) {
+  .page-card {
+    border-radius: 13px;
+  }
+
+  .card-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 13px 13px 0;
+  }
+
+  .card-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .card-actions :deep(input),
+  .card-actions :deep(select),
+  .card-actions :deep(textarea) {
+    width: 100%;
+  }
+
+  .card-body,
+  .card-body.compact,
+  .page-card--padding-sm > .card-body,
+  .page-card--padding-md > .card-body {
+    padding: 13px;
+  }
+
+  .page-card--padding-none > .card-body {
+    padding: 0;
+  }
+
+  .card-footer {
+    padding: 0 13px 13px;
+  }
 }
 </style>

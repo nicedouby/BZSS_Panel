@@ -514,4 +514,19 @@ dt {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .page-shell {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .hero-grid,
+  .team-grid,
+  .team-cards,
+  .metric-grid,
+  .detail-list {
+    gap: 10px;
+  }
+}
 </style>

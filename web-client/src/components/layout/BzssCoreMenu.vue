@@ -1485,7 +1485,7 @@ onBeforeUnmount(() => {
 
 .bzss-core-dialog {
   width: min(620px, calc(100vw - 28px));
-  max-height: min(860px, calc(100vh - 28px));
+  max-height: min(860px, calc(var(--app-viewport-height) - 28px));
   overflow: auto;
   border: 1px solid rgba(89, 192, 239, 0.3);
   border-radius: 22px;

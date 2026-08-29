@@ -80,4 +80,25 @@ withDefaults(defineProps<{
   justify-content: flex-end;
   margin-left: auto;
 }
+
+.workspace-toolbar__main > *,
+.workspace-toolbar__actions > * {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .workspace-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .workspace-toolbar__main,
+  .workspace-toolbar__actions {
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
 </style>

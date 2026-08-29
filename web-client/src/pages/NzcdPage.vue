@@ -150,4 +150,5 @@ th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--color-b
 th { color: var(--color-text-muted); font-size: 12px; }
 .mono { font-family: ui-monospace, monospace; }
 @media (max-width: 800px) { .form-grid, .range-row { grid-template-columns: 1fr; } .range-row span { display: none; } }
+@media (max-width: 640px) { .nzcd-page { padding: 10px; } .toolbar, .section-head { align-items: stretch; flex-direction: column; } .toolbar button, .section-head button { width: 100%; } th, td { padding: 8px; } }
 </style>

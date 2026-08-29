@@ -645,4 +645,19 @@ onBeforeUnmount(() => {
     align-items: flex-start;
   }
 }
+
+@media (max-width: 640px) {
+  .impeachment-page {
+    padding: 12px 10px calc(24px + var(--safe-bottom));
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+  }
+
+  .metrics-grid,
+  .content-grid {
+    gap: 10px;
+  }
+}
 </style>

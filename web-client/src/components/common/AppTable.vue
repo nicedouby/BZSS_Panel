@@ -59,6 +59,7 @@ withDefaults(defineProps<{
   padding: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 :deep(.app-table tbody tr:hover td) {
@@ -71,5 +72,18 @@ withDefaults(defineProps<{
 
 .compact :deep(.app-table tbody td) {
   padding: 12px;
+}
+
+@media (max-width: 640px) {
+  .app-table-scroll {
+    scrollbar-gutter: auto;
+  }
+
+  :deep(.app-table thead th),
+  :deep(.app-table tbody td),
+  .compact :deep(.app-table thead th),
+  .compact :deep(.app-table tbody td) {
+    padding: 9px 10px;
+  }
 }
 </style>

@@ -93,4 +93,16 @@ const isStack = computed(() => props.responsiveMode === "stack");
     display: none;
   }
 }
+
+@media (max-width: 640px) {
+  .app-split-layout {
+    gap: 10px;
+  }
+
+  .split-left,
+  .split-right {
+    gap: 10px;
+    scrollbar-gutter: auto;
+  }
+}
 </style>

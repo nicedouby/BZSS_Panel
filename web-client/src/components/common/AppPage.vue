@@ -48,4 +48,10 @@ const pageClass = computed(() => {
   min-height: 0;
   min-width: 0;
 }
+
+@media (max-width: 720px) {
+  .app-page {
+    gap: 10px;
+  }
+}
 </style>

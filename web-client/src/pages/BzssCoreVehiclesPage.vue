@@ -796,8 +796,10 @@ onUnmounted(() => {
 
 /* Table styling */
 .table-wrap {
-  overflow-x: auto;
-  max-height: calc(100vh - 320px);
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .vehicles-table {
   width: 100%;

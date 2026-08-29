@@ -559,4 +559,5 @@ tr.conflict { background:rgba(127,29,29,.24); } .source { max-width:280px; word-
 .record-message { min-width:300px; max-width:600px; }
 .mono { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; } .ok { color:#86efac; } .bad { color:#fca5a5; } .warn { color:#fcd34d; } .empty { text-align:center; color:#64748b; padding:24px; }
 @media (max-width:1000px) { .grid.two,.preview-grid { grid-template-columns:1fr; } .form-grid { grid-template-columns:1fr; } .page-header,.panel-head { flex-direction:column; } }
+@media (max-width:640px) { .page { padding:10px; gap:10px; } .page-header,.panel-head { gap:10px; } .panel { padding:12px; } .squad-select { max-width:100%; } .record-message { min-width:220px; } }
 </style>

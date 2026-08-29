@@ -396,4 +396,73 @@ function resolveLoadingScreenUrl(mapNameValue: string, layerNameValue: string) {
   border-radius: 16px;
   border: 1px solid rgba(148, 163, 184, 0.12);
 }
+
+@media (max-width: 980px) {
+  .server-info-snapshot-page {
+    min-height: 0;
+    height: 100%;
+    overflow: auto;
+  }
+
+  .snapshot-frame {
+    min-height: 100%;
+    grid-template-rows: auto minmax(520px, 1fr);
+    padding: 14px;
+  }
+
+  .snapshot-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 0.8fr);
+  }
+
+  .snapshot-hero__copy,
+  .loading-screen,
+  .snapshot-map {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .snapshot-frame {
+    grid-template-rows: auto minmax(480px, 1fr);
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .snapshot-hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .snapshot-hero__copy h1 {
+    font-size: clamp(21px, 7vw, 28px);
+    overflow-wrap: anywhere;
+  }
+
+  .details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .details dd {
+    overflow-wrap: anywhere;
+  }
+
+  .loading-screen {
+    min-height: 150px;
+  }
+
+  .snapshot-map {
+    padding: 10px;
+  }
+
+  .snapshot-map__header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .ready-state {
+    align-self: flex-start;
+  }
+}
 </style>

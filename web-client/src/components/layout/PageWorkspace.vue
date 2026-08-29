@@ -86,6 +86,11 @@ withDefaults(defineProps<{
   height: 100%;
 }
 
+.page-workspace__body > * {
+  min-width: 0;
+  min-height: 0;
+}
+
 .page-workspace--flow .page-workspace__body {
   display: grid;
   align-content: start;
@@ -103,5 +108,24 @@ withDefaults(defineProps<{
 .page-workspace--scroll .page-workspace__body {
   overflow: auto;
   scrollbar-gutter: stable;
+}
+
+@media (max-width: 720px) {
+  .page-workspace {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .page-workspace--flow .page-workspace__body,
+  .page-workspace--scroll .page-workspace__body {
+    scrollbar-gutter: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-workspace {
+    gap: 8px;
+    padding: 8px;
+  }
 }
 </style>

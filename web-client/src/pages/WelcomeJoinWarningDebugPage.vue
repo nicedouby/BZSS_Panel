@@ -1194,4 +1194,26 @@ select.input {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .welcome-join-warning-page {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .page-header,
+  .panel-head,
+  .actions-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary-grid,
+  .main-grid,
+  .ops-grid,
+  .field-grid,
+  .field-grid.two {
+    gap: 10px;
+  }
+}
 </style>

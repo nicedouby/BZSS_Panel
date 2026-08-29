@@ -132,7 +132,7 @@ const statusClass = (status?: string) => String(status ?? "UNKNOWN").toLowerCase
 </template>
 
 <style scoped>
-.step-counter-page { min-height:100%; padding-bottom:28px; color:#d9e5f2; }
+.step-counter-page { min-height:100%; display:flex; flex-direction:column; padding-bottom:28px; color:#d9e5f2; }
 .page-header { display:flex; justify-content:space-between; gap:24px; padding:22px; margin-bottom:14px; border:1px solid #24384e; background:rgba(10,20,32,.82); border-radius:12px; }
 .eyebrow { color:#57d6a0; letter-spacing:.12em; font-size:11px; margin:0 0 6px; }
 h1 { margin:0 0 6px; }
@@ -142,7 +142,7 @@ h1 { margin:0 0 6px; }
 .diagnostic-grid article { padding:13px 15px; border:1px solid #24384e; border-radius:10px; background:rgba(8,16,27,.86); }
 .diagnostic-grid span { display:block; margin-bottom:7px; color:#71869b; font-size:11px; text-transform:uppercase; }
 .diagnostic-grid strong { color:#d9e5f2; font-size:16px; }
-.table-shell { max-height:calc(100vh - 315px); min-height:280px; overflow:auto; overscroll-behavior:contain; border:1px solid #24384e; border-radius:12px; background:rgba(8,16,27,.86); }
+.table-shell { flex:1 1 auto; min-height:280px; overflow:auto; overscroll-behavior:contain; border:1px solid #24384e; border-radius:12px; background:rgba(8,16,27,.86); }
 table { width:100%; border-collapse:separate; border-spacing:0; min-width:2180px; }
 th, td { padding:10px 12px; border-bottom:1px solid #1b2b3c; text-align:left; white-space:nowrap; }
 th { position:sticky; top:0; z-index:2; color:#80a0ba; background:#0c1927; font-size:11px; text-transform:uppercase; }
@@ -160,6 +160,6 @@ td small { display:block; color:#71869b; font-size:10px; margin-top:3px; }
 @media (max-width:800px) {
   .page-header { flex-direction:column; }
   .status { text-align:left; }
-  .table-shell { max-height:calc(100vh - 390px); }
+  .table-shell { min-height:240px; }
 }
 </style>

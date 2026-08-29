@@ -228,4 +228,5 @@ h1 { margin:0 0 8px; font-size:28px; } h2 { margin:0 0 12px; font-size:16px; }
 .status-pill { display:inline-block; padding:3px 7px; border-radius:999px; font-size:11px; background:#334155; } .status-pill[data-tone=warned] { color:#86efac; background:rgba(22,101,52,.35); } .status-pill[data-tone=intercepted] { color:#fcd34d; background:rgba(133,77,14,.35); } .status-pill[data-tone=send_failed] { color:#fca5a5; background:rgba(127,29,29,.35); }
 .empty { padding:24px; text-align:center; color:#fbbf24; }
 @media (max-width:800px) { .page-header,.panel-head { flex-direction:column; } .filters { justify-content:flex-start; } .diagnostic-grid { grid-template-columns:1fr; } }
+@media (max-width:640px) { .damage-debug-page { padding:10px; } .filters,.search { width:100%; min-width:0; } .panel { padding:12px; } .metrics,.diagnostics { grid-template-columns:1fr; } }
 </style>

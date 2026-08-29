@@ -13,4 +13,18 @@
   flex-wrap: wrap;
   min-width: 0;
 }
+
+.app-page-toolbar > * {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .app-page-toolbar {
+    align-items: stretch;
+  }
+
+  .app-page-toolbar > * {
+    flex: 1 1 100%;
+  }
+}
 </style>

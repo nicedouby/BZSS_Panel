@@ -30,6 +30,7 @@ defineProps<{
 }
 
 .text-block {
+  flex: 1 1 420px;
   min-width: 0;
 }
 
@@ -58,10 +59,33 @@ defineProps<{
 }
 
 .actions {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .page-header {
+    gap: 12px;
+  }
+
+  .text-block,
+  .actions {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .actions {
+    justify-content: flex-start;
+  }
+
+  .actions :deep(button),
+  .actions :deep(a),
+  .actions :deep(select) {
+    max-width: 100%;
+  }
 }
 </style>

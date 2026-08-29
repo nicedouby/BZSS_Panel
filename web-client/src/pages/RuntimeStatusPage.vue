@@ -641,4 +641,61 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
 }
+
+@media (max-width: 720px) {
+  .runtime-status-page {
+    padding: 14px;
+    scrollbar-gutter: auto;
+  }
+
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .header-actions,
+  .refresh-btn {
+    width: 100%;
+  }
+
+  .status-section {
+    margin-bottom: 26px;
+  }
+
+  .system-grid,
+  .item-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .system-card,
+  .item-card {
+    min-width: 0;
+    padding: 13px;
+  }
+
+  .system-card .value,
+  .item-name,
+  .item-meta,
+  .item-desc {
+    overflow-wrap: anywhere;
+  }
+
+  .chart-container {
+    height: clamp(240px, 52dvh, 320px);
+    padding: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .runtime-status-page {
+    padding: 10px;
+  }
+
+  .item-header {
+    align-items: flex-start;
+  }
+}
 </style>
