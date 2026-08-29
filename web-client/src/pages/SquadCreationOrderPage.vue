@@ -3,15 +3,12 @@
     <WorkspaceToolbar>
       <div class="toolbar-title-section">
         <h1 class="page-title-text">建队顺序</h1>
-        <p class="page-subtitle-text">当前对局最终通过建队记录；同一玩家重复建队时只保留最新记录。</p>
+        <p class="page-subtitle-text">直接显示当前对局的建队日志顺序；对局切换后自动重置。</p>
       </div>
 
       <div class="toolbar-status">
         <AppStatusBadge v-if="pollIntervalLabel" tone="idle">
           自动刷新: {{ pollIntervalLabel }}
-        </AppStatusBadge>
-        <AppStatusBadge :tone="cacheLoaded ? 'ok' : 'warn'">
-          {{ cacheLoaded ? "缓存已加载" : "缓存未加载" }}
         </AppStatusBadge>
         <AppStatusBadge v-if="replayStatus" :tone="replayStatus.status === 'failed' ? 'error' : replayStatus.status === 'completed' ? 'ok' : 'warn'">
           {{ replayStatusLabel }}
@@ -44,13 +41,12 @@
       <span>{{ replayStatusLabel }}</span>
       <span>发现 {{ replayStatus.squadCreatesFound ?? 0 }}</span>
       <span>接受 {{ replayStatus.accepted ?? 0 }}</span>
-      <span>违规拒绝 {{ replayStatus.rejectedPolicy ?? 0 }}</span>
       <span>等待阵营解析 {{ replayStatus.pendingTeamResolution ?? 0 }}</span>
     </div>
 
     <section class="summary-grid">
       <StatCard
-        label="总通过建队数"
+        label="当前对局建队数"
         :value="allRecords.length"
         tone="success"
         :loading="loading"
@@ -62,7 +58,7 @@
         :loading="loading"
       />
       <StatCard
-        label="显示/有效记录"
+        label="显示/全部记录"
         :value="`${filteredRecords.length} / ${allRecords.length}`"
         tone="neutral"
         :loading="loading"
@@ -102,7 +98,7 @@
       <EmptyState
         v-if="!filteredRecords.length"
         title="无建队记录"
-        :description="allRecords.length ? '没有符合当前筛选条件的建队记录。' : '当前对局暂无最终通过的建队记录。'"
+        :description="allRecords.length ? '没有符合当前筛选条件的建队记录。' : '当前对局暂无建队日志记录。'"
         icon="📳"
       />
       <div v-else class="order-list">
@@ -171,34 +167,12 @@ import AppStatusBadge from "../components/common/AppStatusBadge.vue";
 import StatCard from "../components/ui/StatCard.vue";
 import EmptyState from "../components/ui/EmptyState.vue";
 
-type FinalPassRecord = {
-  id: string;
-  createdAt?: string;
-  updatedAt?: string;
-  creationOrderCode?: number;
-  replacedRecordId?: string;
-  event?: {
-    matchId?: string;
-    teamId?: number | null;
-    squadId?: number | null;
-    squadName?: string;
-    leaderName?: string;
-    createdAt?: string;
-  };
-};
-
-type TrackingStateResponse = {
+type LifecycleResponse = {
   ok?: boolean;
-  data?: {
-    lifecycle?: {
-      matchId?: string | null;
-      list?: LifecycleRecord[];
-      replay?: ReplayStatus | null;
-    };
-    ruleChain?: {
-      finalPassRecords?: FinalPassRecord[];
-      finalPassCache?: { loaded?: boolean; cacheKey?: string };
-    };
+  current?: {
+    matchId?: string | null;
+    list?: LifecycleRecord[];
+    replay?: ReplayStatus | null;
   };
 };
 
@@ -223,6 +197,7 @@ type LifecycleRecord = {
   createdAtMs?: number;
   sourceOffset?: number;
   sourceMode?: string;
+  creationSource?: string;
   replayAccepted?: boolean | null;
 };
 
@@ -255,9 +230,9 @@ const recordsRefetchInterval = computed(() => resolveRefreshDelay({
 }));
 const pollIntervalLabel = computed(() => `${Math.round(recordsRefetchInterval.value / 1000)}s`);
 
-const { data: stateData, isLoading: loading, error: queryError, refetch } = useQuery<TrackingStateResponse>({
-  queryKey: ["squad-creation-order-state"],
-  queryFn: async () => apiGet<TrackingStateResponse>("/api/squad-name-tracking/state"),
+const { data: stateData, isLoading: loading, error: queryError, refetch } = useQuery<LifecycleResponse>({
+  queryKey: ["squad-creation-order-current"],
+  queryFn: async () => apiGet<LifecycleResponse>("/api/squad-lifecycle/current"),
   refetchInterval: computed(() => (pageActivity.canAutoRefresh.value ? recordsRefetchInterval.value : false)),
   refetchIntervalInBackground: false,
   refetchOnWindowFocus: false,
@@ -270,8 +245,7 @@ const error = computed(() => {
   return "";
 });
 
-const rawRecords = computed<FinalPassRecord[]>(() => stateData.value?.data?.ruleChain?.finalPassRecords ?? []);
-const replayStatus = computed<ReplayStatus | null>(() => stateData.value?.data?.lifecycle?.replay ?? null);
+const replayStatus = computed<ReplayStatus | null>(() => stateData.value?.current?.replay ?? null);
 const replayStatusLabel = computed(() => {
   const status = replayStatus.value?.status ?? "idle";
   if (status === "completed") return "建队顺序已根据日志恢复";
@@ -281,49 +255,28 @@ const replayStatusLabel = computed(() => {
   }
   return "等待建队日志回溯";
 });
-const cacheLoaded = computed(() => Boolean(stateData.value?.data?.ruleChain?.finalPassCache?.loaded));
-const cacheKey = computed(() => String(stateData.value?.data?.ruleChain?.finalPassCache?.cacheKey ?? ""));
-const matchId = computed(() => String(stateData.value?.data?.lifecycle?.matchId ?? ""));
-const matchLabel = computed(() => matchId.value || cacheKey.value || "-");
+const matchId = computed(() => String(stateData.value?.current?.matchId ?? ""));
+const matchLabel = computed(() => matchId.value || "-");
 const canClear = computed(() => auth.user?.isSuperAdmin === true);
 
 const allRecords = computed<OrderRecord[]>(() => {
-  const liveRecords = rawRecords.value.map((record, index) => ({
-    id: record.id || `creation-order-${index}`,
-    creationOrderCode: Number(record.creationOrderCode ?? 0) || 0,
-    matchId: record.event?.matchId ?? "",
-    teamId: record.event?.teamId ?? null,
-    squadId: record.event?.squadId ?? null,
-    squadName: record.event?.squadName ?? "",
-    leaderName: record.event?.leaderName ?? "",
-    createdAt: record.event?.createdAt || record.createdAt || record.updatedAt || "",
-    replacedRecordId: record.replacedRecordId,
-    sourceOffset: Number.MAX_SAFE_INTEGER,
-  }));
-  const replayRecords = (stateData.value?.data?.lifecycle?.list ?? [])
-    .filter((record) => record.sourceMode === "replay" && record.replayAccepted === true)
+  const currentMatchId = matchId.value;
+  return [...(stateData.value?.current?.list ?? [])]
+    .filter((record) => record.creationSource === "LOG")
+    .filter((record) => !currentMatchId || String(record.matchId ?? "") === currentMatchId)
+    .sort((left, right) => Number(left.order ?? 0) - Number(right.order ?? 0)
+      || (Date.parse(left.createdAt || "") || 0) - (Date.parse(right.createdAt || "") || 0)
+      || Number(left.sourceOffset ?? Number.MAX_SAFE_INTEGER) - Number(right.sourceOffset ?? Number.MAX_SAFE_INTEGER))
     .map((record, index) => ({
-      id: record.key || `replay-creation-${index}`,
-      creationOrderCode: Number(record.order ?? 0) || 0,
+      id: record.key || `creation-order-${index}`,
+      creationOrderCode: index + 1,
       matchId: record.matchId ?? "",
       teamId: record.teamId ?? null,
       squadId: record.squadId ?? null,
       squadName: record.squadName ?? "",
       leaderName: record.creatorName ?? "",
       createdAt: record.createdAt ?? "",
-      sourceOffset: Number.isFinite(Number(record.sourceOffset)) ? Number(record.sourceOffset) : Number.MAX_SAFE_INTEGER,
     }));
-  const byCreation = new Map<string, OrderRecord & { sourceOffset?: number }>();
-  for (const record of [...liveRecords, ...replayRecords]) {
-    const timeBucket = Math.floor((Date.parse(record.createdAt || "") || 0) / 10_000);
-    const key = [record.matchId, record.teamId, record.squadId, record.squadName, record.leaderName, timeBucket].join("|");
-    if (!byCreation.has(key)) byCreation.set(key, record);
-  }
-  return [...byCreation.values()]
-    .sort((left, right) => (Date.parse(left.createdAt || "") || 0) - (Date.parse(right.createdAt || "") || 0)
-      || Number(left.sourceOffset ?? Number.MAX_SAFE_INTEGER) - Number(right.sourceOffset ?? Number.MAX_SAFE_INTEGER)
-      || Number(left.squadId ?? 0) - Number(right.squadId ?? 0))
-    .map((record, index) => ({ ...record, creationOrderCode: index + 1 }));
 });
 
 const filteredRecords = computed<OrderRecord[]>(() => allRecords.value.filter((record) => {
@@ -361,7 +314,7 @@ async function clearCurrentRound() {
 
   const confirmed = await ui.openConfirm({
     title: "清空建队顺序",
-    message: "将清空当前局建队顺序记录，包括建队周期和最终通过记录。",
+    message: "将清空当前对局的内存建队顺序记录。日志文件不会被修改。",
     confirmText: "立即清空",
     cancelText: "取消",
     tone: "warn",

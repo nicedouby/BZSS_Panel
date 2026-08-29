@@ -3789,12 +3789,11 @@ export class WebServer {
       if (!this.requireSuperAdmin(user, res)) return;
       const serverId = url.searchParams.get("serverId") ?? this.getCurrentServerId("");
       this.modules.squadLifecycle?.clearCurrent?.(serverId);
-      const ruleChain = this.modules.squadRuleChain?.clearCurrent?.() ?? null;
       return this.json(res, 200, {
         ok: true,
         data: {
           serverId,
-          ruleChain,
+          lifecycle: this.modules.squadLifecycle?.getCurrent?.(serverId) ?? null,
         },
       });
     }

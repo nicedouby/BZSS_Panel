@@ -281,7 +281,7 @@ export function createSquadLifecycleReducer({ config, logger } = {}) {
     if (!serverKey || !matchKey) return { serverId: serverKey, matchId: matchKey, count: 0 };
 
     const records = [...state.recordsByKey.values()]
-      .filter((record) => record.serverId === serverKey && record.matchId === matchKey && record.replayRejected !== true)
+      .filter((record) => record.serverId === serverKey && record.matchId === matchKey && record.creationSource === "LOG" && record.replayRejected !== true)
       .sort((left, right) => {
         const timeDiff = Number(left.createdAtMs ?? 0) - Number(right.createdAtMs ?? 0);
         if (timeDiff) return timeDiff;

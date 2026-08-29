@@ -113,13 +113,15 @@ async function testReplayPendingFlushKeepsOriginalNameAndSafetyFlags() {
     ],
   });
 
-  const flushed = emitted.find((event) => event.teamId === 1 && event.squadId === 3);
-  assert.ok(flushed, "expected pending create to flush after RCON TeamID resolution");
-  assert.equal(flushed.squadName, "Original Infantry");
-  assert.equal(flushed.originalSquadName, "Original Infantry");
-  assert.equal(flushed.currentSquadName, "Command Squad");
-  assert.equal(flushed.sourceMode, "replay");
-  assert.equal(flushed.canTriggerActions, false);
+  assert.equal(emitted.length, 0, "replayed squad logs must not emit squadCreated");
+  const current = harness.module.api.getCurrent("BZSS_Main");
+  const restored = current.list.find((record) => record.teamId === 1 && record.squadId === 3);
+  assert.ok(restored, "expected replayed create to enter the current creation order");
+  assert.equal(restored.squadName, "Original Infantry");
+  assert.equal(restored.originalSquadName, "Original Infantry");
+  assert.equal(restored.currentSquadName, "Command Squad");
+  assert.equal(restored.sourceMode, "replay");
+  assert.equal(restored.canTriggerActions, false);
 
   unsubscribe();
   await harness.module.stop();

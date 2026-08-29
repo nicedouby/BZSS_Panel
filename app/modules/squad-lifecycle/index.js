@@ -2,7 +2,6 @@
 
 import { parseSquadCreateEvent, normalizeSquadName } from "./log-adapter.js";
 import { createSquadLifecycleReducer } from "./reducer.js";
-import { validateReplaySquadCreate } from "./replay-validator.js";
 import { classifySquadName } from "../../domain/squad/squad_name_classifier.js";
 import crypto from "node:crypto";
 import {
@@ -168,6 +167,20 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
 
     const serverId = String(parsed.serverId ?? event.serverId ?? core.webStatus.serverId ?? "").trim();
     if (!serverId || parsed.squadId == null) return;
+
+    // Historical log records rebuild only the in-memory creation order. They
+    // must never enter the live squadCreated channel used by enforcement,
+    // warnings, broadcasts, or other real-time consumers.
+    const sourceMode = String(parsed.sourceMode ?? event?.sourceMode ?? event?.rawEvent?.SourceMode ?? "").trim().toLowerCase();
+    if (sourceMode === "replay" || parsed.isReplay === true || event?.isReplay === true) {
+      return importReplayCreate({
+        ...parsed,
+        serverId,
+        sourceMode: "replay",
+        isReplay: true,
+        canTriggerActions: false,
+      });
+    }
 
     const matchId = resolveCurrentMatchId(serverId, parsed) || buildSyntheticMatchId(serverId, parsed);
     if (!matchId) return;
@@ -483,27 +496,6 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       return { ok: true, status: "duplicate" };
     }
 
-    const validation = validateReplaySquadCreate(normalized, config);
-    if (!validation.accepted) {
-      rememberStableCreateEvent(serverId, normalized);
-      const rejected = {
-        status: "rejected",
-        reason: "squad_name_policy",
-        squadName: normalized.squadName,
-        creatorName: normalized.creatorName,
-        eventTime: normalized.eventTime,
-        sourceOffset: normalized.sourceOffset,
-        rawLog: normalized.rawLog,
-        sourceMode: "replay",
-        canTriggerActions: false,
-        evaluation: validation.evaluation,
-      };
-      replayRejected.push(rejected);
-      if (replayRejected.length > 1000) replayRejected.splice(0, replayRejected.length - 1000);
-      replayStatus.rejectedPolicy += 1;
-      return { ok: true, status: "rejected", record: rejected };
-    }
-
     if (normalized.teamId == null) {
       normalized.teamId = getTeamIdByFactionName(serverId, normalized.factionName);
     }
@@ -576,15 +568,6 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       pendingTeamResolution: replayPendingCreates.size,
       completedAt: awaitingTeamResolution ? "" : new Date().toISOString(),
     };
-    if (!details.error && !awaitingTeamResolution) {
-      core.eventBus.emitModuleEvent("module.squadLifecycle", "replayImported", {
-        serverId,
-        matchId: rebuilt.matchId,
-        count: rebuilt.count,
-        sourceMode: "replay",
-        canTriggerActions: false,
-      });
-    }
     return { ...rebuilt, replay: api.getReplayStatus() };
   }
 

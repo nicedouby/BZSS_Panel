@@ -60,7 +60,7 @@ function replay(overrides = {}) {
   };
 }
 
-async function testAcceptedOrderAndRejectedGap() {
+async function testAllHistoricalCreatesAreOrdered() {
   const harness = createHarness();
   await harness.module.start();
   let liveCreatedEvents = 0;
@@ -71,16 +71,17 @@ async function testAcceptedOrderAndRejectedGap() {
     replay({ squadId: 8, squadName: "INVALID HISTORICAL NAME", eventTime: "2026-08-14T10:01:00.000Z", sourceOffset: 400 }),
     replay({ squadId: 2, squadName: "Squad 2", eventTime: "2026-08-14T10:02:00.000Z", sourceOffset: 500 }),
   ]);
-  assert.deepEqual(result, { found: 3, accepted: 2, rejectedPolicy: 1, duplicates: 0, pendingTeamResolution: 0 });
+  assert.deepEqual(result, { found: 3, accepted: 3, rejectedPolicy: 0, duplicates: 0, pendingTeamResolution: 0 });
   harness.module.api.finalizeReplay({ serverId: "BZSS_Main" });
 
   const current = harness.module.api.getCurrent("BZSS_Main");
-  assert.deepEqual(current.list.map((item) => item.squadName), ["Squad 7", "Squad 2"]);
-  assert.deepEqual(current.list.map((item) => item.order), [1, 2]);
+  assert.deepEqual(current.list.map((item) => item.squadName), ["Squad 7", "INVALID HISTORICAL NAME", "Squad 2"]);
+  assert.deepEqual(current.list.map((item) => item.order), [1, 2, 3]);
   assert.equal(liveCreatedEvents, 0, "replay import must not emit live squadCreated");
-  assert.equal(harness.module.api.getReplayStatus().rejectedPolicy, 1);
-  assert.equal(harness.module.api.getReplayRejected().length, 1);
+  assert.equal(harness.module.api.getReplayStatus().rejectedPolicy, 0);
+  assert.equal(harness.module.api.getReplayRejected().length, 0);
   assert.equal(harness.commands.length, 0, "replay import must not execute RCON");
+  assert.equal(harness.emitted.length, 0, "replay import must not emit any module event");
 
   unsubscribe();
   await harness.module.stop();
@@ -162,7 +163,7 @@ function subscribe(map, key, handler) {
 }
 function emit(map, key, event) { for (const handler of map.get(key) ?? []) handler(event); }
 
-await testAcceptedOrderAndRejectedGap();
+await testAllHistoricalCreatesAreOrdered();
 await testEventTimeWinsOverArrivalOrder();
 await testPendingTeamResolutionPreservesOriginalName();
 await testSyntheticMatchIsPromotedToRealMatch();
