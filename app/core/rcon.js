@@ -500,7 +500,13 @@ export default class Rcon extends EventEmitter {
     if (this.autoReconnect) {
       this._logInfo(`Reconnecting in ${this.autoReconnectDelay}ms ...`);
       this._setupSocket();
-      this._autoReconnectTimeout = setTimeout(this.connect, this.autoReconnectDelay);
+      this._autoReconnectTimeout = setTimeout(() => {
+        // 自动重连属于后台任务，必须消费 Promise rejection；RCON 未启动时
+        // ECONNREFUSED 只能记录为连接状态，不能让 Node 进程崩溃。
+        void this.connect().catch((error) => {
+          this._logWarn(`Automatic reconnect failed: ${error.message}`);
+        });
+      }, this.autoReconnectDelay);
     }
   }
 
