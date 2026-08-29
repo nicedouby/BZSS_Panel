@@ -1,31 +1,15 @@
 <template>
   <Teleport defer to=".topbar-actions">
     <div v-if="canUse" class="clean-warzone-actions">
-      <button
-        type="button"
-        class="clean-warzone-button"
-        data-action="once"
-        :data-enabled='warmupState ? "true" : "false"'
-        :disabled="!warmupState || busy"
-        :title="immediateButtonTitle"
-        @click="cleanWarzone"
-      >
+      <button type="button" class="clean-warzone-button" :data-enabled="warmupState ? 'true' : 'false'" :disabled="!warmupState || busy" title="Clean Warzone actions" @click="menuOpen = !menuOpen">
         <span class="clean-warzone-icon" aria-hidden="true">⌁</span>
-        <span>{{ busy ? "Cleaning..." : "Clean Warzone" }}</span>
+        <span>{{ loopEnabled ? "Clean Loop On" : "Clean Warzone" }}</span>
+        <span class="clean-warzone-chevron" aria-hidden="true">⌄</span>
       </button>
-
-      <button
-        type="button"
-        class="clean-warzone-button clean-warzone-loop-button"
-        data-action="loop"
-        :data-enabled='loopEnabled && warmupState ? "true" : "false"'
-        :disabled="!warmupState || (busy && !loopEnabled)"
-        :title="loopButtonTitle"
-        @click="toggleCleanWarzoneLoop"
-      >
-        <span class="clean-warzone-loop-icon" aria-hidden="true">{{ loopEnabled ? "◉" : "◌" }}</span>
-        <span>{{ loopEnabled ? "Stop Clean Loop" : "Start Clean Loop" }}</span>
-      </button>
+      <div v-if="menuOpen" class="clean-warzone-menu">
+        <button type="button" @click="menuOpen = false; cleanWarzone()">立即清理</button>
+        <button type="button" @click="toggleCleanWarzoneLoop(); menuOpen = false">{{ loopEnabled ? "关闭定时清理" : "开启定时清理" }}</button>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -40,12 +24,12 @@ import { useServerStore } from "../../stores/server.store";
 import { useUiStore } from "../../stores/ui.store";
 
 const CLEAN_WARZONE_COMMAND = "CleanWarzone:1";
-const CLEAN_WARZONE_INTERVAL_MS = 60_000;
+const CLEAN_WARZONE_INTERVAL_MS = 180_000;
 
 const auth = useAuthStore();
 const server = useServerStore();
 const ui = useUiStore();
-const busy = ref(false);
+const busy = ref(false);\nconst menuOpen = ref(false);
 const loopEnabled = ref(false);
 let loopTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -69,7 +53,7 @@ const immediateButtonTitle = computed(() => {
 
 const loopButtonTitle = computed(() => {
   if (!warmupState.value) return "Available only while warmup mode is enabled.";
-  if (loopEnabled.value) return "Stop the 60-second CleanWarzone cleanup loop.";
+  if (loopEnabled.value) return "Stop the 180-second CleanWarzone cleanup loop.";
   return "Start the 60-second CleanWarzone cleanup loop.";
 });
 
@@ -171,7 +155,7 @@ onBeforeUnmount(stopCleanWarzoneLoop);
   gap: 6px;
 }
 
-.clean-warzone-button {
+.clean-warzone-menu {\n  position: absolute;\n  top: calc(100% + 6px);\n  right: 0;\n  z-index: 20;\n  display: grid;\n  min-width: 150px;\n  padding: 5px;\n  border: 1px solid rgba(251, 146, 60, 0.35);\n  border-radius: 10px;\n  background: var(--panel-surface, #17202a);\n  box-shadow: var(--shadow-md);\n}\n\n.clean-warzone-menu button {\n  padding: 8px 10px;\n  border: 0;\n  border-radius: 6px;\n  background: transparent;\n  color: var(--color-text, #fff);\n  text-align: left;\n  cursor: pointer;\n}\n\n.clean-warzone-menu button:hover { background: rgba(251, 146, 60, 0.16); }\n\n.clean-warzone-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
