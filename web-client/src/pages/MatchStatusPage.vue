@@ -82,15 +82,14 @@
             <ErrorBlock v-if="playtimeError" :message="playtimeError" />
           </div>
 
-          <div v-if="!isMobile || mobileTab === 'teams'" class="match-loyalty-summary">
+          <div
+            v-if="!isMobile || mobileTab === 'teams'"
+            class="match-loyalty-summary"
+            :title="`步战鼠鼠游玩最长玩家：${bzssLongestOnlineCount} 名（仅统计已完成 SquadBrowser 排行榜刷新的玩家）`"
+            :aria-label="`步战鼠鼠游玩最长玩家 ${bzssLongestOnlineCount} 名`"
+          >
             <span class="match-loyalty-summary__mark">◆</span>
-            <strong>步战鼠鼠游玩最长</strong>
             <span class="match-loyalty-summary__count">{{ bzssLongestOnlineCount }}</span>
-            <span class="match-loyalty-summary__unit">/ {{ onlineSteamIdCount }} 名当前玩家</span>
-            <small>只统计已完成 SquadBrowser 排行榜刷新的玩家</small>
-            <AppButton size="sm" variant="soft" :disabled="squadBrowserRefreshLoading" @click="refreshOnlineSquadBrowser">
-              {{ squadBrowserRefreshLoading ? "刷新中…" : "刷新游玩记录" }}
-            </AppButton>
           </div>
           <div v-if="!isMobile || mobileTab === 'teams'" class="squad-main-content" :class="pageState.densityMode">
             <TeamColumn
@@ -747,27 +746,9 @@ const staleText = computed(() => {
 });
 
 const stablePlaytimes = ref<Record<string, any>>({});
-const squadBrowserRefreshLoading = ref(false);
-async function refreshOnlineSquadBrowser() {
-  if (squadBrowserRefreshLoading.value) return;
-  squadBrowserRefreshLoading.value = true;
-  try {
-    await apiPost("/api/squadbrowser/refresh-online", {});
-    ui.pushToast({ title: "游玩记录刷新已启动", message: "正在优先刷新当前对局中缺少或过期的玩家数据。" });
-  } catch (error) {
-    ui.pushToast({ title: "游玩记录刷新失败", message: renderApiError(error, "无法启动 SquadBrowser 刷新任务。") });
-  } finally {
-    squadBrowserRefreshLoading.value = false;
-  }
-}
 
 const squadLifecycleLookup = computed(() => buildSquadLifecycleLookup(squadLifecycleCurrent.value));
 const playtimes = computed(() => stablePlaytimes.value);
-const onlineSteamIdCount = computed(() => new Set(
-  (players.active ?? [])
-    .map((player: any) => String(player?.steamID ?? player?.steam64 ?? "").trim())
-    .filter(Boolean),
-).size);
 const bzssLongestOnlineCount = computed(() => {
   const online = new Set((players.active ?? [])
     .map((player: any) => String(player?.steamID ?? player?.steam64 ?? "").trim())
@@ -2308,6 +2289,7 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 .match-state-main {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
@@ -3321,22 +3303,28 @@ function filterTeamsByMode(teams: TeamViewModel[], mode: "all" | "no_leader" | "
 }
 
 .match-loyalty-summary {
-  display: flex;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 4;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 12px 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 203, 92, 0.32);
-  border-radius: 9px;
-  background: linear-gradient(90deg, rgba(255, 191, 63, 0.12), rgba(255, 191, 63, 0.03));
+  justify-content: center;
+  gap: 4px;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 203, 92, 0.38);
+  border-radius: 999px;
+  background: rgba(53, 39, 16, 0.86);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22);
   color: rgba(255, 239, 191, 0.94);
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: auto;
 }
-.match-loyalty-summary__mark { color: #ffd166; }
-.match-loyalty-summary__count { color: #ffd166; font-size: 18px; font-weight: 850; }
-.match-loyalty-summary__unit, .match-loyalty-summary small { color: rgba(230, 239, 250, 0.68); }
-.match-loyalty-summary small { margin-left: auto; }
-@media (max-width: 720px) { .match-loyalty-summary { flex-wrap: wrap; } .match-loyalty-summary small { margin-left: 0; width: 100%; } }
+.match-loyalty-summary__mark { color: #ffd166; font-size: 10px; }
+.match-loyalty-summary__count { color: #ffd166; font-size: 16px; font-weight: 850; }
 
 .match-status-data-state {
   grid-row: 3;
