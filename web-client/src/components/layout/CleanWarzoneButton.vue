@@ -5,7 +5,7 @@
         type="button"
         class="clean-warzone-button"
         data-action="once"
-        :data-enabled="warmupState ? "true" : "false""
+        :data-enabled='warmupState ? "true" : "false"'
         :disabled="!warmupState || busy"
         :title="immediateButtonTitle"
         @click="cleanWarzone"
@@ -18,7 +18,7 @@
         type="button"
         class="clean-warzone-button clean-warzone-loop-button"
         data-action="loop"
-        :data-enabled="loopEnabled && warmupState ? "true" : "false""
+        :data-enabled='loopEnabled && warmupState ? "true" : "false"'
         :disabled="!warmupState || (busy && !loopEnabled)"
         :title="loopButtonTitle"
         @click="toggleCleanWarzoneLoop"
