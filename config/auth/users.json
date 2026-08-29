@@ -254,6 +254,24 @@
       "createdAt": 1787643120057,
       "updatedAt": 1787643120057,
       "passwordChangedAt": 1787643120057
+    },
+    {
+      "id": "user:行云起",
+      "username": "行云起",
+      "usernameNormalized": "行云起",
+      "passwordHash": "scrypt$AatwVdAO1f2oNogchmxfxQ$Go3K4rKmq3bOUIS4Cz-mH5EH9uHJ0Jq_aC13tcKjWu_d6jkqxqe0jHjxAwF6QKhJEjfQud_gZ8PAYQ0G5ISOBA",
+      "role": "Admin",
+      "displayName": "行云起",
+      "steam64": "76561198951123521",
+      "viewerTeamAutoSwapEnabled": true,
+      "enabled": true,
+      "note": "",
+      "permissionGroupId": "group:mqahgir0f96hwgsk",
+      "authVersion": 1,
+      "permissions": [],
+      "createdAt": 1787982195234,
+      "updatedAt": 1787982195234,
+      "passwordChangedAt": 1787982195234
     }
   ],
   "permissionGroups": [
@@ -278,7 +296,6 @@
         "plugin:tactical-report:logs",
         "plugin:tactical-report:user-codes",
         "panel_ban.manage",
-        "plugin:panel-ban:view",
         "panel_ban.ban",
         "plugin:network-block:view",
         "server_stats.view",
