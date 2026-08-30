@@ -1,139 +1,176 @@
 <template>
   <section class="panel-ban-page">
-    <PageHeader title="面板封禁" subtitle="集中管理封禁身份、有效期和命中记录。所有操作继续使用现有权限与审计链路。" eyebrow="Moderation">
+    <PageHeader title="面板封禁" subtitle="创建、检索和维护全局封禁记录。" eyebrow="Moderation">
       <template #actions>
         <div class="header-actions">
-          <StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>{{ state.lastError ? "状态异常" : "封禁服务正常" }}</StatusBadge>
+          <StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>{{ state.lastError ? "服务异常" : "服务正常" }}</StatusBadge>
           <AppButton size="sm" variant="ghost" :loading="refreshing || loading" @click="refreshState">刷新</AppButton>
-          <AppButton size="sm" variant="ghost" :loading="reloading" @click="reloadStore">重载列表</AppButton>
+          <AppButton size="sm" variant="ghost" :loading="reloading" @click="reloadStore">重载</AppButton>
           <AppButton size="sm" variant="ghost" :loading="rescanning" @click="rescanNow">扫描在线玩家</AppButton>
         </div>
       </template>
     </PageHeader>
 
     <StatGrid :items="summaryItems" :loading="loading && !state" />
+
     <div v-if="pageError || error || state?.lastError" class="notice notice--danger" role="alert">
-      <strong>封禁服务异常</strong><span>{{ pageError || error || state?.lastError }}</span>
+      <strong>异常</strong><span>{{ pageError || error || state?.lastError }}</span>
     </div>
 
-    <div class="ban-workspace">
-      <aside class="editor-column">
-        <PageCard title="封禁处理" :description="editingId ? '正在修改已有条目，保存后立即生效。' : '选择玩家并设置原因与期限。'" :class="{ 'ban-actions-disabled': !canBan }">
-          <form class="ban-form" @submit.prevent="submitDraft">
-            <div class="editor-mode" :class="{ 'editor-mode--editing': editingId }">
-              <div><span class="section-kicker">{{ editingId ? "EDITING" : "NEW BAN" }}</span><strong>{{ editingId ? "编辑封禁条目" : "创建新封禁" }}</strong></div>
-              <StatusBadge :tone="editingId ? 'warning' : 'info'" size="sm">{{ editingId ? "编辑模式" : "新建模式" }}</StatusBadge>
-            </div>
-
-            <div class="form-section">
-              <div class="section-title"><span class="section-index">01</span><div><strong>选择目标</strong><span>支持玩家名、Steam64 或 EOS ID</span></div></div>
-              <div class="field">
-                <PlayerSelect v-model="targetPlayerInput" @select="handlePlayerSelect" placeholder="搜索在线玩家或直接粘贴身份 ID" />
-              </div>
-              <div v-if="draft.name || draft.steamID || draft.eosID" class="selected-identity">
-                <strong>{{ draft.name || "未记录玩家名" }}</strong>
-                <span v-if="draft.steamID">Steam · {{ draft.steamID }}</span>
-                <span v-if="draft.eosID">EOS · {{ draft.eosID }}</span>
-              </div>
-            </div>
-
-            <div class="form-section">
-              <div class="section-title"><span class="section-index">02</span><div><strong>封禁原因</strong><span>该内容会在踢出玩家时展示</span></div></div>
-              <label class="field"><textarea v-model.trim="draft.reason" rows="4" placeholder="简明填写违规行为与处理依据" /></label>
-            </div>
-
-            <div class="form-section">
-              <div class="section-title"><span class="section-index">03</span><div><strong>有效期限</strong><span>选择快捷时长，或自行指定</span></div></div>
-              <div class="quick-duration-actions" aria-label="快捷封禁时长">
-                <button type="button" @click="setQuickDuration(1)">1 天</button>
-                <button type="button" @click="setQuickDuration(3)">3 天</button>
-                <button type="button" @click="setQuickDuration(7)">7 天</button>
-                <button type="button" @click="setQuickDuration(30)">30 天</button>
-              </div>
-              <div class="duration-grid">
-                <label class="field"><span>时长</span><input v-model.number="draft.durationValue" type="number" min="1" step="1" placeholder="7" /></label>
-                <label class="field"><span>单位</span><select v-model="draft.durationUnit"><option value="minutes">分钟</option><option value="hours">小时</option><option value="days">天</option><option value="weeks">周</option></select></label>
-              </div>
-              <label class="field"><span>精确到期时间</span><input v-model="draft.expiresAt" type="datetime-local" /></label>
-              <label class="field"><span>条目状态</span><select v-model="draft.status"><option value="active">有效</option><option value="disabled">禁用</option><option value="expired">已过期</option></select></label>
-              <div class="expiry-preview"><span>预计到期</span><strong>{{ expiryPreview.label }}</strong><small>{{ expiryPreview.hint }}</small></div>
-            </div>
-
-            <div class="form-actions">
-              <AppButton type="submit" :loading="saving" :disabled="!canBan">{{ editingId ? "保存修改" : "确认封禁" }}</AppButton>
-              <AppButton type="button" variant="ghost" :disabled="saving" @click="resetDraft">{{ editingId ? "取消编辑" : "清空内容" }}</AppButton>
-            </div>
-            <p v-if="!canBan" class="permission-hint">当前账户没有封禁管理权限。</p>
-          </form>
-        </PageCard>
-      </aside>
-
-      <main class="list-column">
-        <PageCard title="封禁名单" :description="'当前筛选显示 ' + visibleEntries.length + ' 条，共 ' + (state?.totalEntries ?? 0) + ' 条。'">
-          <div class="list-toolbar">
-            <label class="search-box"><span class="sr-only">搜索封禁名单</span><input v-model.trim="searchText" type="search" placeholder="搜索玩家名、Steam64、EOS 或封禁原因" /></label>
-            <div class="status-tabs" role="tablist" aria-label="封禁状态">
-              <button v-for="option in statusOptions" :key="option.value" type="button" class="status-tab" :class="{ active: viewStatus === option.value }" @click="viewStatus = option.value">{{ option.label }}</button>
+    <PageCard class="quick-ban-card" :title="editingId ? '编辑封禁' : '快速封禁'" :description="editingId ? '正在修改 ' + editingId : '选择玩家、填写原因并确定有效期。'">
+      <form class="quick-ban-form" :class="{ 'ban-actions-disabled': !canBan }" @submit.prevent="submitDraft">
+        <div class="quick-ban-primary">
+          <div class="field field--player">
+            <span>玩家</span>
+            <PlayerSelect v-model="targetPlayerInput" @select="handlePlayerSelect" placeholder="玩家名 / Steam64 / EOS ID" />
+            <div v-if="draft.name || draft.steamID || draft.eosID" class="identity-preview">
+              <strong>{{ draft.name || "未记录玩家名" }}</strong>
+              <span>{{ draft.steamID || draft.eosID }}</span>
             </div>
           </div>
 
-          <div class="table-wrap">
-            <table class="ban-table">
-              <thead><tr><th>玩家身份</th><th>封禁原因</th><th>状态与期限</th><th>命中记录</th><th class="action-column">操作</th></tr></thead>
-              <tbody>
-                <tr v-for="entry in visibleEntries" :key="entry.id" :class="'row--' + entry.status">
-                  <td>
-                    <div class="identity-cell">
-                      <div class="identity-heading"><strong>{{ entry.name || "未记录玩家名" }}</strong><StatusBadge :tone="entryStatusTone(entry.status)" size="sm">{{ entryStatusLabel(entry.status) }}</StatusBadge></div>
-                      <button v-if="entry.steamID" type="button" class="identity-id identity-id--steam" title="复制 Steam64" @click="copyTextWithToast(entry.steamID, ui)"><span>STEAM</span><code>{{ entry.steamID }}</code></button>
-                      <button v-if="entry.eosID" type="button" class="identity-id identity-id--eos" title="复制 EOS ID" @click="copyTextWithToast(entry.eosID, ui)"><span>EOS</span><code>{{ entry.eosID }}</code></button>
-                    </div>
-                  </td>
-                  <td class="reason-cell"><p :title="entry.reason || '未填写原因'">{{ entry.reason || "未填写原因" }}</p><small>创建人：{{ entry.createdBy || "未知" }}</small></td>
-                  <td><div class="expiry-cell"><StatusBadge :tone="entryStatusTone(entry.status)" size="sm">{{ entryStatusLabel(entry.status) }}</StatusBadge><strong :class="{ 'text-danger': entry.status === 'active' && entry.expiresInMs < 86400000 }">{{ entry.expiresInLabel }}</strong><span>{{ formatTime(entry.expiresAt) }}</span></div></td>
-                  <td>
-                    <div class="hit-cell">
-                      <span class="hit-count" :class="{ 'hit-count--active': entry.hitCount > 0 }">{{ entry.hitCount }}</span>
-                      <div v-if="entry.lastHitAt"><strong>{{ entry.lastHitPlayerName || "未知玩家" }}</strong><span>{{ formatTime(entry.lastHitAt) }}</span></div>
-                      <span v-else class="text-muted">尚未命中</span>
-                    </div>
-                  </td>
-                  <td><div class="row-actions">
-                    <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">编辑</AppButton>
-                    <AppButton v-if="entry.status === 'active'" size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'disabled')">停用</AppButton>
-                    <AppButton v-else-if="entry.status === 'disabled'" size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'active')">启用</AppButton>
-                    <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">删除</AppButton>
-                  </div></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <EmptyState v-if="!visibleEntries.length && !loading" compact title="没有匹配的封禁条目" description="尝试切换状态筛选或清除搜索关键词。" />
-        </PageCard>
-      </main>
-    </div>
+          <label class="field field--reason">
+            <span>封禁原因</span>
+            <textarea v-model.trim="draft.reason" rows="2" placeholder="填写违规行为与处理依据" />
+          </label>
+        </div>
 
-    <PageCard title="封禁活动" description="核对封禁命中和名单变更，便于管理员快速追溯。">
+        <div class="quick-ban-options">
+          <div class="duration-block">
+            <span class="field-label">封禁时长</span>
+            <div class="duration-preset">
+              <button type="button" @click="setQuickDuration(1)">1 天</button>
+              <button type="button" @click="setQuickDuration(3)">3 天</button>
+              <button type="button" @click="setQuickDuration(7)">7 天</button>
+              <button type="button" @click="setQuickDuration(30)">30 天</button>
+            </div>
+          </div>
+
+          <label class="field field--duration">
+            <span>自定义</span>
+            <div class="inline-fields">
+              <input v-model.number="draft.durationValue" type="number" min="1" step="1" />
+              <select v-model="draft.durationUnit">
+                <option value="minutes">分钟</option>
+                <option value="hours">小时</option>
+                <option value="days">天</option>
+                <option value="weeks">周</option>
+              </select>
+            </div>
+          </label>
+
+          <label class="field field--expiry">
+            <span>精确到期</span>
+            <input v-model="draft.expiresAt" type="datetime-local" />
+          </label>
+
+          <label class="field field--status">
+            <span>状态</span>
+            <select v-model="draft.status">
+              <option value="active">有效</option>
+              <option value="disabled">禁用</option>
+              <option value="expired">已过期</option>
+            </select>
+          </label>
+
+          <div class="expiry-summary">
+            <span>预计到期</span>
+            <strong>{{ expiryPreview.label }}</strong>
+            <small>{{ expiryPreview.hint }}</small>
+          </div>
+        </div>
+
+        <div class="quick-ban-footer">
+          <span v-if="!canBan" class="permission-hint">当前账户没有封禁管理权限。</span>
+          <span v-else class="form-hint">身份、原因与到期时间确认无误后提交。</span>
+          <div class="form-actions">
+            <AppButton type="button" variant="ghost" :disabled="saving" @click="resetDraft">{{ editingId ? "取消编辑" : "清空" }}</AppButton>
+            <AppButton type="submit" :loading="saving" :disabled="!canBan">{{ editingId ? "保存修改" : "创建封禁" }}</AppButton>
+          </div>
+        </div>
+      </form>
+    </PageCard>
+
+    <PageCard class="ban-list-card" title="封禁名单" :description="'显示 ' + visibleEntries.length + ' 条，共 ' + (state?.totalEntries ?? 0) + ' 条。'">
+      <div class="list-toolbar">
+        <label class="search-box">
+          <span class="sr-only">搜索封禁名单</span>
+          <input v-model.trim="searchText" type="search" placeholder="搜索玩家名、Steam64、EOS 或封禁原因" />
+        </label>
+        <div class="status-tabs" role="tablist" aria-label="封禁状态">
+          <button v-for="option in statusOptions" :key="option.value" type="button" class="status-tab" :class="{ active: viewStatus === option.value }" @click="viewStatus = option.value">{{ option.label }}</button>
+        </div>
+      </div>
+
+      <div class="ban-list">
+        <article v-for="entry in visibleEntries" :key="entry.id" class="ban-row" :class="'ban-row--' + entry.status">
+          <div class="ban-row-status"><StatusBadge :tone="entryStatusTone(entry.status)" size="sm">{{ entryStatusLabel(entry.status) }}</StatusBadge></div>
+
+          <div class="ban-identity">
+            <strong>{{ entry.name || "未记录玩家名" }}</strong>
+            <button v-if="entry.steamID" type="button" class="identity-id identity-id--steam" title="复制 Steam64" @click="copyTextWithToast(entry.steamID, ui)"><span>STEAM</span><code>{{ entry.steamID }}</code></button>
+            <button v-if="entry.eosID" type="button" class="identity-id identity-id--eos" title="复制 EOS ID" @click="copyTextWithToast(entry.eosID, ui)"><span>EOS</span><code>{{ entry.eosID }}</code></button>
+          </div>
+
+          <div class="ban-reason">
+            <span class="row-label">原因</span>
+            <p :title="entry.reason || '未填写原因'">{{ entry.reason || "未填写原因" }}</p>
+            <small>{{ entry.createdBy || "未知管理员" }}</small>
+          </div>
+
+          <div class="ban-expiry">
+            <span class="row-label">剩余时间</span>
+            <strong :class="{ 'text-danger': entry.status === 'active' && entry.expiresInMs < 86400000 }">{{ entry.expiresInLabel }}</strong>
+            <small>{{ formatTime(entry.expiresAt) }}</small>
+          </div>
+
+          <div class="ban-hit">
+            <span class="hit-count" :class="{ 'hit-count--active': entry.hitCount > 0 }">{{ entry.hitCount }}</span>
+            <div>
+              <span class="row-label">命中次数</span>
+              <strong v-if="entry.lastHitAt">{{ entry.lastHitPlayerName || "未知玩家" }}</strong>
+              <small>{{ entry.lastHitAt ? formatTime(entry.lastHitAt) : "尚未命中" }}</small>
+            </div>
+          </div>
+
+          <div class="row-actions">
+            <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">编辑</AppButton>
+            <AppButton v-if="entry.status === 'active'" size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'disabled')">停用</AppButton>
+            <AppButton v-else-if="entry.status === 'disabled'" size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'active')">启用</AppButton>
+            <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">删除</AppButton>
+          </div>
+        </article>
+      </div>
+
+      <EmptyState v-if="!visibleEntries.length && !loading" compact title="没有匹配的封禁条目" description="尝试切换状态或清除搜索关键词。" />
+    </PageCard>
+
+    <PageCard class="activity-card" title="最近活动" description="封禁命中与名单变更记录。">
       <template #actions>
         <div class="event-tabs">
-          <button type="button" class="event-tab-btn" :class="{ 'event-tab-btn--active': activeEventTab === 'hits' }" @click="activeEventTab = 'hits'">命中历史 <span>{{ recentHitEvents.length }}</span></button>
-          <button type="button" class="event-tab-btn" :class="{ 'event-tab-btn--active': activeEventTab === 'events' }" @click="activeEventTab = 'events'">系统事件 <span>{{ recentEvents.length }}</span></button>
+          <button type="button" class="event-tab-btn" :class="{ 'event-tab-btn--active': activeEventTab === 'hits' }" @click="activeEventTab = 'hits'">命中 {{ recentHitEvents.length }}</button>
+          <button type="button" class="event-tab-btn" :class="{ 'event-tab-btn--active': activeEventTab === 'events' }" @click="activeEventTab = 'events'">系统 {{ recentEvents.length }}</button>
         </div>
       </template>
+
       <div class="activity-list">
         <template v-if="activeEventTab === 'hits'">
-          <article v-for="event in recentHitEvents" :key="event.id" class="activity-item" :data-kind="event.kind">
+          <article v-for="event in recentHitEvents" :key="event.id" class="activity-row" :data-kind="event.kind">
             <StatusBadge :tone="event.kind === 'kick_success' ? 'success' : event.kind === 'kick_failed' ? 'danger' : 'info'" size="sm">{{ event.kind }}</StatusBadge>
-            <div><strong>{{ event.playerName || event.entryName || "未知玩家" }}</strong><span>{{ event.matchType ? event.matchType + ": " + event.matchValue : event.reason || "未记录匹配信息" }}</span></div>
-            <span>{{ event.serverId || "global" }}</span><time>{{ formatTime(event.at) }}</time>
+            <strong>{{ event.playerName || event.entryName || "未知玩家" }}</strong>
+            <span>{{ event.matchType ? event.matchType + ": " + event.matchValue : event.reason || "未记录匹配信息" }}</span>
+            <span>{{ event.serverId || "global" }}</span>
+            <time>{{ formatTime(event.at) }}</time>
           </article>
           <EmptyState v-if="!recentHitEvents.length && !loading" compact title="暂无命中历史" description="还没有玩家命中封禁名单。" />
         </template>
         <template v-else>
-          <article v-for="event in recentEvents" :key="event.id" class="activity-item" :data-kind="event.kind">
+          <article v-for="event in recentEvents" :key="event.id" class="activity-row" :data-kind="event.kind">
             <StatusBadge :tone="eventTone(event.kind)" size="sm">{{ event.kind }}</StatusBadge>
-            <div><strong>{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong><span>{{ event.reason || event.entryId || "未记录补充信息" }}</span></div>
-            <span>{{ event.serverId || "global" }}</span><time>{{ formatTime(event.at) }}</time>
+            <strong>{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong>
+            <span>{{ event.reason || event.entryId || "未记录补充信息" }}</span>
+            <span>{{ event.serverId || "global" }}</span>
+            <time>{{ formatTime(event.at) }}</time>
           </article>
           <EmptyState v-if="!recentEvents.length && !loading" compact title="暂无系统事件" description="系统尚未记录封禁事件。" />
         </template>
@@ -666,17 +703,11 @@ function expiryLabelClass(entry: BanEntry) {
 </script>
 
 <style scoped>
-.panel-ban-page{display:grid;gap:16px;min-width:0}.header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.notice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--color-border-default);border-radius:12px}.notice strong{flex:none}.notice--danger{border-color:color-mix(in srgb,var(--color-status-danger,var(--color-status-error)) 38%,var(--color-border-default));background:color-mix(in srgb,var(--color-status-danger,var(--color-status-error)) 10%,transparent)}
-.ban-workspace{display:grid;grid-template-columns:minmax(340px,400px) minmax(0,1fr);gap:16px;align-items:start}.editor-column,.list-column{min-width:0}.editor-column{position:sticky;top:16px}.ban-form{display:grid;gap:14px}.editor-mode{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--color-status-info) 28%,var(--color-border-default));border-radius:12px;background:color-mix(in srgb,var(--color-status-info) 7%,transparent)}.editor-mode--editing{border-color:color-mix(in srgb,var(--color-status-warning) 38%,var(--color-border-default));background:color-mix(in srgb,var(--color-status-warning) 8%,transparent)}.editor-mode>div{display:grid;gap:2px}.editor-mode strong{font-size:13px}.section-kicker{color:var(--color-text-muted);font-size:9px;font-weight:800;letter-spacing:.12em}
-.form-section{display:grid;gap:10px;padding-top:14px;border-top:1px solid color-mix(in srgb,var(--color-border-default) 80%,transparent)}.section-title{display:flex;align-items:center;gap:9px}.section-title>div{display:grid;gap:1px}.section-title strong{font-size:13px}.section-title div span{color:var(--color-text-muted);font-size:11px}.section-index{display:grid;place-items:center;width:25px;height:25px;flex:none;border-radius:8px;color:var(--color-status-info);background:color-mix(in srgb,var(--color-status-info) 10%,transparent);font-size:10px;font-weight:800}
-.field{display:grid;gap:6px;color:var(--color-text-secondary);font-size:11px}.field input,.field textarea,.field select,.search-box input{width:100%;border:1px solid var(--color-border-default);border-radius:10px;outline:none;background:color-mix(in srgb,var(--color-bg-card) 72%,#000 28%);color:var(--color-text-primary);padding:10px 11px;transition:border-color .15s ease,box-shadow .15s ease}.field textarea{resize:vertical;min-height:88px}.field input:focus,.field textarea:focus,.field select:focus,.search-box input:focus{border-color:color-mix(in srgb,var(--color-status-info) 62%,white 38%);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-status-info) 16%,transparent)}
-.selected-identity{display:grid;gap:3px;padding:10px 12px;border:1px dashed color-mix(in srgb,var(--color-status-info) 35%,var(--color-border-default));border-radius:10px;background:color-mix(in srgb,var(--color-status-info) 5%,transparent);overflow:hidden}.selected-identity strong{font-size:13px}.selected-identity span{overflow:hidden;color:var(--color-text-muted);font:10px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;text-overflow:ellipsis;white-space:nowrap}
-.quick-duration-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}.quick-duration-actions button{min-height:34px;border:1px solid var(--color-border-default);border-radius:9px;background:color-mix(in srgb,var(--color-bg-card) 85%,white 15%);color:var(--color-text-secondary);cursor:pointer;font-size:11px;font-weight:700}.quick-duration-actions button:hover{border-color:color-mix(in srgb,var(--color-status-info) 45%,var(--color-border-default));color:var(--color-text-primary)}.duration-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.expiry-preview{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:3px 10px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent);border-radius:10px;background:rgba(255,255,255,.025)}.expiry-preview span{color:var(--color-text-muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase}.expiry-preview strong{font-size:13px;text-align:right}.expiry-preview small{grid-column:1/-1;color:var(--color-text-muted);font-size:10px}.form-actions{display:grid;grid-template-columns:1fr auto;gap:8px}.permission-hint{margin:0;color:var(--color-status-danger);font-size:11px}
-.list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.search-box{flex:1 1 320px;min-width:220px}.status-tabs,.event-tabs{display:flex;align-items:center;gap:4px;padding:3px;border:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent);border-radius:10px;background:rgba(0,0,0,.14)}.status-tab,.event-tab-btn{border:0;border-radius:7px;background:transparent;color:var(--color-text-muted);cursor:pointer;font-size:11px;font-weight:700;padding:7px 10px;white-space:nowrap}.status-tab:hover,.event-tab-btn:hover{color:var(--color-text-primary)}.status-tab.active,.event-tab-btn--active{background:color-mix(in srgb,var(--color-status-info) 12%,rgba(255,255,255,.03));color:var(--color-status-info);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--color-status-info) 16%,transparent)}.event-tab-btn span{display:inline-grid;place-items:center;min-width:18px;margin-left:3px;padding:1px 4px;border-radius:999px;background:rgba(255,255,255,.06);font-size:9px}
-.table-wrap{max-height:690px;overflow:auto;overscroll-behavior:contain;border:1px solid color-mix(in srgb,var(--color-border-default) 72%,transparent);border-radius:12px}.ban-table{width:100%;min-width:940px;border-collapse:separate;border-spacing:0}.ban-table th{position:sticky;top:0;z-index:2;padding:10px 12px;border-bottom:1px solid var(--color-border-default);background:color-mix(in srgb,var(--color-bg-card) 94%,#000 6%);color:var(--color-text-muted);font-size:10px;letter-spacing:.04em;text-align:left;text-transform:uppercase;white-space:nowrap}.ban-table td{padding:12px;border-bottom:1px solid color-mix(in srgb,var(--color-border-default) 72%,transparent);vertical-align:middle}.ban-table tbody tr:last-child td{border-bottom:0}.ban-table tbody tr{transition:background-color .15s ease}.ban-table tbody tr:hover{background:rgba(255,255,255,.018)}.row--disabled{opacity:.67}.row--expired{background:color-mix(in srgb,var(--color-status-warning) 4%,transparent)}.action-column{width:1%}
-.identity-cell{display:grid;gap:5px;min-width:215px;max-width:285px}.identity-heading{display:flex;align-items:center;gap:7px}.identity-heading strong{min-width:0;overflow:hidden;color:var(--color-text-primary);font-size:13px;text-overflow:ellipsis;white-space:nowrap}.identity-id{display:flex;align-items:stretch;width:fit-content;max-width:100%;overflow:hidden;padding:0;border:1px solid rgba(255,255,255,.06);border-radius:6px;background:rgba(0,0,0,.18);color:var(--color-text-muted);cursor:pointer}.identity-id span{flex:none;padding:3px 5px;color:#dbeafe;background:rgba(59,130,246,.27);font-size:8px;font-weight:800}.identity-id--eos span{color:#f3e8ff;background:rgba(168,85,247,.27)}.identity-id code{min-width:0;overflow:hidden;padding:3px 6px;color:inherit;font-size:9px;text-overflow:ellipsis}.identity-id:hover{border-color:rgba(255,255,255,.16);color:var(--color-text-primary)}
-.reason-cell{min-width:180px;max-width:300px}.reason-cell p{display:-webkit-box;overflow:hidden;margin:0 0 5px;color:var(--color-text-secondary);font-size:12px;line-height:1.45;-webkit-box-orient:vertical;-webkit-line-clamp:2}.reason-cell small{color:var(--color-text-muted);font-size:9px}.expiry-cell{display:grid;gap:3px;min-width:115px}.expiry-cell strong{color:var(--color-status-success);font-size:12px}.expiry-cell span{color:var(--color-text-muted);font-size:10px;white-space:nowrap}.text-danger{color:var(--color-status-danger)!important}.text-muted{color:var(--color-text-muted);font-size:10px}.hit-cell{display:flex;align-items:center;gap:8px;min-width:135px}.hit-cell>div{display:grid;gap:2px}.hit-cell strong{max-width:110px;overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.hit-cell span{color:var(--color-text-muted);font-size:9px}.hit-count{display:grid;place-items:center;min-width:28px;height:28px;padding:0 6px;border-radius:8px;background:rgba(255,255,255,.045);color:var(--color-text-muted)!important;font-size:11px!important;font-weight:800}.hit-count--active{border:1px solid color-mix(in srgb,var(--color-status-danger) 35%,transparent);background:color-mix(in srgb,var(--color-status-danger) 11%,transparent);color:color-mix(in srgb,var(--color-status-danger) 75%,white)!important}.row-actions{display:flex;gap:3px;justify-content:flex-end;white-space:nowrap}
-.activity-list{display:grid;max-height:340px;overflow:auto;overscroll-behavior:contain}.activity-item{display:grid;grid-template-columns:110px minmax(180px,1fr) minmax(90px,150px) 150px;align-items:center;gap:12px;min-height:58px;padding:9px 12px;border-bottom:1px solid color-mix(in srgb,var(--color-border-default) 70%,transparent);border-left:2px solid var(--color-border-default)}.activity-item:last-child{border-bottom:0}.activity-item[data-kind="kick_success"]{border-left-color:var(--color-status-success)}.activity-item[data-kind="kick_failed"]{border-left-color:var(--color-status-danger)}.activity-item[data-kind="expired"]{border-left-color:var(--color-status-warning)}.activity-item>div{display:grid;gap:3px;min-width:0}.activity-item strong,.activity-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.activity-item strong{font-size:12px}.activity-item span,.activity-item time{color:var(--color-text-muted);font-size:10px}.activity-item time{text-align:right;white-space:nowrap}
-.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.table-wrap::-webkit-scrollbar,.activity-list::-webkit-scrollbar{width:7px;height:7px}.table-wrap::-webkit-scrollbar-thumb,.activity-list::-webkit-scrollbar-thumb{border-radius:999px;background:rgba(255,255,255,.1)}.table-wrap::-webkit-scrollbar-track,.activity-list::-webkit-scrollbar-track{background:rgba(0,0,0,.08)}
-@media(max-width:1240px){.ban-workspace{grid-template-columns:340px minmax(0,1fr)}.list-toolbar{align-items:stretch;flex-direction:column}.search-box{flex-basis:auto}}@media(max-width:980px){.ban-workspace{grid-template-columns:1fr}.editor-column{position:static}.activity-item{grid-template-columns:100px minmax(0,1fr) 130px}.activity-item>span{display:none}}@media(max-width:640px){.header-actions{justify-content:flex-start}.duration-grid{grid-template-columns:1fr}.quick-duration-actions{grid-template-columns:repeat(2,1fr)}.status-tabs,.event-tabs{width:100%;overflow-x:auto}.status-tab,.event-tab-btn{flex:1 0 auto}.activity-item{grid-template-columns:88px minmax(0,1fr)}.activity-item time{grid-column:2;text-align:left}}
+.panel-ban-page{display:grid;gap:16px;min-width:0}.header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.notice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--color-border-default);border-radius:12px}.notice--danger{border-color:color-mix(in srgb,var(--color-status-danger,var(--color-status-error)) 38%,var(--color-border-default));background:color-mix(in srgb,var(--color-status-danger,var(--color-status-error)) 10%,transparent)}
+.quick-ban-form{display:grid;gap:14px}.quick-ban-primary{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(360px,1.4fr);gap:14px}.quick-ban-options{display:grid;grid-template-columns:auto 190px minmax(210px,1fr) 120px minmax(180px,.8fr);align-items:end;gap:10px;padding-top:14px;border-top:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent)}.field{display:grid;align-content:start;gap:6px;min-width:0;color:var(--color-text-secondary);font-size:11px}.field>span,.field-label{color:var(--color-text-muted);font-size:10px;font-weight:700;letter-spacing:.04em}.field input,.field textarea,.field select,.search-box input{width:100%;border:1px solid var(--color-border-default);border-radius:9px;outline:none;background:color-mix(in srgb,var(--color-bg-card) 72%,#000 28%);color:var(--color-text-primary);padding:9px 10px}.field textarea{min-height:64px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus,.search-box input:focus{border-color:color-mix(in srgb,var(--color-status-info) 60%,white 40%);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-status-info) 15%,transparent)}
+.identity-preview{display:flex;align-items:center;gap:8px;min-width:0;padding:6px 9px;border:1px dashed color-mix(in srgb,var(--color-status-info) 30%,var(--color-border-default));border-radius:8px;background:color-mix(in srgb,var(--color-status-info) 5%,transparent)}.identity-preview strong{flex:none;font-size:11px}.identity-preview span{min-width:0;overflow:hidden;color:var(--color-text-muted);font:9px ui-monospace,SFMono-Regular,Menlo,monospace;text-overflow:ellipsis;white-space:nowrap}.duration-block{display:grid;gap:6px}.duration-preset{display:flex;gap:5px}.duration-preset button{height:35px;padding:0 10px;border:1px solid var(--color-border-default);border-radius:8px;background:rgba(255,255,255,.025);color:var(--color-text-secondary);cursor:pointer;font-size:10px;font-weight:700}.duration-preset button:hover{border-color:color-mix(in srgb,var(--color-status-info) 45%,var(--color-border-default));color:var(--color-text-primary)}.inline-fields{display:grid;grid-template-columns:70px 1fr;gap:5px}.expiry-summary{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:2px 8px;min-height:55px;padding:8px 10px;border:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent);border-radius:9px;background:rgba(255,255,255,.02)}.expiry-summary span{color:var(--color-text-muted);font-size:9px}.expiry-summary strong{overflow:hidden;font-size:11px;text-align:right;text-overflow:ellipsis;white-space:nowrap}.expiry-summary small{grid-column:1/-1;color:var(--color-text-muted);font-size:9px}.quick-ban-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent)}.form-hint,.permission-hint{font-size:10px}.form-hint{color:var(--color-text-muted)}.permission-hint{color:var(--color-status-danger)}.form-actions{display:flex;gap:8px}
+.list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.search-box{flex:1;min-width:240px}.status-tabs,.event-tabs{display:flex;gap:4px;padding:3px;border:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent);border-radius:9px;background:rgba(0,0,0,.13)}.status-tab,.event-tab-btn{border:0;border-radius:6px;background:transparent;color:var(--color-text-muted);cursor:pointer;font-size:10px;font-weight:700;padding:7px 10px;white-space:nowrap}.status-tab.active,.event-tab-btn--active{background:color-mix(in srgb,var(--color-status-info) 12%,rgba(255,255,255,.03));color:var(--color-status-info)}
+.ban-list{display:grid;max-height:640px;overflow:auto;border:1px solid color-mix(in srgb,var(--color-border-default) 72%,transparent);border-radius:11px;overscroll-behavior:contain}.ban-row{display:grid;grid-template-columns:70px minmax(210px,1.05fr) minmax(180px,1.4fr) 130px 160px auto;align-items:center;gap:12px;min-height:82px;padding:11px 12px;border-bottom:1px solid color-mix(in srgb,var(--color-border-default) 72%,transparent);transition:background .15s ease}.ban-row:last-child{border-bottom:0}.ban-row:hover{background:rgba(255,255,255,.018)}.ban-row--disabled{opacity:.65}.ban-row--expired{background:color-mix(in srgb,var(--color-status-warning) 4%,transparent)}.ban-identity,.ban-reason,.ban-expiry{display:grid;gap:4px;min-width:0}.ban-identity>strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.identity-id{display:flex;width:fit-content;max-width:100%;overflow:hidden;padding:0;border:1px solid rgba(255,255,255,.06);border-radius:5px;background:rgba(0,0,0,.17);color:var(--color-text-muted);cursor:pointer}.identity-id span{flex:none;padding:3px 5px;color:#dbeafe;background:rgba(59,130,246,.25);font-size:8px;font-weight:800}.identity-id--eos span{color:#f3e8ff;background:rgba(168,85,247,.25)}.identity-id code{min-width:0;overflow:hidden;padding:3px 6px;color:inherit;font-size:9px;text-overflow:ellipsis}.row-label{color:var(--color-text-muted);font-size:9px;font-weight:700;text-transform:uppercase}.ban-reason p{display:-webkit-box;overflow:hidden;margin:0;color:var(--color-text-secondary);font-size:11px;line-height:1.4;-webkit-box-orient:vertical;-webkit-line-clamp:2}.ban-reason small,.ban-expiry small,.ban-hit small{color:var(--color-text-muted);font-size:9px}.ban-expiry strong{color:var(--color-status-success);font-size:12px}.text-danger{color:var(--color-status-danger)!important}.ban-hit{display:flex;align-items:center;gap:8px;min-width:0}.ban-hit>div{display:grid;gap:3px;min-width:0}.ban-hit strong{overflow:hidden;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.hit-count{display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:8px;background:rgba(255,255,255,.045);color:var(--color-text-muted);font-size:11px;font-weight:800}.hit-count--active{border:1px solid color-mix(in srgb,var(--color-status-danger) 35%,transparent);background:color-mix(in srgb,var(--color-status-danger) 10%,transparent);color:color-mix(in srgb,var(--color-status-danger) 75%,white)}.row-actions{display:flex;justify-content:flex-end;gap:3px;white-space:nowrap}
+.activity-list{display:grid;max-height:270px;overflow:auto}.activity-row{display:grid;grid-template-columns:100px minmax(140px,.7fr) minmax(220px,1.5fr) minmax(80px,.5fr) 145px;align-items:center;gap:12px;min-height:48px;padding:8px 10px;border-bottom:1px solid color-mix(in srgb,var(--color-border-default) 70%,transparent);border-left:2px solid var(--color-border-default)}.activity-row:last-child{border-bottom:0}.activity-row[data-kind="kick_success"]{border-left-color:var(--color-status-success)}.activity-row[data-kind="kick_failed"]{border-left-color:var(--color-status-danger)}.activity-row strong,.activity-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.activity-row strong{font-size:11px}.activity-row span,.activity-row time{color:var(--color-text-muted);font-size:9px}.activity-row time{text-align:right;white-space:nowrap}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.ban-list::-webkit-scrollbar,.activity-list::-webkit-scrollbar{width:7px}.ban-list::-webkit-scrollbar-thumb,.activity-list::-webkit-scrollbar-thumb{border-radius:999px;background:rgba(255,255,255,.1)}
+@media(max-width:1280px){.quick-ban-options{grid-template-columns:1fr 190px minmax(210px,1fr) 110px}.expiry-summary{grid-column:1/-1}.ban-row{grid-template-columns:64px minmax(200px,1fr) minmax(180px,1.2fr) 120px 145px}.row-actions{grid-column:2/-1}.ban-row{min-height:104px}}@media(max-width:900px){.quick-ban-primary{grid-template-columns:1fr}.quick-ban-options{grid-template-columns:1fr 1fr}.duration-block,.expiry-summary{grid-column:1/-1}.ban-row{grid-template-columns:64px minmax(190px,1fr) minmax(150px,1fr)}.ban-expiry,.ban-hit,.row-actions{grid-column:auto}.ban-hit{grid-column:2}.row-actions{grid-column:3;grid-row:2}.activity-row{grid-template-columns:90px minmax(130px,.7fr) minmax(180px,1.2fr) 130px}.activity-row>span:nth-of-type(2){display:none}}@media(max-width:640px){.header-actions{justify-content:flex-start}.quick-ban-options{grid-template-columns:1fr}.duration-block,.expiry-summary{grid-column:auto}.quick-ban-footer,.list-toolbar{align-items:stretch;flex-direction:column}.form-actions{justify-content:flex-end}.status-tabs,.event-tabs{width:100%;overflow:auto}.status-tab,.event-tab-btn{flex:1 0 auto}.ban-row{grid-template-columns:1fr;gap:8px}.ban-row-status,.ban-identity,.ban-reason,.ban-expiry,.ban-hit,.row-actions{grid-column:1;grid-row:auto}.row-actions{justify-content:flex-start}.activity-row{grid-template-columns:86px minmax(0,1fr)}.activity-row>span,.activity-row time{grid-column:2}.activity-row>span:nth-of-type(2){display:none}.activity-row time{text-align:left}}
 </style>
