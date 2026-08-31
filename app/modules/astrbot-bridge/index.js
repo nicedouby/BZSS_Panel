@@ -14,6 +14,7 @@ const DEFAULT_ALLOWED_ACTIONS = ["bindProfile", "setWarmup", "toggleWarmup"];
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const SERVER_INFO_SNAPSHOT_CACHE_DIR = path.resolve(process.cwd(), "data", "astrbot-bridge", "cache");
 const ICON_BASE_DIR = path.resolve(process.cwd(), "web-client/public");
+const PLAYER_SNAPSHOT_LOADING_SCREEN = "MapScene/LoadingScreen_Yehorivka_DQHD.PNG";
 const FACTION_ASSET_DATA_PATH = path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", "faction-data.ts");
 const MAP_SCENE_FILE_BY_KEY = {
   AlBasrah: "LoadingScreen_AlBasrah_DQHD.PNG",
@@ -1831,7 +1832,12 @@ async function renderPlayerSnapshotPng(payload) {
     ...payload,
     avatarDataUrl,
   });
-  return sharp(Buffer.from(svg, "utf8"), { density: 144 }).png().toBuffer();
+  const background = await readBinaryAsset(PLAYER_SNAPSHOT_LOADING_SCREEN);
+  const base = background?.length
+    ? await sharp(background).resize(1280, 780, { fit: "cover", position: "centre" }).modulate({ brightness: 0.46, saturation: 0.72 }).toBuffer()
+    : null;
+  const image = base ? sharp(base) : sharp({ create: { width: 1280, height: 780, channels: 4, background: "#071423" } });
+  return image.composite([{ input: Buffer.from(svg, "utf8") }]).png().toBuffer();
 }
 
 function formatSnapshotDuration(value) {
@@ -1911,9 +1917,9 @@ function renderPlayerSnapshotSvg(payload) {
         .rank-text{font-size:16px;font-weight:900;fill:#06111f}.empty-record{font-size:18px;fill:#94a3b8}.avatar-letter{font-size:58px;font-weight:900;fill:#cffafe}
       ]]></style>
     </defs>
-    <rect width="${width}" height="${height}" fill="url(#bg)"/>
+    <rect width="${width}" height="${height}" fill="#04101d" fill-opacity=".30"/>
     <circle cx="1160" cy="100" r="250" fill="#38bdf8" opacity=".08"/><circle cx="80" cy="${height - 40}" r="230" fill="#6366f1" opacity=".10"/>
-    <rect x="36" y="34" width="1208" height="${height - 68}" rx="28" fill="#06111f" fill-opacity=".68" stroke="#3b526e"/>
+    <rect x="36" y="34" width="1208" height="${height - 68}" rx="28" fill="#020617" fill-opacity=".80" stroke="#7dd3fc" stroke-opacity=".55"/>
     <rect x="64" y="62" width="394" height="7" rx="4" fill="url(#accent)"/>
     <circle cx="163" cy="171" r="80" fill="#0d2036" stroke="#67e8f9" stroke-width="4" filter="url(#shadow)"/>${avatarSvg}
     <text x="270" y="126" class="eyebrow">BZSS / PLAYER INTEL</text>
