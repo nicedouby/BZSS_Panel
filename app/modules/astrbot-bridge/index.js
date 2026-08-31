@@ -1864,7 +1864,7 @@ function normalizeSnapshotServerRecords(rankings = [], sessions = []) {
 function renderPlayerSnapshotSvg(payload) {
   const width = 1280;
   const records = normalizeSnapshotServerRecords(payload.serverRankings, payload.serverSessions);
-  const height = 780 + Math.max(0, records.length - 3) * 64;
+  const height = 780;
   const rows = [
     ["Steam 游戏时长", formatSnapshotHours(payload.gameSeconds, payload.gameHours)],
     ["本服累计时长", formatSnapshotDuration(payload.serverSeconds)],
