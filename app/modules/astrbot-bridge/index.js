@@ -1271,7 +1271,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     if (!playerInput) return createActionError(400, "MissingPlayerInput", "请输入 Steam64、QQ 号或数据库玩家 ID。");
 
     let player = null;
-    if (/^\\d{17}$/.test(playerInput)) player = await playerDatabase.findByIdentity({ steamID: playerInput });
+    if (/^\d{17}$/.test(playerInput)) player = await playerDatabase.findByIdentity({ steamID: playerInput });
     if (!player && /^\\d+$/.test(playerInput)) player = await playerDatabase.findByIdentity({ qqNumber: playerInput });
     if (!player && /^\\d+$/.test(playerInput)) {
       const detailById = await playerDatabase.getPlayerDetail(Number(playerInput));
