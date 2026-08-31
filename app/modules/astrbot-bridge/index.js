@@ -154,6 +154,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       return queryMeSnapshot(input);
     },
 
+    async queryPlayerSnapshot(input = {}) {
+      return queryPlayerSnapshot(input);
+    },
+
     async queryServerInfoSnapshot(input = {}) {
       return queryServerInfoSnapshot(input);
     },
@@ -1254,25 +1258,53 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     const result = await queryMe(input);
     const player = result?.data?.player ?? null;
     if (!player) return createActionError(404, "PlayerNotFound", "QQ is not bound to any player.");
+    return renderPlayerSnapshot(player, result?.data?.detail ?? null);
+  }
 
-    const detail = result?.data?.detail ?? null;
-    const sessionSeconds = Number(player.gameSeconds ?? detail?.summary?.gameSeconds ?? 0);
+  async function queryPlayerSnapshot(input = {}) {
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.findByIdentity || !playerDatabase?.getPlayerDetail) {
+      return createActionError(503, "PlayerDatabaseUnavailable", "Player database is unavailable.");
+    }
+
+    const playerInput = String(input.playerInput ?? input.steam64 ?? input.qqNumber ?? "").trim();
+    if (!playerInput) return createActionError(400, "MissingPlayerInput", "请输入 Steam64、QQ 号或数据库玩家 ID。");
+
+    let player = null;
+    if (/^\d{17}$/.test(playerInput)) player = await playerDatabase.findByIdentity({ steamID: playerInput });
+    if (!player && /^\d+$/.test(playerInput)) player = await playerDatabase.findByIdentity({ qqNumber: playerInput });
+    if (!player && /^\d+$/.test(playerInput)) {
+      const detailById = await playerDatabase.getPlayerDetail(Number(playerInput));
+      player = detailById?.player ?? null;
+    }
+    if (!player?.id) return createActionError(404, "PlayerNotFound", "未找到该玩家。");
+
+    const detail = await playerDatabase.getPlayerDetail(player.id);
+    return renderPlayerSnapshot(serializePlayer(player), detail);
+  }
+
+  async function renderPlayerSnapshot(player, detail) {
+    const sessionSeconds = Number(detail?.summary?.gameSeconds ?? detail?.summary?.steamGameSeconds ?? player?.gameSeconds ?? 0);
     const png = await renderPlayerSnapshotPng({
-      qqNumber: player.qqNumber,
-      qqName: player.qqName,
-      gameName: player.gameName ?? player.name,
-      steam64: player.steam64,
-      eosID: player.eosID,
-      steamAvatar: player.steamAvatar ?? detail?.player?.steam_avatar ?? detail?.player?.steamAvatar ?? null,
+      qqNumber: player?.qqNumber,
+      qqName: player?.qqName,
+      gameName: player?.gameName ?? player?.name,
+      steam64: player?.steam64,
+      eosID: player?.eosID,
+      steamAvatar: player?.steamAvatar ?? detail?.player?.steam_avatar ?? detail?.player?.steamAvatar ?? null,
       gameSeconds: sessionSeconds,
       gameHours: Number((sessionSeconds / 3600).toFixed(2)),
-      updatedAt: player.updatedAt,
+      serverSeconds: Number(detail?.summary?.serverSeconds ?? 0),
+      warmupSeconds: Number(detail?.summary?.warmupSeconds ?? 0),
+      serverRankings: detail?.squadBrowserServerRankings ?? [],
+      serverSessions: detail?.squadBrowserSessions ?? [],
+      updatedAt: player?.updatedAt ?? detail?.player?.updated_at,
     });
 
     return {
       ok: true,
       contentType: "image/png",
-      fileName: `player-snapshot-${sanitizeFileToken(player.qqNumber ?? player.steam64 ?? player.id ?? "unknown")}.png`,
+      fileName: `player-snapshot-${sanitizeFileToken(player?.qqNumber ?? player?.steam64 ?? player?.id ?? "unknown")}.png`,
       player,
       png,
     };
@@ -1802,95 +1834,99 @@ async function renderPlayerSnapshotPng(payload) {
   return sharp(Buffer.from(svg, "utf8"), { density: 144 }).png().toBuffer();
 }
 
-async function renderServerInfoPng(serverInfo) {
-  const sharp = await loadSharp();
-  const width = 1600;
-  const height = 900;
-  const backgroundPath = resolveServerInfoBackgroundAssetPath(serverInfo?.match?.map, serverInfo?.match?.layer);
-  const backgroundBuffer = backgroundPath ? await readBinaryAsset(backgroundPath) : null;
-  const overlaySvg = await renderServerInfoP2Svg(serverInfo);
-  let image = sharp({
-    create: {
-      width,
-      height,
-      channels: 4,
-      background: "#020617",
-    },
-  });
-  if (backgroundBuffer?.length) {
-    const background = await sharp(backgroundBuffer)
-      .resize(width, height, { fit: "cover", position: "centre" })
-      .modulate({ brightness: 0.9, saturation: 0.9 })
-      .toBuffer();
-    image = image.composite([{ input: background, blend: "over" }]);
-  }
-  return image
-    .composite([{ input: Buffer.from(overlaySvg, "utf8") }])
-    .png()
-    .toBuffer();
+function formatSnapshotDuration(value) {
+  const seconds = Math.max(0, Number(value ?? 0) || 0);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) return `${hours} 小时 ${minutes} 分钟`;
+  return `${minutes} 分钟`;
+}
+
+function normalizeSnapshotServerRecords(rankings = [], sessions = []) {
+  const ranked = (Array.isArray(rankings) ? rankings : []).map((item) => ({
+    name: String(item?.server_name ?? item?.serverName ?? item?.name ?? item?.server_id ?? item?.serverId ?? "未知服务器").trim(),
+    minutes: Math.max(0, Number(item?.playtime_minutes ?? item?.playtimeMinutes ?? item?.duration_minutes ?? item?.durationMinutes ?? 0) || 0),
+  })).filter((item) => item.name);
+
+  if (ranked.length) return ranked.slice(0, 5);
+  return (Array.isArray(sessions) ? sessions : []).slice(0, 5).map((item) => ({
+    name: String(item?.server_name ?? item?.serverName ?? item?.server_id ?? item?.serverId ?? "未知服务器").trim(),
+    minutes: Math.max(0, Number(item?.duration_minutes ?? item?.durationMinutes ?? 0) || 0),
+  }));
 }
 
 function renderPlayerSnapshotSvg(payload) {
-  const width = 1120;
-  const height = 620;
+  const width = 1280;
+  const records = normalizeSnapshotServerRecords(payload.serverRankings, payload.serverSessions);
+  const height = 780 + Math.max(0, records.length - 3) * 64;
   const rows = [
-    ["玩家名字", payload.gameName ?? "未知玩家"],
+    ["Steam 游戏时长", formatSnapshotHours(payload.gameSeconds, payload.gameHours)],
+    ["本服累计时长", formatSnapshotDuration(payload.serverSeconds)],
+    ["暖服累计时长", formatSnapshotDuration(payload.warmupSeconds)],
     ["Steam64", payload.steam64 ?? "未绑定"],
     ["EOS ID", payload.eosID ?? "未记录"],
-    ["游戏时长", formatSnapshotHours(payload.gameSeconds, payload.gameHours)],
-    ["QQ 名", payload.qqName ?? "未知"],
-    ["QQ 号", payload.qqNumber ?? "未知"],
-    ["更新时间", formatSnapshotTime(payload.updatedAt)],
   ];
-  const rowY = [230, 292, 354, 416, 478, 540, 584];
+  const rowSvg = rows.map(([label, value], index) => {
+    const y = 288 + index * 66;
+    return `
+      <text x="84" y="${y}" class="row-label">${escapeXml(label)}</text>
+      <text x="310" y="${y}" class="row-value">${escapeXml(value)}</text>
+      <path d="M84 ${y + 20} H676" class="row-line"/>
+    `;
+  }).join("");
 
-  const rowSvg = rows.map(([label, value], index) => `
-    <text x="76" y="${rowY[index]}" font-size="26" font-weight="600" fill="#94a3b8">${escapeXml(label)}</text>
-    <text x="290" y="${rowY[index]}" font-size="28" font-weight="700" fill="#e2e8f0">${escapeXml(value)}</text>
-  `).join("");
+  const recordSvg = records.length
+    ? records.map((record, index) => {
+      const y = 286 + index * 82;
+      const rank = index + 1;
+      return `
+        <rect x="730" y="${y - 42}" width="468" height="62" rx="12" class="record-card"/>
+        <rect x="746" y="${y - 29}" width="34" height="34" rx="8" class="rank-box"/>
+        <text x="763" y="${y - 6}" text-anchor="middle" class="rank-text">${rank}</text>
+        <text x="798" y="${y - 15}" class="record-name">${escapeXml(truncateText(record.name, 34))}</text>
+        <text x="798" y="${y + 7}" class="record-sub">服务器游玩记录</text>
+        <text x="1175" y="${y - 6}" text-anchor="end" class="record-time">${escapeXml(formatSnapshotDuration(record.minutes * 60))}</text>
+      `;
+    }).join("")
+    : `<text x="730" y="300" class="empty-record">暂无服务器游玩记录</text>`;
 
   const avatarSvg = payload.avatarDataUrl
-    ? `
-      <defs>
-        <clipPath id="avatarClip">
-          <circle cx="888" cy="324" r="92" />
-        </clipPath>
-      </defs>
-      <circle cx="888" cy="324" r="104" fill="#0f172a" stroke="#7dd3fc" stroke-width="6" filter="url(#shadow)"/>
-      <image x="796" y="232" width="184" height="184" href="${payload.avatarDataUrl}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>
-    `
-    : `
-      <circle cx="888" cy="324" r="104" fill="#0f172a" stroke="#7dd3fc" stroke-width="6" filter="url(#shadow)"/>
-      <text x="888" y="340" text-anchor="middle" font-size="76" font-weight="800" fill="#e0f2fe">${escapeXml(String(payload.gameName ?? "?").trim().slice(0, 1) || "?")}</text>
-    `;
+    ? `<image x="94" y="102" width="138" height="138" href="${payload.avatarDataUrl}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
+    : `<text x="163" y="190" text-anchor="middle" class="avatar-letter">${escapeXml(String(payload.gameName ?? "?").trim().slice(0, 1) || "?")}</text>`;
 
   return `
   <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
     <defs>
-      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#0f172a" />
-        <stop offset="55%" stop-color="#111827" />
-        <stop offset="100%" stop-color="#1d4ed8" />
-      </linearGradient>
-      <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#22d3ee" />
-        <stop offset="100%" stop-color="#38bdf8" />
-      </linearGradient>
-      <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity="0.45"/>
-      </filter>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#081423"/><stop offset=".58" stop-color="#0d1b2e"/><stop offset="1" stop-color="#102e4b"/></linearGradient>
+      <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#818cf8"/></linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity=".55"/></filter>
+      <clipPath id="avatarClip"><circle cx="163" cy="171" r="69"/></clipPath>
+      <style><![CDATA[
+        text{font-family:'Microsoft YaHei','Noto Sans CJK SC','Segoe UI',sans-serif}
+        .eyebrow{font-size:16px;font-weight:800;letter-spacing:3px;fill:#67e8f9}
+        .name{font-size:42px;font-weight:900;fill:#f8fafc}.meta{font-size:17px;fill:#a5b4c8}
+        .badge{font-size:14px;font-weight:800;fill:#dbeafe}.section{font-size:17px;font-weight:900;letter-spacing:2px;fill:#7dd3fc}
+        .row-label{font-size:17px;font-weight:700;fill:#94a3b8}.row-value{font-size:22px;font-weight:800;fill:#e2e8f0}.row-line{stroke:#334155;stroke-opacity:.65}
+        .record-name{font-size:17px;font-weight:800;fill:#e5efff}.record-sub{font-size:13px;fill:#94a3b8}.record-time{font-size:17px;font-weight:900;fill:#67e8f9}
+        .rank-text{font-size:16px;font-weight:900;fill:#06111f}.empty-record{font-size:18px;fill:#94a3b8}.avatar-letter{font-size:58px;font-weight:900;fill:#cffafe}
+      ]]></style>
     </defs>
-    <rect width="${width}" height="${height}" rx="36" fill="url(#bg)"/>
-    <circle cx="980" cy="110" r="170" fill="#38bdf8" opacity="0.12"/>
-    <circle cx="130" cy="560" r="220" fill="#06b6d4" opacity="0.08"/>
-    <rect x="34" y="34" width="${width - 68}" height="${height - 68}" rx="28" fill="#0b1120" fill-opacity="0.56" stroke="#334155" stroke-opacity="0.85"/>
-    <rect x="58" y="56" width="280" height="10" rx="5" fill="url(#accent)"/>
-    <text x="72" y="120" font-size="52" font-weight="800" fill="#f8fafc">BZSS 玩家快照</text>
-    <text x="74" y="168" font-size="26" font-weight="500" fill="#93c5fd">AstrBot Bridge / 玩家信息图片回执</text>
-    <rect x="700" y="82" width="320" height="72" rx="18" fill="#082f49" fill-opacity="0.75" stroke="#38bdf8" stroke-opacity="0.35"/>
-    <text x="728" y="128" font-size="24" font-weight="700" fill="#bae6fd">已绑定玩家信息</text>
-    ${avatarSvg}
+    <rect width="${width}" height="${height}" fill="url(#bg)"/>
+    <circle cx="1160" cy="100" r="250" fill="#38bdf8" opacity=".08"/><circle cx="80" cy="${height - 40}" r="230" fill="#6366f1" opacity=".10"/>
+    <rect x="36" y="34" width="1208" height="${height - 68}" rx="28" fill="#06111f" fill-opacity=".68" stroke="#3b526e"/>
+    <rect x="64" y="62" width="394" height="7" rx="4" fill="url(#accent)"/>
+    <circle cx="163" cy="171" r="80" fill="#0d2036" stroke="#67e8f9" stroke-width="4" filter="url(#shadow)"/>${avatarSvg}
+    <text x="270" y="126" class="eyebrow">BZSS / PLAYER INTEL</text>
+    <text x="270" y="178" class="name">${escapeXml(truncateText(payload.gameName ?? "未知玩家", 26))}</text>
+    <text x="270" y="212" class="meta">QQ ${escapeXml(payload.qqName ?? "未绑定")} · ${escapeXml(payload.qqNumber ?? "--")}</text>
+    <rect x="1010" y="104" width="184" height="46" rx="23" fill="#0c3147" stroke="#38bdf8" stroke-opacity=".55"/>
+    <text x="1102" y="134" text-anchor="middle" class="badge">玩家信息快照</text>
+    <path d="M76 252 H676" stroke="#67e8f9" stroke-opacity=".55"/><path d="M730 252 H1198" stroke="#67e8f9" stroke-opacity=".55"/>
+    <text x="84" y="250" class="section">账户与游玩时长</text><text x="730" y="250" class="section">服务器游玩记录 / TOP 5</text>
     ${rowSvg}
+    ${recordSvg}
+    <text x="84" y="${height - 70}" class="meta">更新时间  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text>
+    <text x="1196" y="${height - 70}" text-anchor="end" class="meta">数据来源：BZSS 玩家数据库</text>
   </svg>`;
 }
 
