@@ -1272,8 +1272,8 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
 
     let player = null;
     if (/^\d{17}$/.test(playerInput)) player = await playerDatabase.findByIdentity({ steamID: playerInput });
-    if (!player && /^\\d+$/.test(playerInput)) player = await playerDatabase.findByIdentity({ qqNumber: playerInput });
-    if (!player && /^\\d+$/.test(playerInput)) {
+    if (!player && /^\d+$/.test(playerInput)) player = await playerDatabase.findByIdentity({ qqNumber: playerInput });
+    if (!player && /^\d+$/.test(playerInput)) {
       const detailById = await playerDatabase.getPlayerDetail(Number(playerInput));
       player = detailById?.player ?? null;
     }
