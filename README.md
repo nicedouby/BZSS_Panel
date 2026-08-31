@@ -10,11 +10,10 @@ BZSS Panel now uses the Vue client in `web-client/` as the primary frontend shel
 
 ## 玩家账号绑定与快照
 
-- AstrBot 调用 `POST /api/astrbot/binding-code` 为 QQ 账号生成六位短时一次性绑定码。
-- 玩家在游戏聊天输入 `/bind <绑定码>` 后，Panel 使用该聊天事件中的 Steam/EOS 身份写入现有 `players` 表。
-- 绑定码只保存 SHA-256 摘要，默认十分钟失效；成功消费后不可再次使用。
+- 玩家在 QQ 群内发送 `/绑定Steam <17位 Steam64>`，AstrBot 调用 `POST /api/astrbot/bind` 完成绑定。
+- Panel 将 QQ 号、QQ 昵称和绑定时间写入现有 `players` 表，全程不需要游戏内聊天交互。
 - 当前对局玩家单元会显示“已绑定”标签；玩家数据库保留 QQ 与绑定时间。
-- `/api/astrbot/me` 与 `/api/astrbot/me/snapshot` 分别提供玩家信息和 PNG 快照查询。
+- QQ 群内可通过 `/查询我的信息` 查询已绑定玩家；`/api/astrbot/me` 与 `/api/astrbot/me/snapshot` 分别提供玩家信息和 PNG 快照。
 
 ## Development
 

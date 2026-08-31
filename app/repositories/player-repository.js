@@ -1394,120 +1394,22 @@ export class PlayerRepository {
 
     const updated = await this.getPlayerById(id);
     this.cache(updated, existing);
-    return updated;
-  }
-
-  async createQQBindingCode({ codeHash, qqNumber, qqName, expiresAt } = {}) {
-    const hash = cleanText(codeHash);
-    const qq = cleanText(qqNumber);
-    const expiry = Number(expiresAt);
-    if (!hash || !qq || !Number.isFinite(expiry) || expiry <= now()) {
-      throw new Error("A valid binding code, QQ number and future expiry are required.");
-    }
-
-    const ts = now();
-    await this.db.run(
-      `UPDATE player_binding_codes
-       SET consumed_at = COALESCE(consumed_at, ?)
-       WHERE qq_number = ? AND consumed_at IS NULL`,
-      ts,
-      qq,
-    );
-    await this.db.run(
-      `DELETE FROM player_binding_codes
-       WHERE (consumed_at IS NOT NULL OR expires_at <= ?) AND created_at < ?`,
-      ts,
-      ts - 24 * 60 * 60 * 1000,
-    );
-    const result = await this.db.run(
-      `INSERT INTO player_binding_codes (code_hash, qq_number, qq_name, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      hash,
-      qq,
-      cleanText(qqName),
-      ts,
-      Math.floor(expiry),
-    );
-    return {
-      id: Number(result.lastID),
-      qqNumber: qq,
-      qqName: cleanText(qqName),
-      createdAt: ts,
-      expiresAt: Math.floor(expiry),
-    };
-  }
-
-  async consumeQQBindingCode({ codeHash, name, steamID, eosID } = {}) {
-    const hash = cleanText(codeHash);
-    if (!hash) return { ok: false, error: "BindingCodeInvalid" };
-    const steam = cleanId(steamID);
-    const eos = cleanId(eosID);
-    if (!steam && !eos) return { ok: false, error: "PlayerIdentityMissing" };
-
-    const ts = now();
-    const code = await this.db.get(
-      `SELECT * FROM player_binding_codes
-       WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?
-       LIMIT 1`,
-      hash,
-      ts,
-    );
-    if (!code) return { ok: false, error: "BindingCodeInvalidOrExpired" };
-
-    let player = await this.findByIdentity({ name, steamID: steam, eosID: eos });
-    if (!player?.id) {
-      player = await this.upsertFromPresence({ name, steamID: steam, eosID: eos });
-    }
-    if (!player?.id) return { ok: false, error: "PlayerIdentityMissing" };
-
-    const qqOwner = await this.findByIdentity({ qqNumber: code.qq_number });
-    if (qqOwner?.id && Number(qqOwner.id) !== Number(player.id)) {
-      return { ok: false, error: "QQAlreadyBound" };
-    }
-    if (player.qq_number && player.qq_number !== code.qq_number) {
-      return { ok: false, error: "PlayerAlreadyBound" };
-    }
-
-    const claim = await this.db.run(
-      `UPDATE player_binding_codes
-       SET consumed_at = ?, consumed_player_id = ?
-       WHERE id = ? AND consumed_at IS NULL AND expires_at > ?`,
-      ts,
-      Number(player.id),
-      Number(code.id),
-      ts,
-    );
-    if (Number(claim.changes ?? 0) !== 1) {
-      return { ok: false, error: "BindingCodeAlreadyUsed" };
-    }
-
-    try {
-      const updated = await this.bindQQToPlayer(player.id, {
-        qqNumber: code.qq_number,
-        qqName: code.qq_name,
-      });
+    if (!existing.qq_number) {
       await this.addLogEvent({
         sourceEvent: "PLAYER_ACCOUNT_BOUND",
         eventName: "account.binding.completed",
-        matchedPlayerName: updated?.current_name ?? name,
+        matchedPlayerName: updated?.current_name ?? existing.current_name,
         payload: {
-          playerId: updated?.id ?? player.id,
-          steamID: updated?.steam_id ?? steam ?? null,
-          eosID: updated?.eos_id ?? eos ?? null,
-          qqNumber: code.qq_number,
+          playerId: updated?.id ?? existing.id,
+          steamID: updated?.steam_id ?? null,
+          eosID: updated?.eos_id ?? null,
+          qqNumber: updated?.qq_number ?? qq,
           boundAt: updated?.qq_bound_at ?? ts,
-          bindingCodeId: code.id,
+          source: "astrbot.qq-group",
         },
       });
-      return { ok: true, player: updated, qqNumber: code.qq_number, qqName: code.qq_name };
-    } catch (error) {
-      await this.db.run(
-        "UPDATE player_binding_codes SET consumed_at = NULL, consumed_player_id = NULL WHERE id = ? AND consumed_player_id = ?",
-        Number(code.id),
-        Number(player.id),
-      );
-      throw error;
     }
+    return updated;
   }
 
   async unbindQQFromPlayer(playerId) {

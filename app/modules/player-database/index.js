@@ -199,14 +199,6 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
       return repo.bindQQToPlayer(playerId, binding);
     },
 
-    async createQQBindingCode(binding = {}) {
-      return repo.createQQBindingCode(binding);
-    },
-
-    async consumeQQBindingCode(binding = {}) {
-      return repo.consumeQQBindingCode(binding);
-    },
-
     async unbindQQFromPlayer(playerId) {
       return repo.unbindQQFromPlayer(playerId);
     },

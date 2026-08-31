@@ -293,22 +293,6 @@ CREATE TABLE IF NOT EXISTS player_tags (
 CREATE INDEX IF NOT EXISTS idx_player_tags_player ON player_tags(player_id);
 CREATE INDEX IF NOT EXISTS idx_player_tags_type ON player_tags(tag_type);
 
-CREATE TABLE IF NOT EXISTS player_binding_codes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    code_hash TEXT NOT NULL UNIQUE,
-    qq_number TEXT NOT NULL,
-    qq_name TEXT,
-    created_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    consumed_at INTEGER,
-    consumed_player_id INTEGER,
-    FOREIGN KEY(consumed_player_id) REFERENCES players(id) ON DELETE SET NULL
-);
-CREATE INDEX IF NOT EXISTS idx_player_binding_codes_qq
-ON player_binding_codes(qq_number, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_player_binding_codes_expiry
-ON player_binding_codes(expires_at, consumed_at);
-
 CREATE TABLE IF NOT EXISTS player_violation_counts (
     player_id INTEGER NOT NULL,
     violation_key TEXT NOT NULL,
@@ -686,26 +670,6 @@ DROP TABLE IF EXISTS kill_stats;
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 12, Date.now());
   }
 
-  if (!appliedSet.has(13)) {
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS player_binding_codes (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          code_hash TEXT NOT NULL UNIQUE,
-          qq_number TEXT NOT NULL,
-          qq_name TEXT,
-          created_at INTEGER NOT NULL,
-          expires_at INTEGER NOT NULL,
-          consumed_at INTEGER,
-          consumed_player_id INTEGER,
-          FOREIGN KEY(consumed_player_id) REFERENCES players(id) ON DELETE SET NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_player_binding_codes_qq
-      ON player_binding_codes(qq_number, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_player_binding_codes_expiry
-      ON player_binding_codes(expires_at, consumed_at);
-    `);
-    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 13, Date.now());
-  }
 }
 
 async function ensureCompatibleColumns(db) {

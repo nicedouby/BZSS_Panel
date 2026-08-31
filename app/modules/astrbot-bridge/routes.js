@@ -243,15 +243,6 @@ export async function handleAstrbotBridgeRoutes({
     return true;
   }
 
-  if (url.pathname === "/api/astrbot/binding-code" && req.method === "POST") {
-    const body = await readJsonBody(req);
-    const identity = readIdentity(req, url, body ?? {});
-    bridgeLogger?.info?.(`[AstrBotBridge] binding-code-request qq=${identity.qqNumber || "-"} ip=${getRequestIp(req)}`);
-    const result = await bridge.createBindingCode?.(identity);
-    json(200, { ok: true, data: result });
-    return true;
-  }
-
   if (url.pathname === "/api/astrbot/status" && req.method === "GET") {
     const identity = readIdentity(req, url, {});
     bridgeLogger?.info?.(`[AstrBotBridge] status-request qq=${identity.qqNumber || "-"} ip=${getRequestIp(req)}`);
