@@ -128,6 +128,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "astrbot-player-snapshot-test",
+    path: "/system/astrbot/player-snapshot-test",
+    component: () => import("../pages/AstrbotPlayerSnapshotTestPage.vue"),
+    title: "玩家信息图片测试",
+    category: "system",
+    refreshPolicy: "manual",
+    nav: { section: "system", label: "玩家图片测试", icon: "🪪", order: 27 },
+    requiredPermission: "astrbot.manage",
+    ...workspacePage,
+  },
+  {
     name: "astrbot-interaction-records",
     path: "/system/astrbot/interactions",
     component: () => import("../pages/AstrbotInteractionRecordsPage.vue"),
