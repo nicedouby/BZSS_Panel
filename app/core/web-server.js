@@ -561,6 +561,31 @@ export class WebServer {
       });
     }
 
+    if (url.pathname === "/api/astrbot/panel-test/player-snapshot" && req.method === "POST") {
+      const panelUser = this.core.authManager?.getUserFromRequest(req);
+      if (!panelUser) return this.json(res, 401, { error: "AuthenticationRequired" });
+      if (!this.requirePermission(panelUser, "astrbot.manage", res)) return;
+      const bridge = this.modules.astrbotBridge;
+      if (!bridge?.queryPlayerSnapshot) return this.json(res, 404, { error: "AstrBotBridgeUnavailable" });
+      const body = await this.readJsonBody(req);
+      const result = await bridge.queryPlayerSnapshot({ playerInput: body?.playerInput });
+      if (!result?.ok || !Buffer.isBuffer(result?.png) || !result.png.length) {
+        return this.json(res, Number(result?.statusCode ?? 500) || 500, {
+          ok: false,
+          error: result?.error ?? "PlayerSnapshotUnavailable",
+          message: result?.message ?? "无法生成玩家信息图片。",
+        });
+      }
+      res.writeHead(200, {
+        "Content-Type": String(result.contentType ?? "image/png"),
+        "Content-Length": String(result.png.length),
+        "Content-Disposition": `inline; filename="${String(result.fileName ?? "player-snapshot.png").replaceAll('"', "")}"`,
+        "Cache-Control": "no-store",
+      });
+      res.end(result.png);
+      return;
+    }
+
     const astrbotBridgeHandled = await handleAstrbotBridgeRoutes({
       core: this.core,
       modules: this.modules,
