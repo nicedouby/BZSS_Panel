@@ -4,6 +4,7 @@ cd /d "%~dp0"
 
 rem Windows logical CPU indices are zero-based.
 rem CPU 26 + CPU 27 = affinity mask 0x0C000000.
+set "BZSS_ASTRBOT_TOKEN=12345"
 set "NODE_AFFINITY=C000000"
 
 echo [BZSS] Starting Node on logical CPUs 26 and 27...
