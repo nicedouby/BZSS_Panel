@@ -4,13 +4,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 import { handleAstrbotBridgeRoutes } from "./routes.js";
 import { createAstrbotWebSocketGateway } from "./websocket.js";
 
 const MODULE_ID = "module.astrbotBridge";
 const DEFAULT_ALLOWED_ACTIONS = ["bindProfile", "setWarmup", "toggleWarmup"];
+const DEFAULT_BINDING_CODE_TTL_MS = 10 * 60 * 1000;
+const BINDING_CODE_PATTERN = /^\/?bind\s+([A-Z0-9]{6})$/i;
+const BINDING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const SERVER_INFO_SNAPSHOT_CACHE_DIR = path.resolve(process.cwd(), "data", "astrbot-bridge", "cache");
 const ICON_BASE_DIR = path.resolve(process.cwd(), "web-client/public");
@@ -99,6 +102,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   let runtimeConfig = readModuleConfig(config);
   let websocketGateway = null;
   let unsubscribeCoreEvents = null;
+  const unsubscribeChatEvents = [];
   let heartbeatTimer = null;
   let connectedAt = null;
   let lastHeartbeat = null;
@@ -143,6 +147,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
 
     async resolveProfile(input = {}) {
       return resolveOrBindProfile(input);
+    },
+
+    async createBindingCode(input = {}) {
+      return createBindingCode(input);
     },
 
     async queryMe(input = {}) {
@@ -191,7 +199,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       id: MODULE_ID,
       name: "AstrBot Bridge",
       kind: "module",
-      version: "1.0.0",
+      version: "1.1.0",
       description: "Machine-to-machine bridge for AstrBot clients.",
     },
     apiName: "astrbotBridge",
@@ -212,6 +220,22 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         logger: moduleLogger,
       });
       unsubscribeCoreEvents = core?.eventBus?.onCoreEvent?.("*", publishEvent) ?? null;
+      if (typeof modules?.chatManager?.on === "function") {
+        unsubscribeChatEvents.push(modules.chatManager.on("message", (event) => {
+          void handleBindingChatMessage(event);
+        }));
+      } else if (typeof core?.eventBus?.onModuleEvent === "function") {
+        unsubscribeChatEvents.push(core.eventBus.onModuleEvent("module.chatManager", "CHAT_RECEIVED", (event) => {
+          void handleBindingChatMessage({
+            ...event,
+            message: event?.payload?.message ?? event?.message ?? "",
+            playerName: event?.payload?.name ?? event?.payload?.playerName ?? event?.name ?? "",
+            playerId: event?.payload?.playerId ?? event?.playerId ?? null,
+            steamId: event?.payload?.steamid ?? event?.payload?.steamId ?? event?.steamId ?? "",
+            eosId: event?.payload?.eosid ?? event?.payload?.eosId ?? event?.eosId ?? "",
+          });
+        }));
+      }
       connectedAt = new Date().toISOString();
       lastHeartbeat = connectedAt;
       heartbeatTimer = setInterval(() => {
@@ -234,6 +258,9 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       pendingFinishedRounds.clear();
       unsubscribeCoreEvents?.();
       unsubscribeCoreEvents = null;
+      for (const unsubscribe of unsubscribeChatEvents.splice(0)) {
+        try { unsubscribe?.(); } catch {}
+      }
       websocketGateway?.closeAll?.();
       websocketGateway = null;
       moduleLogger?.info?.("[AstrBotBridge] stopped.");
@@ -251,6 +278,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       apiToken: String(current.apiToken ?? "").trim(),
       trustedIps: normalizeList(current.trustedIps),
       allowedActions,
+      bindingCodeTtlMs: Math.max(
+        60_000,
+        Math.min(30 * 60_000, Number(current.binding?.codeTtlMs ?? DEFAULT_BINDING_CODE_TTL_MS) || DEFAULT_BINDING_CODE_TTL_MS),
+      ),
       websocket: {
         enabled: current.websocket?.enabled !== false,
         path: String(current.websocket?.path ?? "/ws/astrbot").trim() || "/ws/astrbot",
@@ -1119,6 +1150,111 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         bound: true,
       },
     };
+  }
+
+  async function createBindingCode(input = {}) {
+    const qqNumber = String(input.qqNumber ?? input.qq ?? input.qq_number ?? "").trim();
+    const qqName = String(input.qqName ?? input.qq_name ?? input.qqNick ?? "").trim();
+    if (!qqNumber) return createActionError(400, "MissingQQNumber", "QQ number is required.");
+    if (!qqName) return createActionError(400, "MissingQQName", "QQ name is required.");
+
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.createQQBindingCode) {
+      return createActionError(503, "PlayerDatabaseUnavailable", "Player database is unavailable.");
+    }
+
+    const alreadyBound = await playerDatabase.findByIdentity?.({ qqNumber });
+    if (alreadyBound?.id) {
+      return createActionError(409, "QQAlreadyBound", "This QQ account is already bound. Unbind it before binding another player.");
+    }
+
+    const expiresAt = Date.now() + runtimeConfig.bindingCodeTtlMs;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const entropy = randomBytes(6);
+      const code = [...entropy]
+        .map((value) => BINDING_CODE_ALPHABET[value % BINDING_CODE_ALPHABET.length])
+        .join("");
+      try {
+        const created = await playerDatabase.createQQBindingCode({
+          codeHash: hashBindingCode(code),
+          qqNumber,
+          qqName,
+          expiresAt,
+        });
+        moduleLogger?.info?.(`[AstrBotBridge] binding-code-created qq=${qqNumber} codeId=${created?.id ?? "-"} expiresAt=${expiresAt}`);
+        return {
+          ok: true,
+          data: {
+            action: "createBindingCode",
+            code,
+            expiresAt,
+            expiresInSeconds: Math.max(1, Math.floor((expiresAt - Date.now()) / 1000)),
+            command: `/bind ${code}`,
+          },
+        };
+      } catch (error) {
+        const duplicate = String(error?.message ?? error).includes("UNIQUE constraint failed");
+        if (!duplicate || attempt === 4) throw error;
+      }
+    }
+    return createActionError(500, "BindingCodeGenerationFailed", "Failed to generate a binding code.");
+  }
+
+  async function handleBindingChatMessage(event = {}) {
+    const match = String(event?.message ?? "").trim().match(BINDING_CODE_PATTERN);
+    if (!match) return;
+
+    const identity = {
+      name: String(event?.playerName ?? event?.name ?? "").trim(),
+      steamID: String(event?.steamId ?? event?.steamID ?? event?.steam64 ?? "").trim(),
+      eosID: String(event?.eosId ?? event?.eosID ?? event?.eos ?? "").trim(),
+    };
+    const playerDatabase = modules?.playerDatabase ?? null;
+    if (!playerDatabase?.consumeQQBindingCode) return;
+
+    try {
+      const result = await playerDatabase.consumeQQBindingCode({
+        codeHash: hashBindingCode(match[1]),
+        ...identity,
+      });
+      if (result?.ok) {
+        moduleLogger?.info?.(`[AstrBotBridge] binding-completed playerId=${result?.player?.id ?? event?.playerId ?? "-"} steam=${identity.steamID || "-"} qq=${result.qqNumber || "-"}`);
+        await notifyBindingPlayer(event, "账号绑定成功，面板已为你添加“已绑定”标签。", "account_binding_completed");
+        return;
+      }
+
+      const messages = {
+        BindingCodeInvalidOrExpired: "绑定码无效、已过期或已经使用，请在机器人中重新获取。",
+        BindingCodeAlreadyUsed: "绑定码已经被使用，请在机器人中重新获取。",
+        QQAlreadyBound: "这个 QQ 已经绑定其他玩家，请先在机器人中解绑。",
+        PlayerAlreadyBound: "这个游戏账号已经绑定其他 QQ。",
+        PlayerIdentityMissing: "无法识别你的 Steam/EOS 身份，请稍后重试。",
+      };
+      await notifyBindingPlayer(event, messages[result?.error] ?? "账号绑定失败，请重新获取绑定码。", "account_binding_rejected");
+    } catch (error) {
+      moduleLogger?.warn?.(`[AstrBotBridge] binding chat failed: ${error?.message ?? error}`);
+      await notifyBindingPlayer(event, "账号绑定失败，请稍后重新获取绑定码。", "account_binding_failed");
+    }
+  }
+
+  async function notifyBindingPlayer(event, message, reason) {
+    const warn = modules?.adminWarn?.warnPlayer ?? modules?.adminWarn?.sendAdminWarn;
+    if (typeof warn !== "function") return;
+    await warn.call(modules.adminWarn, {
+      sourceModule: MODULE_ID,
+      reason,
+      relatedEventId: event?.id ?? event?.eventId,
+      targetPlayerId: event?.playerId ?? event?.playerID ?? undefined,
+      targetName: String(event?.playerName ?? event?.name ?? "玩家").trim() || "玩家",
+      targetSteamId: String(event?.steamId ?? event?.steamID ?? "").trim() || undefined,
+      targetEosId: String(event?.eosId ?? event?.eosID ?? "").trim() || undefined,
+      message,
+      system: true,
+    });
+  }
+
+  function hashBindingCode(code) {
+    return createHash("sha256").update(String(code ?? "").trim().toUpperCase()).digest("hex");
   }
 
   async function resolveOrBindProfile(input = {}) {

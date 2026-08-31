@@ -75,6 +75,7 @@
           :warmup-playtime-seconds="getPlayerWarmupSeconds(squad.leader.steamId)"
           :loyal-player="isPlayerLoyal(squad.leader.steamId)"
           :newcomer-player="isPlayerNewcomer(squad.leader.steamId)"
+          :bound-player="isPlayerBound(squad.leader.steamId)"
           :playtime-known="hasPlaytimeRecord(squad.leader.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(squad.leader.playerId)"
@@ -99,6 +100,7 @@
           :warmup-playtime-seconds="getPlayerWarmupSeconds(member.steamId)"
           :loyal-player="isPlayerLoyal(member.steamId)"
           :newcomer-player="isPlayerNewcomer(member.steamId)"
+          :bound-player="isPlayerBound(member.steamId)"
           :playtime-known="hasPlaytimeRecord(member.steamId)"
           :multi-select-mode="multiSelectMode"
           :checked="isPlayerChecked(member.playerId)"
@@ -257,6 +259,12 @@ function isPlayerNewcomer(steamId: string | null | undefined): boolean {
   return Number.isFinite(totalMinutes) && Number.isFinite(bzssMinutes)
     && totalMinutes < 10 * 60
     && bzssMinutes < 10 * 60;
+}
+
+function isPlayerBound(steamId: string | null | undefined): boolean {
+  if (!steamId) return false;
+  const record = props.playtimes[steamId];
+  return Boolean(record?.accountBound ?? record?.account_bound ?? record?.qqNumber ?? record?.qq_number);
 }
 
 function getCachedDurationSeconds(

@@ -526,7 +526,8 @@ export class PlayerRepository {
     }
 
     const rows = await this.db.all(
-      `SELECT players.id, players.current_name, players.steam_id, players.eos_id, players.current_ip,
+      `SELECT players.id, players.current_name, players.steam_id, players.eos_id,
+              players.qq_number, players.qq_name, players.qq_bound_at, players.current_ip,
               players.permission_group, players.steam_game_seconds, players.game_seconds,
               players.game_seconds_override, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
@@ -591,7 +592,8 @@ export class PlayerRepository {
 
     const placeholders = ids.map(() => "?").join(", ");
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, current_ip, steam_game_seconds, game_seconds, game_seconds_override, server_seconds, warmup_seconds, steam_avatar, updated_at, assets_json,
+      `SELECT id, current_name, steam_id, eos_id, qq_number, qq_name, qq_bound_at,
+              current_ip, steam_game_seconds, game_seconds, game_seconds_override, server_seconds, warmup_seconds, steam_avatar, updated_at, assets_json,
               EXISTS (SELECT 1 FROM player_tags pt WHERE pt.player_id = players.id AND pt.tag_type = 'automatic' AND pt.tag_value = '忠诚玩家') AS is_loyal_player
        FROM players
        WHERE steam_id IN (${placeholders})`,
@@ -661,7 +663,8 @@ export class PlayerRepository {
     if (!clauses.length) return [];
 
     const rows = await this.db.all(
-      `SELECT id, current_name, steam_id, eos_id, steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
+      `SELECT id, current_name, steam_id, eos_id, qq_number, qq_name, qq_bound_at,
+              steam_game_seconds, game_seconds, game_seconds_override, steam_avatar, updated_at, assets_json
        FROM players
        WHERE ${clauses.join(" OR ")}`,
       ...params,
@@ -1392,6 +1395,119 @@ export class PlayerRepository {
     const updated = await this.getPlayerById(id);
     this.cache(updated, existing);
     return updated;
+  }
+
+  async createQQBindingCode({ codeHash, qqNumber, qqName, expiresAt } = {}) {
+    const hash = cleanText(codeHash);
+    const qq = cleanText(qqNumber);
+    const expiry = Number(expiresAt);
+    if (!hash || !qq || !Number.isFinite(expiry) || expiry <= now()) {
+      throw new Error("A valid binding code, QQ number and future expiry are required.");
+    }
+
+    const ts = now();
+    await this.db.run(
+      `UPDATE player_binding_codes
+       SET consumed_at = COALESCE(consumed_at, ?)
+       WHERE qq_number = ? AND consumed_at IS NULL`,
+      ts,
+      qq,
+    );
+    await this.db.run(
+      `DELETE FROM player_binding_codes
+       WHERE (consumed_at IS NOT NULL OR expires_at <= ?) AND created_at < ?`,
+      ts,
+      ts - 24 * 60 * 60 * 1000,
+    );
+    const result = await this.db.run(
+      `INSERT INTO player_binding_codes (code_hash, qq_number, qq_name, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      hash,
+      qq,
+      cleanText(qqName),
+      ts,
+      Math.floor(expiry),
+    );
+    return {
+      id: Number(result.lastID),
+      qqNumber: qq,
+      qqName: cleanText(qqName),
+      createdAt: ts,
+      expiresAt: Math.floor(expiry),
+    };
+  }
+
+  async consumeQQBindingCode({ codeHash, name, steamID, eosID } = {}) {
+    const hash = cleanText(codeHash);
+    if (!hash) return { ok: false, error: "BindingCodeInvalid" };
+    const steam = cleanId(steamID);
+    const eos = cleanId(eosID);
+    if (!steam && !eos) return { ok: false, error: "PlayerIdentityMissing" };
+
+    const ts = now();
+    const code = await this.db.get(
+      `SELECT * FROM player_binding_codes
+       WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?
+       LIMIT 1`,
+      hash,
+      ts,
+    );
+    if (!code) return { ok: false, error: "BindingCodeInvalidOrExpired" };
+
+    let player = await this.findByIdentity({ name, steamID: steam, eosID: eos });
+    if (!player?.id) {
+      player = await this.upsertFromPresence({ name, steamID: steam, eosID: eos });
+    }
+    if (!player?.id) return { ok: false, error: "PlayerIdentityMissing" };
+
+    const qqOwner = await this.findByIdentity({ qqNumber: code.qq_number });
+    if (qqOwner?.id && Number(qqOwner.id) !== Number(player.id)) {
+      return { ok: false, error: "QQAlreadyBound" };
+    }
+    if (player.qq_number && player.qq_number !== code.qq_number) {
+      return { ok: false, error: "PlayerAlreadyBound" };
+    }
+
+    const claim = await this.db.run(
+      `UPDATE player_binding_codes
+       SET consumed_at = ?, consumed_player_id = ?
+       WHERE id = ? AND consumed_at IS NULL AND expires_at > ?`,
+      ts,
+      Number(player.id),
+      Number(code.id),
+      ts,
+    );
+    if (Number(claim.changes ?? 0) !== 1) {
+      return { ok: false, error: "BindingCodeAlreadyUsed" };
+    }
+
+    try {
+      const updated = await this.bindQQToPlayer(player.id, {
+        qqNumber: code.qq_number,
+        qqName: code.qq_name,
+      });
+      await this.addLogEvent({
+        sourceEvent: "PLAYER_ACCOUNT_BOUND",
+        eventName: "account.binding.completed",
+        matchedPlayerName: updated?.current_name ?? name,
+        payload: {
+          playerId: updated?.id ?? player.id,
+          steamID: updated?.steam_id ?? steam ?? null,
+          eosID: updated?.eos_id ?? eos ?? null,
+          qqNumber: code.qq_number,
+          boundAt: updated?.qq_bound_at ?? ts,
+          bindingCodeId: code.id,
+        },
+      });
+      return { ok: true, player: updated, qqNumber: code.qq_number, qqName: code.qq_name };
+    } catch (error) {
+      await this.db.run(
+        "UPDATE player_binding_codes SET consumed_at = NULL, consumed_player_id = NULL WHERE id = ? AND consumed_player_id = ?",
+        Number(code.id),
+        Number(player.id),
+      );
+      throw error;
+    }
   }
 
   async unbindQQFromPlayer(playerId) {

@@ -67,6 +67,7 @@
         <span v-if="persistentPlayerBadge" class="persistent-player-badge" :class="persistentPlayerBadge.tone" :title="persistentPlayerBadge.title">{{ persistentPlayerBadge.label }}</span>
         <span v-if="props.loyalPlayer" class="loyal-player-badge" title="忠诚：步战鼠鼠是最常玩服务器，且占排行榜总时长超过 50%"><span class="loyal-player-mark">◆</span><span>忠诚</span></span>
         <span v-if="props.newcomerPlayer" class="newcomer-player-badge" title="SquadBrowser 已刷新：总游玩记录与步战鼠鼠游玩记录均不足 10 小时">初乍到来</span>
+        <span v-if="props.boundPlayer" class="bound-player-badge" title="该游戏账号已完成机器人账号绑定">已绑定</span>
       </div>
 
       <div class="player-stat-line scoreboard-line">
@@ -142,6 +143,7 @@ const props = defineProps<{
   warmupPlaytimeSeconds?: number | null;
   loyalPlayer?: boolean;
   newcomerPlayer?: boolean;
+  boundPlayer?: boolean;
   playtimeKnown?: boolean;
   groupReport?: { id: string; number: number; name: string; color: string };
 }>();
@@ -674,6 +676,21 @@ function displayRole(role: string | null | undefined) {
   color: #bfdbfe;
   font-size: 10px;
   font-weight: 700;
+  white-space: nowrap;
+}
+.bound-player-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 19px;
+  padding: 0 7px;
+  border: 1px solid rgba(52, 211, 153, .48);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(5, 150, 105, .24), rgba(16, 185, 129, .1));
+  color: #a7f3d0;
+  box-shadow: 0 0 10px rgba(16, 185, 129, .12);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 19px;
   white-space: nowrap;
 }
 .loyal-player-badge {

@@ -110,6 +110,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           steamID: p.steam_id ?? "",
           eos: p.eos_id ?? "",
           eosID: p.eos_id ?? "",
+          qqNumber: p.qq_number ?? null,
+          qqName: p.qq_name ?? null,
+          qqBoundAt: Number(p.qq_bound_at ?? 0) || null,
+          accountBound: Boolean(p.qq_number),
           ip: p.current_ip ?? "",
           permissionGroup: p.permission_group ?? "default",
           steamGameSeconds: Number(p.steam_game_seconds ?? 0),
@@ -193,6 +197,14 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async bindQQToPlayer(playerId, binding = {}) {
       return repo.bindQQToPlayer(playerId, binding);
+    },
+
+    async createQQBindingCode(binding = {}) {
+      return repo.createQQBindingCode(binding);
+    },
+
+    async consumeQQBindingCode(binding = {}) {
+      return repo.consumeQQBindingCode(binding);
     },
 
     async unbindQQFromPlayer(playerId) {
