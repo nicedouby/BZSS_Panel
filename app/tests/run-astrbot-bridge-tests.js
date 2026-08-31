@@ -486,6 +486,14 @@ async function main() {
   assert.equal(playerStore[0].qq_number, null);
   assert.equal(playerStore[0].qq_name, null);
 
+  const interactionState = astrbotBridge.api.getState();
+  assert.ok(interactionState.interactions.recent.length >= 7);
+  assert.equal(interactionState.interactions.recent[0].action, "unbind");
+  assert.equal(interactionState.interactions.recent[0].qqNumber, "12345678");
+  assert.ok(interactionState.interactions.recent.some((item) => item.action === "bind"));
+  assert.ok(interactionState.interactions.recent.some((item) => item.action === "queryMySnapshot"));
+  assert.ok(interactionState.interactions.recent.some((item) => item.action === "serverInfoSnapshot"));
+
   console.log("astrbot bridge tests passed");
 }
 

@@ -58,6 +58,30 @@ function readIdentity(req, url, body = {}) {
   return { qqNumber, qqName, steam64 };
 }
 
+function recordBotInteraction(bridge, req, action, identity = {}, result = {}, extra = {}) {
+  const player = result?.data?.player ?? result?.player ?? extra?.player ?? null;
+  const ok = result?.ok !== false && !result?.error && extra?.ok !== false;
+  bridge.recordInteraction?.({
+    kind: "command",
+    direction: "incoming",
+    action,
+    qqNumber: identity.qqNumber,
+    qqName: identity.qqName,
+    steam64: identity.steam64,
+    playerId: player?.id,
+    playerName: player?.gameName ?? player?.currentName ?? player?.name,
+    clientIp: getRequestIp(req),
+    ok,
+    summary: String(extra?.summary ?? ""),
+    detail: {
+      route: String(req?.url ?? ""),
+      error: result?.error ?? null,
+      message: result?.message ?? null,
+      ...extra?.detail,
+    },
+  });
+}
+
 function normalizeDeliveryAck(body = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     throw createValidationError("InvalidAck", "ACK body must be a JSON object.");
@@ -236,6 +260,10 @@ export async function handleAstrbotBridgeRoutes({
     bridgeLogger?.info?.(`[AstrBotBridge] bind-request qq=${identity.qqNumber || "-"} steam64=${identity.steam64 || "-"} ip=${getRequestIp(req)}`);
     const result = await bridge.resolveProfile?.(identity);
     bridgeLogger?.info?.(`[AstrBotBridge] bind-success qq=${identity.qqNumber || "-"} steam64=${identity.steam64 || "-"} playerId=${result?.data?.player?.id ?? result?.player?.id ?? "-"} bound=${Boolean(result?.data?.bound ?? result?.bound)}`);
+    recordBotInteraction(bridge, req, "bind", identity, result, {
+      summary: result?.ok === false ? "QQ 玩家账号绑定失败" : "QQ 玩家账号绑定完成",
+      detail: { bound: Boolean(result?.data?.bound ?? result?.bound) },
+    });
     json(200, {
       ok: true,
       data: result,
@@ -248,6 +276,10 @@ export async function handleAstrbotBridgeRoutes({
     bridgeLogger?.info?.(`[AstrBotBridge] status-request qq=${identity.qqNumber || "-"} ip=${getRequestIp(req)}`);
     const binding = await bridge.resolveProfile?.(identity);
     bridgeLogger?.info?.(`[AstrBotBridge] status-success qq=${identity.qqNumber || "-"} playerId=${binding?.player?.id ?? binding?.data?.player?.id ?? "-"} bound=${Boolean(binding?.bound ?? binding?.data?.bound)}`);
+    recordBotInteraction(bridge, req, "status", identity, binding, {
+      summary: "机器人查询绑定状态",
+      detail: { bound: Boolean(binding?.bound ?? binding?.data?.bound) },
+    });
     json(200, {
       ok: true,
       binding,
@@ -261,6 +293,9 @@ export async function handleAstrbotBridgeRoutes({
     const result = await bridge.query?.({
       kind: "serverInfo",
       includePlayers: url.searchParams.get("includePlayers") === "1" || url.searchParams.get("players") === "1",
+    });
+    recordBotInteraction(bridge, req, "serverInfo", {}, result, {
+      summary: "机器人查询服务器信息",
     });
     json(200, {
       ok: true,
@@ -284,6 +319,10 @@ export async function handleAstrbotBridgeRoutes({
       bridgeLogger?.error?.(
         `[AstrBotBridge] server-info-snapshot-failed status=${statusCode} error=${result?.error ?? "DOWNLOAD_FAILED"} message=${String(result?.message ?? "failed to render server info snapshot").slice(0, 300)}\n${String(result?.stack ?? "").trim() || "(no stack)"}`
       );
+      recordBotInteraction(bridge, req, "serverInfoSnapshot", {}, result, {
+        ok: false,
+        summary: "服务器信息快照生成失败",
+      });
       json(statusCode >= 400 ? statusCode : 500, {
         ok: false,
         error: result?.error ?? "DOWNLOAD_FAILED",
@@ -293,6 +332,10 @@ export async function handleAstrbotBridgeRoutes({
     }
 
     bridgeLogger?.info?.(`[AstrBotBridge] server-info-snapshot-success bytes=${result.png.length} filePath=${String(result?.file_path ?? result?.filePath ?? "").trim() || "-"}`);
+    recordBotInteraction(bridge, req, "serverInfoSnapshot", {}, result, {
+      summary: "机器人获取服务器信息快照",
+      detail: { bytes: result.png.length },
+    });
     res.writeHead(200, {
       "Content-Type": String(result?.contentType ?? "image/png"),
       "Content-Length": String(result.png.length),
@@ -359,6 +402,10 @@ export async function handleAstrbotBridgeRoutes({
     bridgeLogger?.info?.(`[AstrBotBridge] query-request qq=${identity.qqNumber || "-"} kind=${String(body?.kind ?? body?.query ?? "snapshot")} ip=${getRequestIp(req)}`);
     const binding = await bridge.resolveProfile?.(identity);
     bridgeLogger?.info?.(`[AstrBotBridge] query-success qq=${identity.qqNumber || "-"} playerId=${binding?.player?.id ?? binding?.data?.player?.id ?? "-"} bound=${Boolean(binding?.bound ?? binding?.data?.bound)}`);
+    recordBotInteraction(bridge, req, "query", identity, binding, {
+      summary: "机器人执行玩家信息查询",
+      detail: { kind: String(body?.kind ?? body?.query ?? "snapshot") },
+    });
     json(200, {
       ok: true,
       binding,
@@ -373,6 +420,9 @@ export async function handleAstrbotBridgeRoutes({
     bridgeLogger?.info?.(`[AstrBotBridge] me-request qq=${identity.qqNumber || "-"} ip=${getRequestIp(req)}`);
     const result = await bridge.queryMe?.(identity);
     bridgeLogger?.info?.(`[AstrBotBridge] me-success qq=${identity.qqNumber || "-"} playerId=${result?.data?.player?.id ?? result?.player?.id ?? "-"} bound=${Boolean(result?.data?.player?.qqNumber ?? result?.player?.qqNumber)}`);
+    recordBotInteraction(bridge, req, "queryMyInfo", identity, result, {
+      summary: result?.ok === false ? "玩家信息查询失败" : "机器人查询玩家信息",
+    });
     json(200, {
       ok: true,
       binding: {
@@ -390,6 +440,12 @@ export async function handleAstrbotBridgeRoutes({
     bridgeLogger?.info?.(`[AstrBotBridge] me-snapshot-request qq=${identity.qqNumber || "-"} ip=${getRequestIp(req)}`);
     const result = await bridge.queryMeSnapshot?.(identity);
     bridgeLogger?.info?.(`[AstrBotBridge] me-snapshot-success qq=${identity.qqNumber || "-"} playerId=${result?.player?.id ?? "-"} bytes=${result?.png?.length ?? 0}`);
+    recordBotInteraction(bridge, req, "queryMySnapshot", identity, result, {
+      player: result?.player,
+      ok: Boolean(result?.png?.length),
+      summary: result?.png?.length ? "机器人获取玩家信息快照" : "玩家信息快照生成失败",
+      detail: { bytes: result?.png?.length ?? 0 },
+    });
     res.writeHead(200, {
       "Content-Type": String(result?.contentType ?? "image/png"),
       "Content-Length": String(result?.png?.length ?? 0),
@@ -406,6 +462,10 @@ export async function handleAstrbotBridgeRoutes({
     bridgeLogger?.info?.(`[AstrBotBridge] unbind-request qq=${identity.qqNumber || "-"} ip=${getRequestIp(req)}`);
     const result = await bridge.unbindMe?.(identity);
     bridgeLogger?.info?.(`[AstrBotBridge] unbind-success qq=${identity.qqNumber || "-"} playerId=${result?.data?.player?.id ?? result?.player?.id ?? "-"} unbound=${Boolean(result?.data?.unbound ?? result?.unbound)}`);
+    recordBotInteraction(bridge, req, "unbind", identity, result, {
+      summary: result?.ok === false ? "QQ 玩家账号解绑失败" : "QQ 玩家账号已解绑",
+      detail: { unbound: Boolean(result?.data?.unbound ?? result?.unbound) },
+    });
     json(200, {
       ok: true,
       binding: {
@@ -425,6 +485,10 @@ export async function handleAstrbotBridgeRoutes({
     const binding = await bridge.resolveProfile?.(identity);
     const result = await bridge.action?.(body ?? {});
     bridgeLogger?.info?.(`[AstrBotBridge] action-success qq=${identity.qqNumber || "-"} action=${actionName || "-"} playerId=${binding?.player?.id ?? binding?.data?.player?.id ?? "-"}`);
+    recordBotInteraction(bridge, req, `action:${actionName || "unknown"}`, identity, result, {
+      player: binding?.player ?? binding?.data?.player,
+      summary: result?.ok === false ? "机器人动作执行失败" : "机器人动作执行完成",
+    });
     json(200, {
       ok: true,
       binding,

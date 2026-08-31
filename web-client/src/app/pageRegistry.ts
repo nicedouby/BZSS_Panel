@@ -128,6 +128,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "astrbot-interaction-records",
+    path: "/system/astrbot/interactions",
+    component: () => import("../pages/AstrbotInteractionRecordsPage.vue"),
+    title: "机器人互动记录",
+    category: "system",
+    refreshPolicy: "polling",
+    nav: { section: "system", label: "机器人互动记录", icon: "💬", order: 26 },
+    requiredPermission: "astrbot.manage",
+    ...workspacePage,
+  },
+  {
     name: "console",
     path: "/console",
     component: () => import("../pages/ConsolePage.vue"),

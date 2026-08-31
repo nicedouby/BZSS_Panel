@@ -107,6 +107,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   let lastEvent = null;
   const recentEvents = [];
   const recentAcks = [];
+  const recentInteractions = [];
   const pendingFinishedRounds = new Map();
   const publishedFinishedEvents = new Map();
   let ackReceived = 0;
@@ -184,6 +185,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     recordDeliveryAck(input = {}) {
       return recordDeliveryAck(input);
     },
+
+    recordInteraction(input = {}) {
+      return recordInteraction(input);
+    },
   };
 
   return {
@@ -191,7 +196,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       id: MODULE_ID,
       name: "AstrBot Bridge",
       kind: "module",
-      version: "1.1.1",
+      version: "1.2.0",
       description: "Machine-to-machine bridge for AstrBot clients.",
     },
     apiName: "astrbotBridge",
@@ -268,6 +273,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         maxRecent: clampNumber(current.deliveryAck?.maxRecent, 1, 1000, 100),
       },
       maxRecentEvents: Math.max(10, Math.min(1000, Number(current.maxRecentEvents ?? 100) || 100)),
+      maxRecentInteractions: Math.max(50, Math.min(2000, Number(current.maxRecentInteractions ?? 500) || 500)),
     };
   }
 
@@ -307,6 +313,11 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
         lastDeliveredEventId,
         recentAcks: [...recentAcks],
       },
+      interactions: {
+        total: recentInteractions.length,
+        maxRecent: runtimeConfig.maxRecentInteractions,
+        recent: [...recentInteractions],
+      },
       ...extra,
     };
   }
@@ -335,13 +346,24 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     recentEvents.splice(runtimeConfig.maxRecentEvents);
     lastEvent = normalizedType;
     const websocketClients = websocketGateway?.getClientCount?.() ?? 0;
+    let published = true;
     try {
       websocketGateway?.publish(event);
       eventsSent += 1;
     } catch (error) {
+      published = false;
       eventsFailed += 1;
       moduleLogger?.warn?.(`[AstrBotBridge] event publish failed: ${error.message}`);
     }
+    recordInteraction({
+      kind: "event",
+      direction: "outgoing",
+      action: normalizedType,
+      eventId: normalizedEventId,
+      ok: published,
+      summary: published ? "事件已推送至机器人" : "事件推送失败",
+      detail: event.data,
+    });
     return { event, websocketClients };
   }
 
@@ -757,7 +779,46 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     } else {
       deliveryFailed += 1;
     }
+    recordInteraction({
+      kind: "ack",
+      direction: "incoming",
+      action: ack.eventType || "event.ack",
+      eventId: ack.eventId,
+      ok: ack.delivered && ack.failureCount === 0,
+      summary: ack.delivered ? "机器人已确认群消息送达" : "机器人报告群消息发送失败",
+      detail: {
+        received: ack.received,
+        delivered: ack.delivered,
+        successCount: ack.successCount,
+        failureCount: ack.failureCount,
+        error: ack.error,
+      },
+    });
     return ack;
+  }
+
+  function recordInteraction(input = {}) {
+    const createdAt = normalizeIsoTime(input?.createdAt ?? new Date().toISOString());
+    const interaction = {
+      id: firstText(input?.id, `astrbot:${Date.now()}:${randomBytes(4).toString("hex")}`),
+      createdAt,
+      kind: firstText(input?.kind, "command"),
+      direction: firstText(input?.direction, "incoming"),
+      action: firstText(input?.action, "unknown"),
+      qqNumber: firstText(input?.qqNumber),
+      qqName: firstText(input?.qqName),
+      steam64: firstText(input?.steam64),
+      playerId: input?.playerId == null ? null : Number(input.playerId) || null,
+      playerName: firstText(input?.playerName),
+      clientIp: firstText(input?.clientIp),
+      eventId: firstText(input?.eventId),
+      ok: input?.ok !== false,
+      summary: firstText(input?.summary),
+      detail: sanitizeBridgeEventData(input?.detail ?? {}),
+    };
+    recentInteractions.unshift(interaction);
+    recentInteractions.splice(runtimeConfig.maxRecentInteractions);
+    return interaction;
   }
 
   function sanitizeBridgeEventData(data) {
