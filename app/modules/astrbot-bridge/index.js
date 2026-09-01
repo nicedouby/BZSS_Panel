@@ -1929,10 +1929,8 @@ function renderPlayerSnapshotSvg(payload) {
     <path d="M624 246 H1920" stroke="#b8d7eb" stroke-opacity=".30"/>
     <text x="624" y="310" class="overline">玩家生涯</text>
     <text x="1870" y="310" text-anchor="end" class="overline">PLAYER CAREER</text>
-    <path d="M624 340 H1920 V756 H624 Z" fill="#04111f" fill-opacity=".30" stroke="#9bcde9" stroke-opacity=".12"/>
-    <path d="M624 340 H784" stroke="#74d8ff" stroke-opacity=".62" stroke-width="3"/>
-    <text x="660" y="404" class="overline">CAREER DATA</text>
-    <text x="660" y="450" class="identity">生涯数据区域 · 后续可加入等级、对局、击杀、胜率等统计</text>
+    <path d="M624 340 H1920 V756 H624 Z" fill="#04111f" fill-opacity=".20" stroke="#9bcde9" stroke-opacity=".10"/>
+    <path d="M624 340 H784" stroke="#74d8ff" stroke-opacity=".55" stroke-width="3"/>
     <path d="M624 798 H1920" stroke="#b8d7eb" stroke-opacity=".25"/>
     <text x="624" y="830" class="overline">游玩记录</text>
     <text x="1870" y="830" text-anchor="end" class="overline">PLAYTIME HISTORY</text>
