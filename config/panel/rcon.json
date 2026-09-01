@@ -8,10 +8,10 @@
     "commandTimeoutMs": 15000,
     "connectTimeoutMs": 5000,
     "allowMultipleConnections": true,
-    "commandPoolSize": 4,
-    "notificationPoolSize": 2,
+    "commandPoolSize": 2,
+    "notificationPoolSize": 1,
     "notificationTimeoutMs": 3000,
-    "enforcementPoolSize": 8,
+    "enforcementPoolSize": 2,
     "queryPoolSize": 1,
     "rateLimit": {
       "minIntervalMs": 200,
