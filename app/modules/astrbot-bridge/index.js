@@ -1865,75 +1865,75 @@ function renderPlayerSnapshotSvg(payload) {
   const W = 1920;
   const H = 1080;
   const records = normalizeSnapshotServerRecords(payload.serverRankings, payload.serverSessions);
-  const primaryMetrics = [
-    { label: "STEAM 游玩时长", value: formatSnapshotHours(payload.gameSeconds, payload.gameHours), tone: "#72d5ff" },
-    { label: "本服游玩时长", value: formatSnapshotDuration(payload.serverSeconds), tone: "#f2c879" },
-    { label: "暖服时长", value: formatSnapshotDuration(payload.warmupSeconds), tone: "#b59cff" },
+  const metrics = [
+    { label: "游戏时长", value: formatSnapshotHours(payload.gameSeconds, payload.gameHours), tone: "#80d9ff" },
+    { label: "暖服时长", value: formatSnapshotDuration(payload.warmupSeconds), tone: "#c7a9ff" },
+    { label: "服务器时长", value: formatSnapshotDuration(payload.serverSeconds), tone: "#f2d27d" },
   ];
-  const metricSvg = primaryMetrics.map((item, index) => {
-    const x = 642 + index * 390;
-    return `<path d="M ${x} 646 H ${x + 356} L ${x + 374} 664 V 784 H ${x} Z" class="metric"/><path d="M ${x} 646 H ${x + 96}" stroke="${item.tone}" stroke-width="4"/><text x="${x + 24}" y="692" class="metric-label">${escapeXml(item.label)}</text><text x="${x + 24}" y="744" class="metric-value">${escapeXml(item.value)}</text>`;
+  const metricSvg = metrics.map((item, index) => {
+    const x = 974 + index * 316;
+    return `<path d="M ${x} 0 H ${x + 294} L ${x + 314} 20 V 166 H ${x} Z" class="metric"/><path d="M ${x} 0 H ${x + 108}" stroke="${item.tone}" stroke-width="4"/><text x="${x + 24}" y="58" class="metric-label">${item.label}</text><text x="${x + 24}" y="114" class="metric-value">${escapeXml(item.value)}</text>`;
   }).join("");
-  const historySvg = records.slice(0, 5).map((item, index) => {
-    const y = 846 + index * 36;
-    return `<text x="650" y="${y}" class="history-index">${String(index + 1).padStart(2, "0")}</text><text x="698" y="${y}" class="history-name">${escapeXml(truncateText(item.name, 42))}</text><path d="M 1298 ${y - 6} H 1598" class="history-rule"/><text x="1640" y="${y}" text-anchor="end" class="history-time">${escapeXml(formatSnapshotDuration(item.minutes * 60))}</text>`;
-  }).join("") || '<text x="650" y="850" class="history-empty">暂无服务器游玩记录</text>';
+  const recordsSvg = records.slice(0, 5).map((item, index) => {
+    const y = 424 + index * 108;
+    return `<path d="M 624 ${y - 54} H1920 V${y + 34} H624 Z" class="record-row"/><text x="660" y="${y - 4}" class="record-index">${String(index + 1).padStart(2, "0")}</text><text x="730" y="${y - 8}" class="record-name">${escapeXml(truncateText(item.name, 52))}</text><text x="730" y="${y + 18}" class="record-label">游玩记录</text><text x="1870" y="${y + 4}" text-anchor="end" class="record-time">${escapeXml(formatSnapshotDuration(item.minutes * 60))}</text>`;
+  }).join("") || '<text x="660" y="424" class="empty">暂无游玩记录</text>';
   const initial = escapeXml(String(payload.gameName || "?").trim().slice(0, 1).toUpperCase());
   const avatar = payload.avatarDataUrl
-    ? `<image href="${payload.avatarDataUrl}" x="104" y="312" width="344" height="344" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
-    : `<text x="276" y="520" text-anchor="middle" class="avatar-initial">${initial}</text>`;
+    ? `<image href="${payload.avatarDataUrl}" x="68" y="290" width="140" height="140" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
+    : `<text x="138" y="386" text-anchor="middle" class="avatar-initial">${initial}</text>`;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <defs>
-      <clipPath id="avatarClip"><circle cx="276" cy="484" r="172"/></clipPath>
-      <linearGradient id="topShade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020816" stop-opacity=".94"/><stop offset=".56" stop-color="#061427" stop-opacity=".78"/><stop offset="1" stop-color="#020816" stop-opacity=".26"/></linearGradient>
-      <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020713" stop-opacity=".94"/><stop offset=".72" stop-color="#061325" stop-opacity=".84"/><stop offset="1" stop-color="#061325" stop-opacity=".10"/></linearGradient>
-      <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000814" flood-opacity=".72"/></filter>
+      <clipPath id="avatarClip"><circle cx="138" cy="360" r="70"/></clipPath>
+      <linearGradient id="topShade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020713" stop-opacity=".95"/><stop offset=".60" stop-color="#061426" stop-opacity=".81"/><stop offset="1" stop-color="#020713" stop-opacity=".44"/></linearGradient>
+      <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020713" stop-opacity=".92"/><stop offset=".76" stop-color="#041223" stop-opacity=".74"/><stop offset="1" stop-color="#041223" stop-opacity=".06"/></linearGradient>
+      <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="15" stdDeviation="18" flood-color="#00040c" flood-opacity=".68"/></filter>
       <style><![CDATA[
-        text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Agency FB','Arial Narrow','Microsoft YaHei',sans-serif;fill:#f2f7ff}
-        .overline{font-size:18px;font-weight:900;letter-spacing:4px;fill:#9db4cb}
-        .title{font-size:48px;font-weight:900;letter-spacing:1px;fill:#ffffff}
-        .small{font-size:17px;font-weight:700;letter-spacing:1.5px;fill:#b7c7d7}
-        .name{font-size:66px;font-weight:900;fill:#ffffff}
-        .identity{font-size:18px;font-weight:700;letter-spacing:1px;fill:#b9c9d9}
-        .metric-label{font-size:16px;font-weight:900;letter-spacing:2px;fill:#afc1d1}
-        .metric-value{font-size:33px;font-weight:900;fill:#ffffff}
-        .history-index{font-size:14px;font-weight:900;letter-spacing:2px;fill:#6fd1ff}
-        .history-name{font-size:16px;font-weight:700;fill:#dbe9f5}
-        .history-time{font-size:15px;font-weight:800;fill:#c0d3e4}
-        .history-empty{font-size:15px;font-weight:700;fill:#a7b8c9}
-        .avatar-initial{font-size:132px;font-weight:900;fill:#dff5ff}
-        .metric{fill:#061423;fill-opacity:.76;stroke:#a0d7ff;stroke-opacity:.32;stroke-width:1.5}
-        .history-rule{stroke:#a9c4d8;stroke-opacity:.22;stroke-width:1}
+        text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Agency FB','Arial Narrow','Microsoft YaHei',sans-serif;fill:#f4f8ff}
+        .overline{font-size:17px;font-weight:900;letter-spacing:3.5px;fill:#a8bfd3}
+        .title{font-size:52px;font-weight:900;fill:#ffffff}
+        .name{font-size:52px;font-weight:900;fill:#ffffff}
+        .identity{font-size:17px;font-weight:750;letter-spacing:1.1px;fill:#bdcede}
+        .metric-label{font-size:15px;font-weight:900;letter-spacing:2px;fill:#b4c6d6}
+        .metric-value{font-size:30px;font-weight:900;fill:#ffffff}
+        .record-index{font-size:17px;font-weight:900;letter-spacing:2px;fill:#73d5ff}
+        .record-name{font-size:20px;font-weight:800;fill:#f2f7ff}
+        .record-label{font-size:12px;font-weight:800;letter-spacing:2px;fill:#9eb5c9}
+        .record-time{font-size:19px;font-weight:900;fill:#dcecff}
+        .empty{font-size:18px;font-weight:700;fill:#aabed0}
+        .footer{font-size:14px;font-weight:800;letter-spacing:1.4px;fill:#afc1d0}
+        .avatar-initial{font-size:58px;font-weight:900;fill:#e5f7ff}
+        .metric{fill:#051323;fill-opacity:.76;stroke:#b1dbf5;stroke-opacity:.25;stroke-width:1.5}
+        .record-row{fill:#061424;fill-opacity:.64;stroke:#a8d8f3;stroke-opacity:.18;stroke-width:1}
       ]]></style>
     </defs>
-    <rect width="${W}" height="${H}" fill="#020817" fill-opacity=".28"/>
-    <path d="M0 0 H1920 V208 H0 Z" fill="url(#topShade)"/>
-    <path d="M0 0 H636 V1080 H0 Z" fill="url(#leftShade)"/>
-    <path d="M64 52 H1410 L1460 102 H1856 V164 H64 Z" fill="#061426" fill-opacity=".86" stroke="#b6d8ef" stroke-opacity=".30" filter="url(#shadow)"/>
-    <path d="M64 52 H1410 L1460 102 H1856" fill="none" stroke="#72d5ff" stroke-opacity=".55" stroke-width="2"/>
-    <path d="M84 166 H1836" stroke="#b4cadf" stroke-opacity=".28"/>
-    <text x="96" y="92" class="overline">PLAYER PROFILE / POST MATCH INTEL</text>
-    <text x="96" y="138" class="title">玩家信息快照</text>
-    <text x="1818" y="128" text-anchor="end" class="small">BZSS PANEL · LOADING SCREEN</text>
-    <path d="M72 262 H520 V996 H72 Z" fill="#051120" fill-opacity=".68" stroke="#8ed8ff" stroke-opacity=".36" stroke-width="1.5" filter="url(#shadow)"/>
-    <path d="M72 262 H520" stroke="#74d8ff" stroke-width="3"/>
-    <circle cx="276" cy="484" r="190" fill="#020817" fill-opacity=".58" stroke="#a8ddff" stroke-opacity=".62" stroke-width="3"/>
-    <circle cx="276" cy="484" r="176" fill="#0b1d30" fill-opacity=".62"/>
-    ${avatar}
-    <path d="M126 698 H466" stroke="#b9d6e8" stroke-opacity=".28"/>
-    <text x="126" y="744" class="overline">PLAYER</text>
-    <text x="126" y="810" class="name">${escapeXml(truncateText(payload.gameName || "未知玩家", 20))}</text>
-    <text x="126" y="854" class="identity">STEAM64  ·  ${escapeXml(payload.steam64 || "未绑定")}</text>
-    <text x="126" y="888" class="identity">QQ  ·  ${escapeXml(payload.qqName || "未绑定")}  /  ${escapeXml(payload.qqNumber || "--")}</text>
-    <path d="M642 550 H1836" stroke="#9dc7e4" stroke-opacity=".30"/>
-    <text x="642" y="596" class="overline">PLAYTIME OVERVIEW</text>
+    <rect width="${W}" height="${H}" fill="#020817" fill-opacity=".20"/>
+    <path d="M0 0 H1920 V190 H0 Z" fill="url(#topShade)"/>
+    <path d="M0 190 H560 V1080 H0 Z" fill="url(#leftShade)"/>
+    <path d="M0 184 H1920" stroke="#b9d5e8" stroke-opacity=".28"/>
+    <path d="M0 0 H798 L844 46 H944" fill="none" stroke="#73d5ff" stroke-opacity=".58" stroke-width="2"/>
+    <text x="48" y="67" class="overline">PLAYER PROFILE / POST MATCH INTEL</text>
+    <text x="48" y="132" class="title">玩家信息快照</text>
     ${metricSvg}
-    <path d="M642 814 H1836" stroke="#9dc7e4" stroke-opacity=".30"/>
-    <text x="642" y="830" class="overline" font-size="14">服务器游玩记录（次要信息）</text>
-    ${historySvg}
-    <path d="M72 1020 H1836" stroke="#9dc7e4" stroke-opacity=".28"/>
-    <text x="72" y="1052" class="small">UPDATED  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text>
-    <text x="1836" y="1052" text-anchor="end" class="small">PLAYER INTEL CARD · BZSS</text>
+    <path d="M0 224 H560 V1008 H0 Z" fill="#04101e" fill-opacity=".50" stroke="#8dd7ff" stroke-opacity=".25" filter="url(#shadow)"/>
+    <path d="M0 224 H560" stroke="#72d5ff" stroke-opacity=".75" stroke-width="3"/>
+    <circle cx="138" cy="360" r="82" fill="#020816" fill-opacity=".65" stroke="#a6dcff" stroke-opacity=".60" stroke-width="2"/>
+    <circle cx="138" cy="360" r="71" fill="#0a1b2c" fill-opacity=".70"/>
+    ${avatar}
+    <text x="238" y="334" class="overline">PLAYER</text>
+    <text x="238" y="392" class="name">${escapeXml(truncateText(payload.gameName || "未知玩家", 15))}</text>
+    <path d="M48 472 H512" stroke="#b6d3e5" stroke-opacity=".25"/>
+    <text x="48" y="526" class="identity">STEAM64</text>
+    <text x="48" y="558" class="identity">${escapeXml(payload.steam64 || "未绑定")}</text>
+    <text x="48" y="628" class="identity">QQ</text>
+    <text x="48" y="660" class="identity">${escapeXml(payload.qqName || "未绑定")}  /  ${escapeXml(payload.qqNumber || "--")}</text>
+    <path d="M624 246 H1920" stroke="#b8d7eb" stroke-opacity=".30"/>
+    <text x="624" y="310" class="overline">游玩记录</text>
+    <text x="1870" y="310" text-anchor="end" class="overline">PLAYTIME HISTORY</text>
+    ${recordsSvg}
+    <path d="M0 1030 H1920" stroke="#b9d5e8" stroke-opacity=".26"/>
+    <text x="48" y="1064" class="footer">UPDATED  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text>
+    <text x="1870" y="1064" text-anchor="end" class="footer">BZSS PANEL · PLAYER INTEL CARD</text>
   </svg>`;
 }
 function renderServerInfoSvg(serverInfo) {
