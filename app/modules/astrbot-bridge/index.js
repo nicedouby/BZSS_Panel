@@ -1875,9 +1875,9 @@ function renderPlayerSnapshotSvg(payload) {
     return `<path d="M ${x} 0 H ${x + 294} L ${x + 314} 20 V 166 H ${x} Z" class="metric"/><path d="M ${x} 0 H ${x + 108}" stroke="${item.tone}" stroke-width="4"/><text x="${x + 24}" y="58" class="metric-label">${item.label}</text><text x="${x + 24}" y="114" class="metric-value">${escapeXml(item.value)}</text>`;
   }).join("");
   const recordsSvg = records.slice(0, 5).map((item, index) => {
-    const y = 424 + index * 108;
-    return `<path d="M 624 ${y - 54} H1920 V${y + 34} H624 Z" class="record-row"/><text x="660" y="${y - 4}" class="record-index">${String(index + 1).padStart(2, "0")}</text><text x="730" y="${y - 8}" class="record-name">${escapeXml(truncateText(item.name, 52))}</text><text x="730" y="${y + 18}" class="record-label">游玩记录</text><text x="1870" y="${y + 4}" text-anchor="end" class="record-time">${escapeXml(formatSnapshotDuration(item.minutes * 60))}</text>`;
-  }).join("") || '<text x="660" y="424" class="empty">暂无游玩记录</text>';
+    const y = 856 + index * 42;
+    return `<path d="M 624 ${y - 27} H1920 V${y + 9} H624 Z" class="record-row"/><text x="660" y="${y}" class="record-index">${String(index + 1).padStart(2, "0")}</text><text x="712" y="${y}" class="record-name">${escapeXml(truncateText(item.name, 58))}</text><text x="1870" y="${y}" text-anchor="end" class="record-time">${escapeXml(formatSnapshotDuration(item.minutes * 60))}</text>`;
+  }).join("") || '<text x="660" y="856" class="empty">暂无游玩记录</text>';
   const initial = escapeXml(String(payload.gameName || "?").trim().slice(0, 1).toUpperCase());
   const avatar = payload.avatarDataUrl
     ? `<image href="${payload.avatarDataUrl}" x="68" y="290" width="140" height="140" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
@@ -1896,15 +1896,14 @@ function renderPlayerSnapshotSvg(payload) {
         .identity{font-size:17px;font-weight:750;letter-spacing:1.1px;fill:#bdcede}
         .metric-label{font-size:15px;font-weight:900;letter-spacing:2px;fill:#b4c6d6}
         .metric-value{font-size:30px;font-weight:900;fill:#ffffff}
-        .record-index{font-size:17px;font-weight:900;letter-spacing:2px;fill:#73d5ff}
-        .record-name{font-size:20px;font-weight:800;fill:#f2f7ff}
-        .record-label{font-size:12px;font-weight:800;letter-spacing:2px;fill:#9eb5c9}
-        .record-time{font-size:19px;font-weight:900;fill:#dcecff}
-        .empty{font-size:18px;font-weight:700;fill:#aabed0}
+        .record-index{font-size:13px;font-weight:900;letter-spacing:1.5px;fill:#73d5ff}
+        .record-name{font-size:15px;font-weight:800;fill:#e5eff8}
+        .record-time{font-size:15px;font-weight:900;fill:#dcecff}
+        .empty{font-size:15px;font-weight:700;fill:#aabed0}
         .footer{font-size:14px;font-weight:800;letter-spacing:1.4px;fill:#afc1d0}
         .avatar-initial{font-size:58px;font-weight:900;fill:#e5f7ff}
         .metric{fill:#051323;fill-opacity:.76;stroke:#b1dbf5;stroke-opacity:.25;stroke-width:1.5}
-        .record-row{fill:#061424;fill-opacity:.64;stroke:#a8d8f3;stroke-opacity:.18;stroke-width:1}
+        .record-row{fill:#061424;fill-opacity:.50;stroke:#a8d8f3;stroke-opacity:.14;stroke-width:1}
       ]]></style>
     </defs>
     <rect width="${W}" height="${H}" fill="#020817" fill-opacity=".20"/>
@@ -1928,8 +1927,15 @@ function renderPlayerSnapshotSvg(payload) {
     <text x="48" y="628" class="identity">QQ</text>
     <text x="48" y="660" class="identity">${escapeXml(payload.qqName || "未绑定")}  /  ${escapeXml(payload.qqNumber || "--")}</text>
     <path d="M624 246 H1920" stroke="#b8d7eb" stroke-opacity=".30"/>
-    <text x="624" y="310" class="overline">游玩记录</text>
-    <text x="1870" y="310" text-anchor="end" class="overline">PLAYTIME HISTORY</text>
+    <text x="624" y="310" class="overline">玩家生涯</text>
+    <text x="1870" y="310" text-anchor="end" class="overline">PLAYER CAREER</text>
+    <path d="M624 340 H1920 V756 H624 Z" fill="#04111f" fill-opacity=".30" stroke="#9bcde9" stroke-opacity=".12"/>
+    <path d="M624 340 H784" stroke="#74d8ff" stroke-opacity=".62" stroke-width="3"/>
+    <text x="660" y="404" class="overline">CAREER DATA</text>
+    <text x="660" y="450" class="identity">生涯数据区域 · 后续可加入等级、对局、击杀、胜率等统计</text>
+    <path d="M624 798 H1920" stroke="#b8d7eb" stroke-opacity=".25"/>
+    <text x="624" y="830" class="overline">游玩记录</text>
+    <text x="1870" y="830" text-anchor="end" class="overline">PLAYTIME HISTORY</text>
     ${recordsSvg}
     <path d="M0 1030 H1920" stroke="#b9d5e8" stroke-opacity=".26"/>
     <text x="48" y="1064" class="footer">UPDATED  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text>
