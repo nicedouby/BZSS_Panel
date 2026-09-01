@@ -1834,9 +1834,9 @@ async function renderPlayerSnapshotPng(payload) {
   });
   const background = await readBinaryAsset(PLAYER_SNAPSHOT_LOADING_SCREEN);
   const base = background?.length
-    ? await sharp(background).resize(1280, 1280, { fit: "cover", position: "centre" }).modulate({ brightness: 0.46, saturation: 0.72 }).toBuffer()
+    ? await sharp(background).resize(1920, 1080, { fit: "cover", position: "centre" }).modulate({ brightness: 0.46, saturation: 0.72 }).toBuffer()
     : null;
-  const image = base ? sharp(base) : sharp({ create: { width: 1280, height: 1280, channels: 4, background: "#071423" } });
+  const image = base ? sharp(base) : sharp({ create: { width: 1920, height: 1080, channels: 4, background: "#071423" } });
   return image.composite([{ input: Buffer.from(svg, "utf8") }]).png().toBuffer();
 }
 
@@ -1862,12 +1862,79 @@ function normalizeSnapshotServerRecords(rankings = [], sessions = []) {
 }
 
 function renderPlayerSnapshotSvg(payload) {
- const W=1280,H=1280, rec=normalizeSnapshotServerRecords(payload.serverRankings,payload.serverSessions);
- const metrics=[["STEAM",formatSnapshotHours(payload.gameSeconds,payload.gameHours)],["本服",formatSnapshotDuration(payload.serverSeconds)],["暖服",formatSnapshotDuration(payload.warmupSeconds)]];
- const ms=metrics.map((m,i)=>{const x=72+i*376;return `<path d="M ${x} 486 H ${x+350} L ${x+366} 502 V 590 H ${x} Z" class="metric"/><text x="${x+22}" y="526" class="k">${m[0]}</text><text x="${x+22}" y="568" class="v">${escapeXml(m[1])}</text>`}).join("");
- const rs=rec.slice(0,5).map((q,i)=>{const y=700+i*78;return `<path d="M72 ${y-42} H1208 V${y+20} H72 Z" class="row"/><text x="96" y="${y}" class="rank">0${i+1}</text><text x="192" y="${y-4}" class="server">${escapeXml(truncateText(q.name,42))}</text><text x="192" y="${y+17}" class="sub">SERVER PLAYTIME RECORD</text><text x="1176" y="${y+4}" text-anchor="end" class="time">${escapeXml(formatSnapshotDuration(q.minutes*60))}</text>`}).join("")||'<text x="96" y="720" class="sub">暂无服务器游玩记录</text>';
- const avatar=payload.avatarDataUrl?`<image href="${payload.avatarDataUrl}" x="88" y="184" width="176" height="176" clip-path="url(#clip)" preserveAspectRatio="xMidYMid slice"/>`:`<text x="176" y="292" text-anchor="middle" class="initial">${escapeXml(String(payload.gameName||"?").slice(0,1))}</text>`;
- return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1280"><defs><clipPath id="clip"><circle cx="176" cy="272" r="88"/></clipPath><filter id="sh"><feDropShadow dx="0" dy="12" stdDeviation="20" flood-opacity=".7"/></filter><style>text{font-family:'Microsoft YaHei','Bahnschrift',sans-serif}.plate{fill:#020817;fill-opacity:.82;stroke:#8dd5ff;stroke-opacity:.5}.k,.sub{font-size:14px;font-weight:800;letter-spacing:2px;fill:#9fb4c9}.v,.time{font-size:28px;font-weight:900;fill:#eaf6ff}.server{font-size:22px;font-weight:800;fill:#fff}.rank{font-size:20px;font-weight:900;fill:#67e8f9}.initial{font-size:74px;font-weight:900;fill:#dff8ff}.metric,.row{fill:#081525;fill-opacity:.76;stroke:#93c5fd;stroke-opacity:.28}</style></defs><rect width="1280" height="1280" fill="#04101d" fill-opacity=".22"/><path d="M42 36 H1010 L1060 86 H1238 V164 H42 Z" class="plate" filter="url(#sh)"/><text x="74" y="82" class="k">BZSS / PLAYER INTEL CARD</text><text x="74" y="136" class="v">玩家信息快照</text><text x="1210" y="136" text-anchor="end" class="k">LOADING SCREEN EDITION</text><circle cx="176" cy="272" r="102" class="plate"/>${avatar}<text x="320" y="238" class="k">PLAYER</text><text x="320" y="294" class="v">${escapeXml(truncateText(payload.gameName||"未知玩家",30))}</text><text x="320" y="332" class="sub">STEAM64  ${escapeXml(payload.steam64||"未绑定")}</text><text x="320" y="360" class="sub">QQ  ${escapeXml(payload.qqName||"未绑定")} / ${escapeXml(payload.qqNumber||"--")}</text><path d="M72 426 H1208" stroke="#7dd3fc" stroke-opacity=".55"/>${ms}<text x="72" y="654" class="k">服务器游玩记录 / TOP 5</text>${rs}<path d="M72 1142 H1208" stroke="#7dd3fc" stroke-opacity=".35"/><text x="72" y="1186" class="sub">UPDATED  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text><text x="1208" y="1186" text-anchor="end" class="sub">BZSS PANEL · ASTRBOT</text></svg>`;
+  const W = 1920;
+  const H = 1080;
+  const records = normalizeSnapshotServerRecords(payload.serverRankings, payload.serverSessions);
+  const primaryMetrics = [
+    { label: "STEAM 游玩时长", value: formatSnapshotHours(payload.gameSeconds, payload.gameHours), tone: "#72d5ff" },
+    { label: "本服游玩时长", value: formatSnapshotDuration(payload.serverSeconds), tone: "#f2c879" },
+    { label: "暖服时长", value: formatSnapshotDuration(payload.warmupSeconds), tone: "#b59cff" },
+  ];
+  const metricSvg = primaryMetrics.map((item, index) => {
+    const x = 642 + index * 390;
+    return `<path d="M ${x} 646 H ${x + 356} L ${x + 374} 664 V 784 H ${x} Z" class="metric"/><path d="M ${x} 646 H ${x + 96}" stroke="${item.tone}" stroke-width="4"/><text x="${x + 24}" y="692" class="metric-label">${escapeXml(item.label)}</text><text x="${x + 24}" y="744" class="metric-value">${escapeXml(item.value)}</text>`;
+  }).join("");
+  const historySvg = records.slice(0, 5).map((item, index) => {
+    const y = 846 + index * 36;
+    return `<text x="650" y="${y}" class="history-index">${String(index + 1).padStart(2, "0")}</text><text x="698" y="${y}" class="history-name">${escapeXml(truncateText(item.name, 42))}</text><path d="M 1298 ${y - 6} H 1598" class="history-rule"/><text x="1640" y="${y}" text-anchor="end" class="history-time">${escapeXml(formatSnapshotDuration(item.minutes * 60))}</text>`;
+  }).join("") || '<text x="650" y="850" class="history-empty">暂无服务器游玩记录</text>';
+  const initial = escapeXml(String(payload.gameName || "?").trim().slice(0, 1).toUpperCase());
+  const avatar = payload.avatarDataUrl
+    ? `<image href="${payload.avatarDataUrl}" x="104" y="312" width="344" height="344" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
+    : `<text x="276" y="520" text-anchor="middle" class="avatar-initial">${initial}</text>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs>
+      <clipPath id="avatarClip"><circle cx="276" cy="484" r="172"/></clipPath>
+      <linearGradient id="topShade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020816" stop-opacity=".94"/><stop offset=".56" stop-color="#061427" stop-opacity=".78"/><stop offset="1" stop-color="#020816" stop-opacity=".26"/></linearGradient>
+      <linearGradient id="leftShade" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#020713" stop-opacity=".94"/><stop offset=".72" stop-color="#061325" stop-opacity=".84"/><stop offset="1" stop-color="#061325" stop-opacity=".10"/></linearGradient>
+      <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#000814" flood-opacity=".72"/></filter>
+      <style><![CDATA[
+        text{font-family:'Bahnschrift SemiCondensed','Bahnschrift','Agency FB','Arial Narrow','Microsoft YaHei',sans-serif;fill:#f2f7ff}
+        .overline{font-size:18px;font-weight:900;letter-spacing:4px;fill:#9db4cb}
+        .title{font-size:48px;font-weight:900;letter-spacing:1px;fill:#ffffff}
+        .small{font-size:17px;font-weight:700;letter-spacing:1.5px;fill:#b7c7d7}
+        .name{font-size:66px;font-weight:900;fill:#ffffff}
+        .identity{font-size:18px;font-weight:700;letter-spacing:1px;fill:#b9c9d9}
+        .metric-label{font-size:16px;font-weight:900;letter-spacing:2px;fill:#afc1d1}
+        .metric-value{font-size:33px;font-weight:900;fill:#ffffff}
+        .history-index{font-size:14px;font-weight:900;letter-spacing:2px;fill:#6fd1ff}
+        .history-name{font-size:16px;font-weight:700;fill:#dbe9f5}
+        .history-time{font-size:15px;font-weight:800;fill:#c0d3e4}
+        .history-empty{font-size:15px;font-weight:700;fill:#a7b8c9}
+        .avatar-initial{font-size:132px;font-weight:900;fill:#dff5ff}
+        .metric{fill:#061423;fill-opacity:.76;stroke:#a0d7ff;stroke-opacity:.32;stroke-width:1.5}
+        .history-rule{stroke:#a9c4d8;stroke-opacity:.22;stroke-width:1}
+      ]]></style>
+    </defs>
+    <rect width="${W}" height="${H}" fill="#020817" fill-opacity=".28"/>
+    <path d="M0 0 H1920 V208 H0 Z" fill="url(#topShade)"/>
+    <path d="M0 0 H636 V1080 H0 Z" fill="url(#leftShade)"/>
+    <path d="M64 52 H1410 L1460 102 H1856 V164 H64 Z" fill="#061426" fill-opacity=".86" stroke="#b6d8ef" stroke-opacity=".30" filter="url(#shadow)"/>
+    <path d="M64 52 H1410 L1460 102 H1856" fill="none" stroke="#72d5ff" stroke-opacity=".55" stroke-width="2"/>
+    <path d="M84 166 H1836" stroke="#b4cadf" stroke-opacity=".28"/>
+    <text x="96" y="92" class="overline">PLAYER PROFILE / POST MATCH INTEL</text>
+    <text x="96" y="138" class="title">玩家信息快照</text>
+    <text x="1818" y="128" text-anchor="end" class="small">BZSS PANEL · LOADING SCREEN</text>
+    <path d="M72 262 H520 V996 H72 Z" fill="#051120" fill-opacity=".68" stroke="#8ed8ff" stroke-opacity=".36" stroke-width="1.5" filter="url(#shadow)"/>
+    <path d="M72 262 H520" stroke="#74d8ff" stroke-width="3"/>
+    <circle cx="276" cy="484" r="190" fill="#020817" fill-opacity=".58" stroke="#a8ddff" stroke-opacity=".62" stroke-width="3"/>
+    <circle cx="276" cy="484" r="176" fill="#0b1d30" fill-opacity=".62"/>
+    ${avatar}
+    <path d="M126 698 H466" stroke="#b9d6e8" stroke-opacity=".28"/>
+    <text x="126" y="744" class="overline">PLAYER</text>
+    <text x="126" y="810" class="name">${escapeXml(truncateText(payload.gameName || "未知玩家", 20))}</text>
+    <text x="126" y="854" class="identity">STEAM64  ·  ${escapeXml(payload.steam64 || "未绑定")}</text>
+    <text x="126" y="888" class="identity">QQ  ·  ${escapeXml(payload.qqName || "未绑定")}  /  ${escapeXml(payload.qqNumber || "--")}</text>
+    <path d="M642 550 H1836" stroke="#9dc7e4" stroke-opacity=".30"/>
+    <text x="642" y="596" class="overline">PLAYTIME OVERVIEW</text>
+    ${metricSvg}
+    <path d="M642 814 H1836" stroke="#9dc7e4" stroke-opacity=".30"/>
+    <text x="642" y="830" class="overline" font-size="14">服务器游玩记录（次要信息）</text>
+    ${historySvg}
+    <path d="M72 1020 H1836" stroke="#9dc7e4" stroke-opacity=".28"/>
+    <text x="72" y="1052" class="small">UPDATED  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text>
+    <text x="1836" y="1052" text-anchor="end" class="small">PLAYER INTEL CARD · BZSS</text>
+  </svg>`;
 }
 function renderServerInfoSvg(serverInfo) {
   return renderServerInfoP2Svg(serverInfo);
