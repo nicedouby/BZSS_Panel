@@ -1834,9 +1834,9 @@ async function renderPlayerSnapshotPng(payload) {
   });
   const background = await readBinaryAsset(PLAYER_SNAPSHOT_LOADING_SCREEN);
   const base = background?.length
-    ? await sharp(background).resize(1280, 780, { fit: "cover", position: "centre" }).modulate({ brightness: 0.46, saturation: 0.72 }).toBuffer()
+    ? await sharp(background).resize(1280, 1280, { fit: "cover", position: "centre" }).modulate({ brightness: 0.46, saturation: 0.72 }).toBuffer()
     : null;
-  const image = base ? sharp(base) : sharp({ create: { width: 1280, height: 780, channels: 4, background: "#071423" } });
+  const image = base ? sharp(base) : sharp({ create: { width: 1280, height: 1280, channels: 4, background: "#071423" } });
   return image.composite([{ input: Buffer.from(svg, "utf8") }]).png().toBuffer();
 }
 
@@ -1862,80 +1862,13 @@ function normalizeSnapshotServerRecords(rankings = [], sessions = []) {
 }
 
 function renderPlayerSnapshotSvg(payload) {
-  const width = 1280;
-  const records = normalizeSnapshotServerRecords(payload.serverRankings, payload.serverSessions);
-  const height = 780;
-  const rows = [
-    ["Steam 游戏时长", formatSnapshotHours(payload.gameSeconds, payload.gameHours)],
-    ["本服累计时长", formatSnapshotDuration(payload.serverSeconds)],
-    ["暖服累计时长", formatSnapshotDuration(payload.warmupSeconds)],
-    ["Steam64", payload.steam64 ?? "未绑定"],
-    ["EOS ID", payload.eosID ?? "未记录"],
-  ];
-  const rowSvg = rows.map(([label, value], index) => {
-    const y = 288 + index * 66;
-    return `
-      <text x="84" y="${y}" class="row-label">${escapeXml(label)}</text>
-      <text x="310" y="${y}" class="row-value">${escapeXml(value)}</text>
-      <path d="M84 ${y + 20} H676" class="row-line"/>
-    `;
-  }).join("");
-
-  const recordSvg = records.length
-    ? records.map((record, index) => {
-      const y = 286 + index * 82;
-      const rank = index + 1;
-      return `
-        <rect x="730" y="${y - 42}" width="468" height="62" rx="12" class="record-card"/>
-        <rect x="746" y="${y - 29}" width="34" height="34" rx="8" class="rank-box"/>
-        <text x="763" y="${y - 6}" text-anchor="middle" class="rank-text">${rank}</text>
-        <text x="798" y="${y - 15}" class="record-name">${escapeXml(truncateText(record.name, 34))}</text>
-        <text x="798" y="${y + 7}" class="record-sub">服务器游玩记录</text>
-        <text x="1175" y="${y - 6}" text-anchor="end" class="record-time">${escapeXml(formatSnapshotDuration(record.minutes * 60))}</text>
-      `;
-    }).join("")
-    : `<text x="730" y="300" class="empty-record">暂无服务器游玩记录</text>`;
-
-  const avatarSvg = payload.avatarDataUrl
-    ? `<image x="94" y="102" width="138" height="138" href="${payload.avatarDataUrl}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
-    : `<text x="163" y="190" text-anchor="middle" class="avatar-letter">${escapeXml(String(payload.gameName ?? "?").trim().slice(0, 1) || "?")}</text>`;
-
-  return `
-  <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-    <defs>
-      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#081423"/><stop offset=".58" stop-color="#0d1b2e"/><stop offset="1" stop-color="#102e4b"/></linearGradient>
-      <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#818cf8"/></linearGradient>
-      <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity=".55"/></filter>
-      <clipPath id="avatarClip"><circle cx="163" cy="171" r="69"/></clipPath>
-      <style><![CDATA[
-        text{font-family:'Microsoft YaHei','Noto Sans CJK SC','Segoe UI',sans-serif}
-        .eyebrow{font-size:16px;font-weight:800;letter-spacing:3px;fill:#67e8f9}
-        .name{font-size:42px;font-weight:900;fill:#f8fafc}.meta{font-size:17px;fill:#a5b4c8}
-        .badge{font-size:14px;font-weight:800;fill:#dbeafe}.section{font-size:17px;font-weight:900;letter-spacing:2px;fill:#7dd3fc}
-        .row-label{font-size:17px;font-weight:700;fill:#94a3b8}.row-value{font-size:22px;font-weight:800;fill:#e2e8f0}.row-line{stroke:#334155;stroke-opacity:.65}
-        .record-name{font-size:17px;font-weight:800;fill:#e5efff}.record-sub{font-size:13px;fill:#94a3b8}.record-time{font-size:17px;font-weight:900;fill:#67e8f9}
-        .rank-text{font-size:16px;font-weight:900;fill:#06111f}.empty-record{font-size:18px;fill:#94a3b8}.avatar-letter{font-size:58px;font-weight:900;fill:#cffafe}
-      ]]></style>
-    </defs>
-    <rect width="${width}" height="${height}" fill="#04101d" fill-opacity=".30"/>
-    <circle cx="1160" cy="100" r="250" fill="#38bdf8" opacity=".08"/><circle cx="80" cy="${height - 40}" r="230" fill="#6366f1" opacity=".10"/>
-    <rect x="36" y="34" width="1208" height="${height - 68}" rx="28" fill="#020617" fill-opacity=".80" stroke="#7dd3fc" stroke-opacity=".55"/>
-    <rect x="64" y="62" width="394" height="7" rx="4" fill="url(#accent)"/>
-    <circle cx="163" cy="171" r="80" fill="#0d2036" stroke="#67e8f9" stroke-width="4" filter="url(#shadow)"/>${avatarSvg}
-    <text x="270" y="126" class="eyebrow">BZSS / PLAYER INTEL</text>
-    <text x="270" y="178" class="name">${escapeXml(truncateText(payload.gameName ?? "未知玩家", 26))}</text>
-    <text x="270" y="212" class="meta">QQ ${escapeXml(payload.qqName ?? "未绑定")} · ${escapeXml(payload.qqNumber ?? "--")}</text>
-    <rect x="1010" y="104" width="184" height="46" rx="23" fill="#0c3147" stroke="#38bdf8" stroke-opacity=".55"/>
-    <text x="1102" y="134" text-anchor="middle" class="badge">玩家信息快照</text>
-    <path d="M76 252 H676" stroke="#67e8f9" stroke-opacity=".55"/><path d="M730 252 H1198" stroke="#67e8f9" stroke-opacity=".55"/>
-    <text x="84" y="250" class="section">账户与游玩时长</text><text x="730" y="250" class="section">服务器游玩记录 / TOP 5</text>
-    ${rowSvg}
-    ${recordSvg}
-    <text x="84" y="${height - 70}" class="meta">更新时间  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text>
-    <text x="1196" y="${height - 70}" text-anchor="end" class="meta">数据来源：BZSS 玩家数据库</text>
-  </svg>`;
+ const W=1280,H=1280, rec=normalizeSnapshotServerRecords(payload.serverRankings,payload.serverSessions);
+ const metrics=[["STEAM",formatSnapshotHours(payload.gameSeconds,payload.gameHours)],["本服",formatSnapshotDuration(payload.serverSeconds)],["暖服",formatSnapshotDuration(payload.warmupSeconds)]];
+ const ms=metrics.map((m,i)=>{const x=72+i*376;return `<path d="M ${x} 486 H ${x+350} L ${x+366} 502 V 590 H ${x} Z" class="metric"/><text x="${x+22}" y="526" class="k">${m[0]}</text><text x="${x+22}" y="568" class="v">${escapeXml(m[1])}</text>`}).join("");
+ const rs=rec.slice(0,5).map((q,i)=>{const y=700+i*78;return `<path d="M72 ${y-42} H1208 V${y+20} H72 Z" class="row"/><text x="96" y="${y}" class="rank">0${i+1}</text><text x="192" y="${y-4}" class="server">${escapeXml(truncateText(q.name,42))}</text><text x="192" y="${y+17}" class="sub">SERVER PLAYTIME RECORD</text><text x="1176" y="${y+4}" text-anchor="end" class="time">${escapeXml(formatSnapshotDuration(q.minutes*60))}</text>`}).join("")||'<text x="96" y="720" class="sub">暂无服务器游玩记录</text>';
+ const avatar=payload.avatarDataUrl?`<image href="${payload.avatarDataUrl}" x="88" y="184" width="176" height="176" clip-path="url(#clip)" preserveAspectRatio="xMidYMid slice"/>`:`<text x="176" y="292" text-anchor="middle" class="initial">${escapeXml(String(payload.gameName||"?").slice(0,1))}</text>`;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1280"><defs><clipPath id="clip"><circle cx="176" cy="272" r="88"/></clipPath><filter id="sh"><feDropShadow dx="0" dy="12" stdDeviation="20" flood-opacity=".7"/></filter><style>text{font-family:'Microsoft YaHei','Bahnschrift',sans-serif}.plate{fill:#020817;fill-opacity:.82;stroke:#8dd5ff;stroke-opacity:.5}.k,.sub{font-size:14px;font-weight:800;letter-spacing:2px;fill:#9fb4c9}.v,.time{font-size:28px;font-weight:900;fill:#eaf6ff}.server{font-size:22px;font-weight:800;fill:#fff}.rank{font-size:20px;font-weight:900;fill:#67e8f9}.initial{font-size:74px;font-weight:900;fill:#dff8ff}.metric,.row{fill:#081525;fill-opacity:.76;stroke:#93c5fd;stroke-opacity:.28}</style></defs><rect width="1280" height="1280" fill="#04101d" fill-opacity=".22"/><path d="M42 36 H1010 L1060 86 H1238 V164 H42 Z" class="plate" filter="url(#sh)"/><text x="74" y="82" class="k">BZSS / PLAYER INTEL CARD</text><text x="74" y="136" class="v">玩家信息快照</text><text x="1210" y="136" text-anchor="end" class="k">LOADING SCREEN EDITION</text><circle cx="176" cy="272" r="102" class="plate"/>${avatar}<text x="320" y="238" class="k">PLAYER</text><text x="320" y="294" class="v">${escapeXml(truncateText(payload.gameName||"未知玩家",30))}</text><text x="320" y="332" class="sub">STEAM64  ${escapeXml(payload.steam64||"未绑定")}</text><text x="320" y="360" class="sub">QQ  ${escapeXml(payload.qqName||"未绑定")} / ${escapeXml(payload.qqNumber||"--")}</text><path d="M72 426 H1208" stroke="#7dd3fc" stroke-opacity=".55"/>${ms}<text x="72" y="654" class="k">服务器游玩记录 / TOP 5</text>${rs}<path d="M72 1142 H1208" stroke="#7dd3fc" stroke-opacity=".35"/><text x="72" y="1186" class="sub">UPDATED  ${escapeXml(formatSnapshotTime(payload.updatedAt))}</text><text x="1208" y="1186" text-anchor="end" class="sub">BZSS PANEL · ASTRBOT</text></svg>`;
 }
-
 function renderServerInfoSvg(serverInfo) {
   return renderServerInfoP2Svg(serverInfo);
   const width = 1280;
