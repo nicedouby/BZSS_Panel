@@ -48,7 +48,6 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     inFlightDuplicatesSkipped: 0,
     errors: 0,
   };
-  let serial = Promise.resolve();
 
   const api = {
     getState() {
