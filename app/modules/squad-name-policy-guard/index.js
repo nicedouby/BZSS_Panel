@@ -159,18 +159,21 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
     if (pendingKeys.has(key)) {
       stats.inFlightDuplicatesSkipped += 1;
+      notifyStateUpdated();
       return Promise.resolve(null);
     }
 
     if (pendingTasks.length >= runtimeConfig.maxPendingEvents) {
       stats.queueOverflowSkipped += 1;
       moduleLogger?.warn?.(`[SquadNamePolicyGuard] pending queue is full; skipped ${key}.`);
+      notifyStateUpdated();
       return Promise.resolve(null);
     }
 
     pendingKeys.add(key);
     return new Promise((resolve) => {
       pendingTasks.push({ key, event, source, resolve });
+      notifyStateUpdated();
       void drainPendingTasks();
     });
   }
@@ -190,12 +193,26 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         } finally {
           pendingKeys.delete(task.key);
           activeQueueKey = "";
+          notifyStateUpdated();
         }
       }
     } finally {
       queueDraining = false;
       if (!queueClosed && pendingTasks.length > 0) void drainPendingTasks();
     }
+  }
+
+  function notifyStateUpdated() {
+    core?.eventBus?.emitModuleEvent?.(MODULE_ID, "stateUpdated", {
+      moduleId: MODULE_ID,
+      time: nowIso(),
+      queue: {
+        waiting: pendingTasks.length,
+        active: Boolean(activeQueueKey),
+        pendingKeys: pendingKeys.size,
+      },
+      stats: { ...stats },
+    });
   }
 
   async function handleSquadCandidate(event = {}, source = "LOG") {
