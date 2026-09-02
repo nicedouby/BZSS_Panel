@@ -641,6 +641,17 @@ export const pageRegistry: PageDefinition[] = [
     ...documentPage,
   },
   {
+    name: "data-manager",
+    path: "/system/data-manager",
+    component: () => import("../pages/DataManagerPage.vue"),
+    title: "数据管理",
+    category: "system",
+    refreshPolicy: "manual",
+    nav: { section: "system", label: "数据管理", icon: "🧹", order: 20 },
+    superAdminOnly: true,
+    ...workspacePage,
+  },
+  {
     name: "admin-users",
     path: "/system/admin-users",
     component: () => import("../pages/AdminUsersPage.vue"),

@@ -39,6 +39,7 @@ export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/plugins/stepwise-squad-playtime-guard", requiredPermission: "squad_management.view" },
   { route: "/plugins/fair-squad-guard", requiredPermission: "squad_management.view" },
   { route: "/system/status", requiredPermission: "settings.manage" },
+  { route: "/system/data-manager", requiredPermission: "settings.manage", superAdminOnly: true },
   { route: "/system/logpost", requiredPermission: "debug.tools" },
   { route: "/system/admin-users", requiredPermission: "admin_users.manage", superAdminOnly: true },
   { route: "/system/audit-records", requiredPermission: "audit.view" },

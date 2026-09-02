@@ -57,6 +57,7 @@ import { createTacticalFeedWriterModule } from "../modules/tactical-feed-writer/
 import { createChatManagerModule } from "../modules/chat-manager/index.js";
 import { createNetworkStatsModule } from "../modules/network-stats/index.js";
 import { createSquadBrowserPlayerLookupModule } from "../modules/squadbrowser-player-lookup/index.js";
+import { createDataManagerModule } from "../modules/data-manager/index.js";
 
 /**
  * Core module registry and lifecycle manager.
@@ -125,6 +126,7 @@ export class ModuleManager {
       createTacticalFeedWriterModule,
       createNetworkStatsModule,
       createSquadBrowserPlayerLookupModule,
+      createDataManagerModule,
     ];
 
     for (const factory of factories) {
