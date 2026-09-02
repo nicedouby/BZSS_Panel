@@ -17,6 +17,7 @@ const DEFAULT_DEDUPE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_RECENT_LIMIT = 200;
 const DEFAULT_WARNING_REPEAT_DELAY_MS = 2_000;
 const DEFAULT_WARNING_REPEAT_COUNT = 2;
+const DEFAULT_MAX_PENDING_EVENTS = 64;
 
 export function createSquadNamePolicyGuardModule({ core, modules, config, logger }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -29,6 +30,11 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
   const unsubscribers = [];
   const recentRecords = [];
   const processedKeys = new Map();
+  const pendingKeys = new Set();
+  const pendingTasks = [];
+  let queueDraining = false;
+  let activeQueueKey = "";
+  let queueClosed = false;
   const stats = {
     evaluated: 0,
     violations: 0,
@@ -38,6 +44,8 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
     warningsSkipped: 0,
     duplicatesSkipped: 0,
     auditOnlySkipped: 0,
+    queueOverflowSkipped: 0,
+    inFlightDuplicatesSkipped: 0,
     errors: 0,
   };
   let serial = Promise.resolve();
@@ -52,6 +60,13 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         dedupeTtlMs: runtimeConfig.dedupeTtlMs,
         warningRepeatDelayMs: runtimeConfig.warningRepeatDelayMs,
         warningRepeatCount: runtimeConfig.warningRepeatCount,
+        maxPendingEvents: runtimeConfig.maxPendingEvents,
+        queue: {
+          waiting: pendingTasks.length,
+          active: Boolean(activeQueueKey),
+          activeKey: activeQueueKey,
+          pendingKeys: pendingKeys.size,
+        },
         stats: { ...stats },
         recent: recentRecords.slice().reverse(),
       };
@@ -101,6 +116,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
     async start() {
       runtimeConfig = readConfig(config);
+      queueClosed = false;
       if (!runtimeConfig.enabled) {
         moduleLogger?.info?.("SquadNamePolicyGuard module disabled by config.");
         return;
@@ -108,7 +124,7 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
 
       if (runtimeConfig.detectLogCreated) {
         unsubscribers.push(core.eventBus.onModuleEvent("module.squadLifecycle", "squadCreated", (event) => {
-          void enqueue(() => handleSquadCandidate(event, "LOG"));
+          void enqueueSquadCandidate(event, "LOG");
         }));
       }
 
@@ -128,13 +144,59 @@ export function createSquadNamePolicyGuardModule({ core, modules, config, logger
         } catch {}
       }
       processedKeys.clear();
+      queueClosed = true;
+      for (const task of pendingTasks.splice(0)) {
+        pendingKeys.delete(task.key);
+        task.resolve(null);
+      }
+      activeQueueKey = "";
     },
   };
 
-  function enqueue(task) {
-    const next = serial.then(task, task);
-    serial = next.catch(() => {});
-    return next;
+  function enqueueSquadCandidate(event = {}, source = "LOG") {
+    const normalized = normalizeSquadEvent({ ...event, source });
+    const key = buildDedupeKey(normalized);
+    if (!key || queueClosed) return Promise.resolve(null);
+
+    if (pendingKeys.has(key)) {
+      stats.inFlightDuplicatesSkipped += 1;
+      return Promise.resolve(null);
+    }
+
+    if (pendingTasks.length >= runtimeConfig.maxPendingEvents) {
+      stats.queueOverflowSkipped += 1;
+      moduleLogger?.warn?.(`[SquadNamePolicyGuard] pending queue is full; skipped ${key}.`);
+      return Promise.resolve(null);
+    }
+
+    pendingKeys.add(key);
+    return new Promise((resolve) => {
+      pendingTasks.push({ key, event, source, resolve });
+      void drainPendingTasks();
+    });
+  }
+
+  async function drainPendingTasks() {
+    if (queueDraining || queueClosed) return;
+    queueDraining = true;
+    try {
+      while (!queueClosed && pendingTasks.length > 0) {
+        const task = pendingTasks.shift();
+        activeQueueKey = task.key;
+        try {
+          task.resolve(await handleSquadCandidate(task.event, task.source));
+        } catch (error) {
+          moduleLogger?.warn?.(`[SquadNamePolicyGuard] queued candidate failed: ${error?.message ?? error}`);
+          task.resolve(null);
+        } finally {
+          pendingKeys.delete(task.key);
+          activeQueueKey = "";
+        }
+      }
+    } finally {
+      queueDraining = false;
+      if (!queueClosed && pendingTasks.length > 0) void drainPendingTasks();
+    }
   }
 
   async function handleSquadCandidate(event = {}, source = "LOG") {
@@ -301,6 +363,7 @@ function readConfig(config) {
       DEFAULT_WARNING_REPEAT_DELAY_MS,
     ),
     warningRepeatCount: positiveNumber(raw.warningRepeatCount, DEFAULT_WARNING_REPEAT_COUNT),
+    maxPendingEvents: positiveNumber(raw.maxPendingEvents, DEFAULT_MAX_PENDING_EVENTS),
   };
 }
 
