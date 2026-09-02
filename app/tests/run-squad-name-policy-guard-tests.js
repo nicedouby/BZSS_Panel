@@ -209,7 +209,8 @@ async function testDuplicateHandledOnce() {
   await waitForHandlers();
 
   assert.equal(harness.calls.length, 6);
-  assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 1);
+  assert.equal(harness.instance.api.getState().stats.duplicatesSkipped, 0);
+  assert.equal(harness.instance.api.getState().stats.inFlightDuplicatesSkipped, 1);
   await harness.instance.stop();
 }
 
