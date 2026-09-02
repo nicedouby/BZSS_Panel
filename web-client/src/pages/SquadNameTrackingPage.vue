@@ -1106,6 +1106,9 @@ const stepwiseDraft = reactive({
 const ui = useUiStore();
 const route = useRoute();
 let autoRefreshTimer: number | null = null;
+let squadRuleStream: EventSource | null = null;
+let streamRefreshInFlight = false;
+let streamRefreshPending = false;
 
 // --- Page mode ---
 const pageMode = computed<FlowMode>(() => {
@@ -1442,10 +1445,13 @@ const guardStateStatsDisplay = computed(() => {
 // --- Lifecycle ---
 onMounted(() => {
   void loadAll();
+  setupSquadRuleStream();
   setupAutoRefresh();
 });
 
 onUnmounted(() => {
+  squadRuleStream?.close();
+  squadRuleStream = null;
   if (autoRefreshTimer != null) {
     window.clearInterval(autoRefreshTimer);
     autoRefreshTimer = null;
@@ -1458,6 +1464,34 @@ watch(pageMode, () => {
   fairGuardFullStatus.value = null;
   stepwiseFullState.value = null;
 });
+
+function setupSquadRuleStream() {
+  squadRuleStream?.close();
+  squadRuleStream = new EventSource("/api/squad-name-tracking/stream");
+  squadRuleStream.addEventListener("state", () => {
+    void refreshFromSquadRuleStream();
+  });
+  squadRuleStream.onerror = () => {
+    // The existing active-page poll is the fallback while EventSource reconnects.
+  };
+}
+
+async function refreshFromSquadRuleStream() {
+  if (streamRefreshInFlight) {
+    streamRefreshPending = true;
+    return;
+  }
+  streamRefreshInFlight = true;
+  try {
+    await loadAll(false);
+  } finally {
+    streamRefreshInFlight = false;
+    if (streamRefreshPending) {
+      streamRefreshPending = false;
+      void refreshFromSquadRuleStream();
+    }
+  }
+}
 
 function setupAutoRefresh() {
   if (autoRefreshTimer != null) {
