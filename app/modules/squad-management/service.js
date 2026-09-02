@@ -42,6 +42,7 @@ const DEFAULT_REMOVE_PERMISSION = "squad.remove";
 const DEFAULT_KICK_THRESHOLD = 10;
 const DEFAULT_MATCH_ID_PREFIX = "match";
 const MAX_RECENT_ACTIONS = 100;
+const SQUAD_CREATED_EVENT_DEDUPE_TTL_MS = 10_000;
 
 export function createSquadManagementService({ core, modules, config, logger, repository }) {
   const moduleLogger = logger ?? core.createLogger?.({
@@ -66,6 +67,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
   const recentActions = [];
   const creatorsByServer = new Map();
   const pendingCreationsByServer = new Map();
+  const recentSquadCreateEventKeys = new Map();
   const unsubscribers = [];
   let initialized = false;
 
@@ -374,6 +376,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
         } catch {}
       }
 
+      recentSquadCreateEventKeys.clear();
+
       if (repositoryApi?.close) {
         await repositoryApi.close();
       }
@@ -579,6 +583,11 @@ export function createSquadManagementService({ core, modules, config, logger, re
       return;
     }
     parsed.teamId = resolvedTeamId;
+
+    const eventKey = buildSquadCreatedEventDedupeKey(parsed);
+    cleanupRecentSquadCreateEventKeys();
+    if (recentSquadCreateEventKeys.has(eventKey)) return;
+    recentSquadCreateEventKeys.set(eventKey, Date.now());
 
     const cache = ensureServerCache(parsed.serverId);
     const resolvedMatchId = parsed.matchId || cache.matchId || getCurrentMatchId(parsed.serverId) || buildSyntheticMatchId(parsed.serverId, event);
@@ -1535,6 +1544,27 @@ export function createSquadManagementService({ core, modules, config, logger, re
   function resolveRconRemoveTarget(target) {
     if (!target || typeof target !== "object") return String(target ?? "");
     return normalizeText(target.playerId ?? target.name ?? target.anyId ?? target.playerKey ?? "");
+  }
+
+  function buildSquadCreatedEventDedupeKey(event = {}) {
+    const sourceEventId = normalizeText(event.sourceEventId);
+    if (sourceEventId) return "source:" + normalizeServerId(event.serverId) + ":" + sourceEventId;
+    return [
+      normalizeServerId(event.serverId),
+      normalizeMatchId(event.matchId),
+      event.teamId == null ? "" : String(event.teamId),
+      event.squadId == null ? "" : String(event.squadId),
+      normalizeText(event.creatorSteamId || event.creatorEosId || event.creatorName).toLowerCase(),
+      normalizeText(event.squadName).toLowerCase(),
+    ].join("|");
+  }
+
+  function cleanupRecentSquadCreateEventKeys(now = Date.now()) {
+    for (const [key, createdAt] of recentSquadCreateEventKeys.entries()) {
+      if (now - Number(createdAt ?? now) > SQUAD_CREATED_EVENT_DEDUPE_TTL_MS) {
+        recentSquadCreateEventKeys.delete(key);
+      }
+    }
   }
 
   function getDefaultServerId() {
