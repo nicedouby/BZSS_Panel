@@ -96,6 +96,9 @@ export class WebServer {
     this.jobCounter = 0;
     this.consoleConnections = new Set();
     this.chatConnections = new Set();
+    this.squadRuleChainConnections = new Set();
+    this.squadRuleChainSubscriptions = [];
+    this.squadRuleChainRevision = 0;
     this.tacticalMapViewers = new Map();
     this.consoleSubscription = null;
     this.chatSubscription = null;
@@ -159,6 +162,19 @@ export class WebServer {
       this.chatSubscription = this.modules.chatManager.on("message", (entry) => {
         this.broadcastChatEntry(entry);
       });
+    }
+
+    if (typeof this.core.eventBus?.onModuleEvent === "function") {
+      for (const [moduleId, eventName] of [
+        ["module.squadLifecycle", "squadCreated"],
+        ["module.squadNamePolicyGuard", "stateUpdated"],
+        ["module.squadRuleChain", "squadRuleViolation"],
+        ["module.squadRuleChain", "finalSquadRulePassed"],
+      ]) {
+        this.squadRuleChainSubscriptions.push(this.core.eventBus.onModuleEvent(moduleId, eventName, () => {
+          this.broadcastSquadRuleChainUpdate();
+        }));
+      }
     }
 
     await new Promise((resolve) => {
@@ -276,6 +292,14 @@ export class WebServer {
       } catch {}
       this.chatSubscription = null;
     }
+
+    for (const unsubscribe of this.squadRuleChainSubscriptions.splice(0)) {
+      try { unsubscribe(); } catch {}
+    }
+    for (const client of this.squadRuleChainConnections) {
+      try { client.res.end(); } catch {}
+    }
+    this.squadRuleChainConnections.clear();
 
     for (const client of this.chatConnections) {
       try {
@@ -767,6 +791,10 @@ export class WebServer {
     ) {
       await this.handleAdminUsersApi(url, req, res, user);
       return;
+    }
+
+    if (url.pathname === "/api/squad-name-tracking/stream" && req.method === "GET") {
+      return this.openSquadRuleChainStream(req, res);
     }
 
     if (url.pathname === "/api/squad-name-policy/state") {
@@ -5480,6 +5508,51 @@ export class WebServer {
     try {
       client.socket.end();
     } catch {}
+  }
+
+  openSquadRuleChainStream(req, res) {
+    req.socket.setTimeout(0);
+    req.socket.setKeepAlive(true);
+    res.writeHead(200, {
+      ...BASE_SECURITY_HEADERS,
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    const client = { res, needsResync: false };
+    this.squadRuleChainConnections.add(client);
+    res.write("event: state\\ndata: " + JSON.stringify({ revision: this.squadRuleChainRevision }) + "\\n\\n");
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) res.write(": keepalive\\n\\n");
+    }, 20_000);
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      this.squadRuleChainConnections.delete(client);
+    });
+  }
+
+  broadcastSquadRuleChainUpdate() {
+    if (!this.squadRuleChainConnections.size) return;
+    this.squadRuleChainRevision += 1;
+    const frame = "event: state\\ndata: " + JSON.stringify({ revision: this.squadRuleChainRevision }) + "\\n\\n";
+    for (const client of this.squadRuleChainConnections) {
+      if (client.res.writableEnded || client.res.destroyed) {
+        this.squadRuleChainConnections.delete(client);
+        continue;
+      }
+      if (client.needsResync && client.res.writableNeedDrain) continue;
+      const accepted = client.res.write(frame);
+      client.needsResync = !accepted;
+      if (!accepted) {
+        client.res.once("drain", () => {
+          if (!this.squadRuleChainConnections.has(client) || client.res.writableEnded) return;
+          client.needsResync = false;
+          client.res.write("event: state\\ndata: " + JSON.stringify({ revision: this.squadRuleChainRevision }) + "\\n\\n");
+        });
+      }
+    }
   }
 
   broadcastConsoleEntry(entry) {
