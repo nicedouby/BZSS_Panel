@@ -10,7 +10,7 @@
   },
   "reserveSystem": {
     "enabled": true,
-    "adminFilePath": "E:\\BZSS_SQ_Server\\SquadGame\\ServerConfig\\Admins.cfg",
+    "adminFilePath": "./SquadGame/ServerConfig/Admins.cfg",
     "localReserveFilePath": "data/reserve-slots/store.json"
   },
   "database": {
@@ -19,7 +19,7 @@
   },
   "bzssCore": {
     "modifyScriptPath": "./support/runtime-assets/bzss-core/ModifySaveGame.py",
-    "remoteSaveGamePath": "E:\\BZSS_SQ_Server\\SquadGame\\Saved\\SaveGames\\BZSS-Logger.sav",
+    "remoteSaveGamePath": "./SquadGame/Saved/SaveGames/BZSS-Logger.sav",
     "playerInfoPollIntervalMs": 100
   }
 }
