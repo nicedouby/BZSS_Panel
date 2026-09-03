@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { resolveSquadServerPath } from "../../core/squad-server-path.js";
 
 const execFileAsync = promisify(execFile);
 const MODULE_ID = "module.logpostDiagnostics";
@@ -299,7 +300,7 @@ export function createLogpostDiagnosticsModule({ core, config, logger }) {
     const parserConfigPath = path.resolve(workingDirectory, String(managerConfig.configPath ?? "./config.json").trim());
     const parserConfig = await safeReadJson(parserConfigPath) ?? {};
     const outputDirectory = path.resolve(workingDirectory, String(parserConfig.output_dir ?? "./LogPost"));
-    const sourceLogPath = path.resolve(workingDirectory, String(parserConfig.log_file ?? "./SquadGame.log"));
+    const sourceLogPath = resolveSquadServerPath(parserConfig.log_file ?? "./SquadGame.log", workingDirectory);
     const statePath = path.resolve(
       workingDirectory,
       String(parserConfig?.tail?.state_path ?? path.join(outputDirectory, ".state", "tailer-state.json")),
