@@ -1,196 +1,275 @@
 <template>
-  <section class="panel-ban-page">
-    <PageHeader title="面板封禁" subtitle="创建、检索和维护全局封禁记录。" eyebrow="Moderation">
-      <template #actions>
-        <div class="header-actions">
-          <StatusBadge v-if="state" :tone="state.lastError ? 'danger' : 'success'" dot>{{ state.lastError ? "服务异常" : "服务正常" }}</StatusBadge>
-          <AppButton size="sm" variant="ghost" :loading="refreshing || loading" @click="refreshState">刷新</AppButton>
-          <AppButton size="sm" variant="ghost" :loading="reloading" @click="reloadStore">重载</AppButton>
-          <AppButton size="sm" variant="ghost" :loading="rescanning" @click="rescanNow">扫描在线玩家</AppButton>
+  <AppPage full-bleed class="panel-ban-page">
+    <!-- Streamlined Single-Row Command Header -->
+    <header class="page-cmd-header">
+      <div class="header-left">
+        <h1 class="page-title">面板封禁</h1>
+        <div class="kpi-inline-group">
+          <span class="kpi-tag" :class="state?.lastError ? 'danger' : 'emerald'">
+            <span class="dot"></span>
+            {{ state?.lastError ? "服务异常" : "服务正常" }}
+          </span>
+          <span class="kpi-tag cyan">
+            <span class="dot"></span>
+            总条目 <strong>{{ state?.totalEntries ?? 0 }}</strong>
+          </span>
+          <span class="kpi-tag emerald">
+            <span class="dot"></span>
+            有效 <strong>{{ state?.activeEntries ?? 0 }}</strong>
+          </span>
+          <span class="kpi-tag amber">
+            <span class="dot"></span>
+            已过期 <strong>{{ state?.expiredEntries ?? 0 }}</strong>
+          </span>
+          <span class="kpi-tag neutral">
+            <span class="dot"></span>
+            已禁用 <strong>{{ state?.disabledEntries ?? 0 }}</strong>
+          </span>
+          <span class="kpi-tag purple">
+            <span class="dot"></span>
+            命中 <strong>{{ state?.kickSuccess ?? 0 }}</strong>
+          </span>
         </div>
-      </template>
-    </PageHeader>
+      </div>
 
-    <StatGrid :items="summaryItems" :loading="loading && !state" />
+      <div class="header-right">
+        <button type="button" class="btn-compact ghost" :disabled="refreshing || loading" @click="refreshState">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          {{ refreshing ? "刷新中..." : "刷新" }}
+        </button>
+        <button type="button" class="btn-compact ghost" :disabled="reloading" @click="reloadStore">
+          ⚡ {{ reloading ? "重载中..." : "重载" }}
+        </button>
+        <button type="button" class="btn-compact ghost" :disabled="rescanning" @click="rescanNow">
+          🔍 {{ rescanning ? "扫描中..." : "扫描在线" }}
+        </button>
+      </div>
+    </header>
 
-    <div v-if="pageError || error || state?.lastError" class="notice notice--danger" role="alert">
-      <strong>异常</strong><span>{{ pageError || error || state?.lastError }}</span>
+    <!-- Error Notice Bar -->
+    <div v-if="pageError || error || state?.lastError" class="notice-bar danger">
+      <strong>⚠️ 系统的异常状态:</strong>
+      <span>{{ pageError || error || state?.lastError }}</span>
     </div>
 
-    <PageCard class="quick-ban-card" :title="editingId ? '编辑封禁' : '快速封禁'" :description="editingId ? '正在修改 ' + editingId : '选择玩家、填写原因并确定有效期。'">
-      <form class="quick-ban-form" :class="{ 'ban-actions-disabled': !canBan }" @submit.prevent="submitDraft">
-        <div class="quick-ban-primary">
-          <div class="field field--player">
-            <span>玩家</span>
-            <PlayerSelect v-model="targetPlayerInput" @select="handlePlayerSelect" placeholder="玩家名 / Steam64 / EOS ID" />
-            <div v-if="draft.name || draft.steamID || draft.eosID" class="identity-preview">
-              <strong>{{ draft.name || "未记录玩家名" }}</strong>
-              <span>{{ draft.steamID || draft.eosID }}</span>
+    <!-- Main Split Layout -->
+    <AppSplitLayout class="compact-split">
+      <template #left>
+        <div class="card-panel list-panel">
+          <!-- Toolbar Search & Status Tabs -->
+          <div class="panel-toolbar">
+            <div class="search-input-wrap">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input v-model.trim="searchText" type="search" placeholder="搜索玩家、Steam64、EOS、原因..." class="search-field">
+            </div>
+            <div class="status-tab-group">
+              <button
+                v-for="opt in statusOptions"
+                :key="opt.value"
+                type="button"
+                class="btn-sub"
+                :class="{ active: viewStatus === opt.value }"
+                @click="viewStatus = opt.value"
+              >
+                {{ opt.label }}
+              </button>
             </div>
           </div>
 
-          <label class="field field--reason">
-            <span>封禁原因</span>
-            <textarea v-model.trim="draft.reason" rows="2" placeholder="填写违规行为与处理依据" />
-          </label>
-        </div>
+          <div class="panel-sub-bar">
+            <span class="count-text">显示 {{ visibleEntries.length }} / {{ state?.totalEntries ?? 0 }} 条封禁记录</span>
+          </div>
 
-        <div class="quick-ban-options">
-          <div class="duration-block">
-            <span class="field-label">封禁时长</span>
-            <div class="duration-preset">
-              <button type="button" @click="setQuickDuration(1)">1 天</button>
-              <button type="button" @click="setQuickDuration(3)">3 天</button>
-              <button type="button" @click="setQuickDuration(7)">7 天</button>
-              <button type="button" @click="setQuickDuration(30)">30 天</button>
+          <!-- High-Density Ban List -->
+          <div v-if="loading && !state" class="empty-state">
+            <div class="spinner"></div>
+            <span>正在读取封禁数据...</span>
+          </div>
+          <div v-else-if="!visibleEntries.length" class="empty-state">
+            <span>没有匹配的封禁条目</span>
+          </div>
+          <div v-else class="ban-feed">
+            <div
+              v-for="entry in visibleEntries"
+              :key="entry.id"
+              class="ban-row-card"
+              :class="`status-${entry.status}`"
+            >
+              <div class="row-main-cell">
+                <div class="row-header">
+                  <span class="status-badge-pill" :class="entry.status">{{ entryStatusLabel(entry.status) }}</span>
+                  <strong class="player-name-text" :title="entry.name">{{ entry.name || "未记录玩家名" }}</strong>
+
+                  <button v-if="entry.steamID" type="button" class="id-pill steam" title="点击复制 Steam64" @click.stop="copyTextWithToast(entry.steamID, ui)">
+                    S: {{ entry.steamID }}
+                  </button>
+                  <button v-if="entry.eosID" type="button" class="id-pill eos" title="点击复制 EOS ID" @click.stop="copyTextWithToast(entry.eosID, ui)">
+                    EOS: {{ entry.eosID }}
+                  </button>
+
+                  <span class="expiry-text font-mono" :class="expiryLabelClass(entry)">{{ entry.expiresInLabel }}</span>
+                </div>
+
+                <div class="row-footer">
+                  <div class="reason-block" :title="entry.reason">
+                    <span class="lbl">原因:</span>
+                    <span class="val">{{ entry.reason || "未填写原因" }}</span>
+                    <span class="by">({{ entry.createdBy || "未知" }})</span>
+                  </div>
+
+                  <div class="row-right-group">
+                    <span v-if="entry.hitCount > 0" class="hit-tag" title="最近命中玩家">
+                      🎯 命中 {{ entry.hitCount }} 次
+                    </span>
+
+                    <div class="quick-actions" @click.stop>
+                      <button type="button" class="btn-action-icon" title="编辑封禁" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">✏️</button>
+                      <button v-if="entry.status === 'active'" type="button" class="btn-action-icon" title="停用" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'disabled')">⏸️</button>
+                      <button v-else-if="entry.status === 'disabled'" type="button" class="btn-action-icon" title="启用" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'active')">▶️</button>
+                      <button type="button" class="btn-action-icon danger" title="删除封禁" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">🗑️</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
-          <label class="field field--duration">
-            <span>自定义</span>
-            <div class="inline-fields">
-              <input v-model.number="draft.durationValue" type="number" min="1" step="1" />
-              <select v-model="draft.durationUnit">
-                <option value="minutes">分钟</option>
-                <option value="hours">小时</option>
-                <option value="days">天</option>
-                <option value="weeks">周</option>
-              </select>
-            </div>
-          </label>
-
-          <label class="field field--expiry">
-            <span>精确到期</span>
-            <input v-model="draft.expiresAt" type="datetime-local" />
-          </label>
-
-          <label class="field field--status">
-            <span>状态</span>
-            <select v-model="draft.status">
-              <option value="active">有效</option>
-              <option value="disabled">禁用</option>
-              <option value="expired">已过期</option>
-            </select>
-          </label>
-
-          <div class="expiry-summary">
-            <span>预计到期</span>
-            <strong>{{ expiryPreview.label }}</strong>
-            <small>{{ expiryPreview.hint }}</small>
-          </div>
-        </div>
-
-        <div class="quick-ban-footer">
-          <span v-if="!canBan" class="permission-hint">当前账户没有封禁管理权限。</span>
-          <span v-else class="form-hint">身份、原因与到期时间确认无误后提交。</span>
-          <div class="form-actions">
-            <AppButton type="button" variant="ghost" :disabled="saving" @click="resetDraft">{{ editingId ? "取消编辑" : "清空" }}</AppButton>
-            <AppButton type="submit" :loading="saving" :disabled="!canBan">{{ editingId ? "保存修改" : "创建封禁" }}</AppButton>
-          </div>
-        </div>
-      </form>
-    </PageCard>
-
-    <PageCard class="ban-list-card" title="封禁名单" :description="'显示 ' + visibleEntries.length + ' 条，共 ' + (state?.totalEntries ?? 0) + ' 条。'">
-      <div class="list-toolbar">
-        <label class="search-box">
-          <span class="sr-only">搜索封禁名单</span>
-          <input v-model.trim="searchText" type="search" placeholder="搜索玩家名、Steam64、EOS 或封禁原因" />
-        </label>
-        <div class="status-tabs" role="tablist" aria-label="封禁状态">
-          <button v-for="option in statusOptions" :key="option.value" type="button" class="status-tab" :class="{ active: viewStatus === option.value }" @click="viewStatus = option.value">{{ option.label }}</button>
-        </div>
-      </div>
-
-      <div class="ban-list">
-        <article v-for="entry in visibleEntries" :key="entry.id" class="ban-row" :class="'ban-row--' + entry.status">
-          <div class="ban-row-status"><StatusBadge :tone="entryStatusTone(entry.status)" size="sm">{{ entryStatusLabel(entry.status) }}</StatusBadge></div>
-
-          <div class="ban-identity">
-            <strong>{{ entry.name || "未记录玩家名" }}</strong>
-            <button v-if="entry.steamID" type="button" class="identity-id identity-id--steam" title="复制 Steam64" @click="copyTextWithToast(entry.steamID, ui)"><span>STEAM</span><code>{{ entry.steamID }}</code></button>
-            <button v-if="entry.eosID" type="button" class="identity-id identity-id--eos" title="复制 EOS ID" @click="copyTextWithToast(entry.eosID, ui)"><span>EOS</span><code>{{ entry.eosID }}</code></button>
-          </div>
-
-          <div class="ban-reason">
-            <span class="row-label">原因</span>
-            <p :title="entry.reason || '未填写原因'">{{ entry.reason || "未填写原因" }}</p>
-            <small>{{ entry.createdBy || "未知管理员" }}</small>
-          </div>
-
-          <div class="ban-expiry">
-            <span class="row-label">剩余时间</span>
-            <strong :class="{ 'text-danger': entry.status === 'active' && entry.expiresInMs < 86400000 }">{{ entry.expiresInLabel }}</strong>
-            <small>{{ formatTime(entry.expiresAt) }}</small>
-          </div>
-
-          <div class="ban-hit">
-            <span class="hit-count" :class="{ 'hit-count--active': entry.hitCount > 0 }">{{ entry.hitCount }}</span>
-            <div>
-              <span class="row-label">命中次数</span>
-              <strong v-if="entry.lastHitAt">{{ entry.lastHitPlayerName || "未知玩家" }}</strong>
-              <small>{{ entry.lastHitAt ? formatTime(entry.lastHitAt) : "尚未命中" }}</small>
-            </div>
-          </div>
-
-          <div class="row-actions">
-            <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">编辑</AppButton>
-            <AppButton v-if="entry.status === 'active'" size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'disabled')">停用</AppButton>
-            <AppButton v-else-if="entry.status === 'disabled'" size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'active')">启用</AppButton>
-            <AppButton size="sm" variant="ghost" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">删除</AppButton>
-          </div>
-        </article>
-      </div>
-
-      <EmptyState v-if="!visibleEntries.length && !loading" compact title="没有匹配的封禁条目" description="尝试切换状态或清除搜索关键词。" />
-    </PageCard>
-
-    <PageCard class="activity-card" title="最近活动" description="封禁命中与名单变更记录。">
-      <template #actions>
-        <div class="event-tabs">
-          <button type="button" class="event-tab-btn" :class="{ 'event-tab-btn--active': activeEventTab === 'hits' }" @click="activeEventTab = 'hits'">命中 {{ recentHitEvents.length }}</button>
-          <button type="button" class="event-tab-btn" :class="{ 'event-tab-btn--active': activeEventTab === 'events' }" @click="activeEventTab = 'events'">系统 {{ recentEvents.length }}</button>
         </div>
       </template>
 
-      <div class="activity-list">
-        <template v-if="activeEventTab === 'hits'">
-          <article v-for="event in recentHitEvents" :key="event.id" class="activity-row" :data-kind="event.kind">
-            <StatusBadge :tone="event.kind === 'kick_success' ? 'success' : event.kind === 'kick_failed' ? 'danger' : 'info'" size="sm">{{ event.kind }}</StatusBadge>
-            <strong>{{ event.playerName || event.entryName || "未知玩家" }}</strong>
-            <span>{{ event.matchType ? event.matchType + ": " + event.matchValue : event.reason || "未记录匹配信息" }}</span>
-            <span>{{ event.serverId || "global" }}</span>
-            <time>{{ formatTime(event.at) }}</time>
-          </article>
-          <EmptyState v-if="!recentHitEvents.length && !loading" compact title="暂无命中历史" description="还没有玩家命中封禁名单。" />
-        </template>
-        <template v-else>
-          <article v-for="event in recentEvents" :key="event.id" class="activity-row" :data-kind="event.kind">
-            <StatusBadge :tone="eventTone(event.kind)" size="sm">{{ event.kind }}</StatusBadge>
-            <strong>{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong>
-            <span>{{ event.reason || event.entryId || "未记录补充信息" }}</span>
-            <span>{{ event.serverId || "global" }}</span>
-            <time>{{ formatTime(event.at) }}</time>
-          </article>
-          <EmptyState v-if="!recentEvents.length && !loading" compact title="暂无系统事件" description="系统尚未记录封禁事件。" />
-        </template>
-      </div>
-    </PageCard>
-  </section>
+      <template #right>
+        <div class="card-panel detail-panel">
+          <!-- Stage Workspace Tabs -->
+          <div class="stage-nav">
+            <div class="nav-tabs">
+              <button type="button" class="stage-tab-btn" :class="{ active: rightTab === 'form' }" @click="rightTab = 'form'">
+                🔨 {{ editingId ? "编辑封禁条目" : "快速新建封禁" }}
+              </button>
+              <button type="button" class="stage-tab-btn" :class="{ active: rightTab === 'hits' }" @click="rightTab = 'hits'">
+                ⚡ 最近命中历史 ({{ recentHitEvents.length }})
+              </button>
+              <button type="button" class="stage-tab-btn" :class="{ active: rightTab === 'events' }" @click="rightTab = 'events'">
+                📜 系统事件日志 ({{ recentEvents.length }})
+              </button>
+            </div>
+
+            <button v-if="editingId" type="button" class="btn-compact ghost" @click="resetDraft">取消编辑</button>
+          </div>
+
+          <!-- Tab 1: Form Stage -->
+          <div v-if="rightTab === 'form'" class="stage-body form-stage">
+            <form class="ban-form" :class="{ disabled: !canBan }" @submit.prevent="submitDraft">
+              <div class="form-row">
+                <div class="field field-player">
+                  <label class="f-lbl">选择在线玩家 / 手动输入</label>
+                  <PlayerSelect v-model="targetPlayerInput" placeholder="搜索玩家名 / Steam64 / EOS ID" @select="handlePlayerSelect" />
+                  <div v-if="draft.name || draft.steamID || draft.eosID" class="identity-box">
+                    <strong>{{ draft.name || "未记录名称" }}</strong>
+                    <span class="font-mono">{{ draft.steamID || draft.eosID }}</span>
+                  </div>
+                </div>
+
+                <div class="field field-reason">
+                  <label class="f-lbl">封禁原因描述</label>
+                  <textarea v-model.trim="draft.reason" rows="2" placeholder="填写违规行为与处罚规则依据..." class="f-textarea"></textarea>
+                </div>
+              </div>
+
+              <!-- Options & Duration Section -->
+              <div class="form-options-grid">
+                <div class="opt-col">
+                  <label class="f-lbl">快捷封禁时长</label>
+                  <div class="preset-btns">
+                    <button type="button" class="btn-preset" @click="setQuickDuration(1)">1天</button>
+                    <button type="button" class="btn-preset" @click="setQuickDuration(3)">3天</button>
+                    <button type="button" class="btn-preset" @click="setQuickDuration(7)">7天</button>
+                    <button type="button" class="btn-preset" @click="setQuickDuration(30)">30天</button>
+                  </div>
+                </div>
+
+                <div class="opt-col">
+                  <label class="f-lbl">自定义时长</label>
+                  <div class="inline-inputs">
+                    <input v-model.number="draft.durationValue" type="number" min="1" step="1" class="f-input num">
+                    <select v-model="draft.durationUnit" class="f-select">
+                      <option value="minutes">分钟</option>
+                      <option value="hours">小时</option>
+                      <option value="days">天</option>
+                      <option value="weeks">周</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="opt-col">
+                  <label class="f-lbl">精确到期时间</label>
+                  <input v-model="draft.expiresAt" type="datetime-local" class="f-input date">
+                </div>
+
+                <div class="opt-col">
+                  <label class="f-lbl">封禁状态</label>
+                  <select v-model="draft.status" class="f-select">
+                    <option value="active">有效</option>
+                    <option value="disabled">禁用</option>
+                    <option value="expired">已过期</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="expiry-preview-banner">
+                <span>预计到期:</span>
+                <strong>{{ expiryPreview.label }}</strong>
+                <small>({{ expiryPreview.hint }})</small>
+              </div>
+
+              <div class="form-footer">
+                <span v-if="!canBan" class="perm-warning">🔒 当前账号缺少 panel_ban 管理权限</span>
+                <span v-else class="hint-text">身份、原因与到期时间确认无误后提交生效</span>
+                <div class="foot-btns">
+                  <button type="button" class="btn-compact ghost" :disabled="saving" @click="resetDraft">{{ editingId ? "取消" : "清空" }}</button>
+                  <button type="submit" class="btn-compact accent" :disabled="!canBan || saving">{{ editingId ? "保存修改" : "确认提交封禁" }}</button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tab 2: Hit Events Stage -->
+          <div v-else-if="rightTab === 'hits'" class="stage-body activity-stage">
+            <div v-if="!recentHitEvents.length" class="empty-state">暂无玩家命中纪录</div>
+            <div v-else class="activity-feed">
+              <div v-for="event in recentHitEvents" :key="event.id" class="activity-row" :data-kind="event.kind">
+                <span class="event-tag" :class="event.kind === 'kick_success' ? 'success' : 'danger'">{{ event.kind }}</span>
+                <strong class="act-name">{{ event.playerName || event.entryName || "未知玩家" }}</strong>
+                <span class="act-info">{{ event.matchType ? event.matchType + ": " + event.matchValue : event.reason || "未记录" }}</span>
+                <span class="act-server font-mono">{{ event.serverId || "global" }}</span>
+                <time class="act-time font-mono">{{ formatTime(event.at) }}</time>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab 3: System Logs Stage -->
+          <div v-else-if="rightTab === 'events'" class="stage-body activity-stage">
+            <div v-if="!recentEvents.length" class="empty-state">暂无系统事件纪录</div>
+            <div v-else class="activity-feed">
+              <div v-for="event in recentEvents" :key="event.id" class="activity-row">
+                <span class="event-tag info">{{ event.kind }}</span>
+                <strong class="act-name">{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong>
+                <span class="act-info">{{ event.reason || event.entryId || "补充信息" }}</span>
+                <span class="act-server font-mono">{{ event.serverId || "global" }}</span>
+                <time class="act-time font-mono">{{ formatTime(event.at) }}</time>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </AppSplitLayout>
+  </AppPage>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-
 import { apiDelete, apiGet, apiPatch, apiPost } from "../app/apiClient";
-import AppButton from "../components/ui/AppButton.vue";
-import EmptyState from "../components/ui/EmptyState.vue";
-import PageCard from "../components/common/PageCard.vue";
-import PageHeader from "../components/common/PageHeader.vue";
-import StatGrid from "../components/ui/StatGrid.vue";
-import type { StatItem } from "../components/ui/StatGrid.vue";
-import StatusBadge from "../components/ui/StatusBadge.vue";
 import PlayerSelect from "../components/common/PlayerSelect.vue";
+import AppPage from "../components/common/AppPage.vue";
+import AppSplitLayout from "../components/common/AppSplitLayout.vue";
 import { formatTime } from "../composables/useDateTimeFormat";
 import { usePollingResource } from "../composables/usePollingResource";
 import { copyTextWithToast } from "../utils/clipboard";
@@ -298,7 +377,7 @@ const viewStatus = ref<StatusView>("all");
 const searchText = ref("");
 const editingId = ref("");
 const targetPlayerInput = ref("");
-const activeEventTab = ref<"hits" | "events">("hits");
+const rightTab = ref<"form" | "hits" | "events">("form");
 
 const draft = reactive({
   steamID: "",
@@ -324,7 +403,6 @@ watch(targetPlayerInput, (val) => {
     return;
   }
 
-  // 17-digit numeric string starting with 7 (Steam64)
   if (/^7\d{16}$/.test(cleanVal)) {
     if (draft.steamID !== cleanVal) {
       draft.steamID = cleanVal;
@@ -334,7 +412,6 @@ watch(targetPlayerInput, (val) => {
     return;
   }
 
-  // EOS ID checks: 32 hex chars or starts with "eos"
   if (/^[0-9a-fA-F]{32}$/.test(cleanVal) || cleanVal.toLowerCase().startsWith("eos")) {
     if (draft.eosID !== cleanVal) {
       draft.eosID = cleanVal;
@@ -344,7 +421,6 @@ watch(targetPlayerInput, (val) => {
     return;
   }
 
-  // Fallback: Name
   if (draft.name !== cleanVal) {
     draft.name = cleanVal;
     draft.steamID = "";
@@ -382,47 +458,6 @@ const {
   keepPreviousData: true,
 });
 
-const summaryItems = computed<StatItem[]>(() => {
-  const current = state.value;
-  return [
-    {
-      key: "total",
-      label: "总条目",
-      value: current?.totalEntries ?? 0,
-      description: "包含有效、禁用和已过期记录",
-      tone: "info",
-    },
-    {
-      key: "active",
-      label: "有效",
-      value: current?.activeEntries ?? 0,
-      description: "当前会拦截进服的封禁",
-      tone: "success",
-    },
-    {
-      key: "expired",
-      label: "已过期",
-      value: current?.expiredEntries ?? 0,
-      description: "过期后保留用于审计",
-      tone: "warning",
-    },
-    {
-      key: "disabled",
-      label: "已禁用",
-      value: current?.disabledEntries ?? 0,
-      description: "人工停用但仍保留记录",
-      tone: "neutral",
-    },
-    {
-      key: "hits",
-      label: "命中次数",
-      value: current?.kickSuccess ?? 0,
-      description: `尝试 ${current?.kickAttempts ?? 0} / 失败 ${current?.kickFailed ?? 0}`,
-      tone: "info",
-    },
-  ];
-});
-
 const statusOptions: Array<{ value: StatusView; label: string }> = [
   { value: "all", label: "全部" },
   { value: "active", label: "有效" },
@@ -439,45 +474,24 @@ const visibleEntries = computed(() => {
     if (status !== "all" && entry.status !== status) return false;
     if (!search) return true;
     const haystack = [
-      entry.id,
-      entry.steamID,
-      entry.eosID,
-      entry.name,
-      entry.reason,
-      entry.createdBy,
-      entry.lastHitPlayerName,
-      entry.lastHitServerId,
-      entry.lastHitMatchType,
-      entry.lastHitMatchValue,
+      entry.id, entry.steamID, entry.eosID, entry.name, entry.reason, entry.createdBy,
+      entry.lastHitPlayerName, entry.lastHitServerId, entry.lastHitMatchType, entry.lastHitMatchValue,
     ].join(" ").toLowerCase();
     return haystack.includes(search);
   });
 });
 
-const recentHitEvents = computed(() => (state.value?.recentHits ?? []).slice(0, 12));
-const recentEvents = computed(() => (state.value?.recentEvents ?? []).slice(0, 12));
+const recentHitEvents = computed(() => (state.value?.recentHits ?? []).slice(0, 15));
+const recentEvents = computed(() => (state.value?.recentEvents ?? []).slice(0, 15));
 
 const expiryPreview = computed(() => {
   if (draft.expiresAt) {
-    return {
-      label: formatDateTimeInput(draft.expiresAt),
-      hint: "优先使用到期时间字段",
-    };
+    return { label: formatDateTimeInput(draft.expiresAt), hint: "优先使用到期时间" };
   }
-
   const ms = durationToMs(draft.durationValue, draft.durationUnit);
-  if (!ms) {
-    return {
-      label: "未设置",
-      hint: "填写到期时间或时长后再提交",
-    };
-  }
-
+  if (!ms) return { label: "未设置", hint: "填写到期时间或时长" };
   const target = new Date(Date.now() + ms);
-  return {
-    label: target.toLocaleString(),
-    hint: `按 ${draft.durationValue} ${durationUnitLabel(draft.durationUnit)} 自动换算`,
-  };
+  return { label: target.toLocaleString(), hint: `按 ${draft.durationValue}${durationUnitLabel(draft.durationUnit)} 换算` };
 });
 
 function formatDateTimeInput(value: string) {
@@ -489,22 +503,12 @@ function formatDateTimeInput(value: string) {
 function durationToMs(value: number, unit: DurationUnit) {
   const amount = Number(value ?? 0) || 0;
   if (amount <= 0) return 0;
-  const factor = {
-    minutes: 60_000,
-    hours: 3_600_000,
-    days: 86_400_000,
-    weeks: 7 * 86_400_000,
-  }[unit];
+  const factor = { minutes: 60_000, hours: 3_600_000, days: 86_400_000, weeks: 7 * 86_400_000 }[unit];
   return Math.max(0, Math.floor(amount * factor));
 }
 
 function durationUnitLabel(unit: DurationUnit) {
-  return {
-    minutes: "分钟",
-    hours: "小时",
-    days: "天",
-    weeks: "周",
-  }[unit];
+  return { minutes: "分钟", hours: "小时", days: "天", weeks: "周" }[unit];
 }
 
 function localDateTimeValue(value: string) {
@@ -529,98 +533,54 @@ function resolveDraftExpiry() {
   return "";
 }
 
-function pushPageError(message: string) {
-  pageError.value = message;
-}
+function pushPageError(message: string) { pageError.value = message; }
 
 async function refreshState() {
   pageError.value = "";
-  try {
-    await refresh();
-  } catch (err) {
-    pushPageError(err instanceof Error ? err.message : String(err));
-  }
+  try { await refresh(); } catch (err) { pushPageError(err instanceof Error ? err.message : String(err)); }
 }
 
 async function reloadStore() {
-  reloading.value = true;
-  pageError.value = "";
+  reloading.value = true; pageError.value = "";
   try {
     await apiPost<ApiResponse<PanelBanState | null>>("/api/plugins/panel-ban/reload", {});
     await refresh();
-  } catch (err) {
-    pushPageError(err instanceof Error ? err.message : String(err));
-  } finally {
-    reloading.value = false;
-  }
+  } catch (err) { pushPageError(err instanceof Error ? err.message : String(err)); }
+  finally { reloading.value = false; }
 }
 
 async function rescanNow() {
-  rescanning.value = true;
-  pageError.value = "";
+  rescanning.value = true; pageError.value = "";
   try {
     await apiPost<ApiResponse<PanelBanState | null>>("/api/plugins/panel-ban/rescan", {});
     await refresh();
-  } catch (err) {
-    pushPageError(err instanceof Error ? err.message : String(err));
-  } finally {
-    rescanning.value = false;
-  }
+  } catch (err) { pushPageError(err instanceof Error ? err.message : String(err)); }
+  finally { rescanning.value = false; }
 }
 
 function resetDraft() {
-  editingId.value = "";
-  draft.steamID = "";
-  draft.eosID = "";
-  draft.name = "";
-  draft.reason = "";
-  draft.expiresAt = "";
-  draft.durationValue = 7;
-  draft.durationUnit = "days";
-  draft.status = "active";
+  editingId.value = ""; draft.steamID = ""; draft.eosID = ""; draft.name = ""; draft.reason = "";
+  draft.expiresAt = ""; draft.durationValue = 7; draft.durationUnit = "days"; draft.status = "active";
   targetPlayerInput.value = "";
 }
 
 function editEntry(entry: BanEntry) {
-  editingId.value = entry.id;
-  draft.steamID = entry.steamID;
-  draft.eosID = entry.eosID;
-  draft.name = entry.name;
-  draft.reason = entry.reason;
-  draft.expiresAt = localDateTimeValue(entry.expiresAt);
-  draft.durationValue = 7;
-  draft.durationUnit = "days";
-  draft.status = entry.status;
+  editingId.value = entry.id; draft.steamID = entry.steamID; draft.eosID = entry.eosID; draft.name = entry.name;
+  draft.reason = entry.reason; draft.expiresAt = localDateTimeValue(entry.expiresAt);
+  draft.durationValue = 7; draft.durationUnit = "days"; draft.status = entry.status;
   targetPlayerInput.value = entry.name || entry.steamID || entry.eosID || "";
-  
-  if (typeof window !== "undefined") {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  rightTab.value = "form";
 }
 
 async function submitDraft() {
   pageError.value = "";
-
   if (!draft.steamID && !draft.eosID && !draft.name) {
-    pushPageError("Steam64、EOS 或名称至少需要填写一项。");
-    return;
+    pushPageError("Steam64、EOS 或名称至少需要填写一项。"); return;
   }
-
   const expiresAt = resolveDraftExpiry();
-  if (!expiresAt) {
-    pushPageError("请填写到期时间，或提供有效时长。");
-    return;
-  }
+  if (!expiresAt) { pushPageError("请填写到期时间，或提供有效时长。"); return; }
 
-  const payload = {
-    steamID: draft.steamID,
-    eosID: draft.eosID,
-    name: draft.name,
-    reason: draft.reason,
-    expiresAt,
-    status: draft.status,
-  };
-
+  const payload = { steamID: draft.steamID, eosID: draft.eosID, name: draft.name, reason: draft.reason, expiresAt, status: draft.status };
   saving.value = true;
   try {
     if (editingId.value) {
@@ -628,48 +588,37 @@ async function submitDraft() {
     } else {
       await apiPost<ApiResponse<BanEntry>>("/api/plugins/panel-ban/entries", payload);
     }
-    resetDraft();
-    await refresh();
-  } catch (err) {
-    pushPageError(err instanceof Error ? err.message : String(err));
-  } finally {
-    saving.value = false;
-  }
+    resetDraft(); await refresh();
+    ui.pushToast({ title: "已提交", message: "封禁条目更新成功", tone: "ok" });
+  } catch (err) { pushPageError(err instanceof Error ? err.message : String(err)); }
+  finally { saving.value = false; }
 }
 
 async function setEntryStatus(entry: BanEntry, status: EntryStatus) {
-  busyId.value = entry.id;
-  pageError.value = "";
+  busyId.value = entry.id; pageError.value = "";
   try {
-    await apiPatch<ApiResponse<BanEntry>>(`/api/plugins/panel-ban/entries/${encodeURIComponent(entry.id)}`, {
-      status,
-      expiresAt: entry.expiresAt,
-    });
+    await apiPatch<ApiResponse<BanEntry>>(`/api/plugins/panel-ban/entries/${encodeURIComponent(entry.id)}`, { status, expiresAt: entry.expiresAt });
     await refresh();
-  } catch (err) {
-    pushPageError(err instanceof Error ? err.message : String(err));
-  } finally {
-    busyId.value = "";
-  }
+  } catch (err) { pushPageError(err instanceof Error ? err.message : String(err)); }
+  finally { busyId.value = ""; }
 }
 
 async function removeEntry(entry: BanEntry) {
-  const confirmed = typeof window === "undefined"
-    ? true
-    : window.confirm(`确认删除封禁条目 ${entry.name || entry.id} 吗？`);
+  const confirmed = await ui.openConfirm({
+    title: "确认删除",
+    message: `确认彻底删除封禁条目 ${entry.name || entry.id} 吗？`,
+    confirmText: "确认删除", cancelText: "取消", tone: "warn",
+  });
   if (!confirmed) return;
 
-  busyId.value = entry.id;
-  pageError.value = "";
+  busyId.value = entry.id; pageError.value = "";
   try {
     await apiDelete<ApiResponse<BanEntry>>(`/api/plugins/panel-ban/entries/${encodeURIComponent(entry.id)}`);
     if (editingId.value === entry.id) resetDraft();
     await refresh();
-  } catch (err) {
-    pushPageError(err instanceof Error ? err.message : String(err));
-  } finally {
-    busyId.value = "";
-  }
+    ui.pushToast({ title: "已删除", message: `封禁条目 ${entry.name || entry.id} 已删除。`, tone: "ok" });
+  } catch (err) { pushPageError(err instanceof Error ? err.message : String(err)); }
+  finally { busyId.value = ""; }
 }
 
 function entryStatusLabel(status: EntryStatus) {
@@ -678,36 +627,194 @@ function entryStatusLabel(status: EntryStatus) {
   return "已过期";
 }
 
-function entryStatusTone(status: EntryStatus) {
-  if (status === "active") return "success";
-  if (status === "disabled") return "neutral";
-  return "warning";
-}
-
-function eventTone(kind: string) {
-  if (kind.includes("failed") || kind.includes("error")) return "danger";
-  if (kind.includes("expired")) return "warning";
-  if (kind.includes("created") || kind.includes("updated") || kind.includes("loaded") || kind.includes("match")) {
-    return "success";
-  }
-  return "info";
-}
-
 function expiryLabelClass(entry: BanEntry) {
   if (entry.status !== "active") return "text-muted";
-  if (entry.expiresInMs && entry.expiresInMs < 86_400_000) {
-    return "text-danger-pulse";
-  }
-  return "text-success-soft";
+  if (entry.expiresInMs && entry.expiresInMs < 86_400_000) return "text-danger";
+  return "text-success";
 }
 </script>
 
 <style scoped>
-.panel-ban-page{display:grid;gap:16px;min-width:0}.header-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.notice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--color-border-default);border-radius:12px}.notice--danger{border-color:color-mix(in srgb,var(--color-status-danger,var(--color-status-error)) 38%,var(--color-border-default));background:color-mix(in srgb,var(--color-status-danger,var(--color-status-error)) 10%,transparent)}
-.quick-ban-form{display:grid;gap:14px}.quick-ban-primary{display:grid;grid-template-columns:minmax(280px,.85fr) minmax(360px,1.4fr);gap:14px}.quick-ban-options{display:grid;grid-template-columns:auto 190px minmax(210px,1fr) 120px minmax(180px,.8fr);align-items:end;gap:10px;padding-top:14px;border-top:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent)}.field{display:grid;align-content:start;gap:6px;min-width:0;color:var(--color-text-secondary);font-size:11px}.field>span,.field-label{color:var(--color-text-muted);font-size:10px;font-weight:700;letter-spacing:.04em}.field input,.field textarea,.field select,.search-box input{width:100%;border:1px solid var(--color-border-default);border-radius:9px;outline:none;background:color-mix(in srgb,var(--color-bg-card) 72%,#000 28%);color:var(--color-text-primary);padding:9px 10px}.field textarea{min-height:64px;resize:vertical}.field input:focus,.field textarea:focus,.field select:focus,.search-box input:focus{border-color:color-mix(in srgb,var(--color-status-info) 60%,white 40%);box-shadow:0 0 0 3px color-mix(in srgb,var(--color-status-info) 15%,transparent)}
-.identity-preview{display:flex;align-items:center;gap:8px;min-width:0;padding:6px 9px;border:1px dashed color-mix(in srgb,var(--color-status-info) 30%,var(--color-border-default));border-radius:8px;background:color-mix(in srgb,var(--color-status-info) 5%,transparent)}.identity-preview strong{flex:none;font-size:11px}.identity-preview span{min-width:0;overflow:hidden;color:var(--color-text-muted);font:9px ui-monospace,SFMono-Regular,Menlo,monospace;text-overflow:ellipsis;white-space:nowrap}.duration-block{display:grid;gap:6px}.duration-preset{display:flex;gap:5px}.duration-preset button{height:35px;padding:0 10px;border:1px solid var(--color-border-default);border-radius:8px;background:rgba(255,255,255,.025);color:var(--color-text-secondary);cursor:pointer;font-size:10px;font-weight:700}.duration-preset button:hover{border-color:color-mix(in srgb,var(--color-status-info) 45%,var(--color-border-default));color:var(--color-text-primary)}.inline-fields{display:grid;grid-template-columns:70px 1fr;gap:5px}.expiry-summary{display:grid;grid-template-columns:auto 1fr;align-items:baseline;gap:2px 8px;min-height:55px;padding:8px 10px;border:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent);border-radius:9px;background:rgba(255,255,255,.02)}.expiry-summary span{color:var(--color-text-muted);font-size:9px}.expiry-summary strong{overflow:hidden;font-size:11px;text-align:right;text-overflow:ellipsis;white-space:nowrap}.expiry-summary small{grid-column:1/-1;color:var(--color-text-muted);font-size:9px}.quick-ban-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent)}.form-hint,.permission-hint{font-size:10px}.form-hint{color:var(--color-text-muted)}.permission-hint{color:var(--color-status-danger)}.form-actions{display:flex;gap:8px}
-.list-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.search-box{flex:1;min-width:240px}.status-tabs,.event-tabs{display:flex;gap:4px;padding:3px;border:1px solid color-mix(in srgb,var(--color-border-default) 75%,transparent);border-radius:9px;background:rgba(0,0,0,.13)}.status-tab,.event-tab-btn{border:0;border-radius:6px;background:transparent;color:var(--color-text-muted);cursor:pointer;font-size:10px;font-weight:700;padding:7px 10px;white-space:nowrap}.status-tab.active,.event-tab-btn--active{background:color-mix(in srgb,var(--color-status-info) 12%,rgba(255,255,255,.03));color:var(--color-status-info)}
-.ban-list{display:grid;max-height:640px;overflow:auto;border:1px solid color-mix(in srgb,var(--color-border-default) 72%,transparent);border-radius:11px;overscroll-behavior:contain}.ban-row{display:grid;grid-template-columns:70px minmax(210px,1.05fr) minmax(180px,1.4fr) 130px 160px auto;align-items:center;gap:12px;min-height:82px;padding:11px 12px;border-bottom:1px solid color-mix(in srgb,var(--color-border-default) 72%,transparent);transition:background .15s ease}.ban-row:last-child{border-bottom:0}.ban-row:hover{background:rgba(255,255,255,.018)}.ban-row--disabled{opacity:.65}.ban-row--expired{background:color-mix(in srgb,var(--color-status-warning) 4%,transparent)}.ban-identity,.ban-reason,.ban-expiry{display:grid;gap:4px;min-width:0}.ban-identity>strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.identity-id{display:flex;width:fit-content;max-width:100%;overflow:hidden;padding:0;border:1px solid rgba(255,255,255,.06);border-radius:5px;background:rgba(0,0,0,.17);color:var(--color-text-muted);cursor:pointer}.identity-id span{flex:none;padding:3px 5px;color:#dbeafe;background:rgba(59,130,246,.25);font-size:8px;font-weight:800}.identity-id--eos span{color:#f3e8ff;background:rgba(168,85,247,.25)}.identity-id code{min-width:0;overflow:hidden;padding:3px 6px;color:inherit;font-size:9px;text-overflow:ellipsis}.row-label{color:var(--color-text-muted);font-size:9px;font-weight:700;text-transform:uppercase}.ban-reason p{display:-webkit-box;overflow:hidden;margin:0;color:var(--color-text-secondary);font-size:11px;line-height:1.4;-webkit-box-orient:vertical;-webkit-line-clamp:2}.ban-reason small,.ban-expiry small,.ban-hit small{color:var(--color-text-muted);font-size:9px}.ban-expiry strong{color:var(--color-status-success);font-size:12px}.text-danger{color:var(--color-status-danger)!important}.ban-hit{display:flex;align-items:center;gap:8px;min-width:0}.ban-hit>div{display:grid;gap:3px;min-width:0}.ban-hit strong{overflow:hidden;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.hit-count{display:grid;place-items:center;min-width:30px;height:30px;padding:0 6px;border-radius:8px;background:rgba(255,255,255,.045);color:var(--color-text-muted);font-size:11px;font-weight:800}.hit-count--active{border:1px solid color-mix(in srgb,var(--color-status-danger) 35%,transparent);background:color-mix(in srgb,var(--color-status-danger) 10%,transparent);color:color-mix(in srgb,var(--color-status-danger) 75%,white)}.row-actions{display:flex;justify-content:flex-end;gap:3px;white-space:nowrap}
-.activity-list{display:grid;max-height:270px;overflow:auto}.activity-row{display:grid;grid-template-columns:100px minmax(140px,.7fr) minmax(220px,1.5fr) minmax(80px,.5fr) 145px;align-items:center;gap:12px;min-height:48px;padding:8px 10px;border-bottom:1px solid color-mix(in srgb,var(--color-border-default) 70%,transparent);border-left:2px solid var(--color-border-default)}.activity-row:last-child{border-bottom:0}.activity-row[data-kind="kick_success"]{border-left-color:var(--color-status-success)}.activity-row[data-kind="kick_failed"]{border-left-color:var(--color-status-danger)}.activity-row strong,.activity-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.activity-row strong{font-size:11px}.activity-row span,.activity-row time{color:var(--color-text-muted);font-size:9px}.activity-row time{text-align:right;white-space:nowrap}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}.ban-list::-webkit-scrollbar,.activity-list::-webkit-scrollbar{width:7px}.ban-list::-webkit-scrollbar-thumb,.activity-list::-webkit-scrollbar-thumb{border-radius:999px;background:rgba(255,255,255,.1)}
-@media(max-width:1280px){.quick-ban-options{grid-template-columns:1fr 190px minmax(210px,1fr) 110px}.expiry-summary{grid-column:1/-1}.ban-row{grid-template-columns:64px minmax(200px,1fr) minmax(180px,1.2fr) 120px 145px}.row-actions{grid-column:2/-1}.ban-row{min-height:104px}}@media(max-width:900px){.quick-ban-primary{grid-template-columns:1fr}.quick-ban-options{grid-template-columns:1fr 1fr}.duration-block,.expiry-summary{grid-column:1/-1}.ban-row{grid-template-columns:64px minmax(190px,1fr) minmax(150px,1fr)}.ban-expiry,.ban-hit,.row-actions{grid-column:auto}.ban-hit{grid-column:2}.row-actions{grid-column:3;grid-row:2}.activity-row{grid-template-columns:90px minmax(130px,.7fr) minmax(180px,1.2fr) 130px}.activity-row>span:nth-of-type(2){display:none}}@media(max-width:640px){.header-actions{justify-content:flex-start}.quick-ban-options{grid-template-columns:1fr}.duration-block,.expiry-summary{grid-column:auto}.quick-ban-footer,.list-toolbar{align-items:stretch;flex-direction:column}.form-actions{justify-content:flex-end}.status-tabs,.event-tabs{width:100%;overflow:auto}.status-tab,.event-tab-btn{flex:1 0 auto}.ban-row{grid-template-columns:1fr;gap:8px}.ban-row-status,.ban-identity,.ban-reason,.ban-expiry,.ban-hit,.row-actions{grid-column:1;grid-row:auto}.row-actions{justify-content:flex-start}.activity-row{grid-template-columns:86px minmax(0,1fr)}.activity-row>span,.activity-row time{grid-column:2}.activity-row>span:nth-of-type(2){display:none}.activity-row time{text-align:left}}
+.panel-ban-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 6px;
+}
+
+/* Streamlined Command Header */
+.page-cmd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.header-left { display: flex; align-items: center; gap: 12px; }
+.page-title { font-size: 14px; font-weight: 800; color: var(--color-text-primary); margin: 0; }
+.kpi-inline-group { display: flex; align-items: center; gap: 6px; }
+
+.kpi-tag {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; padding: 2px 6px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); color: var(--color-text-secondary);
+}
+
+.kpi-tag .dot { width: 6px; height: 6px; border-radius: 50%; }
+.kpi-tag.cyan .dot { background: #38bdf8; }
+.kpi-tag.emerald .dot { background: #22c55e; }
+.kpi-tag.amber .dot { background: #f59e0b; }
+.kpi-tag.neutral .dot { background: #94a3b8; }
+.kpi-tag.purple .dot { background: #a78bfa; }
+.kpi-tag.danger .dot { background: #ef4444; }
+.kpi-tag strong { color: var(--color-text-primary); font-weight: 700; }
+
+.header-right { display: flex; gap: 6px; }
+
+.notice-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 5px; font-size: 11px; }
+.notice-bar.danger { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fecaca; }
+
+/* Split Layout & Panels */
+.compact-split {
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr) !important;
+  gap: 6px;
+}
+
+.card-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--color-border-soft);
+  overflow: hidden;
+}
+
+.panel-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px; border-bottom: 1px solid var(--color-border-soft); background: rgba(15, 23, 42, 0.4); }
+.search-input-wrap { position: relative; flex: 1; }
+.search-icon { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; color: var(--color-text-muted); }
+
+.search-field {
+  width: 100%; height: 24px; padding: 0 6px 0 22px; border-radius: 4px; border: 1px solid var(--color-border-soft);
+  background: rgba(15, 23, 42, 0.9); color: var(--color-text-primary); font-size: 11px;
+}
+
+.status-tab-group { display: flex; gap: 2px; background: rgba(0, 0, 0, 0.3); padding: 2px; border-radius: 4px; }
+.btn-sub { padding: 2px 6px; border-radius: 3px; border: 0; background: transparent; color: var(--color-text-muted); font-size: 10px; cursor: pointer; }
+.btn-sub.active { background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; }
+
+.panel-sub-bar { padding: 3px 6px; background: rgba(0, 0, 0, 0.2); font-size: 10px; color: var(--color-text-muted); border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
+
+/* Ban Feed Items */
+.ban-feed { flex: 1; overflow-y: auto; padding: 5px; display: flex; flex-direction: column; gap: 5px; scrollbar-gutter: stable; }
+
+.ban-row-card {
+  display: flex; gap: 6px; padding: 6px 8px; border-radius: 5px; background: rgba(15, 23, 42, 0.55); border: 1px solid var(--color-border-soft); transition: all 0.12s ease;
+}
+
+.ban-row-card:hover { background: rgba(255, 255, 255, 0.03); border-color: rgba(56, 189, 248, 0.3); }
+.ban-row-card.status-disabled { opacity: 0.6; }
+.ban-row-card.status-expired { border-left: 2.5px solid #f59e0b; }
+
+.row-main-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.row-header { display: flex; align-items: center; gap: 5px; }
+
+.status-badge-pill { font-size: 8.5px; font-weight: 800; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; }
+.status-badge-pill.active { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.status-badge-pill.disabled { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+.status-badge-pill.expired { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+.player-name-text { font-size: 11.5px; font-weight: 700; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+
+.id-pill { padding: 1px 4px; border-radius: 3px; font-size: 8.5px; font-family: monospace; border: 1px solid rgba(255, 255, 255, 0.06); background: rgba(0, 0, 0, 0.2); color: var(--color-text-muted); cursor: pointer; }
+.id-pill.steam { color: #93c5fd; background: rgba(59, 130, 246, 0.15); }
+.id-pill.eos { color: #e9d5ff; background: rgba(168, 85, 247, 0.15); }
+
+.expiry-text { font-size: 9.5px; margin-left: auto; white-space: nowrap; }
+.text-danger { color: #f87171; }
+.text-success { color: #22c55e; }
+.text-muted { color: var(--color-text-muted); }
+
+.row-footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.reason-block { display: flex; align-items: center; gap: 4px; font-size: 10px; min-width: 0; flex: 1; overflow: hidden; }
+.reason-block .lbl { color: var(--color-text-muted); flex-shrink: 0; }
+.reason-block .val { color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reason-block .by { color: var(--color-text-muted); font-size: 9px; flex-shrink: 0; }
+
+.row-right-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.hit-tag { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(239, 68, 68, 0.12); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.2); }
+
+.quick-actions { display: flex; gap: 2px; }
+.btn-action-icon { width: 20px; height: 20px; border-radius: 3px; border: 0; background: transparent; font-size: 10.5px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
+.btn-action-icon:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.btn-action-icon.danger:hover { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
+
+/* Right Detail Stage Panel */
+.detail-panel { display: flex; flex-direction: column; }
+
+.stage-nav { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px; background: rgba(15, 23, 42, 0.8); border-bottom: 1px solid var(--color-border-soft); }
+.nav-tabs { display: flex; gap: 2px; }
+.stage-tab-btn { padding: 3px 8px; border-radius: 4px; border: 0; background: transparent; color: var(--color-text-muted); font-size: 11px; font-weight: 600; cursor: pointer; }
+.stage-tab-btn.active { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+
+.stage-body { flex: 1; min-height: 0; overflow: auto; padding: 10px; }
+
+/* Ban Form Styling */
+.ban-form { display: flex; flex-direction: column; gap: 10px; }
+.ban-form.disabled { opacity: 0.6; pointer-events: none; }
+.form-row { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.2fr); gap: 10px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.f-lbl { font-size: 10px; font-weight: 700; color: var(--color-text-muted); }
+.identity-box { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px dashed rgba(56, 189, 248, 0.3); border-radius: 4px; background: rgba(56, 189, 248, 0.05); font-size: 10.5px; }
+
+.f-textarea { width: 100%; height: 58px; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(15, 23, 42, 0.9); color: var(--color-text-primary); font-size: 11px; resize: vertical; }
+
+.form-options-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--color-border-soft); }
+.opt-col { display: flex; flex-direction: column; gap: 4px; }
+.preset-btns { display: flex; gap: 3px; }
+.btn-preset { height: 26px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(255, 255, 255, 0.03); color: var(--color-text-secondary); font-size: 10px; cursor: pointer; flex: 1; }
+.btn-preset:hover { border-color: #38bdf8; color: #38bdf8; }
+
+.inline-inputs { display: grid; grid-template-columns: 60px 1fr; gap: 4px; }
+.f-input, .f-select { height: 26px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(15, 23, 42, 0.9); color: var(--color-text-primary); font-size: 11px; }
+
+.expiry-preview-banner { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 4px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--color-border-soft); font-size: 10.5px; color: var(--color-text-secondary); }
+.expiry-preview-banner strong { color: #38bdf8; }
+.expiry-preview-banner small { color: var(--color-text-muted); font-size: 9.5px; }
+
+.form-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; border-top: 1px solid var(--color-border-soft); }
+.hint-text { font-size: 10px; color: var(--color-text-muted); }
+.perm-warning { font-size: 10px; color: #f87171; }
+.foot-btns { display: flex; gap: 6px; }
+
+/* Activity Stream */
+.activity-feed { display: flex; flex-direction: column; gap: 4px; }
+.activity-row { display: grid; grid-template-columns: 90px minmax(120px, 1fr) minmax(160px, 1.2fr) 90px 120px; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--color-border-soft); font-size: 10.5px; }
+.event-tag { font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; text-align: center; }
+.event-tag.success { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+.event-tag.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.event-tag.info { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+.act-name { color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act-info, .act-server, .act-time { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 30px; color: var(--color-text-muted); font-size: 11px; text-align: center; }
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(56, 189, 248, 0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.btn-compact { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 600; cursor: pointer; border: 1px solid var(--color-border-default); background: rgba(255, 255, 255, 0.04); color: var(--color-text-secondary); }
+.btn-compact .icon { width: 12px; height: 12px; }
+.btn-compact:hover { border-color: var(--color-border-hover); color: var(--color-text-primary); background: rgba(255, 255, 255, 0.08); }
+.btn-compact.accent { background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; }
+.btn-compact.danger { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: #fecaca; }
+.btn-compact.ghost { background: transparent; border-color: rgba(255, 255, 255, 0.06); }
+
+@media (max-width: 1000px) {
+  .compact-split { grid-template-columns: 1fr !important; }
+  .form-row, .form-options-grid { grid-template-columns: 1fr; }
+}
 </style>

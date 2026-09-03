@@ -77,42 +77,43 @@
             <div
               v-for="snapshot in filteredSnapshotsList"
               :key="snapshot.id"
-              class="snapshot-row"
+              class="snapshot-row-card"
               :class="{ active: selectedId === snapshot.id }"
               @click="selectSnapshot(snapshot.id)"
             >
-              <div class="chk-wrap" @click.stop>
+              <div class="row-chk-cell" @click.stop>
                 <input type="checkbox" :value="snapshot.id" v-model="selectedIds">
               </div>
 
-              <div class="row-content">
-                <div class="row-top">
-                  <strong class="name-text" :title="snapshot.name">{{ snapshot.name }}</strong>
-                  <button type="button" class="btn-copy" title="复制 ID" @click.stop="copyText(snapshot.id)">
+              <div class="row-main-cell">
+                <div class="row-header">
+                  <strong class="snapshot-title" :title="snapshot.name">{{ snapshot.name }}</strong>
+                  <button type="button" class="btn-copy-id" title="复制 ID" @click.stop="copyText(snapshot.id)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                   </button>
-                  <span class="time-text">{{ formatDate(snapshot.createdAt, true) }}</span>
+                  <span class="time-badge font-mono">{{ formatDate(snapshot.createdAt, true) }}</span>
                 </div>
-                <div class="id-text font-mono">{{ snapshot.id }}</div>
 
-                <div class="chips-row">
-                  <span
-                    v-for="artifact in snapshot.artifacts"
-                    :key="artifact.format"
-                    class="artifact-tag"
-                    :data-format="artifact.format"
-                    @click.stop="openArtifact(snapshot.id, artifact.format)"
-                  >
-                    {{ artifact.label }} <em>{{ formatSize(artifact.size) }}</em>
-                  </span>
+                <div class="row-footer">
+                  <div class="artifact-pills">
+                    <span
+                      v-for="artifact in snapshot.artifacts"
+                      :key="artifact.format"
+                      class="artifact-pill"
+                      :data-format="artifact.format"
+                      @click.stop="openArtifact(snapshot.id, artifact.format)"
+                    >
+                      {{ artifact.label }} <em>{{ formatSize(artifact.size) }}</em>
+                    </span>
+                  </div>
+
+                  <div class="quick-actions" @click.stop>
+                    <button type="button" class="btn-action-icon" title="查看图片" @click="openArtifact(snapshot.id, 'image')">📷</button>
+                    <button type="button" class="btn-action-icon" title="查看 JSON" @click="openArtifact(snapshot.id, 'json')">📄</button>
+                    <button type="button" class="btn-action-icon" title="下载 CSV" @click="downloadArtifact(snapshot.id, 'csv')">📊</button>
+                    <button type="button" class="btn-action-icon danger" title="删除快照" :disabled="busy" @click="handleDeleteSnapshot(snapshot)">🗑️</button>
+                  </div>
                 </div>
-              </div>
-
-              <div class="row-actions" @click.stop>
-                <button type="button" class="btn-icon-sm" title="查看图片" @click="openArtifact(snapshot.id, 'image')">📷</button>
-                <button type="button" class="btn-icon-sm" title="查看 JSON" @click="openArtifact(snapshot.id, 'json')">📄</button>
-                <button type="button" class="btn-icon-sm" title="下载 CSV" @click="downloadArtifact(snapshot.id, 'csv')">📊</button>
-                <button type="button" class="btn-icon-sm danger" title="删除快照" :disabled="busy" @click="handleDeleteSnapshot(snapshot)">🗑️</button>
               </div>
             </div>
           </div>
@@ -666,87 +667,173 @@ onMounted(loadList);
 .snapshot-feed {
   flex: 1;
   overflow-y: auto;
-  padding: 4px;
+  padding: 5px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 5px;
   scrollbar-gutter: stable;
 }
 
-.snapshot-row {
+.snapshot-row-card {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid transparent;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid var(--color-border-soft);
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: all 0.15s ease;
 }
 
-.snapshot-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.snapshot-row.active {
-  background: rgba(56, 189, 248, 0.08);
+.snapshot-row-card:hover {
+  background: rgba(255, 255, 255, 0.035);
   border-color: rgba(56, 189, 248, 0.3);
 }
 
-.chk-wrap input { width: 12px; height: 12px; display: block; }
+.snapshot-row-card.active {
+  background: rgba(56, 189, 248, 0.08);
+  border-color: #38bdf8;
+  box-shadow: inset 3px 0 0 #38bdf8, 0 0 10px rgba(56, 189, 248, 0.12);
+}
 
-.row-content {
+.row-chk-cell {
+  display: flex;
+  align-items: center;
+}
+
+.row-chk-cell input {
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  accent-color: #38bdf8;
+}
+
+.row-main-cell {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-}
-
-.row-top {
-  display: flex;
-  align-items: center;
   gap: 4px;
 }
 
-.name-text {
+.row-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.snapshot-title {
   font-size: 11.5px;
   font-weight: 700;
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.btn-copy { background: transparent; border: 0; padding: 0; color: var(--color-text-muted); cursor: pointer; display: flex; }
-.btn-copy svg { width: 10px; height: 10px; }
-.btn-copy:hover { color: #38bdf8; }
-
-.time-text { margin-left: auto; font-size: 9.5px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
-.id-text { font-size: 9px; color: var(--color-text-muted); opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.chips-row { display: flex; gap: 3px; margin-top: 1px; }
-
-.artifact-tag {
-  font-size: 9px;
-  padding: 0 4px;
+.btn-copy-id {
+  background: transparent;
+  border: 0;
+  padding: 1px 3px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
   border-radius: 3px;
-  border: 1px solid var(--color-border-soft);
-  color: var(--color-text-secondary);
+  transition: color 0.15s ease;
+}
+
+.btn-copy-id svg { width: 11px; height: 11px; }
+.btn-copy-id:hover { color: #38bdf8; background: rgba(56, 189, 248, 0.12); }
+
+.time-badge {
+  font-size: 9.5px;
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.row-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.artifact-pills {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.artifact-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 9.5px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.12s ease;
+  border: 1px solid transparent;
 }
 
-.artifact-tag em { font-style: normal; opacity: 0.75; font-size: 8.5px; }
-.artifact-tag[data-format="json"] { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); background: rgba(56, 189, 248, 0.08); }
-.artifact-tag[data-format="image"] { color: #22c55e; border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.08); }
+.artifact-pill em {
+  font-style: normal;
+  font-size: 8.5px;
+  opacity: 0.8;
+}
 
-.row-actions { display: flex; gap: 2px; }
-.btn-icon-sm { width: 20px; height: 20px; border-radius: 3px; border: 1px solid var(--color-border-soft); background: rgba(255, 255, 255, 0.02); font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.btn-icon-sm:hover { background: rgba(255, 255, 255, 0.1); }
-.btn-icon-sm.danger:hover { background: rgba(239, 68, 68, 0.2); }
+.artifact-pill[data-format="json"] { color: #38bdf8; background: rgba(56, 189, 248, 0.1); border-color: rgba(56, 189, 248, 0.25); }
+.artifact-pill[data-format="image"] { color: #22c55e; background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.25); }
+.artifact-pill[data-format="csv"] { color: #a78bfa; background: rgba(167, 139, 250, 0.1); border-color: rgba(167, 139, 250, 0.25); }
+.artifact-pill[data-format="markdown"] { color: #f97316; background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.25); }
+
+.artifact-pill:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.25);
+}
+
+.quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.btn-action-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: 0;
+  background: transparent;
+  font-size: 10.5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: all 0.12s ease;
+}
+
+.btn-action-icon:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.btn-action-icon.danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+}
 
 /* Right Detail Stage Panel */
 .detail-panel { display: flex; flex-direction: column; }

@@ -190,7 +190,7 @@
 
             <!-- Tab 1: Scoreboard Stage -->
             <div v-if="activeTab === 'scoreboard'" class="stage-body scoreboard-stage">
-              <!-- Compact Match Overview Bar -->
+              <!-- Compact Match Overview Bar + Image Banner Toggle -->
               <div class="match-meta-bar">
                 <div class="meta-item wide">
                   <span class="lbl">图层:</span>
@@ -208,6 +208,23 @@
                   <span class="lbl">胜利:</span>
                   <strong :class="normalizeWinner(selectedSnapshot.winner)">{{ winnerLabel(selectedSnapshot.winner) }}</strong>
                 </div>
+                <button
+                  type="button"
+                  class="btn-compact ghost image-toggle-btn"
+                  :disabled="!selectedSnapshot.imageAvailable"
+                  @click="showInlineImage = !showInlineImage"
+                >
+                  📷 {{ showInlineImage ? "隐藏战绩图片" : "显示战绩图片" }}
+                </button>
+              </div>
+
+              <!-- Inline Battle Snapshot Image Banner Stage -->
+              <div v-if="showInlineImage && selectedSnapshot.imageAvailable" class="inline-image-banner">
+                <div class="banner-header">
+                  <span>对局战绩图片原图 (PNG)</span>
+                  <a :href="reportImageUrl" target="_blank" rel="noopener noreferrer" class="link-open">全屏查看 ↗</a>
+                </div>
+                <img :src="reportImageUrl" alt="对局战绩快照" loading="lazy" class="banner-img">
               </div>
 
               <div v-if="detailLoading" class="empty-state">
@@ -431,6 +448,7 @@ const imageVersion = ref(String(Date.now()));
 const errorMessage = ref("");
 const playerSearch = ref("");
 const showAdvancedFilter = ref(false);
+const showInlineImage = ref(true);
 
 const filters = ref({
   search: "", time: "all", from: "", to: "", map: "", mode: "", players: "",
@@ -919,6 +937,36 @@ onMounted(loadAll);
 .btn-compact.accent { background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; }
 .btn-compact.danger { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); color: #fecaca; }
 .btn-compact.ghost { background: transparent; border-color: rgba(255, 255, 255, 0.06); }
+
+.inline-image-banner {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--color-border-soft);
+  background: #060911;
+  display: flex;
+  flex-direction: column;
+}
+
+.banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.8);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+}
+
+.link-open { color: #38bdf8; text-decoration: none; font-size: 10px; }
+.link-open:hover { text-decoration: underline; }
+
+.banner-img {
+  width: 100%;
+  max-height: 280px;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
 
 @media (max-width: 1000px) {
   .compact-split { grid-template-columns: 1fr !important; }
