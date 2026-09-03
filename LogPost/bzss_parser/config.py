@@ -107,4 +107,23 @@ def load_config(config_path: str = "config.json") -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         user_config = json.load(f)
 
-    return deep_merge(DEFAULT_CONFIG, user_config)
+    config = deep_merge(DEFAULT_CONFIG, user_config)
+    config["log_file"] = resolve_squad_server_path(config.get("log_file", ""), path)
+    return config
+
+
+def resolve_squad_server_path(value: Any, config_path: Path) -> str:
+    """Resolve SquadGame-relative paths from either the panel root or a child folder."""
+    configured = Path(str(value or "").strip())
+    if not str(configured) or configured.is_absolute():
+        return str(configured)
+
+    parts = [part.lower() for part in configured.parts if part not in {".", ""}]
+    if not parts or parts[0] != "squadgame":
+        return str(configured)
+
+    for directory in (config_path.resolve().parent, *config_path.resolve().parent.parents):
+        if (directory / "SquadGame").is_dir():
+            return str((directory / configured).resolve())
+
+    return str(configured)
