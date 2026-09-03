@@ -1,6 +1,6 @@
 <template>
   <AppPage full-bleed class="panel-ban-page">
-    <!-- Streamlined Single-Row Command Header -->
+    <!-- Streamlined Command Header -->
     <header class="page-cmd-header">
       <div class="header-left">
         <h1 class="page-title">面板封禁</h1>
@@ -48,7 +48,7 @@
 
     <!-- Error Notice Bar -->
     <div v-if="pageError || error || state?.lastError" class="notice-bar danger">
-      <strong>⚠️ 系统的异常状态:</strong>
+      <strong>⚠️ 服务异常状态:</strong>
       <span>{{ pageError || error || state?.lastError }}</span>
     </div>
 
@@ -80,7 +80,7 @@
             <span class="count-text">显示 {{ visibleEntries.length }} / {{ state?.totalEntries ?? 0 }} 条封禁记录</span>
           </div>
 
-          <!-- High-Density Ban List -->
+          <!-- Ban Cards Feed -->
           <div v-if="loading && !state" class="empty-state">
             <div class="spinner"></div>
             <span>正在读取封禁数据...</span>
@@ -92,43 +92,43 @@
             <div
               v-for="entry in visibleEntries"
               :key="entry.id"
-              class="ban-row-card"
-              :class="`status-${entry.status}`"
+              class="ban-card-item"
+              :class="{ active: editingId === entry.id, disabled: entry.status === 'disabled', expired: entry.status === 'expired' }"
+              @click="editEntry(entry)"
             >
-              <div class="row-main-cell">
-                <div class="row-header">
-                  <span class="status-badge-pill" :class="entry.status">{{ entryStatusLabel(entry.status) }}</span>
-                  <strong class="player-name-text" :title="entry.name">{{ entry.name || "未记录玩家名" }}</strong>
+              <!-- Line 1: Status Dot + Player Name + Status Badge + Expiry -->
+              <div class="card-head">
+                <span class="status-dot" :class="entry.status"></span>
+                <strong class="player-name" :title="entry.name">{{ entry.name || "未记录玩家名" }}</strong>
+                <span class="status-pill-badge" :class="entry.status">{{ entryStatusLabel(entry.status) }}</span>
+                <span class="expiry-badge font-mono" :class="expiryLabelClass(entry)">{{ entry.expiresInLabel }}</span>
+              </div>
 
-                  <button v-if="entry.steamID" type="button" class="id-pill steam" title="点击复制 Steam64" @click.stop="copyTextWithToast(entry.steamID, ui)">
-                    S: {{ entry.steamID }}
-                  </button>
-                  <button v-if="entry.eosID" type="button" class="id-pill eos" title="点击复制 EOS ID" @click.stop="copyTextWithToast(entry.eosID, ui)">
-                    EOS: {{ entry.eosID }}
-                  </button>
+              <!-- Line 2: Steam64 & EOS Badges -->
+              <div class="card-ids" v-if="entry.steamID || entry.eosID">
+                <button v-if="entry.steamID" type="button" class="id-badge steam" title="点击复制 Steam64" @click.stop="copyTextWithToast(entry.steamID, ui)">
+                  <span class="id-type">STEAM</span>
+                  <span class="id-val font-mono">{{ entry.steamID }}</span>
+                </button>
+                <button v-if="entry.eosID" type="button" class="id-badge eos" title="点击复制 EOS ID" @click.stop="copyTextWithToast(entry.eosID, ui)">
+                  <span class="id-type">EOS</span>
+                  <span class="id-val font-mono">{{ entry.eosID }}</span>
+                </button>
+              </div>
 
-                  <span class="expiry-text font-mono" :class="expiryLabelClass(entry)">{{ entry.expiresInLabel }}</span>
+              <!-- Line 3: Reason + Hit Counter + Action Icons -->
+              <div class="card-foot">
+                <div class="reason-text" :title="entry.reason">
+                  <span>{{ entry.reason || "未填写原因" }}</span>
+                  <em class="admin-by">@{{ entry.createdBy || "system" }}</em>
                 </div>
 
-                <div class="row-footer">
-                  <div class="reason-block" :title="entry.reason">
-                    <span class="lbl">原因:</span>
-                    <span class="val">{{ entry.reason || "未填写原因" }}</span>
-                    <span class="by">({{ entry.createdBy || "未知" }})</span>
-                  </div>
-
-                  <div class="row-right-group">
-                    <span v-if="entry.hitCount > 0" class="hit-tag" title="最近命中玩家">
-                      🎯 命中 {{ entry.hitCount }} 次
-                    </span>
-
-                    <div class="quick-actions" @click.stop>
-                      <button type="button" class="btn-action-icon" title="编辑封禁" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">✏️</button>
-                      <button v-if="entry.status === 'active'" type="button" class="btn-action-icon" title="停用" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'disabled')">⏸️</button>
-                      <button v-else-if="entry.status === 'disabled'" type="button" class="btn-action-icon" title="启用" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'active')">▶️</button>
-                      <button type="button" class="btn-action-icon danger" title="删除封禁" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">🗑️</button>
-                    </div>
-                  </div>
+                <div class="foot-actions" @click.stop>
+                  <span v-if="entry.hitCount > 0" class="hit-count-pill" title="拦截命中次数">🎯 {{ entry.hitCount }}</span>
+                  <button type="button" class="btn-action-icon" title="编辑" :disabled="busyId === entry.id || !canBan" @click="editEntry(entry)">✏️</button>
+                  <button v-if="entry.status === 'active'" type="button" class="btn-action-icon" title="停用" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'disabled')">⏸️</button>
+                  <button v-else-if="entry.status === 'disabled'" type="button" class="btn-action-icon" title="启用" :disabled="busyId === entry.id || !canBan" @click="setEntryStatus(entry, 'active')">▶️</button>
+                  <button type="button" class="btn-action-icon danger" title="删除" :disabled="busyId === entry.id || !canBan" @click="removeEntry(entry)">🗑️</button>
                 </div>
               </div>
             </div>
@@ -142,13 +142,13 @@
           <div class="stage-nav">
             <div class="nav-tabs">
               <button type="button" class="stage-tab-btn" :class="{ active: rightTab === 'form' }" @click="rightTab = 'form'">
-                🔨 {{ editingId ? "编辑封禁条目" : "快速新建封禁" }}
+                🔨 {{ editingId ? "编辑封禁条目" : "新建封禁规则" }}
               </button>
               <button type="button" class="stage-tab-btn" :class="{ active: rightTab === 'hits' }" @click="rightTab = 'hits'">
-                ⚡ 最近命中历史 ({{ recentHitEvents.length }})
+                ⚡ 拦截命中历史 ({{ recentHitEvents.length }})
               </button>
               <button type="button" class="stage-tab-btn" :class="{ active: rightTab === 'events' }" @click="rightTab = 'events'">
-                📜 系统事件日志 ({{ recentEvents.length }})
+                📜 系统审计日志 ({{ recentEvents.length }})
               </button>
             </div>
 
@@ -157,38 +157,54 @@
 
           <!-- Tab 1: Form Stage -->
           <div v-if="rightTab === 'form'" class="stage-body form-stage">
-            <form class="ban-form" :class="{ disabled: !canBan }" @submit.prevent="submitDraft">
-              <div class="form-row">
-                <div class="field field-player">
-                  <label class="f-lbl">选择在线玩家 / 手动输入</label>
-                  <PlayerSelect v-model="targetPlayerInput" placeholder="搜索玩家名 / Steam64 / EOS ID" @select="handlePlayerSelect" />
-                  <div v-if="draft.name || draft.steamID || draft.eosID" class="identity-box">
-                    <strong>{{ draft.name || "未记录名称" }}</strong>
-                    <span class="font-mono">{{ draft.steamID || draft.eosID }}</span>
+            <form class="ban-form-box" :class="{ disabled: !canBan }" @submit.prevent="submitDraft">
+              <div class="form-header-bar">
+                <h3 class="form-title">{{ editingId ? `编辑封禁 (${editingId})` : "新建全局玩家封禁" }}</h3>
+                <span v-if="!canBan" class="perm-tag">🔒 缺少操作权限</span>
+              </div>
+
+              <!-- Section 1: Player & Reason -->
+              <div class="form-section">
+                <div class="f-group">
+                  <label class="f-label">目标玩家 (选择在线玩家 / 输入 Steam64 / EOS ID)</label>
+                  <PlayerSelect v-model="targetPlayerInput" placeholder="输入玩家名 / 7656119... / EOS ID" @select="handlePlayerSelect" />
+                  <div v-if="draft.name || draft.steamID || draft.eosID" class="identity-card font-mono">
+                    <span class="id-item name">👤 <strong>{{ draft.name || "未记录名称" }}</strong></span>
+                    <span v-if="draft.steamID" class="id-item steam">STEAM: {{ draft.steamID }}</span>
+                    <span v-if="draft.eosID" class="id-item eos">EOS: {{ draft.eosID }}</span>
                   </div>
                 </div>
 
-                <div class="field field-reason">
-                  <label class="f-lbl">封禁原因描述</label>
-                  <textarea v-model.trim="draft.reason" rows="2" placeholder="填写违规行为与处罚规则依据..." class="f-textarea"></textarea>
+                <div class="f-group">
+                  <div class="f-label-row">
+                    <label class="f-label">违规原因与处罚依据</label>
+                    <div class="quick-reason-tags">
+                      <button type="button" class="btn-reason-tag" @click="applyQuickReason('恶意击杀队友 / TK')">恶意TK</button>
+                      <button type="button" class="btn-reason-tag" @click="applyQuickReason('言语攻击 / 辱骂他人')">言语辱骂</button>
+                      <button type="button" class="btn-reason-tag" @click="applyQuickReason('开挂作弊 / 使用非法软件')">开挂作弊</button>
+                      <button type="button" class="btn-reason-tag" @click="applyQuickReason('恶意挂机 / 破坏战术规则')">破坏规则</button>
+                    </div>
+                  </div>
+                  <textarea v-model.trim="draft.reason" rows="2" placeholder="填写具体违规行为、录像截图凭据或处罚决定..." class="f-textarea"></textarea>
                 </div>
               </div>
 
-              <!-- Options & Duration Section -->
-              <div class="form-options-grid">
-                <div class="opt-col">
-                  <label class="f-lbl">快捷封禁时长</label>
-                  <div class="preset-btns">
-                    <button type="button" class="btn-preset" @click="setQuickDuration(1)">1天</button>
-                    <button type="button" class="btn-preset" @click="setQuickDuration(3)">3天</button>
-                    <button type="button" class="btn-preset" @click="setQuickDuration(7)">7天</button>
-                    <button type="button" class="btn-preset" @click="setQuickDuration(30)">30天</button>
+              <!-- Section 2: Duration & Rules -->
+              <div class="form-section grid-2">
+                <div class="f-group">
+                  <label class="f-label">快捷预设时长</label>
+                  <div class="preset-row">
+                    <button type="button" class="btn-duration-preset" :class="{ active: draft.durationValue === 1 && draft.durationUnit === 'days' }" @click="setQuickDuration(1)">1天</button>
+                    <button type="button" class="btn-duration-preset" :class="{ active: draft.durationValue === 3 && draft.durationUnit === 'days' }" @click="setQuickDuration(3)">3天</button>
+                    <button type="button" class="btn-duration-preset" :class="{ active: draft.durationValue === 7 && draft.durationUnit === 'days' }" @click="setQuickDuration(7)">7天</button>
+                    <button type="button" class="btn-duration-preset" :class="{ active: draft.durationValue === 30 && draft.durationUnit === 'days' }" @click="setQuickDuration(30)">30天</button>
+                    <button type="button" class="btn-duration-preset" :class="{ active: draft.durationValue === 3650 && draft.durationUnit === 'days' }" @click="setQuickDuration(3650)">永久</button>
                   </div>
                 </div>
 
-                <div class="opt-col">
-                  <label class="f-lbl">自定义时长</label>
-                  <div class="inline-inputs">
+                <div class="f-group">
+                  <label class="f-label">自定义数值与单位</label>
+                  <div class="custom-duration-row">
                     <input v-model.number="draft.durationValue" type="number" min="1" step="1" class="f-input num">
                     <select v-model="draft.durationUnit" class="f-select">
                       <option value="minutes">分钟</option>
@@ -198,45 +214,51 @@
                     </select>
                   </div>
                 </div>
+              </div>
 
-                <div class="opt-col">
-                  <label class="f-lbl">精确到期时间</label>
+              <!-- Section 3: Exact Expiry & Status -->
+              <div class="form-section grid-2">
+                <div class="f-group">
+                  <label class="f-label">精确到期时间 (选填)</label>
                   <input v-model="draft.expiresAt" type="datetime-local" class="f-input date">
                 </div>
 
-                <div class="opt-col">
-                  <label class="f-lbl">封禁状态</label>
+                <div class="f-group">
+                  <label class="f-label">规则初始状态</label>
                   <select v-model="draft.status" class="f-select">
-                    <option value="active">有效</option>
-                    <option value="disabled">禁用</option>
-                    <option value="expired">已过期</option>
+                    <option value="active">🟢 有效 (立即拦截进服)</option>
+                    <option value="disabled">⏸️ 禁用 (人工停用保留记录)</option>
+                    <option value="expired">🟡 已过期 (存档备查)</option>
                   </select>
                 </div>
               </div>
 
-              <div class="expiry-preview-banner">
-                <span>预计到期:</span>
-                <strong>{{ expiryPreview.label }}</strong>
-                <small>({{ expiryPreview.hint }})</small>
+              <!-- Summary & Actions -->
+              <div class="expiry-summary-card">
+                <div class="sum-left">
+                  <span class="sum-lbl">预计封禁到期:</span>
+                  <strong class="sum-val font-mono">{{ expiryPreview.label }}</strong>
+                </div>
+                <span class="sum-hint">({{ expiryPreview.hint }})</span>
               </div>
 
-              <div class="form-footer">
-                <span v-if="!canBan" class="perm-warning">🔒 当前账号缺少 panel_ban 管理权限</span>
-                <span v-else class="hint-text">身份、原因与到期时间确认无误后提交生效</span>
-                <div class="foot-btns">
-                  <button type="button" class="btn-compact ghost" :disabled="saving" @click="resetDraft">{{ editingId ? "取消" : "清空" }}</button>
-                  <button type="submit" class="btn-compact accent" :disabled="!canBan || saving">{{ editingId ? "保存修改" : "确认提交封禁" }}</button>
-                </div>
+              <div class="form-action-footer">
+                <button type="button" class="btn-compact ghost" :disabled="saving" @click="resetDraft">{{ editingId ? "取消编辑" : "清空重填" }}</button>
+                <button type="submit" class="btn-compact accent submit-btn" :disabled="!canBan || saving">
+                  {{ saving ? "正在提交..." : editingId ? "💾 保存封禁修改" : "⚡ 立即发布封禁" }}
+                </button>
               </div>
             </form>
           </div>
 
-          <!-- Tab 2: Hit Events Stage -->
+          <!-- Tab 2: Hit History -->
           <div v-else-if="rightTab === 'hits'" class="stage-body activity-stage">
             <div v-if="!recentHitEvents.length" class="empty-state">暂无玩家命中纪录</div>
             <div v-else class="activity-feed">
-              <div v-for="event in recentHitEvents" :key="event.id" class="activity-row" :data-kind="event.kind">
-                <span class="event-tag" :class="event.kind === 'kick_success' ? 'success' : 'danger'">{{ event.kind }}</span>
+              <div v-for="event in recentHitEvents" :key="event.id" class="activity-row-card" :data-kind="event.kind">
+                <span class="event-tag" :class="event.kind === 'kick_success' ? 'success' : 'danger'">
+                  {{ event.kind === 'kick_success' ? '拦截成功' : '拦截失败' }}
+                </span>
                 <strong class="act-name">{{ event.playerName || event.entryName || "未知玩家" }}</strong>
                 <span class="act-info">{{ event.matchType ? event.matchType + ": " + event.matchValue : event.reason || "未记录" }}</span>
                 <span class="act-server font-mono">{{ event.serverId || "global" }}</span>
@@ -245,11 +267,11 @@
             </div>
           </div>
 
-          <!-- Tab 3: System Logs Stage -->
+          <!-- Tab 3: System Logs -->
           <div v-else-if="rightTab === 'events'" class="stage-body activity-stage">
-            <div v-if="!recentEvents.length" class="empty-state">暂无系统事件纪录</div>
+            <div v-if="!recentEvents.length" class="empty-state">暂无系统审计事件</div>
             <div v-else class="activity-feed">
-              <div v-for="event in recentEvents" :key="event.id" class="activity-row">
+              <div v-for="event in recentEvents" :key="event.id" class="activity-row-card">
                 <span class="event-tag info">{{ event.kind }}</span>
                 <strong class="act-name">{{ event.entryName || event.playerName || event.error || "系统事件" }}</strong>
                 <span class="act-info">{{ event.reason || event.entryId || "补充信息" }}</span>
@@ -433,6 +455,10 @@ function setQuickDuration(days: number) {
   draft.durationUnit = "days";
 }
 
+function applyQuickReason(text: string) {
+  draft.reason = text;
+}
+
 function handlePlayerSelect(player: any) {
   draft.steamID = player.steam_id || player.steamID || player.steamId || "";
   draft.eosID = player.eos_id || player.eosID || player.eosId || "";
@@ -486,12 +512,12 @@ const recentEvents = computed(() => (state.value?.recentEvents ?? []).slice(0, 1
 
 const expiryPreview = computed(() => {
   if (draft.expiresAt) {
-    return { label: formatDateTimeInput(draft.expiresAt), hint: "优先使用到期时间" };
+    return { label: formatDateTimeInput(draft.expiresAt), hint: "优先使用精确到期时间" };
   }
   const ms = durationToMs(draft.durationValue, draft.durationUnit);
-  if (!ms) return { label: "未设置", hint: "填写到期时间或时长" };
+  if (!ms) return { label: "未设置", hint: "填写到期时间或选择有效时长" };
   const target = new Date(Date.now() + ms);
-  return { label: target.toLocaleString(), hint: `按 ${draft.durationValue}${durationUnitLabel(draft.durationUnit)} 换算` };
+  return { label: target.toLocaleString(), hint: `按 ${draft.durationValue}${durationUnitLabel(draft.durationUnit)} 自动计算` };
 });
 
 function formatDateTimeInput(value: string) {
@@ -642,7 +668,7 @@ function expiryLabelClass(entry: BanEntry) {
   gap: 6px;
 }
 
-/* Streamlined Command Header */
+/* Streamlined Single Command Header */
 .page-cmd-header {
   display: flex;
   align-items: center;
@@ -681,7 +707,7 @@ function expiryLabelClass(entry: BanEntry) {
 .compact-split {
   flex: 1;
   min-height: 0;
-  grid-template-columns: minmax(340px, 420px) minmax(0, 1fr) !important;
+  grid-template-columns: minmax(340px, 390px) minmax(0, 1fr) !important;
   gap: 6px;
 }
 
@@ -710,46 +736,51 @@ function expiryLabelClass(entry: BanEntry) {
 
 .panel-sub-bar { padding: 3px 6px; background: rgba(0, 0, 0, 0.2); font-size: 10px; color: var(--color-text-muted); border-bottom: 1px solid rgba(255, 255, 255, 0.03); }
 
-/* Ban Feed Items */
+/* Left Feed: Crisp 3-Row Card Items */
 .ban-feed { flex: 1; overflow-y: auto; padding: 5px; display: flex; flex-direction: column; gap: 5px; scrollbar-gutter: stable; }
 
-.ban-row-card {
-  display: flex; gap: 6px; padding: 6px 8px; border-radius: 5px; background: rgba(15, 23, 42, 0.55); border: 1px solid var(--color-border-soft); transition: all 0.12s ease;
+.ban-card-item {
+  display: flex; flex-direction: column; gap: 4px; padding: 7px 9px; border-radius: 6px;
+  background: rgba(15, 23, 42, 0.55); border: 1px solid var(--color-border-soft); cursor: pointer; transition: all 0.15s ease;
 }
 
-.ban-row-card:hover { background: rgba(255, 255, 255, 0.03); border-color: rgba(56, 189, 248, 0.3); }
-.ban-row-card.status-disabled { opacity: 0.6; }
-.ban-row-card.status-expired { border-left: 2.5px solid #f59e0b; }
+.ban-card-item:hover { background: rgba(255, 255, 255, 0.035); border-color: rgba(56, 189, 248, 0.3); }
+.ban-card-item.active { background: rgba(56, 189, 248, 0.08); border-color: #38bdf8; box-shadow: inset 3px 0 0 #38bdf8; }
+.ban-card-item.disabled { opacity: 0.6; }
+.ban-card-item.expired { border-left: 3px solid #f59e0b; }
 
-.row-main-cell { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.row-header { display: flex; align-items: center; gap: 5px; }
+.card-head { display: flex; align-items: center; gap: 5px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.status-dot.active { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.status-dot.disabled { background: #94a3b8; }
+.status-dot.expired { background: #f59e0b; }
 
-.status-badge-pill { font-size: 8.5px; font-weight: 800; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; }
-.status-badge-pill.active { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
-.status-badge-pill.disabled { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
-.status-badge-pill.expired { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.player-name { font-size: 12px; font-weight: 700; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 
-.player-name-text { font-size: 11.5px; font-weight: 700; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.status-pill-badge { font-size: 8.5px; font-weight: 700; padding: 0 4px; border-radius: 3px; text-transform: uppercase; }
+.status-pill-badge.active { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+.status-pill-badge.disabled { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+.status-pill-badge.expired { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
 
-.id-pill { padding: 1px 4px; border-radius: 3px; font-size: 8.5px; font-family: monospace; border: 1px solid rgba(255, 255, 255, 0.06); background: rgba(0, 0, 0, 0.2); color: var(--color-text-muted); cursor: pointer; }
-.id-pill.steam { color: #93c5fd; background: rgba(59, 130, 246, 0.15); }
-.id-pill.eos { color: #e9d5ff; background: rgba(168, 85, 247, 0.15); }
-
-.expiry-text { font-size: 9.5px; margin-left: auto; white-space: nowrap; }
+.expiry-badge { font-size: 9.5px; margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .text-danger { color: #f87171; }
 .text-success { color: #22c55e; }
 .text-muted { color: var(--color-text-muted); }
 
-.row-footer { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.reason-block { display: flex; align-items: center; gap: 4px; font-size: 10px; min-width: 0; flex: 1; overflow: hidden; }
-.reason-block .lbl { color: var(--color-text-muted); flex-shrink: 0; }
-.reason-block .val { color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.reason-block .by { color: var(--color-text-muted); font-size: 9px; flex-shrink: 0; }
+.card-ids { display: flex; gap: 4px; flex-wrap: wrap; }
+.id-badge { display: inline-flex; align-items: center; gap: 3px; padding: 1px 4px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.05); background: rgba(0, 0, 0, 0.25); cursor: pointer; font-size: 9px; }
+.id-badge.steam { color: #93c5fd; border-color: rgba(59, 130, 246, 0.25); background: rgba(59, 130, 246, 0.1); }
+.id-badge.eos { color: #e9d5ff; border-color: rgba(168, 85, 247, 0.25); background: rgba(168, 85, 247, 0.1); }
+.id-type { font-weight: 800; font-size: 8px; opacity: 0.8; }
+.id-val { opacity: 0.95; }
 
-.row-right-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.hit-tag { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(239, 68, 68, 0.12); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.2); }
+.card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.reason-text { font-size: 10px; color: var(--color-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; display: flex; gap: 4px; }
+.admin-by { font-style: normal; color: var(--color-text-muted); font-size: 9px; flex-shrink: 0; }
 
-.quick-actions { display: flex; gap: 2px; }
+.foot-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; margin-left: auto; }
+.hit-count-pill { font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 3px; background: rgba(239, 68, 68, 0.15); color: #fecaca; border: 1px solid rgba(239, 68, 68, 0.25); }
+
 .btn-action-icon { width: 20px; height: 20px; border-radius: 3px; border: 0; background: transparent; font-size: 10.5px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--color-text-secondary); }
 .btn-action-icon:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .btn-action-icon.danger:hover { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
@@ -764,37 +795,51 @@ function expiryLabelClass(entry: BanEntry) {
 
 .stage-body { flex: 1; min-height: 0; overflow: auto; padding: 10px; }
 
-/* Ban Form Styling */
-.ban-form { display: flex; flex-direction: column; gap: 10px; }
-.ban-form.disabled { opacity: 0.6; pointer-events: none; }
-.form-row { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.2fr); gap: 10px; }
-.field { display: flex; flex-direction: column; gap: 4px; }
-.f-lbl { font-size: 10px; font-weight: 700; color: var(--color-text-muted); }
-.identity-box { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px dashed rgba(56, 189, 248, 0.3); border-radius: 4px; background: rgba(56, 189, 248, 0.05); font-size: 10.5px; }
+/* Form Stage Box */
+.ban-form-box { display: flex; flex-direction: column; gap: 12px; max-width: 780px; }
+.ban-form-box.disabled { opacity: 0.5; pointer-events: none; }
 
-.f-textarea { width: 100%; height: 58px; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(15, 23, 42, 0.9); color: var(--color-text-primary); font-size: 11px; resize: vertical; }
+.form-header-bar { display: flex; align-items: center; justify-content: space-between; padding-bottom: 6px; border-bottom: 1px solid var(--color-border-soft); }
+.form-title { font-size: 13px; font-weight: 800; color: var(--color-text-primary); margin: 0; }
+.perm-tag { font-size: 10px; color: #f87171; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 3px; }
 
-.form-options-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding-top: 8px; border-top: 1px solid var(--color-border-soft); }
-.opt-col { display: flex; flex-direction: column; gap: 4px; }
-.preset-btns { display: flex; gap: 3px; }
-.btn-preset { height: 26px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(255, 255, 255, 0.03); color: var(--color-text-secondary); font-size: 10px; cursor: pointer; flex: 1; }
-.btn-preset:hover { border-color: #38bdf8; color: #38bdf8; }
+.form-section { display: flex; flex-direction: column; gap: 8px; background: rgba(255, 255, 255, 0.015); border: 1px solid var(--color-border-soft); border-radius: 6px; padding: 8px 10px; }
+.form-section.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-.inline-inputs { display: grid; grid-template-columns: 60px 1fr; gap: 4px; }
+.f-group { display: flex; flex-direction: column; gap: 4px; }
+.f-label-row { display: flex; align-items: center; justify-content: space-between; }
+.f-label { font-size: 10px; font-weight: 700; color: var(--color-text-muted); }
+
+.quick-reason-tags { display: flex; gap: 3px; }
+.btn-reason-tag { padding: 1px 4px; border-radius: 3px; border: 1px solid var(--color-border-soft); background: rgba(255, 255, 255, 0.03); color: #38bdf8; font-size: 9.5px; cursor: pointer; }
+.btn-reason-tag:hover { background: rgba(56, 189, 248, 0.15); }
+
+.identity-card { display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 4px; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); font-size: 10px; }
+.id-item { color: var(--color-text-secondary); }
+.id-item.name strong { color: #38bdf8; }
+
+.f-textarea { width: 100%; height: 50px; padding: 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(15, 23, 42, 0.9); color: var(--color-text-primary); font-size: 11px; resize: vertical; }
+
+.preset-row { display: flex; gap: 4px; }
+.btn-duration-preset { height: 26px; flex: 1; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(255, 255, 255, 0.03); color: var(--color-text-secondary); font-size: 10.5px; font-weight: 600; cursor: pointer; }
+.btn-duration-preset:hover { border-color: #38bdf8; color: #38bdf8; }
+.btn-duration-preset.active { background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #38bdf8; }
+
+.custom-duration-row { display: grid; grid-template-columns: 80px 1fr; gap: 4px; }
 .f-input, .f-select { height: 26px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--color-border-soft); background: rgba(15, 23, 42, 0.9); color: var(--color-text-primary); font-size: 11px; }
 
-.expiry-preview-banner { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 4px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--color-border-soft); font-size: 10.5px; color: var(--color-text-secondary); }
-.expiry-preview-banner strong { color: #38bdf8; }
-.expiry-preview-banner small { color: var(--color-text-muted); font-size: 9.5px; }
+.expiry-summary-card { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--color-border-soft); font-size: 11px; }
+.sum-left { display: flex; gap: 6px; align-items: center; }
+.sum-lbl { color: var(--color-text-muted); }
+.sum-val { color: #38bdf8; font-weight: 700; }
+.sum-hint { color: var(--color-text-muted); font-size: 10px; }
 
-.form-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 8px; border-top: 1px solid var(--color-border-soft); }
-.hint-text { font-size: 10px; color: var(--color-text-muted); }
-.perm-warning { font-size: 10px; color: #f87171; }
-.foot-btns { display: flex; gap: 6px; }
+.form-action-footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+.submit-btn { height: 28px; padding: 0 12px; }
 
 /* Activity Stream */
 .activity-feed { display: flex; flex-direction: column; gap: 4px; }
-.activity-row { display: grid; grid-template-columns: 90px minmax(120px, 1fr) minmax(160px, 1.2fr) 90px 120px; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--color-border-soft); font-size: 10.5px; }
+.activity-row-card { display: grid; grid-template-columns: 90px minmax(120px, 1fr) minmax(160px, 1.2fr) 90px 120px; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--color-border-soft); font-size: 10.5px; }
 .event-tag { font-size: 9px; font-weight: 800; padding: 1px 4px; border-radius: 3px; text-transform: uppercase; text-align: center; }
 .event-tag.success { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
 .event-tag.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
@@ -815,6 +860,6 @@ function expiryLabelClass(entry: BanEntry) {
 
 @media (max-width: 1000px) {
   .compact-split { grid-template-columns: 1fr !important; }
-  .form-row, .form-options-grid { grid-template-columns: 1fr; }
+  .form-section.grid-2 { grid-template-columns: 1fr; }
 }
 </style>
