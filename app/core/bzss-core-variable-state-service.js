@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveSquadServerPath } from "./squad-server-path.js";
 import { execFile } from "node:child_process";
 
 export const BZSS_CORE_BOOL_KEYS = [
@@ -44,7 +45,7 @@ export class BzssCoreVariableStateService {
           ? configuredScriptPath
           : path.resolve(process.cwd(), configuredScriptPath))
         : "",
-      saveGamePath,
+      saveGamePath: resolveSquadServerPath(saveGamePath),
       desiredStatePath: path.isAbsolute(desiredStatePath)
         ? desiredStatePath
         : path.resolve(process.cwd(), desiredStatePath),
