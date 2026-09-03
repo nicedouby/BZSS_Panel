@@ -4,7 +4,7 @@
   "source": {
     "type": "xlsx",
     "fileName": "载具队队名规范.xlsx",
-    "path": "D:\\BZSS_Panel\\support\\reference-data\\载具队队名规范.xlsx",
+    "path": "./support/reference-data/载具队队名规范.xlsx",
     "sheetName": "Sheet1"
   },
   "migrationWarnings": [
