@@ -17,6 +17,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
+import { apiPost } from "../../app/apiClient";
 import { t } from "../../i18n";
 import { hasPermission } from "../../shared/rcon-permissions.js";
 import { useAuthStore } from "../../stores/auth.store";
@@ -103,6 +104,7 @@ async function cleanWarzone() {
 }
 
 function stopCleanWarzoneLoop() {
+  void apiPost("/api/bzss-core/clean-warzone-loop", { enabled: false }).catch(() => {});
   if (loopTimer) {
     clearTimeout(loopTimer);
     loopTimer = null;
@@ -124,7 +126,9 @@ async function startCleanWarzoneLoop() {
   if (!warmupState.value || loopEnabled.value) return;
 
   loopEnabled.value = true;
-  await executeCleanWarzone(true);
+  const result = await apiPost<any>("/api/bzss-core/clean-warzone-loop", { enabled: true });
+  if (!result?.enabled) { loopEnabled.value = false; return; }
+  return;
 
   if (!loopEnabled.value || !warmupState.value) {
     stopCleanWarzoneLoop();
