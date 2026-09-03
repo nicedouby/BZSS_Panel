@@ -49,7 +49,7 @@
     "enabled": true,
     "pythonBin": "python",
     "script": "log_event_bridge.py",
-    "logPath": "Z:\\SquadGame.log",
+    "logPath": "./SquadGame/Saved/Logs/SquadGame.log",
     "catalogPath": "core/log_event_catalog.json",
     "targetHost": "127.0.0.1",
     "targetPort": 31001,
