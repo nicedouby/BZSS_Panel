@@ -113,6 +113,7 @@ export class WebServer {
     this.maxMemoryHistoryPoints = 120;
     this.memoryInterval = null;
     this.initialMatchHydration = null;
+    this.cleanWarzoneLoop = { enabled: false, timer: null, running: false, lastResult: null };
   }
 
   async start() {
@@ -266,6 +267,7 @@ export class WebServer {
   }
 
   async stop() {
+    this.stopCleanWarzoneLoop();
     if (this.memoryInterval) {
       clearInterval(this.memoryInterval);
       this.memoryInterval = null;
@@ -311,6 +313,29 @@ export class WebServer {
 
     await new Promise((resolve) => this.server.close(resolve));
     this.server = null;
+  }
+
+  stopCleanWarzoneLoop() {
+    const loop = this.cleanWarzoneLoop;
+    loop.enabled = false;
+    if (loop.timer) clearTimeout(loop.timer);
+    loop.timer = null;
+  }
+
+  scheduleCleanWarzoneLoop() {
+    const loop = this.cleanWarzoneLoop;
+    if (!loop.enabled) return;
+    loop.timer = setTimeout(async () => {
+      loop.timer = null;
+      if (loop.enabled && !loop.running) {
+        loop.running = true;
+        try {
+          loop.lastResult = await this.bzssCoreCommandService.execute({ command: "CleanWarzone:1", raw: true, source: "clean-warzone-loop" });
+          if (!loop.lastResult.ok) this.logger.warn?.(`[Clean Warzone] timed cleanup failed: ${loop.lastResult.message ?? loop.lastResult.error}`);
+        } finally { loop.running = false; }
+      }
+      this.scheduleCleanWarzoneLoop();
+    }, 180000);
   }
 
   async handleRequest(req, res) {
@@ -2383,6 +2408,28 @@ export class WebServer {
       } catch (error) {
         return this.json(res, 400, { error: "BzssCoreVariableWriteFailed", message: error?.message ?? String(error) });
       }
+    }
+
+    if (url.pathname === "/api/bzss-core/clean-warzone-loop" && req.method === "GET") {
+      const user = this.core.authManager?.getUserFromRequest(req);
+      if (!this.canUseBzssCoreTool(user)) return this.json(res, 403, { error: "Forbidden" });
+      const loop = this.cleanWarzoneLoop;
+      return this.json(res, 200, { ok: true, enabled: loop.enabled, running: loop.running, lastResult: loop.lastResult });
+    }
+    if (url.pathname === "/api/bzss-core/clean-warzone-loop" && req.method === "POST") {
+      const user = this.core.authManager?.getUserFromRequest(req);
+      if (!this.canUseBzssCoreTool(user)) return this.json(res, 403, { error: "Forbidden" });
+      const body = await this.readJsonBody(req);
+      if (body?.enabled) {
+        if (!this.cleanWarzoneLoop.enabled) {
+          this.cleanWarzoneLoop.enabled = true;
+          this.cleanWarzoneLoop.running = true;
+          try { this.cleanWarzoneLoop.lastResult = await this.bzssCoreCommandService.execute({ command: "CleanWarzone:1", raw: true, source: "clean-warzone-loop" }); }
+          finally { this.cleanWarzoneLoop.running = false; }
+          this.scheduleCleanWarzoneLoop();
+        }
+      } else this.stopCleanWarzoneLoop();
+      return this.json(res, 200, { ok: true, enabled: this.cleanWarzoneLoop.enabled, lastResult: this.cleanWarzoneLoop.lastResult });
     }
 
     if (url.pathname === "/api/bzss-core/execute" && req.method === "POST") {
