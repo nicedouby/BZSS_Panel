@@ -7,6 +7,7 @@ import { Worker } from "node:worker_threads";
 import { ReplayKillStore } from "./replay-store.js";
 import { normalizeLiveCombat, normalizeLiveKill } from "./kill-record-normalizer.js";
 import { dedupeKillRecords } from "./kill-record-dedupe.js";
+import { resolveSquadServerPath } from "../../core/squad-server-path.js";
 
 const MODULE_ID = "module.killRecords";
 const WORKER_PATH = new URL("../../workers/kill-replay-worker.js", import.meta.url);
@@ -367,7 +368,7 @@ function normalizeCombatType(value) {
 }
 
 async function resolveSourcePath(moduleConfig) {
-  if (String(moduleConfig.sourcePath ?? "").trim()) return path.resolve(String(moduleConfig.sourcePath));
+  if (String(moduleConfig.sourcePath ?? "").trim()) return resolveSquadServerPath(moduleConfig.sourcePath);
   const candidates = [
     path.resolve(moduleConfig.logPostConfigPath ?? "./LogPost/config.json"),
     path.resolve("./LogPost/config.example.json"),
@@ -375,7 +376,7 @@ async function resolveSourcePath(moduleConfig) {
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(await fs.readFile(candidate, "utf8"));
-      if (String(parsed.log_file ?? "").trim()) return path.resolve(String(parsed.log_file));
+      if (String(parsed.log_file ?? "").trim()) return resolveSquadServerPath(parsed.log_file);
     } catch {}
   }
   return "";
