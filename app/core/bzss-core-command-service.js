@@ -99,7 +99,7 @@ export class BzssCoreCommandService {
         directive: command.directive,
         source,
         scriptPath: resolvedScriptPath,
-        remoteSaveGamePath: saveGamePath,
+        remoteSaveGamePath: resolvedSaveGamePath,
         stdout: String(error?.stdout ?? ""),
         stderr: String(error?.stderr ?? ""),
         exitCode: error?.code ?? null,
