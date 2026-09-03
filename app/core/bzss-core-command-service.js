@@ -2,6 +2,7 @@
 
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { resolveSquadServerPath } from "./squad-server-path.js";
 
 const ALLOWED_DIRECTIVES = new Set([
   "SetTime",
@@ -60,11 +61,12 @@ export class BzssCoreCommandService {
     if (!command.ok) return { ...command, source };
 
     const resolvedScriptPath = path.isAbsolute(scriptPath) ? scriptPath : path.resolve(process.cwd(), scriptPath);
+    const resolvedSaveGamePath = resolveSquadServerPath(saveGamePath);
     const startedAt = Date.now();
     try {
       const output = await this.executor("python", [
         resolvedScriptPath,
-        saveGamePath,
+        resolvedSaveGamePath,
         ...(Array.isArray(command.command) ? command.command : [command.command]),
       ], {
         cwd: path.dirname(resolvedScriptPath),
@@ -78,7 +80,7 @@ export class BzssCoreCommandService {
         directive: command.directive,
         source,
         scriptPath: resolvedScriptPath,
-        remoteSaveGamePath: saveGamePath,
+        remoteSaveGamePath: resolvedSaveGamePath,
         stdout: output.stdout,
         stderr: output.stderr,
         durationMs: Date.now() - startedAt,
