@@ -45,8 +45,9 @@
           </div>
           <div class="item-meta">
             <span>{{ t("database.lastActive") }} {{ formatTime(player.updated_at ?? player.updatedAt) }}</span>
-            <span v-if="Number(player.total_matches ?? player.totalMatches ?? 0) > 0">
-              {{ formatNumber(player.total_matches ?? player.totalMatches) }} {{ t("database.matches") }}
+            <span v-if="careerMatches(player) > 0">
+              {{ formatNumber(careerMatches(player)) }} {{ t("database.matches") }} ·
+              {{ formatNumber(careerWins(player)) }} 胜 · K/D {{ careerKd(player) }}
             </span>
           </div>
         </div>
@@ -89,6 +90,20 @@ function formatDuration(value: unknown) {
 
 function formatNumber(value: unknown) {
   return new Intl.NumberFormat(currentLocale.value).format(Number(value ?? 0));
+}
+
+function careerMatches(player: any) {
+  return Math.max(0, Number(player?.career?.matches ?? player?.career_matches ?? player?.total_matches ?? player?.totalMatches ?? 0));
+}
+
+function careerWins(player: any) {
+  return Math.max(0, Number(player?.career?.wins ?? player?.career_wins ?? player?.total_match_wins ?? player?.totalMatchWins ?? 0));
+}
+
+function careerKd(player: any) {
+  const kills = Math.max(0, Number(player?.career?.kills ?? player?.career_kills ?? 0));
+  const deaths = Math.max(0, Number(player?.career?.deaths ?? player?.career_deaths ?? 0));
+  return (deaths > 0 ? kills / deaths : kills).toFixed(2);
 }
 </script>
 

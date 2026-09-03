@@ -58,6 +58,10 @@ export function createPlugin({ core, modules, logger } = {}) {
       modules,
     });
     payload.roundKey = buildRoundKey(payload);
+    payload.source = {
+      ...objectValue(payload.source),
+      automatic: options?.automatic === true,
+    };
     const id = buildSnapshotId(payload);
     const coverage = payload.summary?.fireTeamCounts ?? {};
     pluginLogger.info?.("[MatchEndSnapshot] fireteam coverage: A=" + (coverage.A ?? 0)
@@ -112,6 +116,8 @@ export function createPlugin({ core, modules, logger } = {}) {
           pages: bundle.manifest?.pages ?? [],
           generatedAt: bundle.manifest?.generatedAt ?? new Date().toISOString(),
         };
+        await settleCareerSnapshot(payload, id);
+        await writeJsonAtomic(path.join(resolveSnapshotDir(), id + ".json"), payload);
         core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
           eventName: "match.snapshot.ready",
           snapshotId: id,
@@ -227,7 +233,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       await delay(AUTO_SETTLE_MS);
       const settledOverview = getCurrentOverview();
       const overview = chooseOverview(initialOverview, settledOverview);
-      const item = await captureSnapshot(triggerEvent, { overview });
+      const item = await captureSnapshot(triggerEvent, { overview, automatic: true });
       if (item) lastAutomaticCaptureAt = Date.now();
       return item;
     })().finally(() => {
@@ -254,6 +260,7 @@ export function createPlugin({ core, modules, logger } = {}) {
         manifest: task.result?.manifest ?? safeId + "-manifest.json",
         pages: Array.isArray(task.result?.pages) ? task.result.pages : [],
       };
+      await settleCareerSnapshot(payload, safeId);
       await writeJsonAtomic(snapshotPath, payload);
       core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
           eventName: "match.snapshot.ready",
@@ -267,6 +274,45 @@ export function createPlugin({ core, modules, logger } = {}) {
       });
     } catch (error) {
       pluginLogger.error?.("[MatchEndSnapshot] failed to finalize task " + task.id + ": " + (error?.stack || error));
+    }
+  }
+
+  async function settleCareerSnapshot(payload, snapshotId) {
+    if (payload?.source?.automatic !== true) return null;
+    const databaseApi = modules?.playerDatabase?.api ?? modules?.playerDatabase;
+    if (typeof databaseApi?.settleMatchSnapshot !== "function") {
+      pluginLogger.warn?.("[MatchEndSnapshot] player career settlement is unavailable.");
+      return null;
+    }
+
+    try {
+      const result = await databaseApi.settleMatchSnapshot(payload, { snapshotId });
+      payload.careerSettlement = {
+        status: result?.settled === false ? "duplicate" : "settled",
+        roundKey: result?.roundKey ?? payload?.roundKey ?? null,
+        snapshotId: result?.snapshotId ?? snapshotId,
+        matchId: result?.matchId ?? null,
+        playerCount: Number(result?.playerCount ?? 0),
+        skippedPlayerCount: Number(result?.skippedPlayerCount ?? 0),
+        settledAt: Number(result?.settledAt ?? Date.now()),
+      };
+      pluginLogger.info?.(
+        "[MatchEndSnapshot] career " + payload.careerSettlement.status +
+        " round=" + payload.careerSettlement.roundKey +
+        " players=" + payload.careerSettlement.playerCount +
+        " skipped=" + payload.careerSettlement.skippedPlayerCount,
+      );
+      return result;
+    } catch (error) {
+      payload.careerSettlement = {
+        status: "failed",
+        roundKey: payload?.roundKey ?? payload?.source?.roundKey ?? null,
+        snapshotId,
+        error: String(error?.message ?? error),
+        failedAt: Date.now(),
+      };
+      pluginLogger.error?.("[MatchEndSnapshot] career settlement failed: " + (error?.stack || error));
+      return null;
     }
   }
 
@@ -562,7 +608,7 @@ export function createPlugin({ core, modules, logger } = {}) {
       id: PLUGIN_ID,
       name: "对局结束数据快照",
       kind: "plugin",
-      version: "1.2.0",
+      version: "1.3.0",
       description: "Persist versioned match-end data and generate fixed 1600x900 cover and paged team scoreboard images.",
     },
     apiName: "matchEndSnapshot",

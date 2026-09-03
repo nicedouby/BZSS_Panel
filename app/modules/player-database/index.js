@@ -102,6 +102,17 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           assets: parseAssets(p.assets ?? p.assets_json ?? p.assetsJson),
           warmupPoints: warmupPointsFromPlayer(p),
           blackEdgeSwitchCount: blackEdgeSwitchCountFromPlayer(p),
+          career: {
+            matches: Number(p.career_matches ?? p.total_matches ?? 0),
+            wins: Number(p.career_wins ?? p.total_match_wins ?? 0),
+            kills: Number(p.career_kills ?? 0),
+            deaths: Number(p.career_deaths ?? 0),
+            downs: Number(p.career_downs ?? 0),
+            wounds: Number(p.career_wounds ?? 0),
+            teamKills: Number(p.career_team_kills ?? 0),
+            vehicleKills: Number(p.career_vehicle_kills ?? 0),
+            revives: Number(p.career_revives ?? 0),
+          },
         })),
         players: players.map((p) => ({
           id: p.id,
@@ -127,6 +138,19 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
           assets: parseAssets(p.assets ?? p.assets_json ?? p.assetsJson),
           warmupPoints: warmupPointsFromPlayer(p),
           blackEdgeSwitchCount: blackEdgeSwitchCountFromPlayer(p),
+          totalMatches: Number(p.total_matches ?? 0),
+          totalMatchWins: Number(p.total_match_wins ?? 0),
+          career: {
+            matches: Number(p.career_matches ?? p.total_matches ?? 0),
+            wins: Number(p.career_wins ?? p.total_match_wins ?? 0),
+            kills: Number(p.career_kills ?? 0),
+            deaths: Number(p.career_deaths ?? 0),
+            downs: Number(p.career_downs ?? 0),
+            wounds: Number(p.career_wounds ?? 0),
+            teamKills: Number(p.career_team_kills ?? 0),
+            vehicleKills: Number(p.career_vehicle_kills ?? 0),
+            revives: Number(p.career_revives ?? 0),
+          },
           suicides: Number(p.total_suicides ?? 0),
           updatedAt: Number(p.updated_at ?? 0) || null,
           steamAvatar: p.steam_avatar ?? null,
@@ -141,6 +165,10 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
 
     async getPlayerDetail(playerId) {
       return repo.getPlayerDetail(playerId);
+    },
+
+    async settleMatchSnapshot(payload = {}, options = {}) {
+      return repo.settleMatchSnapshot(payload, options);
     },
 
     async listPlayerAliases(playerId, options = {}) {
@@ -328,7 +356,7 @@ export function createPlayerDatabaseModule({ core, modules, config }) {
   };
 
   return {
-    manifest: { id: "module.playerDatabase", name: "Player Database Module", kind: "module", version: "0.2.0", description: "玩家持久化数据库模块。只提供数据读写接口，不主动监听事件。" },
+    manifest: { id: "module.playerDatabase", name: "Player Database Module", kind: "module", version: "0.3.0", description: "玩家持久化数据库模块。只提供数据读写接口，不主动监听事件。" },
     apiName: "playerDatabase",
     api,
 

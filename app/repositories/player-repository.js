@@ -107,6 +107,45 @@ function mapPlayerPlaytimeRow(row) {
   };
 }
 
+function normalizeCareerInteger(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.floor(numeric));
+}
+
+function mapCareerStats(row = {}) {
+  const matches = normalizeCareerInteger(row.matches ?? row.career_matches ?? row.total_matches);
+  const wins = normalizeCareerInteger(row.wins ?? row.career_wins ?? row.total_match_wins);
+  const kills = normalizeCareerInteger(row.kills ?? row.career_kills);
+  const deaths = normalizeCareerInteger(row.deaths ?? row.career_deaths);
+  return {
+    matches,
+    wins,
+    kills,
+    deaths,
+    downs: normalizeCareerInteger(row.downs ?? row.career_downs),
+    wounds: normalizeCareerInteger(row.wounds ?? row.career_wounds),
+    teamKills: normalizeCareerInteger(row.team_kills ?? row.career_team_kills),
+    vehicleKills: normalizeCareerInteger(row.vehicle_kills ?? row.career_vehicle_kills),
+    revives: normalizeCareerInteger(row.revives ?? row.career_revives),
+    healPoints: normalizeCareerInteger(row.heal_points ?? row.career_heal_points),
+    combatScore: normalizeCareerInteger(row.combat_score ?? row.career_combat_score),
+    objectiveScore: normalizeCareerInteger(row.objective_score ?? row.career_objective_score),
+    teamworkScore: normalizeCareerInteger(row.teamwork_score ?? row.career_teamwork_score),
+    winRate: matches > 0 ? wins / matches : 0,
+    kd: deaths > 0 ? kills / deaths : kills,
+    updatedAt: normalizeCareerInteger(row.updated_at ?? row.career_updated_at),
+  };
+}
+
+function normalizeWinnerTeam(value) {
+  if (value == null) return null;
+  const numeric = Number(value);
+  if (numeric === 1 || numeric === 2) return numeric;
+  const match = String(value).trim().match(/(?:team\s*)?([12])\b/i);
+  return match ? Number(match[1]) : null;
+}
+
 function normalizeSearchTerms(query) {
   return String(query ?? "")
     .trim()
@@ -198,7 +237,7 @@ export class PlayerRepository {
     for (const row of rows) this.cache(normalizeSteamAvatarFields(row));
   }
 
-  async findByIdentity({ name, steamID, eosID, qqNumber }) {
+  async findByIdentity({ name, steamID, eosID, qqNumber, allowNameFallback = true }) {
     const steam = cleanId(steamID);
     const eos = cleanId(eosID);
     const playerName = cleanText(name);
@@ -212,7 +251,7 @@ export class PlayerRepository {
       const row = await this.db.get("SELECT * FROM players WHERE steam_id = ?", steam);
       if (row) return row;
     }
-    if (playerName) {
+    if (playerName && allowNameFallback) {
       const row = await this.db.get("SELECT * FROM players WHERE current_name = ? ORDER BY updated_at DESC LIMIT 1", playerName);
       if (row) return row;
 
@@ -235,7 +274,7 @@ export class PlayerRepository {
     return null;
   }
 
-  async upsertFromPresence({ name, steamID, eosID, ip, qqNumber, qqName } = {}) {
+  async upsertFromPresence({ name, steamID, eosID, ip, qqNumber, qqName } = {}, options = {}) {
     const ts = now();
     const playerName = cleanText(name);
     const steam = cleanId(steamID);
@@ -243,7 +282,7 @@ export class PlayerRepository {
     const currentIp = cleanText(ip);
     const qq = cleanText(qqNumber);
     const qqDisplayName = cleanText(qqName);
-    let existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq });
+    let existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq, allowNameFallback: options.allowNameFallback !== false });
 
     if (!existing) {
       try {
@@ -267,7 +306,7 @@ export class PlayerRepository {
         return created;
       } catch (error) {
         if (!isPlayerIdentityConflict(error)) throw error;
-        existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq });
+        existing = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq, allowNameFallback: options.allowNameFallback !== false });
         if (!existing) throw error;
       }
     }
@@ -299,7 +338,7 @@ export class PlayerRepository {
       );
     } catch (error) {
       if (!isPlayerIdentityConflict(error)) throw error;
-      const conflicted = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq });
+      const conflicted = await this.findByIdentity({ name: playerName, steamID: steam, eosID: eos, qqNumber: qq, allowNameFallback: options.allowNameFallback !== false });
       if (!conflicted) throw error;
       existing = conflicted;
     }
@@ -531,8 +570,17 @@ export class PlayerRepository {
               players.permission_group, players.steam_game_seconds, players.game_seconds,
               players.game_seconds_override, players.server_seconds,
               players.commander_seconds, players.squad_leader_seconds, players.in_squad_seconds, players.warmup_seconds,
-              players.assets_json, players.steam_avatar, players.updated_at
+              players.assets_json, players.steam_avatar, players.updated_at,
+              players.total_matches, players.total_match_wins,
+              career.matches AS career_matches, career.wins AS career_wins,
+              career.kills AS career_kills, career.deaths AS career_deaths,
+              career.downs AS career_downs, career.wounds AS career_wounds,
+              career.team_kills AS career_team_kills, career.vehicle_kills AS career_vehicle_kills,
+              career.revives AS career_revives, career.heal_points AS career_heal_points,
+              career.combat_score AS career_combat_score, career.objective_score AS career_objective_score,
+              career.teamwork_score AS career_teamwork_score, career.updated_at AS career_updated_at
        FROM players
+       LEFT JOIN player_career_stats career ON career.player_id = players.id
        WHERE ${search.where}
        ORDER BY ${orderBy}
        LIMIT ? OFFSET ?`,
@@ -1080,6 +1128,266 @@ export class PlayerRepository {
     );
   }
 
+  async getPlayerCareerStats(playerId) {
+    const id = Number(playerId);
+    if (!Number.isFinite(id)) return mapCareerStats();
+    const row = await this.db.get(
+      `SELECT career.*,
+              players.total_matches AS total_matches,
+              players.total_match_wins AS total_match_wins
+       FROM players
+       LEFT JOIN player_career_stats career ON career.player_id = players.id
+       WHERE players.id = ?`,
+      id,
+    );
+    return row ? mapCareerStats(row) : null;
+  }
+
+  async settleMatchSnapshot(payload = {}, options = {}) {
+    const roundKey = cleanText(options.roundKey ?? payload?.roundKey ?? payload?.source?.roundKey);
+    if (!roundKey) {
+      const error = new Error("A stable roundKey is required to settle career statistics.");
+      error.code = "RoundKeyRequired";
+      throw error;
+    }
+
+    const snapshotId = cleanText(options.snapshotId ?? payload?.snapshotId);
+    const winnerTeam = normalizeWinnerTeam(payload?.trigger?.winner ?? payload?.winner);
+    const endedAtParsed = Date.parse(String(payload?.capturedAt ?? ""));
+    const endedAt = Number.isFinite(endedAtParsed) ? endedAtParsed : now();
+    const playtimeSeconds = normalizeCareerInteger(payload?.match?.playtime);
+    const startedAt = Math.max(0, endedAt - playtimeSeconds * 1000);
+    const rawPlayers = Array.isArray(payload?.players) ? payload.players : [];
+    const recordsByPlayerId = new Map();
+    let skippedPlayerCount = 0;
+
+    for (const snapshotPlayer of rawPlayers) {
+      const steamID = cleanId(snapshotPlayer?.steamID ?? snapshotPlayer?.steam_id);
+      const eosID = cleanId(snapshotPlayer?.eosID ?? snapshotPlayer?.eos_id);
+      if (!steamID && !eosID) {
+        skippedPlayerCount += 1;
+        continue;
+      }
+
+      const player = await this.upsertFromPresence({
+        name: cleanText(snapshotPlayer?.name ?? snapshotPlayer?.current_name),
+        steamID,
+        eosID,
+      }, { allowNameFallback: false });
+      if (!player?.id) {
+        skippedPlayerCount += 1;
+        continue;
+      }
+
+      const scoreboard = snapshotPlayer?.bzssCore && typeof snapshotPlayer.bzssCore === "object"
+        ? snapshotPlayer.bzssCore
+        : snapshotPlayer?.combat && typeof snapshotPlayer.combat === "object"
+          ? snapshotPlayer.combat
+          : {};
+      const scoreboardAvailable = snapshotPlayer?.bzssCore?.available === true
+        || snapshotPlayer?.scoreboardAvailable === true
+        || snapshotPlayer?.scoreboard_available === true;
+      const teamId = Number(snapshotPlayer?.teamID ?? snapshotPlayer?.team_id);
+      const record = {
+        playerId: Number(player.id),
+        teamId: Number.isFinite(teamId) ? Math.floor(teamId) : null,
+        wasSquadLead: snapshotPlayer?.isLeader === true || snapshotPlayer?.wasSquadLead === true ? 1 : 0,
+        wasCommander: snapshotPlayer?.isCommander === true || snapshotPlayer?.wasCommander === true ? 1 : 0,
+        won: winnerTeam != null && Number.isFinite(teamId) && Math.floor(teamId) === winnerTeam ? 1 : 0,
+        scoreboardAvailable: scoreboardAvailable ? 1 : 0,
+        kills: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.kills ?? scoreboard?.numKills) : 0,
+        deaths: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.deaths ?? scoreboard?.numDeaths) : 0,
+        downs: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.downs ?? scoreboard?.woundeds ?? scoreboard?.numWoundeds) : 0,
+        wounds: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.wounds ?? scoreboard?.numWounds) : 0,
+        teamKills: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.teamKills ?? scoreboard?.numTeamKills) : 0,
+        vehicleKills: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.vehicleKills) : 0,
+        revives: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.revives ?? scoreboard?.revivedPoints) : 0,
+        healPoints: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.healPoints) : 0,
+        combatScore: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.combatScore) : 0,
+        objectiveScore: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.objectiveScore) : 0,
+        teamworkScore: scoreboardAvailable ? normalizeCareerInteger(scoreboard?.teamworkScore) : 0,
+      };
+
+      const previous = recordsByPlayerId.get(record.playerId);
+      if (!previous || (!previous.scoreboardAvailable && record.scoreboardAvailable)) {
+        recordsByPlayerId.set(record.playerId, record);
+      }
+    }
+
+    const records = [...recordsByPlayerId.values()];
+    const settledAt = now();
+    await this.db.exec("BEGIN IMMEDIATE;");
+    try {
+      const duplicate = await this.db.get(
+        `SELECT round_key, snapshot_id, match_id, player_count, skipped_player_count, settled_at
+         FROM match_career_settlements
+         WHERE round_key = ? OR (? IS NOT NULL AND snapshot_id = ?)
+         LIMIT 1`,
+        roundKey,
+        snapshotId,
+        snapshotId,
+      );
+      if (duplicate) {
+        await this.db.exec("COMMIT;");
+        return {
+          ok: true,
+          settled: false,
+          duplicate: true,
+          roundKey: duplicate.round_key,
+          snapshotId: duplicate.snapshot_id,
+          matchId: duplicate.match_id,
+          playerCount: Number(duplicate.player_count ?? 0),
+          skippedPlayerCount: Number(duplicate.skipped_player_count ?? 0),
+          settledAt: Number(duplicate.settled_at ?? 0),
+        };
+      }
+
+      await this.db.run(
+        `INSERT INTO match_career_settlements
+           (round_key, snapshot_id, match_id, player_count, skipped_player_count, settled_at)
+         VALUES (?, ?, NULL, ?, ?, ?)`,
+        roundKey,
+        snapshotId,
+        records.length,
+        skippedPlayerCount,
+        settledAt,
+      );
+
+      const matchResult = await this.db.run(
+        `INSERT INTO match_records
+           (round_key, snapshot_id, server_id, map_name, layer_name, mode, started_at, ended_at, winner_team, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        roundKey,
+        snapshotId,
+        cleanText(payload?.server?.serverId),
+        cleanText(payload?.match?.map),
+        cleanText(payload?.match?.layer),
+        cleanText(payload?.match?.mode),
+        startedAt,
+        endedAt,
+        winnerTeam,
+        "match-end-snapshot",
+      );
+      const matchId = Number(matchResult.lastID);
+
+      await this.db.run(
+        "UPDATE match_career_settlements SET match_id = ? WHERE round_key = ?",
+        matchId,
+        roundKey,
+      );
+
+      for (const record of records) {
+        await this.db.run(
+          `INSERT INTO player_match_records (
+             match_id, player_id, team_id, was_squad_lead, was_commander, won,
+             scoreboard_available, kills, deaths, downs, wounds, team_kills,
+             vehicle_kills, revives, heal_points, combat_score, objective_score,
+             teamwork_score, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          matchId,
+          record.playerId,
+          record.teamId,
+          record.wasSquadLead,
+          record.wasCommander,
+          record.won,
+          record.scoreboardAvailable,
+          record.kills,
+          record.deaths,
+          record.downs,
+          record.wounds,
+          record.teamKills,
+          record.vehicleKills,
+          record.revives,
+          record.healPoints,
+          record.combatScore,
+          record.objectiveScore,
+          record.teamworkScore,
+          settledAt,
+        );
+
+        await this.db.run(
+          `INSERT OR IGNORE INTO player_career_stats
+             (player_id, matches, wins, updated_at)
+           SELECT id, total_matches, total_match_wins, ?
+           FROM players
+           WHERE id = ?`,
+          settledAt,
+          record.playerId,
+        );
+        await this.db.run(
+          `UPDATE player_career_stats
+           SET matches = matches + 1,
+               wins = wins + ?,
+               kills = kills + ?,
+               deaths = deaths + ?,
+               downs = downs + ?,
+               wounds = wounds + ?,
+               team_kills = team_kills + ?,
+               vehicle_kills = vehicle_kills + ?,
+               revives = revives + ?,
+               heal_points = heal_points + ?,
+               combat_score = combat_score + ?,
+               objective_score = objective_score + ?,
+               teamwork_score = teamwork_score + ?,
+               updated_at = ?
+           WHERE player_id = ?`,
+          record.won,
+          record.kills,
+          record.deaths,
+          record.downs,
+          record.wounds,
+          record.teamKills,
+          record.vehicleKills,
+          record.revives,
+          record.healPoints,
+          record.combatScore,
+          record.objectiveScore,
+          record.teamworkScore,
+          settledAt,
+          record.playerId,
+        );
+        await this.db.run(
+          `UPDATE players
+           SET total_matches = total_matches + 1,
+               total_match_wins = total_match_wins + ?,
+               total_lead_matches = total_lead_matches + ?,
+               total_lead_wins = total_lead_wins + ?,
+               total_cmd_matches = total_cmd_matches + ?,
+               total_cmd_wins = total_cmd_wins + ?,
+               updated_at = ?
+           WHERE id = ?`,
+          record.won,
+          record.wasSquadLead,
+          record.wasSquadLead && record.won ? 1 : 0,
+          record.wasCommander,
+          record.wasCommander && record.won ? 1 : 0,
+          settledAt,
+          record.playerId,
+        );
+      }
+
+      await this.db.exec("COMMIT;");
+      for (const record of records) {
+        const updated = await this.getPlayerById(record.playerId);
+        this.cache(updated);
+      }
+      return {
+        ok: true,
+        settled: true,
+        duplicate: false,
+        roundKey,
+        snapshotId,
+        matchId,
+        playerCount: records.length,
+        skippedPlayerCount,
+        settledAt,
+      };
+    } catch (error) {
+      await this.db.exec("ROLLBACK;").catch(() => {});
+      throw error;
+    }
+  }
+
   async getPlayerDetail(playerId) {
     const id = Number(playerId);
     if (!Number.isFinite(id)) return null;
@@ -1087,7 +1395,7 @@ export class PlayerRepository {
     const player = await this.getPlayerById(id);
     if (!player) return null;
 
-    const [aliases, ips, sessions, steamProfile, containers, tags, violationCounts, squadBrowserServerPlaytime, squadBrowserServerRankings] = await Promise.all([
+    const [aliases, ips, sessions, steamProfile, containers, tags, violationCounts, squadBrowserServerPlaytime, squadBrowserServerRankings, career] = await Promise.all([
       this.listPlayerAliases(id, { limit: 12 }),
       this.listPlayerIps(id, { limit: 12 }),
       this.listPlayerSessionHistory(id, { limit: 20 }),
@@ -1097,6 +1405,7 @@ export class PlayerRepository {
       this.listPlayerViolationCounts(id),
       this.listSquadBrowserServerPlaytime(id),
       this.listSquadBrowserServerRankings(id),
+      this.getPlayerCareerStats(id),
     ]);
 
     return {
@@ -1111,6 +1420,7 @@ export class PlayerRepository {
       containers,
       tags,
       violationCounts,
+      career,
       summary: {
         gameSeconds: resolveEffectiveGameSeconds(player),
         steamGameSeconds: normalizeSeconds(player.steam_game_seconds ?? player.game_seconds ?? 0),
@@ -1124,6 +1434,11 @@ export class PlayerRepository {
         notes: parseAssets(player.notes_json),
         totalMatches: Number(player.total_matches ?? 0),
         totalMatchWins: Number(player.total_match_wins ?? 0),
+        career,
+        totalKills: Number(career?.kills ?? 0),
+        totalDeaths: Number(career?.deaths ?? 0),
+        totalDowns: Number(career?.downs ?? 0),
+        totalTeamKills: Number(career?.teamKills ?? 0),
         totalReportsReceived: Number(player.total_reports_received ?? 0),
         totalReportsSubmitted: Number(player.total_reports_submitted ?? 0),
       },
@@ -1215,7 +1530,11 @@ export class PlayerRepository {
           CASE WHEN reporter_player_id = ? THEN 'submitted' ELSE 'received' END AS relation
           FROM report_records WHERE reporter_player_id = ? OR target_player_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?`, id, id, id, take, offset); break;
       case "commands": items = await this.db.all("SELECT id, operator_name, command_text, command_result, created_at FROM command_logs WHERE player_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
-      case "matches": items = await this.db.all(`SELECT pmr.id, pmr.team_id, pmr.was_squad_lead, pmr.was_commander, pmr.won, mr.map_name, mr.layer_name, mr.started_at, mr.ended_at, mr.winner_team
+      case "matches": items = await this.db.all(`SELECT pmr.id, pmr.team_id, pmr.was_squad_lead, pmr.was_commander, pmr.won,
+          pmr.scoreboard_available, pmr.kills, pmr.deaths, pmr.downs, pmr.wounds, pmr.team_kills,
+          pmr.vehicle_kills, pmr.revives, pmr.heal_points, pmr.combat_score, pmr.objective_score,
+          pmr.teamwork_score, mr.round_key, mr.snapshot_id, mr.server_id, mr.map_name, mr.layer_name,
+          mr.mode, mr.started_at, mr.ended_at, mr.winner_team
           FROM player_match_records pmr JOIN match_records mr ON mr.id = pmr.match_id WHERE pmr.player_id = ? ORDER BY mr.started_at DESC LIMIT ? OFFSET ?`, id, take, offset); break;
       case "ladder-history": items = await this.db.all("SELECT old_rating, new_rating, reason, changed_at FROM ladder_rating_history WHERE player_id = ? ORDER BY changed_at DESC LIMIT ? OFFSET ?", id, take, offset); break;
       case "squad-records": items = await this.db.all(`SELECT id, kind, time_ms, source, squad_name, team_name, reason, result, error, command, record_type

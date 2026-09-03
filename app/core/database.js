@@ -215,13 +215,19 @@ CREATE TABLE IF NOT EXISTS ladder_rating_history (
 
 CREATE TABLE IF NOT EXISTS match_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_key TEXT,
+    snapshot_id TEXT,
+    server_id TEXT,
     map_name TEXT,
     layer_name TEXT,
+    mode TEXT,
     started_at INTEGER NOT NULL,
     ended_at INTEGER,
     winner_team INTEGER,
     source TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_match_records_round_key
+ON match_records(round_key) WHERE round_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS player_match_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -231,9 +237,52 @@ CREATE TABLE IF NOT EXISTS player_match_records (
     was_squad_lead INTEGER NOT NULL DEFAULT 0,
     was_commander INTEGER NOT NULL DEFAULT 0,
     won INTEGER NOT NULL DEFAULT 0,
+    scoreboard_available INTEGER NOT NULL DEFAULT 0,
+    kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    downs INTEGER NOT NULL DEFAULT 0,
+    wounds INTEGER NOT NULL DEFAULT 0,
+    team_kills INTEGER NOT NULL DEFAULT 0,
+    vehicle_kills INTEGER NOT NULL DEFAULT 0,
+    revives INTEGER NOT NULL DEFAULT 0,
+    heal_points INTEGER NOT NULL DEFAULT 0,
+    combat_score INTEGER NOT NULL DEFAULT 0,
+    objective_score INTEGER NOT NULL DEFAULT 0,
+    teamwork_score INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     FOREIGN KEY(match_id) REFERENCES match_records(id) ON DELETE CASCADE,
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_player_match_records_player_match
+ON player_match_records(player_id, match_id DESC);
+
+CREATE TABLE IF NOT EXISTS player_career_stats (
+    player_id INTEGER PRIMARY KEY,
+    matches INTEGER NOT NULL DEFAULT 0,
+    wins INTEGER NOT NULL DEFAULT 0,
+    kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    downs INTEGER NOT NULL DEFAULT 0,
+    wounds INTEGER NOT NULL DEFAULT 0,
+    team_kills INTEGER NOT NULL DEFAULT 0,
+    vehicle_kills INTEGER NOT NULL DEFAULT 0,
+    revives INTEGER NOT NULL DEFAULT 0,
+    heal_points INTEGER NOT NULL DEFAULT 0,
+    combat_score INTEGER NOT NULL DEFAULT 0,
+    objective_score INTEGER NOT NULL DEFAULT 0,
+    teamwork_score INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS match_career_settlements (
+    round_key TEXT PRIMARY KEY,
+    snapshot_id TEXT UNIQUE,
+    match_id INTEGER,
+    player_count INTEGER NOT NULL DEFAULT 0,
+    skipped_player_count INTEGER NOT NULL DEFAULT 0,
+    settled_at INTEGER NOT NULL,
+    FOREIGN KEY(match_id) REFERENCES match_records(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS log_events (
@@ -668,6 +717,61 @@ DROP TABLE IF EXISTS kill_stats;
       ON squadbrowser_server_rankings(player_id, rank_position ASC);
     `);
     await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 12, Date.now());
+  }
+
+  if (!appliedSet.has(13)) {
+    await addColumnIfMissing(db, "match_records", "round_key", "TEXT");
+    await addColumnIfMissing(db, "match_records", "snapshot_id", "TEXT");
+    await addColumnIfMissing(db, "match_records", "server_id", "TEXT");
+    await addColumnIfMissing(db, "match_records", "mode", "TEXT");
+    await addColumnIfMissing(db, "player_match_records", "scoreboard_available", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "kills", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "deaths", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "downs", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "wounds", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "team_kills", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "vehicle_kills", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "revives", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "heal_points", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "combat_score", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "objective_score", "INTEGER NOT NULL DEFAULT 0");
+    await addColumnIfMissing(db, "player_match_records", "teamwork_score", "INTEGER NOT NULL DEFAULT 0");
+    await db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_match_records_round_key
+      ON match_records(round_key) WHERE round_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_player_match_records_player_match
+      ON player_match_records(player_id, match_id DESC);
+
+      CREATE TABLE IF NOT EXISTS player_career_stats (
+          player_id INTEGER PRIMARY KEY,
+          matches INTEGER NOT NULL DEFAULT 0,
+          wins INTEGER NOT NULL DEFAULT 0,
+          kills INTEGER NOT NULL DEFAULT 0,
+          deaths INTEGER NOT NULL DEFAULT 0,
+          downs INTEGER NOT NULL DEFAULT 0,
+          wounds INTEGER NOT NULL DEFAULT 0,
+          team_kills INTEGER NOT NULL DEFAULT 0,
+          vehicle_kills INTEGER NOT NULL DEFAULT 0,
+          revives INTEGER NOT NULL DEFAULT 0,
+          heal_points INTEGER NOT NULL DEFAULT 0,
+          combat_score INTEGER NOT NULL DEFAULT 0,
+          objective_score INTEGER NOT NULL DEFAULT 0,
+          teamwork_score INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL,
+          FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS match_career_settlements (
+          round_key TEXT PRIMARY KEY,
+          snapshot_id TEXT UNIQUE,
+          match_id INTEGER,
+          player_count INTEGER NOT NULL DEFAULT 0,
+          skipped_player_count INTEGER NOT NULL DEFAULT 0,
+          settled_at INTEGER NOT NULL,
+          FOREIGN KEY(match_id) REFERENCES match_records(id) ON DELETE SET NULL
+      );
+    `);
+    await db.run("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)", 13, Date.now());
   }
 
 }
