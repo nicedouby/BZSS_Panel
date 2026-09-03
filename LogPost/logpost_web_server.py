@@ -8,7 +8,7 @@ from pathlib import Path
 LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 19090
 
-OUTPUT_LOG_FILE = r"D:\BZSS_SQ_Server\BZSS_Panel\LogPost\SquadGame.log"
+OUTPUT_LOG_FILE = Path(__file__).resolve().parent / "SquadGame.log"
 
 
 def main():
