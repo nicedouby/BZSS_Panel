@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { executeBzssCoreCommand } from "../../app/bzssCoreApi";
 import { t } from "../../i18n";
 import { hasPermission } from "../../shared/rcon-permissions.js";
@@ -32,7 +32,7 @@ const ui = useUiStore();
 const busy = ref(false);
 const menuOpen = ref(false);
 const loopEnabled = ref(false);
-let loopTimer: ReturnType<typeof setInterval> | null = null;
+let loopTimer: ReturnType<typeof setTimeout> | null = null;
 
 const userPermissions = computed(() => auth.user?.permissions ?? []);
 const canUse = computed(() => Boolean(
@@ -104,10 +104,20 @@ async function cleanWarzone() {
 
 function stopCleanWarzoneLoop() {
   if (loopTimer) {
-    clearInterval(loopTimer);
+    clearTimeout(loopTimer);
     loopTimer = null;
   }
   loopEnabled.value = false;
+}
+
+function scheduleNextCleanWarzone() {
+  if (!loopEnabled.value || !warmupState.value) return;
+
+  loopTimer = setTimeout(async () => {
+    loopTimer = null;
+    await executeCleanWarzone(false);
+    scheduleNextCleanWarzone();
+  }, CLEAN_WARZONE_INTERVAL_MS);
 }
 
 async function startCleanWarzoneLoop() {
@@ -121,9 +131,7 @@ async function startCleanWarzoneLoop() {
     return;
   }
 
-  loopTimer = setInterval(() => {
-    void executeCleanWarzone(false);
-  }, CLEAN_WARZONE_INTERVAL_MS);
+  scheduleNextCleanWarzone();
 }
 
 function toggleCleanWarzoneLoop() {
@@ -145,7 +153,6 @@ watch(warmupState, (enabled) => {
   if (!enabled) stopCleanWarzoneLoop();
 });
 
-onBeforeUnmount(stopCleanWarzoneLoop);
 </script>
 
 <style scoped>
