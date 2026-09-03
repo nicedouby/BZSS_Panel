@@ -10,6 +10,8 @@ export async function createDatabase(config = {}) {
   const dbFile = path.resolve(dbDir, config.filename ?? "micepanel.db");
   fs.mkdirSync(path.dirname(dbFile), { recursive: true });
 
+  console.log(`[Database] Opening SQLite database: ${dbFile}`);
+
   const db = await open({
     filename: dbFile,
     driver: sqlite3.Database,
@@ -23,6 +25,8 @@ export async function createDatabase(config = {}) {
   await ensureMicePanelSchema(db);
   await runMigrations(db);
   await ensureCompatibleColumns(db);
+  await ensureIndexes(db);
+  await verifyMicePanelSchema(db);
   await migrateLegacyColumns(db);
 
   return db;
@@ -66,7 +70,6 @@ CREATE TABLE IF NOT EXISTS players (
     UNIQUE(eos_id),
     UNIQUE(qq_number)
 );
-CREATE INDEX IF NOT EXISTS idx_players_updated_at ON players(updated_at);
 
 CREATE TABLE IF NOT EXISTS player_aliases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -192,16 +195,6 @@ CREATE TABLE IF NOT EXISTS web_action_audit_records (
     duration_ms INTEGER,
     related_record_id TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_web_audit_created_at
-ON web_action_audit_records(created_at_ms DESC);
-CREATE INDEX IF NOT EXISTS idx_web_audit_actor
-ON web_action_audit_records(actor_username, created_at_ms DESC);
-CREATE INDEX IF NOT EXISTS idx_web_audit_action
-ON web_action_audit_records(action, created_at_ms DESC);
-CREATE INDEX IF NOT EXISTS idx_web_audit_server
-ON web_action_audit_records(server_id, created_at_ms DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_web_audit_request_id
-ON web_action_audit_records(request_id);
 
 CREATE TABLE IF NOT EXISTS ladder_rating_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -226,8 +219,6 @@ CREATE TABLE IF NOT EXISTS match_records (
     winner_team INTEGER,
     source TEXT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_match_records_round_key
-ON match_records(round_key) WHERE round_key IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS player_match_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -253,8 +244,6 @@ CREATE TABLE IF NOT EXISTS player_match_records (
     FOREIGN KEY(match_id) REFERENCES match_records(id) ON DELETE CASCADE,
     FOREIGN KEY(player_id) REFERENCES players(id) ON DELETE CASCADE
 );
-CREATE INDEX IF NOT EXISTS idx_player_match_records_player_match
-ON player_match_records(player_id, match_id DESC);
 
 CREATE TABLE IF NOT EXISTS player_career_stats (
     player_id INTEGER PRIMARY KEY,
@@ -737,11 +726,6 @@ DROP TABLE IF EXISTS kill_stats;
     await addColumnIfMissing(db, "player_match_records", "objective_score", "INTEGER NOT NULL DEFAULT 0");
     await addColumnIfMissing(db, "player_match_records", "teamwork_score", "INTEGER NOT NULL DEFAULT 0");
     await db.exec(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_match_records_round_key
-      ON match_records(round_key) WHERE round_key IS NOT NULL;
-      CREATE INDEX IF NOT EXISTS idx_player_match_records_player_match
-      ON player_match_records(player_id, match_id DESC);
-
       CREATE TABLE IF NOT EXISTS player_career_stats (
           player_id INTEGER PRIMARY KEY,
           matches INTEGER NOT NULL DEFAULT 0,
@@ -819,6 +803,11 @@ async function ensureCompatibleColumns(db) {
   await addColumnIfMissing(db, "player_ips", "ip", "TEXT");
   await addColumnIfMissing(db, "player_ips", "seen_at", "INTEGER NOT NULL DEFAULT 0");
 
+  await addColumnIfMissing(db, "match_records", "round_key", "TEXT");
+  await addColumnIfMissing(db, "match_records", "snapshot_id", "TEXT");
+  await addColumnIfMissing(db, "match_records", "server_id", "TEXT");
+  await addColumnIfMissing(db, "match_records", "mode", "TEXT");
+
   const violationEventColumns = {
     category_key: "TEXT",
     category_label: "TEXT",
@@ -873,6 +862,65 @@ async function ensureCompatibleColumns(db) {
   for (const [column, definition] of Object.entries(auditColumns)) {
     await addColumnIfMissing(db, "web_action_audit_records", column, definition);
   }
+}
+
+async function ensureIndexes(db) {
+  await db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_players_updated_at
+    ON players(updated_at);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_web_audit_request_id
+    ON web_action_audit_records(request_id);
+    CREATE INDEX IF NOT EXISTS idx_web_audit_created_at
+    ON web_action_audit_records(created_at_ms DESC);
+    CREATE INDEX IF NOT EXISTS idx_web_audit_actor
+    ON web_action_audit_records(actor_username, created_at_ms DESC);
+    CREATE INDEX IF NOT EXISTS idx_web_audit_action
+    ON web_action_audit_records(action, created_at_ms DESC);
+    CREATE INDEX IF NOT EXISTS idx_web_audit_server
+    ON web_action_audit_records(server_id, created_at_ms DESC);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_match_records_round_key
+    ON match_records(round_key)
+    WHERE round_key IS NOT NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_player_match_records_player_match
+    ON player_match_records(player_id, match_id DESC);
+  `);
+}
+
+async function verifyMicePanelSchema(db) {
+  const columns = await db.all("PRAGMA table_info(match_records)");
+  const actualColumns = new Set(columns.map((column) => column.name));
+  const requiredColumns = [
+    "id",
+    "round_key",
+    "snapshot_id",
+    "server_id",
+    "map_name",
+    "layer_name",
+    "mode",
+    "started_at",
+    "ended_at",
+    "winner_team",
+    "source",
+  ];
+  const missingColumns = requiredColumns.filter((column) => !actualColumns.has(column));
+  if (missingColumns.length > 0) {
+    throw new Error(
+      `[Database] Schema self-check failed: match_records is missing columns: ${missingColumns.join(", ")}`,
+    );
+  }
+
+  const indexes = await db.all("PRAGMA index_list(match_records)");
+  const hasRoundKeyIndex = indexes.some((index) => index.name === "idx_match_records_round_key");
+  if (!hasRoundKeyIndex) {
+    throw new Error(
+      "[Database] Schema self-check failed: idx_match_records_round_key was not created",
+    );
+  }
+
+  console.log("[Database] Schema self-check passed: match_records columns and indexes verified");
 }
 
 async function migrateLegacyColumns(db) {
@@ -935,6 +983,7 @@ async function addColumnIfMissing(db, table, column, definition) {
   const info = await db.all(`PRAGMA table_info(${table})`);
   if (info.some((row) => row.name === column)) return;
   await db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  console.log(`[Database] Added missing column: ${table}.${column}`);
 }
 
 async function tableExists(db, table) {
