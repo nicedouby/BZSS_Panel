@@ -87,7 +87,7 @@
       "enabled": false
     },
     "udpEventForwarder": {
-      "enabled": true,
+      "enabled": false,
       "host": "114.66.18.134",
       "port": 4000,
       "serverId": "BZSS_Main",
@@ -105,6 +105,9 @@
       "maxPacketBytes": 4096,
       "logSuccess": false,
       "logFailure": true
+    },
+    "udp_event_forwarder": {
+      "enabled": false
     },
     "periodic-teamwork-warning": {
       "enabled": true,
@@ -125,6 +128,9 @@
       "messageTemplate": "【${title}】你的击杀数为 ${kills}，感激参与暖服"
     },
     "plugin": {
+      "udpCombatLogForwarder": {
+        "enabled": false
+      },
       "fairSquadGuard": {
         "enabled": true,
         "enforcementPlayerThreshold": 0,

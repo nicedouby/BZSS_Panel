@@ -88,6 +88,30 @@
       "readChunkBytes": 4194304,
       "batchSize": 100
     },
+    "combatWsBridge": {
+      "enabled": true,
+      "apiToken": "",
+      "websocket": {
+        "enabled": true,
+        "path": "/ws/combat",
+        "authTimeoutMs": 5000,
+        "heartbeatIntervalMs": 15000,
+        "heartbeatTimeoutMs": 45000
+      },
+      "batch": {
+        "flushIntervalMs": 250,
+        "maxEvents": 64
+      },
+      "delivery": {
+        "ackTimeoutMs": 3000,
+        "maxPendingBatches": 4096,
+        "maxUnassignedEvents": 4096
+      },
+      "monitor": {
+        "maxPackets": 300,
+        "maxEvents": 3000
+      }
+    },
     "combatClean": {
       "enabled": true,
       "maxEvents": 5000,

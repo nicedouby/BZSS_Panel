@@ -24,6 +24,7 @@ import { handlePressureZoneRulesRoutes } from "../modules/pressure-zone-rules/ro
 import { handleTacticalStateV2Routes } from "../modules/tactical-state-v2/routes.js";
 import { handleTacticalFeedWriterRoutes } from "../modules/tactical-feed-writer/routes.js";
 import { handleDataManagerRoutes } from "../modules/data-manager/routes.js";
+import { handleCombatWsBridgeRoutes } from "../modules/combat-ws-bridge/routes.js";
 import {
   readSquadNamePolicyState,
   resolveSquadNamePolicyPath,
@@ -97,6 +98,7 @@ export class WebServer {
     this.jobCounter = 0;
     this.consoleConnections = new Set();
     this.chatConnections = new Set();
+    this.combatConnections = new Set();
     this.squadRuleChainConnections = new Set();
     this.squadRuleChainSubscriptions = [];
     this.squadRuleChainRevision = 0;
@@ -238,7 +240,7 @@ export class WebServer {
             fileIOActiveChannels: this.core.fileIO?.getPublicDiagnostics?.()?.activeChannels ?? 0,
             tacticalSubscribers: tacticalDiagnostics.subscriberCount ?? 0,
             tacticalProfileCache: tacticalDiagnostics.profileCacheSize ?? 0,
-            websocketClients: this.consoleConnections.size + this.chatConnections.size,
+            websocketClients: this.consoleConnections.size + this.chatConnections.size + this.combatConnections.size,
             chatMessageListeners: this.modules.chatManager?.getListenerCount?.("message") ?? 0,
             rconPhysicalConnections: rconClients.size,
             squadBrowserInFlight: squadBrowserStatus.inFlightCount ?? 0,
@@ -310,6 +312,11 @@ export class WebServer {
       } catch {}
     }
     this.chatConnections.clear();
+
+    for (const client of this.combatConnections) {
+      try { client.socket.end(); } catch {}
+    }
+    this.combatConnections.clear();
 
     await new Promise((resolve) => this.server.close(resolve));
     this.server = null;
@@ -434,6 +441,11 @@ export class WebServer {
   }
 
   async handleApi(url, req, res) {
+    if (url.pathname === "/api/combat-ws/state" && req.method === "GET") {
+      const user = this.core.authManager?.getUserFromRequest(req);
+      if (!this.requirePermission(user, "settings.manage", res)) return;
+      if (handleCombatWsBridgeRoutes({ url, req, res, modules: this.modules, json: this.json.bind(this) })) return;
+    }
     if (url.pathname === "/api/health" && req.method === "GET") {
       return this.json(res, 200, {
         ok: true,
@@ -5395,6 +5407,8 @@ export class WebServer {
         ? "chat"
         : url.pathname === "/ws/astrbot"
           ? "astrbot"
+          : url.pathname === (this.modules.combatWsBridge?.getConfig?.()?.websocket?.path ?? "/ws/combat")
+            ? "combat"
           : null;
 
     if (!connectionKind) {
@@ -5412,8 +5426,12 @@ export class WebServer {
       return bridge.acceptWebSocket(req, socket, head);
     }
 
-    const user = this.core.authManager?.getUserFromRequest(req);
-    if (!user) {
+    if (connectionKind === "combat" && !this.modules.combatWsBridge?.acceptWebSocket) {
+      return this.rejectUpgrade(socket, 503, "Combat WebSocket bridge unavailable.");
+    }
+
+    const user = connectionKind === "combat" ? null : this.core.authManager?.getUserFromRequest(req);
+    if (connectionKind !== "combat" && !user) {
       return this.rejectUpgrade(socket, 401, "Authentication required.");
     }
     if (connectionKind === "console" && !this.core.authManager?.hasEverything?.(user)) {
@@ -5450,8 +5468,18 @@ export class WebServer {
 
     if (connectionKind === "console") {
       this.consoleConnections.add(client);
-    } else {
+    } else if (connectionKind === "chat") {
       this.chatConnections.add(client);
+    } else {
+      this.combatConnections.add(client);
+      const handlers = { message: null, close: null };
+      client.combatHandlers = handlers;
+      this.modules.combatWsBridge.acceptWebSocket(req, {
+        sendText: (value) => this.sendWebSocketFrame(socket, Buffer.from(value, "utf8"), 0x1),
+        close: (code, reason) => this.closeWebSocketClient(client, code, reason),
+        onMessage: (handler) => { handlers.message = handler; },
+        onClose: (handler) => { handlers.close = handler; },
+      });
     }
 
     socket.on("data", (chunk) => {
@@ -5555,15 +5583,23 @@ export class WebServer {
 
       if (opcode === 0x9) {
         this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0xA);
+      } else if (opcode === 0x1 && client.kind === "combat") {
+        client.combatHandlers?.message?.(payload.toString("utf8"));
       }
     }
   }
 
-  closeWebSocketClient(client) {
+  closeWebSocketClient(client, code = 1000, reason = "") {
     this.consoleConnections.delete(client);
     this.chatConnections.delete(client);
+    this.combatConnections.delete(client);
+    client.combatHandlers?.close?.();
     try {
-      this.sendWebSocketFrame(client.socket, Buffer.alloc(0), 0x8);
+      const reasonBytes = Buffer.from(String(reason ?? ""), "utf8").subarray(0, 123);
+      const payload = Buffer.alloc(2 + reasonBytes.length);
+      payload.writeUInt16BE(Number(code) || 1000, 0);
+      reasonBytes.copy(payload, 2);
+      this.sendWebSocketFrame(client.socket, payload, 0x8);
     } catch {}
     try {
       client.socket.end();

@@ -26,6 +26,7 @@ import { createPlayerTimeStatsModule } from "../modules/player-time-stats/index.
 import { createIpLookupModule } from "../modules/ip-lookup/index.js";
 import { createKillManageModule } from "../modules/kill-manage/index.js";
 import { createCombatCollectorModule } from "../modules/combat-collector/index.js";
+import { createCombatWsBridgeModule } from "../modules/combat-ws-bridge/index.js";
 import { createBattleLogModule } from "../modules/battle-log/index.js";
 import { createCombatLogModule } from "../modules/combat-log/index.js";
 import { createAdminWarnModule } from "../modules/admin-warn/index.js";
@@ -100,6 +101,7 @@ export class ModuleManager {
       createPlayerTimeStatsModule,
       createIpLookupModule,
       createCombatCollectorModule,
+      createCombatWsBridgeModule,
       createBattleLogModule,
       createCombatLogModule,
       createAdminWarnModule,
