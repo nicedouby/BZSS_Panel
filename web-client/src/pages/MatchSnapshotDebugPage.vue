@@ -13,50 +13,30 @@
       </template>
     </AppPageHeader>
 
-    <!-- Top KPI Summary Bar -->
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-icon-box cyan">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-        </div>
-        <div class="kpi-content">
-          <span class="kpi-label">总快照数量</span>
-          <strong class="kpi-value">{{ snapshots.length }}</strong>
-          <small class="kpi-sub">自动与调试录制文件</small>
-        </div>
+    <!-- Compact KPI Strip -->
+    <div class="kpi-strip">
+      <div class="kpi-strip-item">
+        <span class="kpi-icon-dot cyan"></span>
+        <span class="kpi-strip-label">总快照数量</span>
+        <strong class="kpi-strip-val">{{ snapshots.length }}</strong>
       </div>
-
-      <div class="kpi-card">
-        <div class="kpi-icon-box emerald">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </div>
-        <div class="kpi-content">
-          <span class="kpi-label">最新录制时间</span>
-          <strong class="kpi-value date-text">{{ latestSnapshot ? formatDate(latestSnapshot.createdAt) : '-' }}</strong>
-          <small class="kpi-sub">{{ latestSnapshot ? latestSnapshot.name : '暂无数据' }}</small>
-        </div>
+      <div class="kpi-strip-divider"></div>
+      <div class="kpi-strip-item">
+        <span class="kpi-icon-dot emerald"></span>
+        <span class="kpi-strip-label">最新快照时间</span>
+        <strong class="kpi-strip-val date">{{ latestSnapshot ? formatDate(latestSnapshot.createdAt) : '-' }}</strong>
       </div>
-
-      <div class="kpi-card">
-        <div class="kpi-icon-box amber">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-        </div>
-        <div class="kpi-content">
-          <span class="kpi-label">Capture Point 覆盖</span>
-          <strong class="kpi-value">{{ selectedSnapshotCaptureZones.length }} <span class="unit">个</span></strong>
-          <small class="kpi-sub">{{ selectedSnapshotMapTitle }}</small>
-        </div>
+      <div class="kpi-strip-divider"></div>
+      <div class="kpi-strip-item">
+        <span class="kpi-icon-dot amber"></span>
+        <span class="kpi-strip-label">Capture Point 覆盖</span>
+        <strong class="kpi-strip-val">{{ selectedSnapshotCaptureZones.length }} 点位</strong>
       </div>
-
-      <div class="kpi-card">
-        <div class="kpi-icon-box purple">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        </div>
-        <div class="kpi-content">
-          <span class="kpi-label">工件种类</span>
-          <strong class="kpi-value">{{ selectedSnapshot?.artifacts?.length || 0 }} <span class="unit">项</span></strong>
-          <small class="kpi-sub">JSON / Image / CSV / MD</small>
-        </div>
+      <div class="kpi-strip-divider"></div>
+      <div class="kpi-strip-item">
+        <span class="kpi-icon-dot purple"></span>
+        <span class="kpi-strip-label">当前快照工件</span>
+        <strong class="kpi-strip-val">{{ selectedSnapshot?.artifacts?.length || 0 }} 项</strong>
       </div>
     </div>
 
@@ -64,19 +44,19 @@
     <AppSplitLayout class="snapshot-split">
       <template #left>
         <AppCard compact title="历史快照记录" description="选择快照进行深度分析与导出" class="list-card">
-          <!-- Filter Search & Batch Bar -->
+          <!-- Toolbar Search & Batch Bar -->
           <div class="list-toolbar">
             <div class="search-box">
               <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
               <input
                 v-model.trim="searchQuery"
                 type="search"
-                placeholder="搜索快照名称、工件 ID 或时间..."
+                placeholder="搜索快照名称、ID 或时间..."
                 class="search-input"
               >
             </div>
             <div v-if="selectedIds.length > 0" class="batch-actions-bar">
-              <span class="batch-count">已选择 <strong>{{ selectedIds.length }}</strong> 项</span>
+              <span class="batch-count">已选 <strong>{{ selectedIds.length }}</strong> 项</span>
               <button
                 type="button"
                 class="action-btn sm danger"
@@ -86,6 +66,19 @@
                 批量删除
               </button>
             </div>
+          </div>
+
+          <!-- List Header Bar -->
+          <div class="list-header-row">
+            <label class="chk-label">
+              <input
+                type="checkbox"
+                :checked="selectedIds.length === filteredSnapshotsList.length && filteredSnapshotsList.length > 0"
+                @change="toggleSelectAll($event)"
+              >
+              <span>全选</span>
+            </label>
+            <span class="list-count-desc">共 {{ filteredSnapshotsList.length }} 条记录</span>
           </div>
 
           <div v-if="loading" class="empty-state">
@@ -100,67 +93,47 @@
             <span>未找到匹配 “{{ searchQuery }}” 的快照</span>
           </div>
           <div v-else class="snapshot-list-container">
-            <AppTable compact class="custom-snapshot-table">
-              <thead>
-                <tr>
-                  <th class="col-chk">
-                    <input
-                      type="checkbox"
-                      :checked="selectedIds.length === filteredSnapshotsList.length && filteredSnapshotsList.length > 0"
-                      @change="toggleSelectAll($event)"
-                    >
-                  </th>
-                  <th>快照名称</th>
-                  <th>录制时间</th>
-                  <th>工件列表</th>
-                  <th class="text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="snapshot in filteredSnapshotsList"
-                  :key="snapshot.id"
-                  :class="{ selected: selectedId === snapshot.id }"
-                  @click="selectSnapshot(snapshot.id)"
-                >
-                  <td class="col-chk" @click.stop>
-                    <input type="checkbox" :value="snapshot.id" v-model="selectedIds">
-                  </td>
-                  <td class="col-name">
-                    <div class="name-row">
-                      <strong class="snapshot-name" :title="snapshot.name">{{ snapshot.name }}</strong>
-                      <button type="button" class="copy-btn" title="复制 ID" @click.stop="copyText(snapshot.id)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                      </button>
-                    </div>
-                    <div class="snapshot-file">{{ snapshot.id }}</div>
-                  </td>
-                  <td class="col-time">{{ formatDate(snapshot.createdAt) }}</td>
-                  <td class="col-artifacts">
-                    <div class="artifact-list">
-                      <span
-                        v-for="artifact in snapshot.artifacts"
-                        :key="artifact.format"
-                        class="artifact-chip"
-                        :data-format="artifact.format"
-                        @click.stop="openArtifact(snapshot.id, artifact.format)"
-                      >
-                        {{ artifact.label }}
-                        <span class="artifact-size">{{ formatSize(artifact.size) }}</span>
-                      </span>
-                    </div>
-                  </td>
-                  <td class="col-actions text-right" @click.stop>
-                    <div class="action-dropdown-group">
-                      <button type="button" class="icon-btn" title="查看图片" @click="openArtifact(snapshot.id, 'image')">📷</button>
-                      <button type="button" class="icon-btn" title="查看 JSON" @click="openArtifact(snapshot.id, 'json')">📄</button>
-                      <button type="button" class="icon-btn" title="下载 CSV" @click="downloadArtifact(snapshot.id, 'csv')">📊</button>
-                      <button type="button" class="icon-btn danger" title="删除" :disabled="busy" @click="handleDeleteSnapshot(snapshot)">🗑️</button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </AppTable>
+            <div
+              v-for="snapshot in filteredSnapshotsList"
+              :key="snapshot.id"
+              class="snapshot-item-row"
+              :class="{ selected: selectedId === snapshot.id }"
+              @click="selectSnapshot(snapshot.id)"
+            >
+              <div class="row-left" @click.stop>
+                <input type="checkbox" :value="snapshot.id" v-model="selectedIds">
+              </div>
+
+              <div class="row-main">
+                <div class="row-title-bar">
+                  <strong class="snapshot-name" :title="snapshot.name">{{ snapshot.name }}</strong>
+                  <button type="button" class="copy-btn" title="复制 ID" @click.stop="copyText(snapshot.id)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                  </button>
+                  <span class="snapshot-time-pill">{{ formatDate(snapshot.createdAt) }}</span>
+                </div>
+                <div class="snapshot-id-text font-mono">{{ snapshot.id }}</div>
+
+                <div class="artifact-list">
+                  <span
+                    v-for="artifact in snapshot.artifacts"
+                    :key="artifact.format"
+                    class="artifact-chip"
+                    :data-format="artifact.format"
+                    @click.stop="openArtifact(snapshot.id, artifact.format)"
+                  >
+                    {{ artifact.label }} <span class="artifact-size">{{ formatSize(artifact.size) }}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="row-actions" @click.stop>
+                <button type="button" class="icon-btn" title="查看图片" @click="openArtifact(snapshot.id, 'image')">📷</button>
+                <button type="button" class="icon-btn" title="查看 JSON" @click="openArtifact(snapshot.id, 'json')">📄</button>
+                <button type="button" class="icon-btn" title="下载 CSV" @click="downloadArtifact(snapshot.id, 'csv')">📊</button>
+                <button type="button" class="icon-btn danger" title="删除快照" :disabled="busy" @click="handleDeleteSnapshot(snapshot)">🗑️</button>
+              </div>
+            </div>
           </div>
         </AppCard>
       </template>
@@ -177,7 +150,7 @@
                 @click="previewMode = 'image'"
               >
                 <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                图片预览
+                战绩图片
               </button>
               <button
                 type="button"
@@ -208,7 +181,7 @@
                 class="action-btn sm ghost"
                 @click="zoomMode = zoomMode === 'fit' ? 'raw' : 'fit'"
               >
-                {{ zoomMode === 'fit' ? '原始大小 (1:1)' : '适应窗口' }}
+                {{ zoomMode === 'fit' ? '1:1 原始大小' : '适应窗口' }}
               </button>
               <button
                 type="button"
@@ -223,40 +196,61 @@
 
           <!-- Mode 1: Capture Point / Tactical Map Preview -->
           <div v-if="previewMode === 'map'" class="map-preview-shell">
-            <div v-if="selectedSnapshotCaptureZones.length" class="map-preview-meta">
+            <div class="map-sub-header">
               <div class="meta-pill">
-                <span class="meta-label">地图:</span>
+                <span class="meta-label">地图图层:</span>
                 <strong>{{ selectedSnapshotMapTitle }}</strong>
               </div>
               <div class="meta-pill cyan">
-                <span class="meta-label">捕获点数量:</span>
+                <span class="meta-label">捕获点:</span>
                 <strong>{{ selectedSnapshotCaptureZones.length }} 个</strong>
               </div>
-            </div>
-
-            <div v-if="selectedSnapshotMapConfig && selectedSnapshotCaptureZones.length" class="map-preview-stage">
-              <img :src="selectedSnapshotMapConfig.image" :alt="selectedSnapshotMapTitle" class="map-preview-image">
-              <div class="map-preview-layer">
+              <div class="map-view-toggle">
                 <button
-                  v-for="zone in selectedSnapshotCaptureMarkers"
-                  :key="`${zone.name}-${zone.mapX}-${zone.mapY}`"
                   type="button"
-                  class="map-preview-marker"
-                  :style="{ left: `${zone.mapX}%`, top: `${zone.mapY}%` }"
-                  :title="`${zone.name}\n${zone.raw}`"
+                  class="mini-pill-btn"
+                  :class="{ active: mapSubView === 'overlay' }"
+                  @click="mapSubView = 'overlay'"
                 >
-                  <span class="map-preview-marker-pulse"></span>
-                  <span class="map-preview-marker-dot"></span>
-                  <span class="map-preview-marker-label">{{ zone.name }}</span>
+                  🗺️ 战术地图
+                </button>
+                <button
+                  type="button"
+                  class="mini-pill-btn"
+                  :class="{ active: mapSubView === 'list' }"
+                  @click="mapSubView = 'list'"
+                >
+                  📌 坐标列表
                 </button>
               </div>
             </div>
 
-            <div v-if="selectedSnapshotCaptureZones.length" class="capture-zone-list-card">
-              <div class="capture-zone-list-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm"><path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                Capture Point 坐标列表
+            <div v-if="mapSubView === 'overlay'" class="map-stage-container">
+              <div v-if="selectedSnapshotMapConfig && selectedSnapshotCaptureZones.length" class="map-preview-stage">
+                <img :src="selectedSnapshotMapConfig.image" :alt="selectedSnapshotMapTitle" class="map-preview-image">
+                <div class="map-preview-layer">
+                  <button
+                    v-for="zone in selectedSnapshotCaptureMarkers"
+                    :key="`${zone.name}-${zone.mapX}-${zone.mapY}`"
+                    type="button"
+                    class="map-preview-marker"
+                    :style="{ left: `${zone.mapX}%`, top: `${zone.mapY}%` }"
+                    :title="`${zone.name}\n${zone.raw}`"
+                  >
+                    <span class="map-preview-marker-pulse"></span>
+                    <span class="map-preview-marker-dot"></span>
+                    <span class="map-preview-marker-label">{{ zone.name }}</span>
+                  </button>
+                </div>
               </div>
+              <div v-else-if="selectedSnapshotJsonLoading" class="empty-state">
+                <div class="spinner-lg"></div>
+                <span>正在加载战术地图...</span>
+              </div>
+              <div v-else class="empty-state">未能解析对应的战术地图图层。</div>
+            </div>
+
+            <div v-else class="capture-zone-grid-wrapper">
               <div class="capture-zone-grid">
                 <div
                   v-for="zone in selectedSnapshotCaptureZones"
@@ -272,12 +266,6 @@
                 </div>
               </div>
             </div>
-
-            <div v-else-if="selectedSnapshotJsonLoading" class="empty-state">
-              <div class="spinner-lg"></div>
-              <span>正在加载 Capture Point 数据...</span>
-            </div>
-            <div v-else class="empty-state">该快照没有 Capture Point 坐标信息。</div>
           </div>
 
           <!-- Mode 2: JSON Viewer -->
@@ -327,7 +315,6 @@ import AppCard from "../components/common/AppCard.vue";
 import AppPage from "../components/common/AppPage.vue";
 import AppPageHeader from "../components/common/AppPageHeader.vue";
 import AppSplitLayout from "../components/common/AppSplitLayout.vue";
-import AppTable from "../components/common/AppTable.vue";
 import { TACTICAL_MAP_CONFIGS, resolveTacticalMapKey, type TacticalMapConfig } from "../shared/tactical-map-data";
 import { useUiStore } from "../stores/ui.store";
 
@@ -368,6 +355,7 @@ const selectedId = ref("");
 const searchQuery = ref("");
 const zoomMode = ref<"fit" | "raw">("fit");
 const previewMode = ref<"image" | "map" | "json">("image");
+const mapSubView = ref<"overlay" | "list">("overlay");
 const selectedSnapshotJson = ref<MatchSnapshotJsonPayload | null>(null);
 const selectedSnapshotJsonLoading = ref(false);
 const selectedIds = ref<string[]>([]);
@@ -623,113 +611,59 @@ onMounted(loadList);
 </script>
 
 <style scoped>
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.kpi-card {
+/* Compact Top KPI Strip */
+.kpi-strip {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border-radius: 12px;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-  transition: all 0.2s ease;
-}
-
-.kpi-card:hover {
-  border-color: rgba(56, 189, 248, 0.25);
-  transform: translateY(-2px);
-}
-
-.kpi-icon-box {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 42px;
-  height: 42px;
+  gap: 16px;
+  padding: 10px 18px;
   border-radius: 10px;
-  flex-shrink: 0;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(8px);
+  margin-bottom: 14px;
 }
 
-.kpi-icon-box svg {
-  width: 22px;
-  height: 22px;
-}
-
-.kpi-icon-box.cyan {
-  background: rgba(56, 189, 248, 0.12);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-}
-
-.kpi-icon-box.emerald {
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.25);
-}
-
-.kpi-icon-box.amber {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-  border: 1px solid rgba(245, 158, 11, 0.25);
-}
-
-.kpi-icon-box.purple {
-  background: rgba(167, 139, 250, 0.12);
-  color: #a78bfa;
-  border: 1px solid rgba(167, 139, 250, 0.25);
-}
-
-.kpi-content {
+.kpi-strip-item {
   display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.kpi-label {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  font-weight: 500;
-}
-
-.kpi-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.kpi-value.date-text {
-  font-size: 13px;
-}
-
-.kpi-value .unit {
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
-  font-weight: 400;
-  opacity: 0.7;
 }
 
-.kpi-sub {
-  font-size: 10px;
+.kpi-icon-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.kpi-icon-dot.cyan { background: #38bdf8; box-shadow: 0 0 8px #38bdf8; }
+.kpi-icon-dot.emerald { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+.kpi-icon-dot.amber { background: #f59e0b; box-shadow: 0 0 8px #f59e0b; }
+.kpi-icon-dot.purple { background: #a78bfa; box-shadow: 0 0 8px #a78bfa; }
+
+.kpi-strip-label {
   color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.kpi-strip-val {
+  color: var(--color-text-primary);
+  font-weight: 700;
+}
+
+.kpi-strip-val.date {
+  font-size: 11px;
+}
+
+.kpi-strip-divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .snapshot-split {
-  grid-template-columns: minmax(0, 1.35fr) minmax(420px, 1fr) !important;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(400px, 1fr) !important;
+  gap: 14px;
 }
 
 .list-card,
@@ -743,15 +677,13 @@ onMounted(loadList);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .search-box {
   position: relative;
   flex: 1;
-  min-width: 200px;
 }
 
 .search-icon {
@@ -769,28 +701,26 @@ onMounted(loadList);
   width: 100%;
   height: 32px;
   padding: 0 12px 0 30px;
-  border-radius: 8px;
+  border-radius: 7px;
   border: 1px solid var(--color-border-soft);
   background: rgba(15, 23, 42, 0.8);
   color: var(--color-text-primary);
   font-size: 12px;
-  transition: all 0.15s ease;
 }
 
 .search-input:focus {
   outline: none;
   border-color: rgba(56, 189, 248, 0.4);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
 }
 
 .batch-actions-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .batch-count {
@@ -798,73 +728,112 @@ onMounted(loadList);
   color: #fecaca;
 }
 
-.snapshot-list-container {
-  flex: 1 1 auto;
-  min-height: 400px;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  border-radius: 8px;
-  border: 1px solid var(--color-border-soft);
-  background: rgba(15, 23, 42, 0.3);
+.list-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
-.custom-snapshot-table {
-  width: 100%;
-}
-
-.col-chk {
-  width: 32px;
-  text-align: center;
-}
-
-.col-name {
-  min-width: 160px;
-}
-
-.name-row {
+.chk-label {
   display: flex;
   align-items: center;
   gap: 6px;
+  cursor: pointer;
+}
+
+.snapshot-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 420px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* Row Item Cards */
+.snapshot-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--color-border-soft);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.snapshot-item-row:hover {
+  border-color: var(--color-border-hover);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.snapshot-item-row.selected {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.06);
+  box-shadow: inset 3px 0 0 #38bdf8;
+}
+
+.row-left {
+  padding-top: 2px;
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .snapshot-name {
   font-size: 13px;
   font-weight: 700;
   color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .copy-btn {
   background: transparent;
   border: 0;
   color: var(--color-text-muted);
-  padding: 2px;
-  border-radius: 4px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
+  padding: 2px;
 }
 
-.copy-btn svg {
-  width: 12px;
-  height: 12px;
+.copy-btn svg { width: 12px; height: 12px; }
+.copy-btn:hover { color: #38bdf8; }
+
+.snapshot-time-pill {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.copy-btn:hover {
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.1);
-}
-
-.snapshot-file {
-  margin-top: 2px;
+.snapshot-id-text {
   font-size: 10px;
   color: var(--color-text-muted);
-  font-family: monospace;
-}
-
-.col-time {
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -872,6 +841,7 @@ onMounted(loadList);
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  margin-top: 2px;
 }
 
 .artifact-chip {
@@ -886,53 +856,20 @@ onMounted(loadList);
   font-size: 10px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
-.artifact-chip:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
+.artifact-chip[data-format="json"] { border-color: rgba(56, 189, 248, 0.3); color: #38bdf8; background: rgba(56, 189, 248, 0.08); }
+.artifact-chip[data-format="image"] { border-color: rgba(34, 197, 94, 0.3); color: #22c55e; background: rgba(34, 197, 94, 0.08); }
+.artifact-chip[data-format="csv"] { border-color: rgba(167, 139, 250, 0.3); color: #a78bfa; background: rgba(167, 139, 250, 0.08); }
+.artifact-chip[data-format="markdown"] { border-color: rgba(249, 115, 22, 0.3); color: #f97316; background: rgba(249, 115, 22, 0.08); }
 
-.artifact-size {
-  opacity: 0.7;
-  font-size: 9px;
-}
-
-.artifact-chip[data-format="json"] {
-  border-color: rgba(56, 189, 248, 0.3);
-  color: #38bdf8;
-  background: rgba(56, 189, 248, 0.08);
-}
-
-.artifact-chip[data-format="image"] {
-  border-color: rgba(34, 197, 94, 0.3);
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.08);
-}
-
-.artifact-chip[data-format="csv"] {
-  border-color: rgba(167, 139, 250, 0.3);
-  color: #a78bfa;
-  background: rgba(167, 139, 250, 0.08);
-}
-
-.artifact-chip[data-format="markdown"] {
-  border-color: rgba(249, 115, 22, 0.3);
-  color: #f97316;
-  background: rgba(249, 115, 22, 0.08);
-}
-
-.action-dropdown-group {
-  display: inline-flex;
+.row-actions {
+  display: flex;
   align-items: center;
   gap: 4px;
 }
 
 .icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 26px;
   height: 26px;
   border-radius: 6px;
@@ -940,46 +877,40 @@ onMounted(loadList);
   background: rgba(255, 255, 255, 0.03);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.icon-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: var(--color-border-hover);
-}
+.icon-btn:hover { background: rgba(255, 255, 255, 0.1); }
+.icon-btn.danger:hover { background: rgba(239, 68, 68, 0.2); }
 
-.icon-btn.danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.4);
-}
-
-/* Preview Navigation Tabs */
+/* Preview Card */
 .preview-header-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 12px;
-  flex-wrap: wrap;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--color-border-soft);
+  flex-wrap: wrap;
 }
 
 .preview-tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: rgba(15, 23, 42, 0.7);
   padding: 3px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
+  padding: 5px 10px;
   border-radius: 6px;
   border: 0;
   background: transparent;
@@ -987,46 +918,20 @@ onMounted(loadList);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
-.tab-btn .tab-icon {
-  width: 14px;
-  height: 14px;
-}
+.tab-btn .tab-icon { width: 14px; height: 14px; }
+.tab-btn.active { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
 
-.tab-btn:hover:not(:disabled) {
-  color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.05);
-}
+.preview-quick-actions { display: flex; gap: 6px; }
 
-.tab-btn.active {
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
-}
-
-.tab-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.preview-quick-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* Preview Shell & Map Stage */
 .preview-shell {
   flex: 1;
   min-height: 420px;
   overflow: auto;
   border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #090d16;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-  background-size: 16px 16px;
   position: relative;
   display: flex;
   align-items: center;
@@ -1034,29 +939,21 @@ onMounted(loadList);
 }
 
 .preview-shell img {
-  display: block;
-  transition: transform 0.2s ease;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
-  border-radius: 6px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
 }
 
-.preview-shell.raw img {
-  max-width: none;
-  max-height: none;
-}
+.preview-shell.raw img { max-width: none; max-height: none; }
 
 .image-overlay-info {
   position: absolute;
-  bottom: 10px;
-  left: 10px;
-  padding: 4px 10px;
-  border-radius: 6px;
+  bottom: 8px;
+  left: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
   background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
   font-size: 11px;
   color: var(--color-text-secondary);
 }
@@ -1065,11 +962,11 @@ onMounted(loadList);
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   min-height: 420px;
 }
 
-.map-preview-meta {
+.map-sub-header {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1078,60 +975,55 @@ onMounted(loadList);
 .meta-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 4px;
+  padding: 3px 8px;
   border-radius: 6px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid var(--color-border-soft);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-secondary);
 }
 
-.meta-pill.cyan {
-  border-color: rgba(56, 189, 248, 0.3);
-  color: #38bdf8;
+.meta-pill.cyan { color: #38bdf8; border-color: rgba(56, 189, 248, 0.3); }
+
+.map-view-toggle {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px;
+  border-radius: 6px;
 }
 
-.map-preview-stage {
+.mini-pill-btn {
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mini-pill-btn.active { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+
+.map-stage-container {
   position: relative;
   flex: 1;
-  min-height: 320px;
+  min-height: 360px;
   border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: #080c14;
 }
 
-.map-preview-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.map-preview-layer {
-  position: absolute;
-  inset: 0;
-}
-
-.map-preview-marker {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-  z-index: 2;
-}
+.map-preview-image { width: 100%; height: 100%; object-fit: contain; }
+.map-preview-layer { position: absolute; inset: 0; }
+.map-preview-marker { position: absolute; transform: translate(-50%, -50%); border: 0; background: transparent; cursor: pointer; padding: 0; z-index: 2; }
 
 .map-preview-marker-pulse {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: rgba(249, 115, 22, 0.4);
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 20px; height: 20px; border-radius: 50%; background: rgba(249, 115, 22, 0.4);
   animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
 }
 
@@ -1141,58 +1033,29 @@ onMounted(loadList);
 }
 
 .map-preview-marker-dot {
-  position: relative;
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: #f97316;
-  border: 2px solid #0f172a;
-  box-shadow: 0 0 10px #f97316;
+  position: relative; display: block; width: 10px; height: 10px; border-radius: 50%;
+  background: #f97316; border: 2px solid #0f172a; box-shadow: 0 0 8px #f97316;
 }
 
 .map-preview-marker-label {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(249, 115, 22, 0.4);
-  font-size: 10px;
-  font-weight: 700;
-  color: #fff;
-  white-space: nowrap;
+  display: inline-block; margin-top: 3px; padding: 1px 5px; border-radius: 4px;
+  background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(249, 115, 22, 0.4);
+  font-size: 10px; font-weight: 700; color: #fff; white-space: nowrap;
 }
 
-.capture-zone-list-card {
+.capture-zone-grid-wrapper {
+  flex: 1;
+  overflow-y: auto;
   border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 8px;
+  padding: 10px;
   background: rgba(15, 23, 42, 0.4);
-}
-
-.capture-zone-list-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-
-.icon-sm {
-  width: 14px;
-  height: 14px;
-  color: #f97316;
 }
 
 .capture-zone-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 8px;
-  max-height: 160px;
-  overflow-y: auto;
 }
 
 .capture-zone-card-item {
@@ -1205,32 +1068,16 @@ onMounted(loadList);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.zone-name {
-  font-size: 12px;
-  color: var(--color-text-primary);
-}
+.zone-name { font-size: 11px; color: var(--color-text-primary); }
+.capture-zone-coords { display: flex; gap: 4px; }
+.coord-pill { font-size: 10px; font-family: monospace; padding: 1px 4px; border-radius: 3px; background: rgba(56, 189, 248, 0.1); color: #38bdf8; }
 
-.capture-zone-coords {
-  display: flex;
-  gap: 4px;
-}
-
-.coord-pill {
-  font-size: 10px;
-  font-family: monospace;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(56, 189, 248, 0.1);
-  color: #38bdf8;
-}
-
-/* JSON Shell */
 .json-preview-shell {
   flex: 1;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--color-border-soft);
-  border-radius: 10px;
+  border-radius: 8px;
   background: #090d16;
   overflow: hidden;
   min-height: 420px;
@@ -1240,14 +1087,9 @@ onMounted(loadList);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 6px 12px;
   background: rgba(15, 23, 42, 0.8);
   border-bottom: 1px solid var(--color-border-soft);
-}
-
-.json-info {
-  font-size: 11px;
-  color: var(--color-text-muted);
 }
 
 .json-code-block {
@@ -1255,9 +1097,8 @@ onMounted(loadList);
   margin: 0;
   padding: 12px;
   overflow: auto;
-  font-family: Consolas, Monaco, 'Andale Mono', monospace;
+  font-family: monospace;
   font-size: 11px;
-  line-height: 1.5;
   color: #7dd3fc;
 }
 
@@ -1266,105 +1107,33 @@ onMounted(loadList);
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
   padding: 40px 16px;
   text-align: center;
   color: var(--color-text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
-.empty-icon {
-  width: 36px;
-  height: 36px;
-  opacity: 0.4;
-}
-
-.spinner-lg {
-  width: 24px;
-  height: 24px;
-  border: 2px solid rgba(56, 189, 248, 0.2);
-  border-top-color: #38bdf8;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+.empty-icon { width: 32px; height: 32px; opacity: 0.4; }
+.spinner-lg { width: 22px; height: 22px; border: 2px solid rgba(56, 189, 248, 0.2); border-top-color: #38bdf8; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 .action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid var(--color-border-default);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--color-text-secondary);
-  transition: all 0.15s ease;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 10px;
+  border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--color-border-default); background: rgba(255, 255, 255, 0.04); color: var(--color-text-secondary);
 }
 
-.btn-icon {
-  width: 14px;
-  height: 14px;
-}
+.btn-icon { width: 14px; height: 14px; }
+.action-btn:hover { border-color: var(--color-border-hover); color: var(--color-text-primary); background: rgba(255, 255, 255, 0.08); }
+.action-btn.danger { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.08); color: #fecaca; }
+.action-btn.danger:hover { background: rgba(239, 68, 68, 0.18); color: #fff; }
+.action-btn.ghost { background: rgba(255, 255, 255, 0.02); }
+.action-btn.sm { min-height: 24px; padding: 2px 6px; font-size: 11px; }
 
-.action-btn:hover:not(:disabled) {
-  border-color: var(--color-border-hover);
-  color: var(--color-text-primary);
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.action-btn.danger {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.08);
-  color: #fecaca;
-}
-
-.action-btn.danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.18);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #fff;
-}
-
-.action-btn.ghost {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.action-btn.sm {
-  min-height: 26px;
-  padding: 4px 8px;
-  font-size: 11px;
-  border-radius: 6px;
-}
-
-.action-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-:deep(.custom-snapshot-table tbody tr.selected td) {
-  background: rgba(56, 189, 248, 0.1) !important;
-  border-bottom-color: rgba(56, 189, 248, 0.25) !important;
-}
-
-@media (max-width: 1200px) {
-  .kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .snapshot-split {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-}
-
-@media (max-width: 640px) {
-  .kpi-grid {
-    grid-template-columns: 1fr;
-  }
+@media (max-width: 1100px) {
+  .snapshot-split { grid-template-columns: 1fr !important; }
 }
 </style>
+
 
