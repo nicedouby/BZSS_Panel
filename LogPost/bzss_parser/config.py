@@ -114,8 +114,12 @@ def load_config(config_path: str = "config.json") -> Dict[str, Any]:
 
 def resolve_squad_server_path(value: Any, config_path: Path) -> str:
     """Resolve SquadGame-relative paths from either the panel root or a child folder."""
-    configured = Path(str(value or "").strip())
-    if not str(configured) or configured.is_absolute():
+    text = str(value or "").strip()
+    if not text:
+        return ""
+
+    configured = Path(text)
+    if configured.is_absolute():
         return str(configured)
 
     parts = [part.lower() for part in configured.parts if part not in {".", ""}]
