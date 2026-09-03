@@ -57,7 +57,11 @@ export function createPlugin({ core, modules, logger } = {}) {
       capturedAt,
       modules,
     });
-    payload.roundKey = buildRoundKey(payload);
+    if (!payload.matchId) {
+      pluginLogger.warn?.("[MatchEndSnapshot] skipped snapshot because MatchState has no canonical matchId.");
+      return null;
+    }
+    payload.roundKey = payload.matchId;
     payload.source = {
       ...objectValue(payload.source),
       automatic: options?.automatic === true,
@@ -121,6 +125,7 @@ export function createPlugin({ core, modules, logger } = {}) {
         core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
           eventName: "match.snapshot.ready",
           snapshotId: id,
+          matchId: payload.matchId,
           roundKey: buildRoundKey(payload),
           pageCount: payload.artifacts.pageCount,
           pages: payload.artifacts.pages,
@@ -263,8 +268,9 @@ export function createPlugin({ core, modules, logger } = {}) {
       await settleCareerSnapshot(payload, safeId);
       await writeJsonAtomic(snapshotPath, payload);
       core?.eventBus?.emitCoreEvent?.("match.snapshot.ready", {
-          eventName: "match.snapshot.ready",
+        eventName: "match.snapshot.ready",
         snapshotId: safeId,
+        matchId: payload.matchId,
         roundKey: buildRoundKey(payload),
         pageCount: payload.artifacts.pageCount,
         pages: payload.artifacts.pages,
@@ -666,6 +672,8 @@ export function createPlugin({ core, modules, logger } = {}) {
 
 async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, modules }) {
   const matchState = objectValue(overview?.matchState);
+  const matchStateApi = modules?.matchState?.api ?? modules?.matchState;
+  const canonicalMatchId = firstText(matchStateApi?.getCurrentMatchId?.(), matchState?.match?.matchId, matchState?.round?.current?.matchId);
   const status = objectValue(overview?.status);
   const serverStatus = {
     ...objectValue(matchState?.serverStatus),
@@ -720,7 +728,8 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
   const remoteTicketSnapshot = await resolveRemoteTelemetryTeamTickets(modules);
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    matchId: canonicalMatchId || null,
     snapshotType: "match-end-data",
     capturedAt,
     trigger: {
@@ -735,6 +744,7 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
       queueCount: firstNumber(status.queueCount, serverStatus.queueCount, match.queueCount) ?? 0,
     },
     match: {
+      matchId: canonicalMatchId || null,
       map: currentMap,
       layer: currentLayer,
       mode: firstText(match.mode, match.gameMode, status.mode, status.gameMode, serverStatus.mode, serverStatus.gameMode),
@@ -764,13 +774,8 @@ async function buildSnapshotPayload({ overview, triggerEvent, capturedAt, module
     players,
     squads,
     source: {
-      roundKey: firstText(
-        triggerEvent?.roundKey,
-        triggerEvent?.payload?.roundKey,
-        triggerEvent?.data?.roundKey,
-        triggerEvent?.eventId,
-        triggerEvent?.rawEvent?.EventId,
-      ),
+      matchId: canonicalMatchId || null,
+      roundKey: canonicalMatchId || null,
       triggerEventId: firstText(triggerEvent?.eventId, triggerEvent?.rawEvent?.EventId),
       matchStateUpdatedAt: firstText(matchState?.updatedAt, matchState?.players?.lastUpdatedAt),
       bzssCoreUpdatedAt: firstText(
@@ -1307,16 +1312,7 @@ function filterAndSortSnapshots(items, options = {}) {
 }
 
 function buildRoundKey(payload) {
-  const explicit = firstText(payload?.roundKey, payload?.source?.roundKey);
-  if (explicit) return explicit;
-  const capturedMs = Date.parse(firstText(payload?.capturedAt));
-  const playtimeMs = Math.max(0, firstNumber(payload?.match?.playtime) ?? 0) * 1000;
-  const anchorMs = Math.floor(((Number.isFinite(capturedMs) ? capturedMs : Date.now()) - playtimeMs) / 60_000) * 60_000;
-  return [
-    firstText(payload?.server?.serverId, "server"),
-    firstText(payload?.match?.layer, payload?.match?.map, "unknown"),
-    new Date(anchorMs).toISOString().slice(0, 16),
-  ].join(":");
+  return firstText(payload?.matchId, payload?.match?.matchId, payload?.source?.matchId);
 }
 
 function buildSnapshotId(payload) {

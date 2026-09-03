@@ -569,12 +569,20 @@ export class UdpEventForwarderService {
   }
 
   buildMatchEnvelope() {
+    this.syncCanonicalMatchId();
     return {
       matchId: this.state.matchId,
       map: this.state.map,
       layer: this.state.layer,
       gameMode: this.state.gameMode,
     };
+  }
+
+  syncCanonicalMatchId() {
+    const matchState = this.modules?.matchState?.api ?? this.modules?.matchState;
+    const matchId = matchState?.getCurrentMatchId?.();
+    this.state.matchId = isNilOrEmpty(matchId) ? null : String(matchId);
+    return this.state.matchId;
   }
 
   buildEnvelope(type, payload, source = {}) {
@@ -625,8 +633,10 @@ export class UdpEventForwarderService {
   }
 
   syncFromModules() {
-    this.syncFromMatchState(this.modules?.matchState?.getState?.() || this.modules?.matchState?.getOverview?.() || null, "initial");
-    this.syncFromRoundState(this.modules?.matchState?.getRoundState?.() || null, "initial");
+    const matchState = this.modules?.matchState?.api ?? this.modules?.matchState;
+    this.syncFromMatchState(matchState?.getState?.() || matchState?.getOverview?.() || null, "initial");
+    this.syncFromRoundState(matchState?.getRoundState?.() || null, "initial");
+    this.syncCanonicalMatchId();
   }
 
   onMatchStateUpdated(rawEvent, eventBusEvent) {
@@ -643,8 +653,7 @@ export class UdpEventForwarderService {
     if (!isNilOrEmpty(map)) this.state.map = map;
     if (!isNilOrEmpty(layer)) this.state.layer = layer;
     if (!isNilOrEmpty(gameMode)) this.state.gameMode = gameMode;
-    if (!isNilOrEmpty(match.matchId)) this.state.matchId = match.matchId;
-    if (!isNilOrEmpty(event.matchId)) this.state.matchId = event.matchId;
+    this.syncCanonicalMatchId();
 
     const playerCount = toNumberOrNull(firstDefined(
       serverStatus.playerCount,
@@ -702,7 +711,7 @@ export class UdpEventForwarderService {
     if (!isNilOrEmpty(map)) this.state.map = map;
     if (!isNilOrEmpty(layer)) this.state.layer = layer;
     if (!isNilOrEmpty(gameMode)) this.state.gameMode = gameMode;
-    if (!isNilOrEmpty(match.matchId)) this.state.matchId = match.matchId;
+    this.syncCanonicalMatchId();
 
     const playerCount = toNumberOrNull(firstDefined(serverStatus.playerCount, players.count));
     const maxPlayers = toNumberOrNull(serverStatus.maxPlayers);
@@ -758,9 +767,7 @@ export class UdpEventForwarderService {
       this.state.logAvailable = true;
     }
 
-    if (!isNilOrEmpty(current.matchId)) {
-      this.state.matchId = current.matchId;
-    }
+    this.syncCanonicalMatchId();
 
     if (reason) {
       this.state.lastRoundStateUpdatedAt = new Date().toISOString();
@@ -842,6 +849,13 @@ export class UdpEventForwarderService {
       victim: this.config.includeIds ? victim : { name: victim.name },
       attacker: this.config.includeIds ? attacker : { name: attacker.name },
     };
+
+    // Revive events predate the normalized combat envelope and consumers use
+    // these fields to distinguish them. Keep other combat payloads exact.
+    if (combatType === "revive") {
+      payload.combatType = combatType;
+      payload.eventName = firstDefined(record.eventName, rawEvent?.eventName);
+    }
 
     if (this.config.includeRawLog) {
       payload.rawLog = firstDefined(
@@ -932,11 +946,7 @@ export class UdpEventForwarderService {
 
     this.state.lastMapChangedAt = new Date().toISOString();
     this.state.lastRoundStateUpdatedAt = new Date().toISOString();
-    if (event.matchId || rawEvent?.matchId) {
-      this.state.matchId = event.matchId || rawEvent.matchId;
-    } else if (!this.state.matchId) {
-      this.state.matchId = `${this.config.serverId}:${new Date().toISOString().replace(/[-:.]/g, "").slice(0, 15)}:${layer || "unknown_layer"}`;
-    }
+    this.syncCanonicalMatchId();
 
     // Only forward when the map or layer actually changed to avoid noisy duplicates.
     const mapChanged = previousMap !== this.state.map || previousLayer !== this.state.layer;

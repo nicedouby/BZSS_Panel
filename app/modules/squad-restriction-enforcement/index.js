@@ -947,19 +947,10 @@ export function createSquadRestrictionEnforcementModule({
       || lastRoundContext?.serverId,
     );
     const managementState = getManagementState(serverId);
-    const matchState = modules?.matchState?.getState?.() ?? {};
-    const matchId = text(
-      event?.matchId
-      ?? managementState?.matchId
-      ?? managementState?.currentMatchId
-      ?? matchState?.round?.current?.sessionId
-      ?? matchState?.round?.current?.matchId
-      ?? lastRoundContext?.matchId,
-    );
-    const roundKey = text(managementState?.roundKey)
-      || (serverId && matchId ? `${serverId}:${matchId}` : "")
-      || text(lastRoundContext?.roundKey)
-      || currentRoundKey;
+    const matchStateApi = modules?.matchState?.api ?? modules?.matchState;
+    const matchState = matchStateApi?.getState?.() ?? {};
+    const matchId = text(matchStateApi?.getCurrentMatchId?.());
+    const roundKey = matchId;
     const polling = status?.rconPolling ?? matchState?.rconPolling ?? {};
     const logClockSeconds = numeric(
       status?.logClockSeconds

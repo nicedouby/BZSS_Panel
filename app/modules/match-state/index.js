@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import {
   parseCurrentMap,
@@ -41,8 +42,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   const MAX_ROUND_HISTORY = 200;
   const DEFAULT_DEDUPE_TTL_MS = 10 * 60 * 1000;
   const DEFAULT_SESSION_STATE_FILE = "./data/match-state/session.json";
-  const LEGACY_SESSION_STATE_FILE = "./data/match-state-session.json";
-  const SESSION_STATE_VERSION = 1;
+  const SESSION_STATE_VERSION = 2;
   const roundDedupeTtlMs = normalizePositiveNumber(moduleConfig.roundDedupeTtlMs, DEFAULT_DEDUPE_TTL_MS);
   const roundMaxHistory = normalizePositiveNumber(moduleConfig.roundMaxHistory ?? moduleConfig.maxEvents, MAX_ROUND_HISTORY);
   const sessionStateFile = path.resolve(
@@ -99,6 +99,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       lastUpdatedAt: "",
     },
     match: {
+      matchId: null,
       map: "",
       layer: "",
       mode: "",
@@ -202,6 +203,27 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   const api = {
     getState: getSnapshot,
 
+    getCurrentMatchId() {
+      return normalizeText(state.match.matchId || state.round.current?.matchId || "") || null;
+    },
+
+    getCurrentMatchIdentity() {
+      const matchId = api.getCurrentMatchId();
+      if (!matchId) return null;
+      const record = state.round.current ?? {};
+      return {
+        matchId,
+        serverId: normalizeText(state.serverId || core.webStatus.serverId || ""),
+        worldPath: String(record.worldPath ?? "").trim(),
+        logLineTime: String(record.logLineTime ?? "").trim(),
+        serverPlayAt: String(record.serverPlayAt ?? "").trim(),
+        map: String(record.mapName ?? state.match.map ?? "").trim(),
+        layer: String(record.layerName ?? state.match.layer ?? "").trim(),
+        mode: String(record.gameMode ?? state.match.mode ?? "").trim(),
+        startedAt: String(record.receivedAt ?? "").trim(),
+      };
+    },
+
     getOverview(matchState = null) {
       const snapshot = matchState ?? getSnapshot();
       if (snapshotCache.overviewSnapshot === snapshot && snapshotCache.overview) {
@@ -302,10 +324,12 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     }
     roundRecentKeys.set(dedupeKey, Date.now());
 
+    const previousMatchId = api.getCurrentMatchId();
     const record = {
       ...parsed,
       serverId,
       dedupeKey,
+      matchId: buildCanonicalMatchId({ serverId, logLineTime: parsed.logLineTime, worldPath: parsed.worldPath, serverPlayAt: parsed.serverPlayAt }),
       sourceEventId: String(event?.eventId ?? ""),
       receivedAt: new Date().toISOString(),
       rawLog: String(event?.rawLog ?? parsed.rawLog ?? ""),
@@ -313,6 +337,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     state.serverId = serverId;
     state.round.current = clone(record);
+    state.match.matchId = record.matchId;
+    state.match.map = String(record.mapName ?? state.match.map ?? "").trim();
+    state.match.layer = String(record.layerName ?? state.match.layer ?? "").trim();
+    state.match.mode = String(record.gameMode ?? state.match.mode ?? "").trim();
     roundHistory.push(clone(record));
     if (roundHistory.length > roundMaxHistory) {
       roundHistory.splice(0, roundHistory.length - roundMaxHistory);
@@ -354,6 +382,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       layer: "module",
       source: "module.matchState",
       serverId,
+      matchId: record.matchId,
+      previousMatchId: previousMatchId && previousMatchId !== record.matchId ? previousMatchId : null,
       time: record.receivedAt,
       record: clone(record),
       roundState: api.getRoundState(),
@@ -367,6 +397,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       source: "module.roundState",
       state: api.getRoundState(),
     });
+    void persistMatchSessionState();
 
     moduleLogger.info(
       `[MATCH] Round World bring up detected: ${record.layerName} map=${record.mapName || "unknown"}`,
@@ -955,8 +986,9 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const promoteComparisonState = options?.promoteComparisonState === true;
     const currentFingerprint = buildCurrentMatchFingerprint();
     const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
-    if (serverId && currentFingerprint) {
-      const currentFingerprintKey = currentFingerprint.fingerprint || currentFingerprint.fullKey || currentFingerprint.baseKey || "";
+    const matchId = api.getCurrentMatchId();
+    if (serverId && currentFingerprint && matchId) {
+      const currentFingerprintKey = matchId;
       const lastPersistedFingerprint = sessionState.lastPersistedFingerprintByServerId.get(serverId) ?? "";
       if (lastPersistedFingerprint === currentFingerprintKey && sessionState.persistedByServerId.has(serverId)) {
         if (promoteComparisonState) {
@@ -965,17 +997,17 @@ export function createMatchStateModule({ core, modules, config, logger }) {
             sessionState.byServerId.set(serverId, { ...persistedRecord });
           }
         }
-        return;
-      }
-      const record = {
-        sessionId: buildMatchSessionId(serverId, currentFingerprint),
-        closedAt: new Date().toISOString(),
-        ...currentFingerprint,
-      };
-      sessionState.persistedByServerId.set(serverId, record);
-      sessionState.lastPersistedFingerprintByServerId.set(serverId, currentFingerprintKey);
-      if (promoteComparisonState) {
-        sessionState.byServerId.set(serverId, { ...record });
+      } else {
+        const record = {
+          matchId,
+          closedAt: new Date().toISOString(),
+          ...currentFingerprint,
+        };
+        sessionState.persistedByServerId.set(serverId, record);
+        sessionState.lastPersistedFingerprintByServerId.set(serverId, currentFingerprintKey);
+        if (promoteComparisonState) {
+          sessionState.byServerId.set(serverId, { ...record });
+        }
       }
     }
 
@@ -1018,7 +1050,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     if (!previous) return false;
 
     if (!sessionState.serverInfoReady) {
-      const waitingKey = `serverInfo:${previous.sessionId || serverId}`;
+      const waitingKey = `serverInfo:${previous.matchId || serverId}`;
       const announcedWaiting = sessionState.waitingForServerInfoByServerId.get(serverId) ?? "";
       if (announcedWaiting !== waitingKey) {
         sessionState.waitingForServerInfoByServerId.set(serverId, waitingKey);
@@ -1027,7 +1059,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
           data: {
             trigger,
             serverId,
-            sessionId: String(previous.sessionId ?? ""),
+            matchId: String(previous.matchId ?? ""),
             previousClosedAt: String(previous.closedAt ?? ""),
           },
         });
@@ -1037,7 +1069,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
 
     const current = buildCurrentMatchFingerprint();
     if (!current) {
-      const waitingKey = `waiting:${String(previous.sessionId ?? previous.baseKey ?? serverId)}`;
+      const waitingKey = `waiting:${String(previous.matchId ?? previous.baseKey ?? serverId)}`;
       const announcedWaiting = sessionState.awaitingComparisonByServerId.get(serverId) ?? "";
       if (announcedWaiting !== waitingKey) {
         sessionState.awaitingComparisonByServerId.set(serverId, waitingKey);
@@ -1046,7 +1078,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
           data: {
             trigger,
             serverId,
-            sessionId: String(previous.sessionId ?? ""),
+            matchId: String(previous.matchId ?? ""),
             previousClosedAt: String(previous.closedAt ?? ""),
             previousFingerprint: previous,
           },
@@ -1056,10 +1088,10 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     }
 
     const currentComparisonKey = current.fullKey || current.baseKey;
-    const previousSessionId = String(previous.sessionId ?? "").trim();
+    const persistedIdentityKey = String(previous.matchId ?? previous.fullKey ?? previous.baseKey ?? currentComparisonKey).trim();
     const announcedComparison = sessionState.announcedComparisonByServerId.get(serverId) ?? "";
-    const sameKey = `same:${previousSessionId || currentComparisonKey}`;
-    const differentKey = `different:${previousSessionId || currentComparisonKey}`;
+    const sameKey = `same:${persistedIdentityKey}`;
+    const differentKey = `different:${persistedIdentityKey}`;
     if (announcedComparison === sameKey) return true;
     if (announcedComparison === differentKey) return false;
     sessionState.awaitingComparisonByServerId.delete(serverId);
@@ -1072,7 +1104,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
         data: {
           trigger,
           serverId,
-          sessionId: previousSessionId || "",
+          matchId: String(previous.matchId ?? ""),
           previousClosedAt: String(previous.closedAt ?? ""),
           currentFingerprint: current,
           previousFingerprint: previous,
@@ -1082,13 +1114,31 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     }
 
     sessionState.announcedComparisonByServerId.set(serverId, sameKey);
-    sessionState.announcedSameMatchByServerId.set(serverId, previousSessionId || currentComparisonKey);
+    if (previous.matchId && !api.getCurrentMatchId()) {
+      state.match.matchId = String(previous.matchId);
+      state.round.current = {
+        ...(state.round.current ?? {}),
+        matchId: String(previous.matchId),
+        serverId,
+        worldPath: String(previous.roundAnchor?.worldPath ?? ""),
+        logLineTime: String(previous.roundAnchor?.logLineTime ?? ""),
+        serverPlayAt: String(previous.roundAnchor?.serverPlayAt ?? ""),
+        mapName: String(previous.map ?? ""),
+        layerName: String(previous.layer ?? ""),
+        gameMode: String(previous.mode ?? ""),
+        restored: true,
+      };
+      state.match.map = String(previous.map ?? state.match.map ?? "");
+      state.match.layer = String(previous.layer ?? state.match.layer ?? "");
+      state.match.mode = String(previous.mode ?? state.match.mode ?? "");
+    }
+    sessionState.announcedSameMatchByServerId.set(serverId, String(previous.matchId ?? currentComparisonKey));
     logWithFallback(moduleLogger, "info", "/xm 当前对局与上一次关闭的对局为同一对局", {
       operation: "matchState.sameMatchRestored",
       data: {
         trigger,
         serverId,
-        sessionId: previousSessionId || "",
+        matchId: String(previous.matchId ?? ""),
         previousClosedAt: String(previous.closedAt ?? ""),
         currentFingerprint: current,
         previousFingerprint: previous,
@@ -1141,13 +1191,13 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     if (!value || typeof value !== "object") return null;
     const baseKey = normalizeText(value.baseKey ?? value.matchKey ?? value.fingerprint ?? "");
     const fullKey = normalizeText(value.fullKey ?? value.matchFullKey ?? "");
-    const sessionId = normalizeText(value.sessionId ?? value.id ?? "");
+    const matchId = normalizeText(value.matchId ?? "");
     const closedAt = String(value.closedAt ?? value.lastClosedAt ?? "").trim();
 
-    if (!baseKey && !fullKey && !sessionId) return null;
+    if (!matchId) return null;
 
     return {
-      sessionId: sessionId || buildMatchSessionId("unknown", { baseKey, fullKey, fingerprint: fullKey || baseKey }),
+      matchId,
       closedAt,
       baseKey,
       fullKey,
@@ -1189,15 +1239,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       .trim()
       .toLowerCase()
       .replace(/\s+/g, " ");
-  }
-
-  function buildMatchSessionId(serverId, fingerprint) {
-    return [
-      "match-state",
-      serverId,
-      fingerprint?.fingerprint || fingerprint?.fullKey || fingerprint?.baseKey || "unknown",
-      Date.now(),
-    ].join(":");
   }
 
   function enrichPlayersWithMatchPresence(serverId, players) {
@@ -1249,6 +1290,8 @@ export function createMatchStateModule({ core, modules, config, logger }) {
   }
 
   function buildCurrentMatchIdentity() {
+    const matchId = api.getCurrentMatchId();
+    if (!matchId) return null;
     const map = normalizeMatchFingerprintPart(state.serverStatus.map || state.match.map || "");
     const layer = normalizeMatchFingerprintPart(state.serverStatus.layer || state.match.layer || "");
     const mode = normalizeMatchFingerprintPart(state.serverStatus.mode || state.match.mode || "");
@@ -1263,6 +1306,7 @@ export function createMatchStateModule({ core, modules, config, logger }) {
     const baseKey = baseParts.join("|");
 
     return {
+      matchId,
       serverId: state.serverId || core.webStatus.serverId || "",
       baseKey,
       fullKey,
@@ -1279,155 +1323,6 @@ export function createMatchStateModule({ core, modules, config, logger }) {
       },
       lastObservedPlaytimeSeconds: Number(state.serverStatus.playtime ?? state.match.playtime ?? 0) || 0,
     };
-  }
-
-  function maybeAnnounceRestoredSameMatch_legacy(trigger = "") {
-    const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
-    if (!serverId) return false;
-
-    const matchCache = modules?.matchCache;
-    const cachedMatch = typeof matchCache?.getMatchIdentity === "function"
-      ? matchCache.getMatchIdentity(serverId)
-      : null;
-    if (!cachedMatch) return false;
-
-    const comparison = typeof matchCache?.compareCachedMatch === "function"
-      ? matchCache.compareCachedMatch(cachedMatch, serverId)
-      : { status: "pending", reason: "cache_unavailable" };
-
-    if (comparison.status === "pending") return false;
-    if (comparison.status === "ambiguous") {
-      logWithFallback(moduleLogger, "info", "[MatchState] 当前对局信息不足，暂不比对", {
-        operation: "matchState.waitingForCurrentMatch",
-        data: { trigger, serverId, reason: comparison.reason },
-      });
-      return false;
-    }
-    if (comparison.status === "different") {
-      logWithFallback(moduleLogger, "info", "/xm 当前对局与上一轮关闭的对局不是同一对局", {
-        operation: "matchState.differentMatchRestored",
-        data: {
-          trigger,
-          serverId,
-          reason: comparison.reason,
-          currentFingerprint: comparison.currentMatch,
-          previousFingerprint: comparison.cachedMatch,
-        },
-      });
-      return false;
-    }
-
-    logWithFallback(moduleLogger, "info", "/xm 当前对局与上一轮关闭的对局为同一对局", {
-      operation: "matchState.sameMatchRestored",
-      data: {
-        trigger,
-        serverId,
-        reason: comparison.reason,
-        currentFingerprint: comparison.currentMatch,
-        previousFingerprint: comparison.cachedMatch,
-      },
-    });
-    return true;
-  }
-
-  async function loadMatchSessionState_legacy() {
-    if (sessionState.loaded) return;
-    sessionState.loaded = true;
-    const matchCache = modules?.matchCache;
-    if (!matchCache) return;
-
-    const status = typeof matchCache.getStatus === "function"
-      ? matchCache.getStatus(state.serverId || core.webStatus.serverId || "")
-      : null;
-    if (!status?.cachedMatch) return;
-
-    const restored = await matchCache.restoreCurrentMatch(
-      status.cachedMatch,
-      status.serverId || state.serverId || core.webStatus.serverId || "",
-    );
-    if (restored) {
-      const serverKey = normalizeText(status.serverId || state.serverId || core.webStatus.serverId || "");
-      if (serverKey) {
-        sessionState.byServerId.set(serverKey, {
-          sessionId: restored.sessionId || buildMatchSessionId(serverKey, restored),
-          closedAt: restored.closedAt || new Date().toISOString(),
-          ...restored,
-        });
-      }
-    }
-  }
-
-  async function persistMatchSessionState_legacy(options = {}) {
-    const promoteComparisonState = options?.promoteComparisonState === true;
-    const cacheCurrentMatch = modules?.matchCache?.getStatus?.(state.serverId || core.webStatus.serverId || "")?.currentMatch ?? null;
-    const currentFingerprint = buildCurrentMatchIdentity() ?? cacheCurrentMatch;
-    const serverId = normalizeText(state.serverId || core.webStatus.serverId || "");
-    if (serverId && currentFingerprint) {
-      const currentFingerprintKey = currentFingerprint.fingerprint || currentFingerprint.fullKey || currentFingerprint.baseKey || "";
-      const lastPersistedFingerprint = sessionState.lastPersistedFingerprintByServerId.get(serverId) ?? "";
-      if (lastPersistedFingerprint === currentFingerprintKey && sessionState.persistedByServerId.has(serverId)) {
-        if (promoteComparisonState) {
-          const persistedRecord = sessionState.persistedByServerId.get(serverId);
-          if (persistedRecord) {
-            sessionState.byServerId.set(serverId, { ...persistedRecord });
-          }
-        }
-        return;
-      }
-      const record = {
-        sessionId: buildMatchSessionId(serverId, currentFingerprint),
-        closedAt: new Date().toISOString(),
-        ...currentFingerprint,
-      };
-      sessionState.persistedByServerId.set(serverId, record);
-      sessionState.lastPersistedFingerprintByServerId.set(serverId, currentFingerprintKey);
-      if (promoteComparisonState) {
-        sessionState.byServerId.set(serverId, { ...record });
-      }
-    }
-
-    if (sessionState.persistedByServerId.size === 0) return;
-
-    const payload = {
-      version: SESSION_STATE_VERSION,
-      servers: Object.fromEntries(
-        [...sessionState.persistedByServerId.entries()]
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, value]) => [key, { ...value }]),
-      ),
-    };
-
-    try {
-      await fs.mkdir(path.dirname(sessionState.filePath), { recursive: true });
-      const tempFile = `${sessionState.filePath}.${process.pid}.${Date.now()}.tmp`;
-      try {
-        await fs.writeFile(tempFile, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-        await fs.rename(tempFile, sessionState.filePath);
-      } finally {
-        await fs.rm(tempFile, { force: true }).catch(() => {});
-      }
-    } catch (error) {
-      logWithFallback(moduleLogger, "warn", "[MatchState] session state write failed", {
-        operation: "matchState.sessionStateWriteFailed",
-        data: {
-          filePath: sessionState.filePath,
-          message: String(error?.message ?? error),
-        },
-      });
-    }
-
-    const matchCache = modules?.matchCache;
-    if (matchCache) {
-      maybeSetCurrentMatchIdentity("persist");
-      await matchCache.flush(state.serverId || core.webStatus.serverId || "", { force: options?.promoteComparisonState === true });
-    }
-  }
-
-  function normalizeMatchFingerprintPart_legacy(value) {
-    return String(value ?? "")
-      .trim()
-      .toLowerCase()
-      .replace(/\s+/g, " ");
   }
 
   function extractSquadTeamNames_legacy(squads = []) {
@@ -1967,4 +1862,10 @@ function normalizeText(value) {
   return String(value ?? "")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+export function buildCanonicalMatchId({ serverId, logLineTime, worldPath, serverPlayAt } = {}) {
+  const parts = [serverId, logLineTime, worldPath, serverPlayAt].map((value) => String(value ?? "").trim());
+  if (parts.some((value) => !value)) return "";
+  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 24);
 }

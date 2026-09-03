@@ -673,24 +673,7 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       || normalizeText(core?.webStatus?.serverId)
       || normalizeText(core?.webStatus?.getSnapshot?.()?.serverId)
       || "";
-    const round = state?.round?.current ?? {};
-    const latestRound = Array.isArray(state?.round?.history) ? state.round.history.at(-1) ?? {} : {};
-    const roundAnchor = [
-      round?.worldPath,
-      round?.serverPlayAt,
-      round?.logLineTime,
-      round?.receivedAt,
-      latestRound?.worldPath,
-      latestRound?.serverPlayAt,
-      latestRound?.logLineTime,
-      latestRound?.receivedAt,
-      state?.round?.lastAcceptedAt,
-      // MatchState can enter warmup before the first round event is recorded.
-      // Map/layer is the stable identity available during that window.
-      "warmup",
-    ].map(normalizeText).find(Boolean) || "warmup";
-    const map = normalizeText(state?.match?.map) || normalizeText(state?.serverStatus?.map);
-    const layer = normalizeText(state?.match?.layer) || normalizeText(state?.serverStatus?.layer);
+    const matchId = normalizeText(matchStateApi?.getCurrentMatchId?.());
     const phase = normalizeText(state?.match?.phase).toLowerCase() || "unknown";
     const rawPlaytime = state?.match?.playtime ?? state?.serverStatus?.playtime;
     const playtime = Number(rawPlaytime);
@@ -699,13 +682,14 @@ export function createTeamBalanceService({ core, modules, config, logger }) {
       serverId,
       phase,
       playtime,
-      roundKey: [serverId, map, layer, roundAnchor].join("|"),
+      matchId,
+      roundKey: matchId,
     };
   }
 
   function getShuffleGate() {
     const context = getCurrentMatchContext();
-    if (!context.serverId || context.roundKey.endsWith("|warmup") && context.roundKey.split("|").slice(1, 3).every((value) => !value)) {
+    if (!context.serverId || !context.matchId) {
       return { ok: false, reason: "round_unavailable", roundKey: context.roundKey, message: "当前没有可识别的对局。" };
     }
     // Shuffle is a one-shot command batch. It may be submitted during warmup

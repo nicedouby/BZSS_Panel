@@ -19,8 +19,6 @@ export function parseSquadCreateEvent(event) {
   const serverId = String(event.serverId ?? getParam(event, "ServerID") ?? "").trim();
   const matchId = String(
     event.matchId
-      ?? event.sessionId
-      ?? getParam(event, "SessionID")
       ?? getParam(event, "MatchID")
       ?? "",
   ).trim();

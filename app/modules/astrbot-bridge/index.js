@@ -345,6 +345,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       version: Number(version) || 1,
       eventId: normalizedEventId,
       time: normalizedTime,
+      ...(normalizedType === "match.finished" && firstText(data?.matchId) ? { matchId: firstText(data.matchId) } : {}),
       data: sanitizeBridgeEventData(data),
     };
     recentEvents.unshift(event);
@@ -521,7 +522,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       if (!runtimeConfig.matchFinished.allowTextFallback || hasPublishedRound(roundKey)) return;
       void dispatchMatchFinishedEvent({
         sourceEvent,
-        roundKey,
+        matchId: roundKey,
         serverId: pending.serverId,
         winner: pending.winner,
         snapshotId: null,
@@ -537,9 +538,9 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   async function handleFinishedSnapshotReady(sourceEvent = {}) {
     if (!runtimeConfig.matchFinished.enabled) return;
     const roundKey = firstText(
-      sourceEvent?.roundKey,
-      sourceEvent?.data?.roundKey,
-      sourceEvent?.payload?.roundKey,
+      sourceEvent?.matchId,
+      sourceEvent?.data?.matchId,
+      sourceEvent?.payload?.matchId,
     );
     const pending = pendingFinishedRounds.get(roundKey);
     if (!roundKey || !pending) return;
@@ -556,10 +557,10 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     }
 
     const snapshotRoundKey = firstText(
-      snapshot?.roundKey,
-      snapshot?.source?.roundKey,
-      snapshot?.trigger?.raw?.roundKey,
-      sourceEvent?.roundKey,
+      snapshot?.matchId,
+      snapshot?.match?.matchId,
+      snapshot?.source?.matchId,
+      sourceEvent?.matchId,
     );
     if (snapshotRoundKey !== roundKey) {
       moduleLogger?.warn?.(`[AstrBotBridge] ignored snapshot ${snapshotId}: roundKey mismatch expected=${roundKey} actual=${snapshotRoundKey || "-"}`);
@@ -570,7 +571,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     pendingFinishedRounds.delete(roundKey);
     await dispatchMatchFinishedEvent({
       sourceEvent: pending.sourceEvent,
-      roundKey,
+      matchId: roundKey,
       serverId: pending.serverId,
       winner: pending.winner,
       snapshotId,
@@ -618,14 +619,14 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       serverInfo?.server?.serverId,
       "server",
     );
-    const randomId = randomBytes(6).toString("hex");
     const time = normalizeIsoTime(input?.time);
+    const matchState = modules?.matchState?.api ?? modules?.matchState;
     const roundKey = firstText(
-      input?.roundKey,
-      simulated ? `test:${time}:${randomId}` : "",
-      snapshot?.roundKey,
-      snapshot?.source?.roundKey,
-      snapshotId ? `${serverId}:${snapshotId}` : "",
+      input?.matchId,
+      snapshot?.matchId,
+      snapshot?.match?.matchId,
+      snapshot?.source?.matchId,
+      matchState?.getCurrentMatchId?.(),
     );
     if (!roundKey) {
       const error = new Error("A stable roundKey is required for match.finished.");
@@ -636,9 +637,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
 
     const eventId = firstText(
       input?.eventId,
-      simulated
-        ? `test_match_finished:${serverId}:${Date.parse(time) || Date.now()}:${randomId}`
-        : `match_finished:${serverId}:${roundKey}`,
+      `match_finished:${serverId}:${roundKey}`,
     );
     const duplicate = findPublishedFinishedEvent(eventId, roundKey, simulated);
     if (duplicate) {
@@ -657,6 +656,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
     const data = {
       serverId,
       serverName: firstText(input?.serverName, snapshot?.server?.serverName, serverInfo?.server?.serverName),
+      matchId: roundKey,
       roundKey,
       map: firstText(input?.map, snapshot?.match?.map, serverInfo?.match?.map),
       layer: firstText(input?.layer, snapshot?.match?.layer, serverInfo?.match?.layer),
@@ -707,13 +707,13 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
   }
 
   function resolveRoundKey(event = {}, normalizedPayload = {}, serverInfo = {}) {
+    const matchState = modules?.matchState?.api ?? modules?.matchState;
     const explicit = firstText(
-      event?.roundKey,
-      event?.payload?.roundKey,
-      event?.data?.roundKey,
-      normalizedPayload?.roundKey,
-      event?.eventId,
-      event?.rawEvent?.EventId,
+      event?.matchId,
+      event?.payload?.matchId,
+      event?.data?.matchId,
+      normalizedPayload?.matchId,
+      matchState?.getCurrentMatchId?.(),
     );
     if (explicit) return explicit;
 

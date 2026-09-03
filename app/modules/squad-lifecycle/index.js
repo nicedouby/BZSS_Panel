@@ -99,22 +99,12 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
         if (!serverId) return;
 
         cleanupExpiredPending();
-        const matchId = resolveCurrentMatchId(serverId, event) || buildSyntheticMatchId(serverId, event);
+        const matchId = resolveCurrentMatchId(serverId, event);
         if (!matchId) return;
 
         const previousMatchId = reducer.getCurrentMatchId(serverId);
         if (previousMatchId && previousMatchId !== matchId) {
-          if (previousMatchId.startsWith(`synthetic:${serverId}:`)) {
-            reducer.reassignMatchId(serverId, previousMatchId, matchId);
-            for (const pending of pendingCreateLogs.values()) {
-              if (pending.serverId === serverId && pending.matchId === previousMatchId) pending.matchId = matchId;
-            }
-            for (const pending of replayPendingCreates.values()) {
-              if (pending.serverId === serverId && pending.matchId === previousMatchId) pending.matchId = matchId;
-            }
-          } else {
-            clearPendingForServer(serverId);
-          }
+          clearPendingForServer(serverId);
         }
 
         reducer.setCurrentMatchId(serverId, matchId);
@@ -126,6 +116,13 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
           observedAt: event.time ?? new Date().toISOString(),
           squads: Array.isArray(event.squads) ? event.squads : [],
         });
+      }));
+
+      unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "roundUpdated", (event) => {
+        const serverId = String(event?.serverId ?? core.webStatus.serverId ?? "").trim();
+        const matchId = String(event?.matchId ?? "").trim();
+        if (!serverId || !matchId) return;
+        reducer.setCurrentMatchId(serverId, matchId);
       }));
 
       for (const eventName of MATCH_END_EVENTS) {
@@ -158,7 +155,7 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
           operation: "squadLifecycle.rawCreateParseFailed",
           data: {
             serverId: String(event?.serverId ?? core.webStatus.serverId ?? "").trim(),
-            matchId: String(event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim() || reducer.getCurrentMatchId(event?.serverId ?? core.webStatus.serverId ?? ""),
+            matchId: reducer.getCurrentMatchId(event?.serverId ?? core.webStatus.serverId ?? ""),
           },
         });
       }
@@ -182,7 +179,7 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
       });
     }
 
-    const matchId = resolveCurrentMatchId(serverId, parsed) || buildSyntheticMatchId(serverId, parsed);
+    const matchId = resolveCurrentMatchId(serverId, parsed);
     if (!matchId) return;
 
     reducer.setCurrentMatchId(serverId, matchId);
@@ -451,15 +448,8 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
   }
 
   function resolveCurrentMatchId(serverId, event) {
-    const parsedMatchId = String(event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim();
-    if (parsedMatchId) return parsedMatchId;
-    return reducer.getCurrentMatchId(serverId);
-  }
-
-  function buildSyntheticMatchId(serverId, event) {
-    const matchId = String(event?.matchId ?? event?.sessionId ?? event?.sessionID ?? "").trim();
-    if (matchId) return matchId;
-    return `synthetic:${serverId}:current`;
+    const matchState = modules?.matchState?.api ?? modules?.matchState;
+    return String(matchState?.getCurrentMatchId?.() ?? "").trim();
   }
 
   function rememberCreateEvent(serverId, parsed) {
@@ -478,7 +468,8 @@ export function createSquadLifecycleModule({ core, modules, config, logger }) {
 
     const serverId = String(record.serverId ?? core.webStatus.serverId ?? "").trim();
     if (!serverId || record.squadId == null) return { ok: false, code: "missing_required_fields" };
-    const matchId = resolveCurrentMatchId(serverId, record) || buildSyntheticMatchId(serverId, record);
+    const matchId = String(record.matchId ?? "").trim();
+    if (!matchId) return { ok: false, code: "canonical_match_id_unavailable" };
     const normalized = {
       ...record,
       serverId,

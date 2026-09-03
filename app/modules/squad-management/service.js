@@ -40,7 +40,6 @@ const DEFAULT_DISBAND_PERMISSION = "squad.disband";
 const DEFAULT_KICK_PERMISSION = "squad.kick";
 const DEFAULT_REMOVE_PERMISSION = "squad.remove";
 const DEFAULT_KICK_THRESHOLD = 10;
-const DEFAULT_MATCH_ID_PREFIX = "match";
 const MAX_RECENT_ACTIONS = 100;
 const SQUAD_CREATED_EVENT_DEDUPE_TTL_MS = 10_000;
 
@@ -502,10 +501,11 @@ export function createSquadManagementService({ core, modules, config, logger, re
   async function handleRconSquadsUpdated(event = {}) {
     const serverId = normalizeServerId(event.serverId);
     if (!serverId) return;
-    const matchId = normalizeMatchId(event.matchId ?? event.sessionId ?? event.sessionID ?? getCurrentMatchId(serverId));
+    const matchId = normalizeMatchId(getCurrentMatchId(serverId));
     const squads = normalizeRconSquads(event.squads ?? []);
     const cache = ensureServerCache(serverId);
-    const resolvedMatchId = matchId || cache.matchId || normalizeMatchId(buildSyntheticMatchId(serverId, event));
+    const resolvedMatchId = matchId;
+    if (!resolvedMatchId) return;
 
     cache.matchId = resolvedMatchId;
     cache.rconUpdatedAt = event.time ?? new Date().toISOString();
@@ -540,7 +540,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     cache.playersUpdatedAt = event.time ?? new Date().toISOString();
     cache.lastEventAt = cache.playersUpdatedAt;
     if (!cache.matchId) {
-      cache.matchId = normalizeMatchId(getCurrentMatchId(serverId) || buildSyntheticMatchId(serverId, event));
+      cache.matchId = normalizeMatchId(getCurrentMatchId(serverId));
     }
     touchCache(cache);
 
@@ -590,7 +590,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
     recentSquadCreateEventKeys.set(eventKey, Date.now());
 
     const cache = ensureServerCache(parsed.serverId);
-    const resolvedMatchId = parsed.matchId || cache.matchId || getCurrentMatchId(parsed.serverId) || buildSyntheticMatchId(parsed.serverId, event);
+    const resolvedMatchId = getCurrentMatchId(parsed.serverId);
+    if (!resolvedMatchId) return;
     cache.matchId = resolvedMatchId;
     cache.lastEventAt = parsed.createdAt ?? new Date().toISOString();
 
@@ -1372,7 +1373,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
       activationPopulation: players.length,
       activationPlayerThreshold: 0,
       activationPopulationSource: "squadManagement.players",
-      roundKey: `${serverId}:${matchId}`,
+      roundKey: matchId,
       roundStartedAtMs: 0,
       roundStartedAt: "",
       logClockSeconds: Number(cache.match?.logClockSeconds ?? 0) || 0,
@@ -1572,7 +1573,8 @@ export function createSquadManagementService({ core, modules, config, logger, re
   }
 
   function getCurrentMatchId(serverId) {
-    return normalizeMatchId(lifecycle.getCurrentMatchId(serverId) || ensureServerCache(serverId).matchId || "");
+    const matchState = modules?.matchState?.api ?? modules?.matchState;
+    return normalizeMatchId(matchState?.getCurrentMatchId?.() || "");
   }
 
   function ensureServerCache(serverId) {
@@ -2049,7 +2051,7 @@ export function createSquadManagementService({ core, modules, config, logger, re
     const source = normalizeText(event.source ?? event.layer ?? "log");
     const createdAt = normalizeText(event.createdAt ?? event.time ?? new Date().toISOString());
     const createdAtMs = normalizePositiveNumber(event.createdAtMs ?? event.timeMs ?? createdAt, Date.now());
-    const matchId = normalizeMatchId(event.matchId ?? event.sessionId ?? event.sessionID ?? getCurrentMatchId(serverId) ?? "");
+    const matchId = normalizeMatchId(getCurrentMatchId(serverId));
 
     return {
       serverId,
@@ -2213,12 +2215,6 @@ export function createSquadManagementService({ core, modules, config, logger, re
       normalizeText(parsed.creatorSteamId).toLowerCase(),
       normalizeText(parsed.creatorEosId).toLowerCase(),
     ].join(":");
-  }
-
-  function buildSyntheticMatchId(serverId, event = {}) {
-    const rawMatchId = normalizeMatchId(event.matchId ?? event.sessionId ?? event.sessionID ?? "");
-    if (rawMatchId) return rawMatchId;
-    return `${DEFAULT_MATCH_ID_PREFIX}:${serverId}:${Date.now()}`;
   }
 
   function normalizeRecordKindFilter(value) {

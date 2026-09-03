@@ -1144,12 +1144,13 @@ export class PlayerRepository {
   }
 
   async settleMatchSnapshot(payload = {}, options = {}) {
-    const roundKey = cleanText(options.roundKey ?? payload?.roundKey ?? payload?.source?.roundKey);
-    if (!roundKey) {
-      const error = new Error("A stable roundKey is required to settle career statistics.");
-      error.code = "RoundKeyRequired";
+    const canonicalMatchId = cleanText(options.matchId ?? payload?.matchId ?? payload?.match?.matchId ?? payload?.source?.matchId);
+    if (!canonicalMatchId) {
+      const error = new Error("A canonical matchId is required to settle career statistics.");
+      error.code = "MatchIdRequired";
       throw error;
     }
+    const roundKey = canonicalMatchId;
 
     const snapshotId = cleanText(options.snapshotId ?? payload?.snapshotId);
     const winnerTeam = normalizeWinnerTeam(payload?.trigger?.winner ?? payload?.winner);
@@ -1235,7 +1236,8 @@ export class PlayerRepository {
           duplicate: true,
           roundKey: duplicate.round_key,
           snapshotId: duplicate.snapshot_id,
-          matchId: duplicate.match_id,
+          matchId: canonicalMatchId,
+          matchRecordId: duplicate.match_id,
           playerCount: Number(duplicate.player_count ?? 0),
           skippedPlayerCount: Number(duplicate.skipped_player_count ?? 0),
           settledAt: Number(duplicate.settled_at ?? 0),
@@ -1268,11 +1270,11 @@ export class PlayerRepository {
         winnerTeam,
         "match-end-snapshot",
       );
-      const matchId = Number(matchResult.lastID);
+      const matchRecordId = Number(matchResult.lastID);
 
       await this.db.run(
         "UPDATE match_career_settlements SET match_id = ? WHERE round_key = ?",
-        matchId,
+        matchRecordId,
         roundKey,
       );
 
@@ -1284,7 +1286,7 @@ export class PlayerRepository {
              vehicle_kills, revives, heal_points, combat_score, objective_score,
              teamwork_score, created_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          matchId,
+          matchRecordId,
           record.playerId,
           record.teamId,
           record.wasSquadLead,
@@ -1377,7 +1379,8 @@ export class PlayerRepository {
         duplicate: false,
         roundKey,
         snapshotId,
-        matchId,
+        matchId: canonicalMatchId,
+        matchRecordId,
         playerCount: records.length,
         skippedPlayerCount,
         settledAt,

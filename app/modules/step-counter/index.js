@@ -160,8 +160,8 @@ export function createStepCounterModule({ core, modules, config, logger }) {
     async init() {
       await storage.init();
       activeRoundKey = storage.getActiveRoundKey();
-      const currentRound = modules.matchState?.getState?.()?.round?.current;
-      acceptRoundKey(getStepRoundKey(currentRound), { flush: false });
+      const matchStateApi = modules.matchState?.api ?? modules.matchState;
+      acceptRoundKey(matchStateApi?.getCurrentMatchId?.(), { flush: false });
       this.api = { getStats, getPlayer: (steamID) => storage.getPlayer(steamID) };
     },
     async start() {
@@ -262,13 +262,5 @@ export function getStepRoundKey(value) {
   const record = value?.record ?? value?.roundState?.current ?? value;
   if (!record || typeof record !== "object") return "";
 
-  const direct = String(record.dedupeKey ?? "").trim();
-  if (direct) return direct;
-
-  const serverId = String(record.serverId ?? value?.serverId ?? "").trim();
-  const logLineTime = String(record.logLineTime ?? "").trim();
-  const worldPath = String(record.worldPath ?? "").trim();
-  const serverPlayAt = String(record.serverPlayAt ?? "").trim();
-  if (!worldPath || (!logLineTime && !serverPlayAt)) return "";
-  return [serverId, logLineTime, worldPath, serverPlayAt].join(":");
+  return String(value?.matchId ?? record.matchId ?? "").trim();
 }

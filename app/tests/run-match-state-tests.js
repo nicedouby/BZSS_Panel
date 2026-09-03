@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import assert from "node:assert/strict";
 
-import { createMatchStateModule } from "../modules/match-state/index.js";
+import { buildCanonicalMatchId, createMatchStateModule } from "../modules/match-state/index.js";
 
 function createHarness({ sessionStateFile = "", logs = [], subscribed = true, squadRestrictionMonitor = null } = {}) {
   const subscriptionState = { subscribed };
@@ -176,6 +176,24 @@ function renderLogMessage(message) {
 
 function sleep(ms = 0) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function emitCanonicalRoundStart(harness, overrides = {}) {
+  const round = {
+    mapName: "Al Basrah",
+    layerName: "Al Basrah RAAS v1",
+    gameMode: "RAAS",
+    worldPath: "/Game/Maps/Al_Basrah/Al_Basrah_RAAS_v1",
+    logLineTime: "2023.01.01-12.00.00:000",
+    serverPlayAt: "2023.01.01-12.00.00:000",
+    ...overrides,
+  };
+  harness.core.eventBus.emitCoreEvent("round.world_bring_up", {
+    eventName: "round.world_bring_up",
+    serverId: "BZSS_Main",
+    normalized: { roundWorldBringUp: round },
+  });
+  return round;
 }
 
 async function testAggregatesRconSnapshots() {
@@ -398,6 +416,12 @@ async function testIngestWorldBringUp() {
   assert.equal(state.round.current.mapName, "Al Basrah");
   assert.equal(state.round.current.layerName, "Al Basrah RAAS v1");
   assert.equal(state.match.phase, "warmup");
+  assert.equal(state.match.matchId, buildCanonicalMatchId({
+    serverId: "BZSS_Main",
+    logLineTime: event.normalized.roundWorldBringUp.logLineTime,
+    worldPath: event.normalized.roundWorldBringUp.worldPath,
+    serverPlayAt: event.normalized.roundWorldBringUp.serverPlayAt,
+  }));
   assert.equal(harness.webStatusState.matchPhase, "warmup");
 
   const roundOverview = harness.module.api.getRoundOverview();
@@ -469,10 +493,12 @@ async function testMatchStateSessionContinuityAcrossRestart() {
     const firstHarness = createHarness({ sessionStateFile, logs: [] });
     await firstHarness.module.start();
     await firstHarness.module.api.refresh("all");
+    emitCanonicalRoundStart(firstHarness);
+    await sleep();
     await firstHarness.module.stop();
 
     const persisted = JSON.parse(await fs.readFile(sessionStateFile, "utf8"));
-    assert.equal(persisted.version, 1);
+    assert.equal(persisted.version, 2);
     assert.ok(persisted.servers.BZSS_Main);
     assert.equal(persisted.servers.BZSS_Main.baseKey, "albasrah|albasrah_raas_v1|raas");
 
@@ -503,6 +529,8 @@ async function testMatchStateSessionContinuityAcrossSubscriptionToggle() {
     const harness = createHarness({ sessionStateFile, logs: [], subscribed: true });
     await harness.module.start();
     await harness.module.api.refresh("all");
+    emitCanonicalRoundStart(harness);
+    await sleep();
 
     harness.subscriptionState.subscribed = false;
     await harness.module.api.refresh("serverInfo");
@@ -559,6 +587,8 @@ async function testMatchStateSessionDifferentMapDoesNotMatchPreviousMatch() {
     const firstHarness = createHarness({ sessionStateFile, logs: [] });
     await firstHarness.module.start();
     await firstHarness.module.api.refresh("all");
+    emitCanonicalRoundStart(firstHarness);
+    await sleep();
     await firstHarness.module.stop();
 
     const secondHarness = createHarness({ sessionStateFile, logs: [] });

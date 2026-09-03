@@ -83,7 +83,7 @@ export function createMatchCacheModule({ core, config, logger }) {
   function normalizeStatusMatch(match = null) {
     if (!match || typeof match !== "object") return null;
     const normalized = {
-      sessionId: normalizeText(match.sessionId ?? ""),
+      matchId: normalizeText(match.matchId ?? ""),
       fingerprint: normalizeText(match.fingerprint ?? ""),
       baseKey: normalizeText(match.baseKey ?? ""),
       fullKey: normalizeText(match.fullKey ?? ""),
@@ -102,22 +102,12 @@ export function createMatchCacheModule({ core, config, logger }) {
       },
     };
 
-    if (!normalized.sessionId && !normalized.fingerprint && !normalized.baseKey && !normalized.fullKey) {
+    if (!normalized.matchId) {
       return null;
     }
 
     normalized.fingerprint = normalized.fingerprint || normalized.fullKey || normalized.baseKey;
-    normalized.sessionId = normalized.sessionId || buildSessionId(normalized);
     return normalized;
-  }
-
-  function buildSessionId(match) {
-    return [
-      "match-cache",
-      getServerId(),
-      match?.fingerprint || match?.fullKey || match?.baseKey || "unknown",
-      Date.now(),
-    ].join(":");
   }
 
   function getProviderNames() {
@@ -462,7 +452,7 @@ export function createMatchCacheModule({ core, config, logger }) {
           namespaces,
         };
 
-        if (archiveEndedMatches && state.cachedMatch && currentMatch && state.cachedMatch.sessionId && currentMatch.sessionId && state.cachedMatch.sessionId !== currentMatch.sessionId) {
+        if (archiveEndedMatches && state.cachedMatch && currentMatch && state.cachedMatch.matchId && currentMatch.matchId && state.cachedMatch.matchId !== currentMatch.matchId) {
           await archiveSnapshot(state, payload);
         }
 
