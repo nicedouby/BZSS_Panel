@@ -12,7 +12,7 @@ export function resolveSquadServerPath(configuredPath, cwd = process.cwd()) {
   if (!value || path.isAbsolute(value)) return value;
 
   const direct = path.resolve(cwd, value);
-  const normalized = value.replaceAll("\\\\", "/").replace(/^\.\//, "");
+  const normalized = value.split(path.sep).join("/").replace(/^\.\//, "");
   if (!normalized.toLowerCase().startsWith("squadgame/")) return direct;
 
   let candidate = path.resolve(cwd);
