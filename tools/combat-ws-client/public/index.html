@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BZSS Combat Receiver</title><link rel="stylesheet" href="/style.css"></head>
+<body><main><header><div><p>BZSS COMBAT WS · RECEIVER</p><h1>战斗数据接收端</h1><small>事件成功写入本地文件后才会发送 ACK。</small></div><div id="status" class="status">连接中</div></header>
+<section class="config"><label>WS 地址<input id="websocketUrl"></label><label>Token<input id="token" type="password" placeholder="保留为空则不修改"></label><label>客户端名称<input id="clientId"></label><label>重连间隔(ms)<input id="reconnectDelayMs" type="number" min="250"></label><label>保存目录<input id="outputDirectory"></label><button id="save">保存并重连</button></section>
+<section id="metrics" class="metrics"></section><section class="bar"><h2>最近数据包</h2><div><button id="reconnect">立即重连</button><a href="/api/export">导出状态</a></div></section><div id="packets" class="packets"></div></main><script type="module" src="/app.js"></script></body></html>
