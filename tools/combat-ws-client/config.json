@@ -1,0 +1,9 @@
+{
+  "websocketUrl": "ws://127.0.0.1:12864/ws/combat",
+  "token": "CHANGE_ME",
+  "clientId": "customer-combat-receiver",
+  "dashboardPort": 39080,
+  "reconnectDelayMs": 2000,
+  "outputDirectory": "./data",
+  "maxRememberedPacketIds": 10000
+}
