@@ -22,6 +22,7 @@ const RECORD = Object.freeze({
   PLAYER_NETWORK_DELTA: 0x14,
   ZONE_DELTA: 0x20,
   MAIN_ZONE_DELTA: 0x21,
+  PRESSURE_ZONE_DELTA: 0x22,
   FOB_CREATE: 0x30,
   FOB_DELTA: 0x31,
   FOB_REMOVE: 0x32,
@@ -394,6 +395,7 @@ function createReplayState(session) {
     pings: new Map(),
     zones: new Map(),
     mainZones: new Map(),
+    pressureZoneState: null,
     fobs: new Map(),
     vehicles: new Map(),
     invalidRecords: 0,
@@ -452,6 +454,9 @@ function applyRecord(replay, type, payload) {
       return;
     case RECORD.MAIN_ZONE_DELTA:
       applyAssetUpsert(replay.mainZones, payload?.upsert);
+      return;
+    case RECORD.PRESSURE_ZONE_DELTA:
+      replay.pressureZoneState = expandPressureZoneState(payload?.state);
       return;
     case RECORD.FOB_CREATE:
     case RECORD.FOB_DELTA:
@@ -568,6 +573,7 @@ function serializeReplayState(replay, session, atMs) {
       fobs: mapAssets(replay.fobs),
       vehicles: mapAssets(replay.vehicles),
     },
+    pressureZoneState: replay.pressureZoneState,
     session: {
       id: session.id,
       status: session.status,
@@ -583,6 +589,48 @@ function mapAssets(map) {
     ...(value && typeof value === "object" ? value : {}),
     id,
   }));
+}
+
+function expandPressureZoneState(value) {
+  if (!value || typeof value !== "object") return null;
+  if (Object.hasOwn(value, "active")) return value;
+  const hotspot = Array.isArray(value.h) ? {
+    center: { x: numberOrNull(value.h[0]), y: numberOrNull(value.h[1]) },
+    radiusMeters: numberOrNull(value.h[2]),
+    playerCount: numberOrNull(value.h[3]) ?? 0,
+    radiusWorld: numberOrNull(value.h[4]),
+    linearMapScale: numberOrNull(value.h[5]),
+    positionSource: "alive-player-centroid",
+    sizeSource: "map-effective-size",
+  } : null;
+  const zones = (Array.isArray(value.z) ? value.z : []).flatMap((zone) => {
+    if (!Array.isArray(zone) || zone.length < 5) return [];
+    const center = Array.isArray(zone[5])
+      ? { x: numberOrNull(zone[5][0]), y: numberOrNull(zone[5][1]) }
+      : null;
+    const polygon = (Array.isArray(zone[7]) ? zone[7] : []).flatMap((point) => (
+      Array.isArray(point) ? [{ x: numberOrNull(point[0]), y: numberOrNull(point[1]) }] : []
+    ));
+    return [{
+      id: text(zone[0]),
+      type: text(zone[1]),
+      teamId: numberOrNull(zone[2]),
+      priority: numberOrNull(zone[3]),
+      geometry: {
+        type: text(zone[4]),
+        ...(center ? { center } : {}),
+        ...(zone[6] != null ? { radius: numberOrNull(zone[6]) } : {}),
+        ...(polygon.length ? { polygon } : {}),
+      },
+    }];
+  });
+  return {
+    active: value.a === true,
+    reason: text(value.r),
+    mapKey: text(value.k),
+    hotspot,
+    zones,
+  };
 }
 
 function resolveReplayIdentity(id, value) {
