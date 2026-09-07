@@ -68,6 +68,7 @@ function createStructuredEvent({ seq, eventName, raw, params = {} }) {
 async function main() {
   await testBridgeReadsDirectEventsDirectory();
   await testBridgeReadsAllEventsFile();
+  await testBridgeRecoversLatestNamedEvent();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "logpost-file-bridge-"));
   const logger = createSilentLogger();
   const eventBus = new EventBus({ logger });
@@ -131,6 +132,55 @@ async function main() {
   await bridge.stop();
   fs.rmSync(tempDir, { recursive: true, force: true });
   console.log("[run-logpost-file-bridge-tests] OK");
+}
+
+
+async function testBridgeRecoversLatestNamedEvent() {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "logpost-file-bridge-latest-"));
+  const logger = createSilentLogger();
+  const eventBus = new EventBus({ logger });
+  const eventPipeline = new EventPipeline();
+  const webStatus = { set() {} };
+  const today = new Date();
+  const dateKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const eventsDir = path.join(tempDir, "LogPost", "events", dateKey);
+  fs.mkdirSync(eventsDir, { recursive: true });
+  const filePath = path.join(eventsDir, "all.jsonl");
+  fs.writeFileSync(filePath, [
+    JSON.stringify(createStructuredEvent({
+      seq: 1,
+      eventName: "round.world_bring_up",
+      raw: "LogWorld: Bring Up",
+      params: {
+        logLineTime: "2026.09.07-07.00.00:000",
+        frame: "1",
+        worldPath: "/Game/Maps/AlBasrah/AlBasrah_RAAS_v1",
+        layerName: "AlBasrah_RAAS_v1",
+        mapName: "AlBasrah",
+        gameMode: "RAAS",
+        maxTickRate: "50",
+        serverPlayAt: "2026.09.07-15.00.00",
+      },
+    })),
+    JSON.stringify(createRawEvent({ seq: 2, raw: "newer combat log" })),
+  ].join("\n") + "\n", "utf8");
+
+  const recovered = [];
+  eventBus.onCoreEvent("round.world_bring_up", (event) => recovered.push(event));
+  const bridge = new LogPostFileBridge({
+    config: { enabled: true, workingDirectory: tempDir, pollIntervalMs: 200, replayRecentLines: 1, fromEnd: true },
+    logger, eventBus, eventPipeline, webStatus,
+  });
+
+  await bridge.start();
+  assert.equal(recovered.length, 0);
+  const result = await bridge.replayLatestEvent("round.world_bring_up");
+  assert.equal(result.found, true);
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].sourceMode, "recovery");
+  assert.equal(recovered[0].canTriggerActions, false);
+  await bridge.stop();
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
 async function testBridgeReadsAllEventsFile() {
