@@ -13,6 +13,7 @@ const DEFAULT_MAX_PROCESS_SLICE_MS = 8;
 const YIELD_CHECK_EVERY_LINES = 24;
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RECENT_REPLAY_LINES = 120;
+const DEFAULT_LATEST_EVENT_LOOKBACK_BYTES = 8 * 1024 * 1024;
 const DEFAULT_EVENT_NAME = "On_RawLogLine";
 const ALL_EVENTS_FILE_NAME = "all.jsonl";
 const BZSS_CORE_PLAYER_CHUNK_EVENT_NAME = "On_BzssCorePlayerChunk";
@@ -179,6 +180,37 @@ export class LogPostFileBridge {
       catch (error) { this.logger?.warn?.(`LogPost recent replay ignored invalid row: ${error?.message ?? error}`); }
     }
   }
+
+  async replayLatestEvent(eventName, { maxBytes = DEFAULT_LATEST_EVENT_LOOKBACK_BYTES } = {}) {
+    const target = String(eventName ?? "").trim();
+    if (!this.enabled || !target) return { found: false, reason: "disabled-or-empty-event" };
+
+    const filePath = this.currentFilePath || await this.resolveCurrentFilePath();
+    if (!filePath || !(await this.fileIO.exists(filePath))) return { found: false, reason: "file-missing" };
+
+    const stat = await this.fileIO.stat(filePath, { cache: false });
+    const windowBytes = Math.min(stat.size, Math.max(1, Number(maxBytes) || DEFAULT_LATEST_EVENT_LOOKBACK_BYTES));
+    if (windowBytes <= 0) return { found: false, reason: "file-empty" };
+
+    const start = Math.max(0, stat.size - windowBytes);
+    const buffer = await this.fileIO.readRange(filePath, start, windowBytes);
+    const rows = splitCompleteLines(buffer, start).lines;
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const line = rows[index].buffer.toString("utf8");
+      let rawEvent;
+      try {
+        rawEvent = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (String(rawEvent?.Event ?? "").trim() !== target) continue;
+
+      const result = this.ingestJsonLine(line, { replay: true, filePath });
+      return { found: true, eventId: String(result?.eventId ?? ""), event: result?.event ?? null };
+    }
+    return { found: false, reason: "event-not-found", scannedBytes: windowBytes };
+  }
+
 
   async readPendingFromFile(filePath) {
     if (!filePath || !(await this.fileIO.exists(filePath))) {
