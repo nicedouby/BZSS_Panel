@@ -492,6 +492,12 @@ function testMonitorState() {
     2,
   );
 
+  // A rotating subset may still arrive inside the legacy VRI wrapper.
+  // It must not replace vehicles received in earlier chunks.
+  const wrappedPartialVehicleFrame = "PIE: VRI{{ID:-1,VT:IFV,H:(1250/1250),,P:11,10,0,5,S:0,T:1,PS:}}";
+  assert.equal(module.api.ingestLogLine(wrappedPartialVehicleFrame).ok, true);
+  assert.equal(module.api.getVehicles().length, 3);
+
   const movedFirstVehicleChunk = "PIE: Error: "
     + "{ID:-1,VT:IFV,H:(1000/1250),,P:11,10,0,5,S:20,T:1,PS:}"
     + "{ID:-1,VT:IFV,H:(1250/1250),,P:101,100,0,95,S:10,T:1,PS:}";
