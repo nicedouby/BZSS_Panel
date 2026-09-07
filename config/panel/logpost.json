@@ -1,6 +1,6 @@
 {
   "udp": {
-    "host": "0.0.0.0",
+    "host": "114.66.28.12",
     "port": 12345,
     "maxMessageBytes": 65535,
     "recvBufferBytes": 8388608,

@@ -1,7 +1,7 @@
 {
   "rcon": {
     "enabled": true,
-    "host": "127.0.0.1",
+    "host": "114.66.28.12",
     "port": 30144,
     "password": "9290dd2aa02b",
     "passwordFromEnv": "BZSS_RCON_PASSWORD",
