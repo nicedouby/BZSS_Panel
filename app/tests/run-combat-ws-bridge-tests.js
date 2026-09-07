@@ -19,7 +19,16 @@ function createHarness(overrides = {}) {
   const core = { webStatus: { serverId: "BZSS_Main" }, eventBus: { onCoreEvent: (name, fn) => on(coreListeners, name, fn), onModuleEvent: (moduleId, name, fn) => on(moduleListeners, `${moduleId}:${name}`, fn) }, logger: { info() {}, warn() {}, error() {} } };
   const modules = { matchState: { getCurrentMatchId: () => matchId } };
   const instance = createCombatWsBridgeModule({ core, modules, config: { get: (key, fallback) => key === "modules.combatWsBridge" ? configValue : key === "server.id" ? "BZSS_Main" : fallback }, logger: core.logger });
-  return { instance, api: instance.api, setMatchId(value) { matchId = value; }, start: () => instance.start(), stop: () => instance.stop() };
+  return {
+    instance,
+    api: instance.api,
+    setMatchId(value) { matchId = value; },
+    emitMatchRoundUpdated(event = {}) {
+      for (const listener of moduleListeners.get("module.matchState:roundUpdated") ?? []) listener(event);
+    },
+    start: () => instance.start(),
+    stop: () => instance.stop(),
+  };
 }
 
 class FakeTransport {
@@ -50,6 +59,13 @@ test("12 一个 Batch 只有一个 Match ID", () => withHarness({}, async ({ api
 test("13 Match A -> B 立即 Flush", () => withHarness({}, async ({ api, setMatchId }) => { api.ingestCombatEvent(createEvent()); setMatchId("BZSS_Main:match-b"); api.ingestCombatEvent(createEvent()); api.flush(); assert.deepEqual(new Set(api.getState().packets.items.map((x) => x.mid)), new Set(["BZSS_Main:match-a", "BZSS_Main:match-b"])); }));
 test("14 缺少 Match ID 不生成 synthetic ID", () => withHarness({ matchId: null }, async ({ api }) => { api.ingestCombatEvent(createEvent()); assert.equal(api.getState().packets.items.length, 0); assert.equal(api.getState().buffer.unassignedEvents, 1); }));
 test("15 Match ID 恢复后发送 unassigned", () => withHarness({ matchId: null }, async ({ api, setMatchId }) => { api.ingestCombatEvent(createEvent()); setMatchId("BZSS_Main:restored"); api.notifyMatchAvailable(); api.flush(); assert.equal(api.getState().packets.items[0].mid, "BZSS_Main:restored"); }));
+test("15b roundUpdated 自动冲刷未分配事件", () => withHarness({ matchId: null }, async ({ api, setMatchId, emitMatchRoundUpdated }) => {
+  api.ingestCombatEvent(createEvent());
+  setMatchId("BZSS_Main:round-updated");
+  emitMatchRoundUpdated({ matchId: "BZSS_Main:round-updated" });
+  assert.equal(api.getState().packets.items[0].mid, "BZSS_Main:round-updated");
+  assert.equal(api.getState().buffer.unassignedEvents, 0);
+}));
 test("16 客户端认证失败", () => withHarness({}, async ({ api }) => { const transport = new FakeTransport(); api.acceptWebSocket({ socket: {} }, transport); transport.receive({ t: "hello", v: 1, token: "wrong", client: "test" }); assert.equal(transport.closeInfo.code, 4003); }));
 test("17 客户端认证成功", () => withHarness({}, async ({ api }) => { const transport = new FakeTransport(); api.acceptWebSocket({ socket: {} }, transport); transport.receive({ t: "hello", v: 1, token: "12345", client: "test" }); assert.equal(transport.messages[0].t, "welcome"); assert.equal(api.getState().clients[0].authenticated, true); }));
 test("18 ACK 后 Pending 删除", () => withHarness({}, async ({ api }) => { const transport = new FakeTransport(); api.acceptWebSocket({ socket: {} }, transport); transport.receive({ t: "hello", v: 1, token: "12345", client: "test" }); api.ingestCombatEvent(createEvent()); api.flush(); const packet = transport.packets()[0]; assert.equal(api.getState().pending.count, 1); transport.receive({ t: "ack", v: 1, pid: packet.pid, mid: packet.mid }); assert.equal(api.getState().pending.count, 0); }));
