@@ -401,7 +401,7 @@
                     >
                       <div class="btn-inner">
                         <span class="btn-icon btn-icon--cheer" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
-                        <span class="btn-text">Q / KILL</span>
+                        <span class="btn-text">KILL / 击杀</span>
                       </div>
                     </button>
 
@@ -1434,38 +1434,36 @@ async function handleCheer() {
   if (!player || actionBusy.value || !canUseBzssCore.value) return;
 
   const playerId = Number(player.playerId);
-  if (!Number.isInteger(playerId) || playerId < 0) {
+  if (!Number.isSafeInteger(playerId) || playerId < 0) {
     ui.pushToast({
-          title: "KILL 无法执行",
+      title: "Kill 无法执行",
       message: "当前玩家缺少有效的 RCON 玩家 ID。",
       tone: "error",
     });
     return;
   }
 
-  const target = "#" + playerId;
+  const target = String(playerId);
+  const command = `Kill:${target}`;
   const confirmed = await ui.openConfirm({
-    title: "确认执行 KILL？",
-    message: "将通过 BZSS-Core 击杀玩家 " + target + "。此操作不可撤销。",
+    title: "确认执行 Kill？",
+    message: "将通过 BZSS-Core 执行 " + command + "，击杀玩家 " + target + "。此操作不可撤销。",
     tone: "error",
   });
   if (!confirmed || actionBusy.value) return;
 
   actionBusy.value = true;
   try {
-    const result = await executeBzssCoreCommand({
-      directive: "Cheer",
-      parameter: target,
-    });
-    if (!result.ok) throw new Error(result.message || "KILL 执行失败");
+    const result = await executeBzssCoreCommand({ command });
+    if (!result.ok) throw new Error(result.message || "Kill 执行失败");
     ui.pushToast({
-      title: "KILL 已执行",
-      message: "目标玩家：" + target,
+      title: "Kill 已执行",
+      message: "已发送 " + (result.command || command),
       tone: "ok",
     });
   } catch (error) {
     ui.pushToast({
-      title: "KILL 执行失败",
+      title: "Kill 执行失败",
       message: error instanceof Error ? error.message : String(error),
       tone: "error",
     });
@@ -1473,86 +1471,6 @@ async function handleCheer() {
     actionBusy.value = false;
   }
 }
-
-async function handleCreateSquad() {
-  const player = props.player;
-  if (!player || actionBusy.value || !canUseBzssCore.value) return;
-
-  const playerId = Number(player.playerId);
-  if (!Number.isSafeInteger(playerId) || playerId < 0) {
-    ui.pushToast({ title: "CreateSQ 无法执行", message: "当前玩家缺少有效的玩家 ID。", tone: "error" });
-    return;
-  }
-
-  const confirmed = await ui.openConfirm({
-    title: "确认创建小队？",
-    message: `将执行 CreateSQ:${playerId}，让玩家 ${player.name} 创建小队。`,
-    tone: "warn",
-  });
-  if (!confirmed || actionBusy.value) return;
-
-  actionBusy.value = true;
-  try {
-    const result = await executeBzssCoreCommand({
-      directive: "CreateSQ",
-      parameter: String(playerId),
-    });
-    if (!result.ok) throw new Error(result.message || "CreateSQ 执行失败");
-    ui.pushToast({ title: "CreateSQ 已执行", message: result.command || `CreateSQ:${playerId}`, tone: "ok" });
-  } catch (error) {
-    ui.pushToast({
-      title: "CreateSQ 执行失败",
-      message: error instanceof Error ? error.message : String(error),
-      tone: "error",
-    });
-  } finally {
-    actionBusy.value = false;
-  }
-}
-
-async function handleJoinSquad() {
-  const player = props.player;
-  if (!player || actionBusy.value || !canUseBzssCore.value) return;
-
-  const playerId = Number(player.playerId);
-  if (!Number.isSafeInteger(playerId) || playerId < 0) {
-    ui.pushToast({ title: "JoinSQ 无法执行", message: "当前玩家缺少有效的玩家 ID。", tone: "error" });
-    return;
-  }
-
-  const squadId = window.prompt("请输入目标小队编号", "")?.trim() ?? "";
-  if (!/^\\d+$/.test(squadId)) {
-    ui.pushToast({ title: "JoinSQ 已取消", message: "小队编号必须是非负整数。", tone: "warn" });
-    return;
-  }
-
-  const parameter = `${playerId},${squadId}`;
-  const confirmed = await ui.openConfirm({
-    title: "确认加入小队？",
-    message: `将执行 JoinSQ:${parameter}，让玩家 ${player.name} 加入小队 ${squadId}。`,
-    tone: "warn",
-  });
-  if (!confirmed || actionBusy.value) return;
-
-  actionBusy.value = true;
-  try {
-    const result = await executeBzssCoreCommand({
-      directive: "JoinSQ",
-      parameter,
-    });
-    if (!result.ok) throw new Error(result.message || "JoinSQ 执行失败");
-    ui.pushToast({ title: "JoinSQ 已执行", message: result.command || `JoinSQ:${parameter}`, tone: "ok" });
-  } catch (error) {
-    ui.pushToast({
-      title: "JoinSQ 执行失败",
-      message: error instanceof Error ? error.message : String(error),
-      tone: "error",
-    });
-  } finally {
-    actionBusy.value = false;
-  }
-}
-
 async function handleKick() {
   const player = props.player;
   if (!player || actionBusy.value) return;
