@@ -1516,7 +1516,7 @@ async function handleJoinSquad() {
   }
 
   const squadId = window.prompt("请输入目标小队编号", "")?.trim() ?? "";
-  if (!/^\\d+$/.test(squadId)) {
+  if (!/^\d+$/.test(squadId)) {
     ui.pushToast({ title: "JoinSQ 已取消", message: "小队编号必须是非负整数。", tone: "warn" });
     return;
   }
