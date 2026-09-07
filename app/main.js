@@ -317,6 +317,14 @@ async function main() {
   // after plugins have subscribed, otherwise recovery events such as squad
   // creation are emitted before their consumers exist and are silently lost.
   await logPostFileBridge.start();
+  // Recover the authoritative round anchor after a panel restart in an already-running match.
+  // The replay only restores MatchState; Combat WS still rejects replay combat records.
+  await logPostFileBridge.replayLatestEvent("round.world_bring_up").catch((error) => {
+    logger.warn(`[LogPost] latest round recovery failed: ${error?.message ?? error}`, {
+      scope: "app",
+      source: "app.main",
+    });
+  });
   await reserveExchangeService.start();
   await webServer.start();
   await bzssCoreVariableStateService.start();
