@@ -350,18 +350,6 @@
 
                     <button
                       type="button"
-                      class="hud-action-btn-styled cheer-btn"
-                      @click="handleCheer"
-                      :disabled="actionBusy || !canUseBzssCore"
-                    >
-                      <div class="btn-inner">
-                        <span class="btn-icon btn-icon--cheer" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
-        <span class="btn-text">KILL / 击杀</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
                       class="hud-action-btn-styled kick-btn"
                       @click="handleKick"
                       :disabled="actionBusy || !canKickPlayer"
@@ -393,6 +381,51 @@
                       <div class="btn-inner">
                         <span class="btn-icon btn-icon--balance" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M7 7h11l-3-3M17 17H6l3 3"/><path d="M18 7a6 6 0 0 1 0 10M6 17A6 6 0 0 1 6 7"/></svg></span>
                         <span class="btn-text">强制跳边</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- BZSS-Core player actions -->
+                <div class="hud-pane-section hud-admin-console bzss-core-player-console">
+                  <div class="hud-section-header">
+                    <span class="hud-section-title">BZSS-Core 功能 / BZSS-CORE</span>
+                    <span class="hud-section-subtitle">直接调用 Core 玩家指令</span>
+                  </div>
+                  <div class="actions-grid-hud">
+                    <button
+                      type="button"
+                      class="hud-action-btn-styled cheer-btn"
+                      @click="handleCheer"
+                      :disabled="actionBusy || !canUseBzssCore"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon btn-icon--cheer" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg></span>
+                        <span class="btn-text">Q / KILL</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="hud-action-btn-styled bzss-core-squad-btn"
+                      @click="handleCreateSquad"
+                      :disabled="actionBusy || !canUseBzssCore"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon" aria-hidden="true">+</span>
+                        <span class="btn-text">CreateSQ / 创建小队</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      class="hud-action-btn-styled bzss-core-squad-btn"
+                      @click="handleJoinSquad"
+                      :disabled="actionBusy || !canUseBzssCore"
+                    >
+                      <div class="btn-inner">
+                        <span class="btn-icon" aria-hidden="true">↗</span>
+                        <span class="btn-text">JoinSQ / 加入小队</span>
                       </div>
                     </button>
                   </div>
@@ -1433,6 +1466,85 @@ async function handleCheer() {
   } catch (error) {
     ui.pushToast({
       title: "KILL 执行失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleCreateSquad() {
+  const player = props.player;
+  if (!player || actionBusy.value || !canUseBzssCore.value) return;
+
+  const playerId = Number(player.playerId);
+  if (!Number.isSafeInteger(playerId) || playerId < 0) {
+    ui.pushToast({ title: "CreateSQ 无法执行", message: "当前玩家缺少有效的玩家 ID。", tone: "error" });
+    return;
+  }
+
+  const confirmed = await ui.openConfirm({
+    title: "确认创建小队？",
+    message: `将执行 CreateSQ:${playerId}，让玩家 ${player.name} 创建小队。`,
+    tone: "warn",
+  });
+  if (!confirmed || actionBusy.value) return;
+
+  actionBusy.value = true;
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "CreateSQ",
+      parameter: String(playerId),
+    });
+    if (!result.ok) throw new Error(result.message || "CreateSQ 执行失败");
+    ui.pushToast({ title: "CreateSQ 已执行", message: result.command || `CreateSQ:${playerId}`, tone: "ok" });
+  } catch (error) {
+    ui.pushToast({
+      title: "CreateSQ 执行失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleJoinSquad() {
+  const player = props.player;
+  if (!player || actionBusy.value || !canUseBzssCore.value) return;
+
+  const playerId = Number(player.playerId);
+  if (!Number.isSafeInteger(playerId) || playerId < 0) {
+    ui.pushToast({ title: "JoinSQ 无法执行", message: "当前玩家缺少有效的玩家 ID。", tone: "error" });
+    return;
+  }
+
+  const squadId = window.prompt("请输入目标小队编号", "")?.trim() ?? "";
+  if (!/^\\d+$/.test(squadId)) {
+    ui.pushToast({ title: "JoinSQ 已取消", message: "小队编号必须是非负整数。", tone: "warn" });
+    return;
+  }
+
+  const parameter = `${playerId},${squadId}`;
+  const confirmed = await ui.openConfirm({
+    title: "确认加入小队？",
+    message: `将执行 JoinSQ:${parameter}，让玩家 ${player.name} 加入小队 ${squadId}。`,
+    tone: "warn",
+  });
+  if (!confirmed || actionBusy.value) return;
+
+  actionBusy.value = true;
+  try {
+    const result = await executeBzssCoreCommand({
+      directive: "JoinSQ",
+      parameter,
+    });
+    if (!result.ok) throw new Error(result.message || "JoinSQ 执行失败");
+    ui.pushToast({ title: "JoinSQ 已执行", message: result.command || `JoinSQ:${parameter}`, tone: "ok" });
+  } catch (error) {
+    ui.pushToast({
+      title: "JoinSQ 执行失败",
       message: error instanceof Error ? error.message : String(error),
       tone: "error",
     });
@@ -2609,6 +2721,20 @@ onUnmounted(() => {
   border-color: rgba(244, 63, 94, 0.4);
   box-shadow: 0 4px 14px rgba(244, 63, 94, 0.15);
   color: #f43f5e;
+}
+
+.bzss-core-player-console {
+  border-color: rgba(45, 212, 191, 0.28);
+}
+
+.bzss-core-player-console .hud-section-title {
+  color: #99f6e4;
+}
+
+.bzss-core-squad-btn:hover:not(:disabled) {
+  border-color: rgba(45, 212, 191, 0.5);
+  box-shadow: 0 4px 14px rgba(45, 212, 191, 0.16);
+  color: #5eead4;
 }
 
 .hud-action-btn-styled.balance-btn:hover:not(:disabled) {
