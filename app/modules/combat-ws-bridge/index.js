@@ -245,6 +245,11 @@ export function createCombatWsBridgeModule({ core, modules, config, logger }) {
       unsubscribers.push(core.eventBus.onModuleEvent("module.combatCollector", "combatEvent", api.ingestCombatEvent));
       unsubscribers.push(core.eventBus.onModuleEvent("module.combatClean", "reviveResolved", api.ingestReviveEvent));
       unsubscribers.push(core.eventBus.onCoreEvent("TEAM_KILL", api.ingestTeamKillEvent));
+      // A round update is the authoritative signal that MatchState has a canonical Match ID.
+      // Do not create a fallback ID here: queued events must wait for MatchState.
+      unsubscribers.push(core.eventBus.onModuleEvent("module.matchState", "roundUpdated", () => {
+        if (flushUnassigned() > 0) batcher.flush();
+      }));
       unsubscribers.push(core.eventBus.onCoreEvent("match.snapshot.ready", handleSnapshotReady));
       retryTimer = setInterval(retryPending, Math.max(25, Math.min(1000, runtimeConfig.delivery.ackTimeoutMs / 2)));
       moduleLogger?.info?.(`[CombatWsBridge] started on ${runtimeConfig.websocket.path}; token=${runtimeConfig.apiToken ? "configured" : "missing"}.`);
