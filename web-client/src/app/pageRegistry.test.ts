@@ -42,6 +42,16 @@ describe("page registry", () => {
     expect(route?.meta?.legacyRequiredPermissions).toEqual(["kill_manager.view"]);
   });
 
+  it("registers the combat WebSocket monitoring page", () => {
+    const definition = pageRegistry.find((page) => page.name === "combat-ws");
+    const route = buildPageRoutes().find((item) => item.name === "combat-ws");
+
+    expect(definition?.path).toBe("/debug/combat-ws");
+    expect(definition?.component).toBeTruthy();
+    expect(definition?.nav).toMatchObject({ section: "combat", label: "WS 战斗转发" });
+    expect(route?.meta?.requiredPermission).toBe("settings.manage");
+  });
+
   it("shares the same static navigation source with the sidebar", () => {
     expect(staticNavItems).toEqual(getStaticNavItems());
   });
