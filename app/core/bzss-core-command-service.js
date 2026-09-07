@@ -16,6 +16,8 @@ const ALLOWED_DIRECTIVES = new Set([
   "RemoveAdminTrack",
   "DragCapturePoint",
   "Kill",
+  "CreateSQ",
+  "JoinSQ",
   "RearmSoldier",
 ]);
 
@@ -189,6 +191,14 @@ export class BzssCoreCommandService {
       const validation = this.validateKillParameter(text);
       if (!validation.ok) return validation;
     }
+    if (normalizedDirective === "CreateSQ") {
+      const validation = this.validateCreateSquadParameter(text);
+      if (!validation.ok) return validation;
+    }
+    if (normalizedDirective === "JoinSQ") {
+      const validation = this.validateJoinSquadParameter(text);
+      if (!validation.ok) return validation;
+    }
     if (normalizedDirective === "RearmSoldier") {
       const validation = this.validateRearmSoldierParameter(text);
       if (!validation.ok) return validation;
@@ -204,6 +214,30 @@ export class BzssCoreCommandService {
     const playerId = Number(text);
     if (!Number.isSafeInteger(playerId) || playerId < 0) {
       return invalid("InvalidKillPlayerId", "Kill player ID must be a non-negative safe integer.");
+    }
+    return { ok: true };
+  }
+
+  validateCreateSquadParameter(parameter) {
+    const text = String(parameter ?? "").trim();
+    if (!/^\\d+$/.test(text)) {
+      return invalid("InvalidCreateSQPlayerId", "CreateSQ requires a non-negative numeric Player ID.");
+    }
+    const playerId = Number(text);
+    if (!Number.isSafeInteger(playerId) || playerId < 0) {
+      return invalid("InvalidCreateSQPlayerId", "CreateSQ Player ID must be a non-negative safe integer.");
+    }
+    return { ok: true };
+  }
+
+  validateJoinSquadParameter(parameter) {
+    const parts = String(parameter ?? "").split(",").map((part) => part.trim());
+    if (parts.length !== 2 || parts.some((part) => !/^\\d+$/.test(part))) {
+      return invalid("InvalidJoinSQParameter", "JoinSQ requires Player ID and Squad ID, for example 1,2.");
+    }
+    const [playerId, squadId] = parts.map(Number);
+    if (![playerId, squadId].every((value) => Number.isSafeInteger(value) && value >= 0)) {
+      return invalid("InvalidJoinSQParameter", "JoinSQ Player ID and Squad ID must be non-negative safe integers.");
     }
     return { ok: true };
   }
