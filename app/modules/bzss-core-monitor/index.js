@@ -442,13 +442,25 @@ export function createBzssCoreMonitorModule({ core, modules, config, logger }) {
             const lastChunkAtMs = Date.parse(String(draft.vehicleChunkUpdatedAt ?? ""));
             const chunkIsRecent = Number.isFinite(lastChunkAtMs)
               && Date.now() - lastChunkAtMs <= VEHICLE_CHUNK_STALE_MS;
-            if (parsed.vehicles.length === 0 && chunkIsRecent) {
-              appendDiagnostic(draft, {
-                type: "vehicles",
-                reason: "ignored_empty_legacy_frame_during_chunk_stream",
-                rawLineHash: hashText(segment),
-                observedAt: parsed.observedAt,
-              });
+
+            // A VRI/VehicleInfo wrapper is not guaranteed to contain the
+            // complete vehicle population. BZSS-Core may emit a rotating
+            // subset while retaining the legacy wrapper. Once a chunk stream
+            // is active, never replace the accumulated population with that
+            // subset; merge it by stable tracking identity/position instead.
+            if (chunkIsRecent) {
+              if (parsed.vehicles.length === 0) {
+                appendDiagnostic(draft, {
+                  type: "vehicles",
+                  reason: "ignored_empty_legacy_frame_during_chunk_stream",
+                  rawLineHash: hashText(segment),
+                  observedAt: parsed.observedAt,
+                });
+              } else {
+                draft.vehicles = mergeVehicleChunk(draft.vehicles, parsed.vehicles, parsed.observedAt);
+                recordObservedVehicleTypes(draft, parsed.vehicles, parsed.observedAt);
+              }
+              draft.vehicleFrameUpdatedAt = parsed.observedAt;
               continue;
             }
 
