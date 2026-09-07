@@ -72,7 +72,7 @@ export function normalizeCombatEvent(input = {}, { observedMode = "cache" } = {}
     sourceMode,
     observedModes,
     isReplay: sourceMode !== "live",
-    canTriggerActions: false,
+    canTriggerActions: sourceMode === "live",
     provenance: {
       sourceFile,
       sourceFileId,
