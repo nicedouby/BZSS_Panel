@@ -1471,6 +1471,80 @@ async function handleCheer() {
     actionBusy.value = false;
   }
 }
+async function handleCreateSquad() {
+  const player = props.player;
+  if (!player || actionBusy.value || !canUseBzssCore.value) return;
+
+  const playerId = Number(player.playerId);
+  if (!Number.isSafeInteger(playerId) || playerId < 0) {
+    ui.pushToast({ title: "CreateSQ 无法执行", message: "当前玩家缺少有效的玩家 ID。", tone: "error" });
+    return;
+  }
+
+  const command = `CreateSQ:${playerId}`;
+  const confirmed = await ui.openConfirm({
+    title: "确认创建小队？",
+    message: `将通过 BZSS-Core 执行 ${command}，让玩家 ${player.name} 创建小队。`,
+    tone: "warn",
+  });
+  if (!confirmed || actionBusy.value) return;
+
+  actionBusy.value = true;
+  try {
+    const result = await executeBzssCoreCommand({ command });
+    if (!result.ok) throw new Error(result.message || "CreateSQ 执行失败");
+    ui.pushToast({ title: "CreateSQ 已执行", message: "已发送 " + (result.command || command), tone: "ok" });
+  } catch (error) {
+    ui.pushToast({
+      title: "CreateSQ 执行失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
+async function handleJoinSquad() {
+  const player = props.player;
+  if (!player || actionBusy.value || !canUseBzssCore.value) return;
+
+  const playerId = Number(player.playerId);
+  if (!Number.isSafeInteger(playerId) || playerId < 0) {
+    ui.pushToast({ title: "JoinSQ 无法执行", message: "当前玩家缺少有效的玩家 ID。", tone: "error" });
+    return;
+  }
+
+  const squadId = window.prompt("请输入目标小队编号", "")?.trim() ?? "";
+  if (!/^\\d+$/.test(squadId)) {
+    ui.pushToast({ title: "JoinSQ 已取消", message: "小队编号必须是非负整数。", tone: "warn" });
+    return;
+  }
+
+  const command = `JoinSQ:${playerId},${squadId}`;
+  const confirmed = await ui.openConfirm({
+    title: "确认加入小队？",
+    message: `将通过 BZSS-Core 执行 ${command}，让玩家 ${player.name} 加入小队 ${squadId}。`,
+    tone: "warn",
+  });
+  if (!confirmed || actionBusy.value) return;
+
+  actionBusy.value = true;
+  try {
+    const result = await executeBzssCoreCommand({ command });
+    if (!result.ok) throw new Error(result.message || "JoinSQ 执行失败");
+    ui.pushToast({ title: "JoinSQ 已执行", message: "已发送 " + (result.command || command), tone: "ok" });
+  } catch (error) {
+    ui.pushToast({
+      title: "JoinSQ 执行失败",
+      message: error instanceof Error ? error.message : String(error),
+      tone: "error",
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+}
+
 async function handleKick() {
   const player = props.player;
   if (!player || actionBusy.value) return;
