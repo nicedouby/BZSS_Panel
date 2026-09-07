@@ -468,7 +468,7 @@ export const pageRegistry: PageDefinition[] = [
     title: "WS 战斗转发",
     category: "debug",
     refreshPolicy: "polling",
-    nav: { section: "system", label: "WS 战斗转发", icon: "🔗", order: 60 },
+    nav: { section: "combat", label: "WS 战斗转发", icon: "🔗", order: 90 },
     requiredPermission: "settings.manage",
     ...workspacePage,
   },
