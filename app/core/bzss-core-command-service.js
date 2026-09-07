@@ -220,7 +220,7 @@ export class BzssCoreCommandService {
 
   validateCreateSquadParameter(parameter) {
     const text = String(parameter ?? "").trim();
-    if (!/^\\d+$/.test(text)) {
+    if (!/^\d+$/.test(text)) {
       return invalid("InvalidCreateSQPlayerId", "CreateSQ requires a non-negative numeric Player ID.");
     }
     const playerId = Number(text);
@@ -232,7 +232,7 @@ export class BzssCoreCommandService {
 
   validateJoinSquadParameter(parameter) {
     const parts = String(parameter ?? "").split(",").map((part) => part.trim());
-    if (parts.length !== 2 || parts.some((part) => !/^\\d+$/.test(part))) {
+    if (parts.length !== 2 || parts.some((part) => !/^\d+$/.test(part))) {
       return invalid("InvalidJoinSQParameter", "JoinSQ requires Player ID and Squad ID, for example 1,2.");
     }
     const [playerId, squadId] = parts.map(Number);
@@ -249,7 +249,7 @@ export class BzssCoreCommandService {
     }
 
     const [playerId, itemPath, slot] = parts;
-    if (!/^\\d+$/.test(playerId)) {
+    if (!/^\d+$/.test(playerId)) {
       return invalid("InvalidRearmSoldierPlayerId", "RearmSoldier PlayerId must be a non-negative integer.");
     }
     const numericPlayerId = Number(playerId);
@@ -259,7 +259,7 @@ export class BzssCoreCommandService {
     if (!itemPath || /[\\u0000-\\u001f\\u007f]/.test(itemPath) || !itemPath.startsWith("/Game/")) {
       return invalid("InvalidRearmSoldierItemPath", "RearmSoldier item path must be a single-line /Game/ asset path.");
     }
-    if (!/^\\d+$/.test(slot)) {
+    if (!/^\d+$/.test(slot)) {
       return invalid("InvalidRearmSoldierSlot", "RearmSoldier inventory slot must be a non-negative integer.");
     }
     const numericSlot = Number(slot);
