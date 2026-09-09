@@ -11,7 +11,7 @@ function snapshot({ x = 100, y = 200, health = 100, map = "Jensens Range", state
 async function main() {
   const root = await mkdtemp(path.join(os.tmpdir(), "tactical-feed-"));
   let onSnapshot = null;
-  const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe(listener) { onSnapshot = listener; return () => { onSnapshot = null; }; } } }, config: { get() { return { enabled: true, rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
+  const feed = createTacticalFeedWriterModule({ core: { eventBus: createEventBus(), webStatus: { serverId: "test" } }, modules: { tacticalState: { async getSnapshot() { return snapshot(); }, subscribe(listener) { onSnapshot = listener; return () => { onSnapshot = null; }; } }, dynamicPressureZone: { async recalculate(value) { const x = value.players[0]?.telemetry?.position?.x ?? 0; return { active: true, mapKey: "jensens-range", hotspot: { center: { x, y: 200 }, radiusMeters: 450 }, zones: [{ id: "combat", type: "combat", teamId: null, priority: 30, geometry: { type: "capsule", polygon: [{ x, y: 100 }, { x, y: 300 }] } }] }; } } }, config: { get() { return { enabled: true, rootDir: root, playerSampleMs: 1, statsSampleMs: 1, networkSampleMs: 1, sceneSampleMs: 1, heartbeatMs: 1, segmentDurationMs: 1 }; } }, logger: console });
   await feed.start();
   await new Promise((resolve) => setTimeout(resolve, 75));
   onSnapshot?.(snapshot({ x: 800, y: 900 }));
@@ -30,6 +30,7 @@ async function main() {
   const data = await readFile(path.join(root, entries[0], "segments", segments.find((name) => name.endsWith(".rps"))));
   assert.equal(data.readUInt32LE(0), 0x50525a42);
   assert.equal(data.readUInt8(5), TacticalReplayRecord.SESSION_BEGIN);
+  assert.equal(TacticalReplayRecord.PRESSURE_ZONE_DELTA, 0x22);
   assert.ok(data.length > 24);
   const replay = createTacticalReplayPlayerModule({
     config: { get() { return { rootDir: root }; } },
@@ -49,8 +50,11 @@ async function main() {
   assert.equal(replayState.state.players.length, 1);
   assert.equal(replayState.state.players[0].identity.name, "Alpha");
   assert.deepEqual(replayState.state.players[0].telemetry.position, { x: 800, y: 900, z: 3 });
+  assert.equal(replayState.state.pressureZoneState.hotspot.center.x, 800);
+  assert.equal(replayState.state.pressureZoneState.zones[0].type, "combat");
   const earlyReplayState = await replay.api.readState(sessions[0].id, { atMs: 50 });
   assert.deepEqual(earlyReplayState.state.players[0].telemetry.position, { x: 100, y: 200, z: 3 });
+  assert.equal(earlyReplayState.state.pressureZoneState.hotspot.center.x, 100);
   assert.ok(replayState.resolvedAtMs > earlyReplayState.resolvedAtMs, "later replay requests must apply later recorded state");
   const cachedForwardReplayState = await replay.api.readState(sessions[0].id, { atMs: 60_000 });
   assert.deepEqual(cachedForwardReplayState.state.players[0].telemetry.position, { x: 800, y: 900, z: 3 }, "forward reads must continue from the cached cursor");

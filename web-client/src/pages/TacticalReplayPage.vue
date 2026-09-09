@@ -116,6 +116,11 @@
               <span>MAP DATA UNAVAILABLE</span>
               <small>当前录制没有匹配的地图资源</small>
             </div>
+            <PressureZoneOverlay
+              :state="replayPressureZoneState"
+              :map-bounds="activeMapConfig.bounds"
+              :visible="showPressureZones"
+            />
             <div class="player-layer">
               <PlayerMarker
                 v-for="player in visiblePlayers"
@@ -149,6 +154,14 @@
             <button type="button" title="放大 (+)" @click="zoomBy(1.25)">＋</button>
             <button type="button" title="缩小 (-)" @click="zoomBy(0.8)">−</button>
             <button type="button" title="重置视角 (R)" @click="resetCamera">⌂</button>
+            <button
+              type="button"
+              class="pressure-zone-button"
+              :class="{ active: showPressureZones }"
+              :disabled="!replayPressureZoneState"
+              :title="showPressureZones ? '隐藏历史压家圈' : '显示历史压家圈'"
+              @click="showPressureZones = !showPressureZones"
+            >⚡</button>
             <button
               v-if="selectedPlayer"
               type="button"
@@ -331,6 +344,8 @@ import { useRoute, useRouter } from "vue-router";
 import { apiDelete, apiGet } from "../app/apiClient";
 import TiledMapRenderer from "../components/tactical-map/TiledMapRenderer.vue";
 import PlayerMarker from "../components/tactical-map/PlayerMarker.vue";
+import PressureZoneOverlay from "../components/tactical-map/PressureZoneOverlay.vue";
+import type { PressureZoneState } from "../app/dynamicPressureZoneApi";
 import { provideTacticalMapViewport } from "../composables/tacticalMapViewport";
 import { useMapCamera } from "../composables/useMapCamera";
 import { EMPTY_TACTICAL_MAP_CONFIG, TACTICAL_MAP_CONFIGS, resolveTacticalMapKey } from "../shared/tactical-map-data";
@@ -350,6 +365,7 @@ const activeSession = ref<ReplaySession | null>(null);
 const state = ref<Record<string, any> | null>(null);
 const status = ref<Record<string, any> | null>(null);
 const selectedPlayer = ref<ReplayPlayer | null>(null);
+const showPressureZones = ref(true);
 const isFollowingPlayer = ref(false);
 const inspectorTab = ref<"details" | "roster">("details");
 const rosterSearchText = ref("");
@@ -407,6 +423,10 @@ const activeMapConfig = computed(() => {
 });
 const hasMapResource = computed(() => Boolean(activeMapConfig.value.tileBasePath || activeMapConfig.value.image));
 const currentSnapshot = computed(() => state.value && state.value.state || null);
+const replayPressureZoneState = computed<PressureZoneState | null>(() => {
+  const value = currentSnapshot.value?.pressureZoneState;
+  return value && typeof value === "object" ? value as PressureZoneState : null;
+});
 const rawPlayers = computed<any[]>(() => Array.isArray(currentSnapshot.value && currentSnapshot.value.players) ? currentSnapshot.value.players : []);
 const replayNameCache = new Map<string, string>();
 const visiblePlayers = computed<ReplayPlayer[]>(() => rawPlayers.value.map(normalizePlayer).filter((item: ReplayPlayer) => item.hasPosition));
@@ -929,6 +949,8 @@ onBeforeUnmount(() => {
 .map-controls { position: absolute; z-index: 12; right: 8px; top: 38px; display: grid; gap: 4px; }
 .map-controls button { width: 26px; height: 26px; border: 1px solid rgba(159,210,224,.2); border-radius: 5px; color: #bfeaf0; background: rgba(4,16,28,.82); cursor: pointer; font-size: 13px; display: grid; place-content: center; }
 .map-controls button:hover { color: #fff; border-color: rgba(85,221,182,.7); background: rgba(24,92,83,.75); }
+.map-controls button:disabled { cursor: not-allowed; opacity: .38; }
+.pressure-zone-button.active { border-color: rgba(250,204,21,.72); color: #fde047; background: rgba(113,63,18,.72); }
 .follow-button { font-size: 12px; }
 .follow-button.active { border-color: #40dfa0 !important; background: rgba(64,223,160,.35) !important; color: #fff !important; }
 

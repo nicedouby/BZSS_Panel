@@ -21,6 +21,7 @@ const RECORD = Object.freeze({
   PLAYER_NETWORK_DELTA: 0x14,
   ZONE_DELTA: 0x20,
   MAIN_ZONE_DELTA: 0x21,
+  PRESSURE_ZONE_DELTA: 0x22,
   FOB_CREATE: 0x30,
   FOB_DELTA: 0x31,
   FOB_REMOVE: 0x32,
@@ -118,6 +119,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     await rotateSegmentIfNeeded(now);
     if (now - state.lastPlayerSampleAt >= settings.playerSampleMs) {
       await writePlayerDelta(snapshot, now);
+      await writePressureZoneDelta(snapshot, now);
       state.lastPlayerSampleAt = now;
     }
     if (now - state.lastStatsSampleAt >= settings.statsSampleMs) {
@@ -329,6 +331,28 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
     await writeFobs(snapshot?.assets?.fobs, now);
   }
 
+  async function writePressureZoneDelta(snapshot, now) {
+    const pressureZone = modules.dynamicPressureZone;
+    if (!pressureZone?.recalculate && !pressureZone?.getState) return;
+
+    let nextState = null;
+    try {
+      nextState = await pressureZone.recalculate?.(snapshot) ?? pressureZone.getState?.() ?? null;
+    } catch (error) {
+      moduleLogger?.warn?.("Tactical replay pressure-zone calculation failed.", {
+        operation: "tacticalFeedWriter.writePressureZoneDelta",
+        data: { message: error?.message ?? String(error) },
+      });
+      return;
+    }
+
+    if (!nextState || typeof nextState !== "object") return;
+    const normalized = compactPressureZoneState(nextState);
+    if (sameValue(state.pressureZoneState, normalized)) return;
+    state.pressureZoneState = normalized;
+    await append(RECORD.PRESSURE_ZONE_DELTA, now, { state: normalized });
+  }
+
   async function writeAssetCollection(type, values, cache, now, prefix, removeType = null) {
     const next = new Map();
     const upsert = [];
@@ -382,7 +406,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
 
   function resetSessionState() {
     state.session = null; state.segment = null; state.segmentHandle = null; state.sequence = 0; state.segmentIndex = 0; state.nextPlayerId = 1; state.playerIds.clear();
-    state.players.clear(); state.stats.clear(); state.pings.clear(); state.lastPingAt.clear(); state.pendingDictionaryUpdates.length = 0; state.fobs.clear(); state.zones.clear(); state.mainZones.clear(); state.vehicles.clear();
+    state.players.clear(); state.stats.clear(); state.pings.clear(); state.lastPingAt.clear(); state.pendingDictionaryUpdates.length = 0; state.fobs.clear(); state.zones.clear(); state.mainZones.clear(); state.vehicles.clear(); state.pressureZoneState = null;
   }
 
   return {
@@ -433,7 +457,7 @@ export function createTacticalFeedWriterModule({ core, modules, config, logger }
   };
 }
 
-function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "", lastFinalization: null }; }
+function createState() { return { recordingEnabled: true, latestSnapshot: null, latestReceivedAt: 0, session: null, segment: null, segmentHandle: null, sequence: 0, segmentIndex: 0, nextPlayerId: 1, playerIds: new Map(), pendingDictionaryUpdates: [], players: new Map(), stats: new Map(), pings: new Map(), lastPingAt: new Map(), fobs: new Map(), zones: new Map(), mainZones: new Map(), vehicles: new Map(), pressureZoneState: null, lastPlayerSampleAt: 0, lastStatsSampleAt: 0, lastNetworkSampleAt: 0, lastSceneSampleAt: 0, lastHeartbeatAt: 0, recordCount: 0, lastError: "", lastFinalization: null }; }
 function readSettings(config) { const value = config?.get?.("modules.tacticalFeedWriter", {}) ?? {}; return { ...DEFAULTS, ...value, rootDir: value.rootDir ?? DEFAULTS.rootDir }; }
 function isMatchActive(snapshot) { return Boolean(safeText(snapshot?.server?.map) || safeText(snapshot?.server?.layer)) && !isMatchEnded(snapshot); }
 function isMatchEnded(snapshot) { const text = [snapshot?.match?.state, snapshot?.match?.phase, snapshot?.server?.state, snapshot?.server?.phase].map(safeText).join(" "); return /waitingpostmatch|postmatch|matchended|ended/i.test(text); }
@@ -446,6 +470,32 @@ function normalizeStats(value = {}) { return ["kills", "wounds", "deaths", "team
 function normalizePosition(value) { if (!value || typeof value !== "object") return null; const x = integerOrNull(value.x); const y = integerOrNull(value.y); const z = integerOrNull(value.z); return x == null || y == null || z == null ? null : [x, y, z]; }
 function normalizeYaw(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(((n % 360) + 360) % 360) : null; }
 function normalizeAsset(value) { return canonicalize(value); }
+function compactPressureZoneState(value = {}) {
+  const hotspot = value?.hotspot;
+  return canonicalize({
+    a: value?.active === true,
+    r: safeText(value?.reason),
+    k: safeText(value?.mapKey),
+    h: hotspot?.center ? [
+      hotspot.center.x,
+      hotspot.center.y,
+      hotspot.radiusMeters,
+      hotspot.playerCount,
+      hotspot.radiusWorld,
+      hotspot.linearMapScale,
+    ] : null,
+    z: (Array.isArray(value?.zones) ? value.zones : []).map((zone) => [
+      safeText(zone?.id),
+      safeText(zone?.type),
+      integerOrNull(zone?.teamId),
+      integerOrNull(zone?.priority),
+      safeText(zone?.geometry?.type),
+      zone?.geometry?.center ? [zone.geometry.center.x, zone.geometry.center.y] : null,
+      zone?.geometry?.radius ?? null,
+      (Array.isArray(zone?.geometry?.polygon) ? zone.geometry.polygon : []).map((point) => [point?.x, point?.y]),
+    ]),
+  });
+}
 function diffPlayer(before, next, settings) { if (!before) return { mask: FIELD.POSITION | FIELD.YAW | FIELD.HEALTH | FIELD.PRESENCE | FIELD.TEAM | FIELD.SQUAD | FIELD.FIRETEAM | FIELD.ROLE | FIELD.VEHICLE | FIELD.LEADER, values: playerValues(next, FIELD.POSITION | FIELD.YAW | FIELD.HEALTH | FIELD.PRESENCE | FIELD.TEAM | FIELD.SQUAD | FIELD.FIRETEAM | FIELD.ROLE | FIELD.VEHICLE | FIELD.LEADER) }; let mask = 0; if (distanceExceeded(before.position, next.position, settings.positionThresholdCm)) mask |= FIELD.POSITION; if (angleDelta(before.yaw, next.yaw) >= settings.yawThresholdDegrees) mask |= FIELD.YAW; if (before.health !== next.health) mask |= FIELD.HEALTH; if (before.presence !== next.presence) mask |= FIELD.PRESENCE; if (before.team !== next.team) mask |= FIELD.TEAM; if (before.squad !== next.squad) mask |= FIELD.SQUAD; if (before.fireTeam !== next.fireTeam) mask |= FIELD.FIRETEAM; if (before.role !== next.role) mask |= FIELD.ROLE; if (before.vehicle !== next.vehicle) mask |= FIELD.VEHICLE; if (before.leader !== next.leader) mask |= FIELD.LEADER; return { mask, values: playerValues(next, mask) }; }
 function playerValues(value, mask) { const out = []; if (mask & FIELD.POSITION) out.push(value.position); if (mask & FIELD.YAW) out.push(value.yaw); if (mask & FIELD.HEALTH) out.push(value.health); if (mask & FIELD.PRESENCE) out.push(value.presence); if (mask & FIELD.TEAM) out.push(value.team); if (mask & FIELD.SQUAD) out.push(value.squad); if (mask & FIELD.FIRETEAM) out.push(value.fireTeam); if (mask & FIELD.ROLE) out.push(value.role); if (mask & FIELD.VEHICLE) out.push(value.vehicle); if (mask & FIELD.LEADER) out.push(value.leader); return out; }
 function distanceExceeded(a, b, threshold) { if (!a || !b) return !sameValue(a, b); const dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2]; return dx * dx + dy * dy + dz * dz >= threshold * threshold; }
