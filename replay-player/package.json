@@ -1,0 +1,9 @@
+{
+  "name": "bzss-replay-player",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone BZSS tactical replay archive player",
+  "scripts": { "start": "node app/server/index.js", "test": "node --test app/server/*.test.js" },
+  "engines": { "node": ">=18" }
+}
