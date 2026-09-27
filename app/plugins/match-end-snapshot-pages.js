@@ -33,39 +33,61 @@ const PLAYER_STAT_COLUMNS = Object.freeze([
   { key: "ping", label: "P", width: 25, tone: "#cbd5e1" },
 ]);
 
-const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
 let sharpLoaderPromise = null;
 
 const MAP_SCENE_FILE_BY_KEY = {
-  AlBasrah: "LoadingScreen_AlBasrah_DQHD.PNG",
-  Anvil: "LoadingScreen_Anvil_DQHD.PNG",
-  Belaya_Pass: "LoadingScreen_Belaya_Pass_DQHD.PNG",
-  BlackCoast: "LoadingScreen_BlackCoast_DQHD.PNG",
-  Chora: "LoadingScreen_Chora_DQHD.PNG",
-  Fallujah: "LoadingScreen_Fallujah_DQHD.PNG",
-  FoolsRoad: "LoadingScreen_FoolsRoad_DQHD.PNG",
-  GooseBay: "LoadingScreen_GooseBay_DQHD.PNG",
-  Gorodok: "LoadingScreen_Gorodok_DQHD.PNG",
-  Harju: "LoadingScreen_Harju_DQHD.PNG",
-  JensensRange: "LoadingScreen_JensensRange_DQHD.PNG",
-  Kamdesh: "LoadingScreen_Kamdesh_DQHD.PNG",
-  Kohat: "LoadingScreen_Kohat_DQHD.PNG",
-  Kokan: "LoadingScreen_Kokan_DQHD.PNG",
-  Lashkar: "LoadingScreen_Lashkar_DQHD.PNG",
-  Manicouagan: "LoadingScreen_Manicouagan_DQHD.PNG",
-  Mestia: "LoadingScreen_Mestia_DQHD.PNG",
-  Mutaha: "LoadingScreen_Mutaha_DQHD.PNG",
-  Narva: "LoadingScreen_Narva_DQHD.PNG",
-  PacificProvingGrounds: "LoadingScreen_PacificProvingGrounds_DQHD.PNG",
-  Sanxian: "LoadingScreen_Sanxian_DQHD.PNG",
-  Skorpo: "LoadingScreen_Skorpo_DQHD.PNG",
-  Sumari: "LoadingScreen_Sumari_DQHD.PNG",
-  Tallil: "LoadingScreen_Tallil_DQHD.PNG",
-  Yehorivka: "LoadingScreen_Yehorivka_DQHD.PNG",
+  AlBasrah: "LoadingScreen_AlBasrah_DQHD.webp",
+  Anvil: "LoadingScreen_Anvil_DQHD.webp",
+  Belaya_Pass: "LoadingScreen_Belaya_Pass_DQHD.webp",
+  BlackCoast: "LoadingScreen_BlackCoast_DQHD.webp",
+  Chora: "LoadingScreen_Chora_DQHD.webp",
+  Fallujah: "LoadingScreen_Fallujah_DQHD.webp",
+  FoolsRoad: "LoadingScreen_FoolsRoad_DQHD.webp",
+  GooseBay: "LoadingScreen_GooseBay_DQHD.webp",
+  Gorodok: "LoadingScreen_Gorodok_DQHD.webp",
+  Harju: "LoadingScreen_Harju_DQHD.webp",
+  JensensRange: "LoadingScreen_JensensRange_DQHD.webp",
+  Kamdesh: "LoadingScreen_Kamdesh_DQHD.webp",
+  Kohat: "LoadingScreen_Kohat_DQHD.webp",
+  Kokan: "LoadingScreen_Kokan_DQHD.webp",
+  Lashkar: "LoadingScreen_Lashkar_DQHD.webp",
+  Manicouagan: "LoadingScreen_Manicouagan_DQHD.webp",
+  Mestia: "LoadingScreen_Mestia_DQHD.webp",
+  Mutaha: "LoadingScreen_Mutaha_DQHD.webp",
+  Narva: "LoadingScreen_Narva_DQHD.webp",
+  PacificProvingGrounds: "LoadingScreen_PacificProvingGrounds_DQHD.webp",
+  Sanxian: "LoadingScreen_Sanxian_DQHD.webp",
+  Skorpo: "LoadingScreen_Skorpo_DQHD.webp",
+  Sumari: "LoadingScreen_Sumari_DQHD.webp",
+  Tallil: "LoadingScreen_Tallil_DQHD.webp",
+  Yehorivka: "LoadingScreen_Yehorivka_DQHD.webp",
 };
 
-const MAP_MINIMAP_EXTENSIONS = [".PNG", ".png", ".JPG", ".jpg", ".JPEG", ".jpeg"];
+const MAP_MINIMAP_EXTENSIONS = [".webp", ".PNG", ".png", ".JPG", ".jpg", ".JPEG", ".jpeg"];
+
+const MAP_MINIMAP_FILE_BY_KEY = Object.freeze({
+  Anvil: "Anvil_Minimap.webp",
+  Belaya_Pass: "Belaya_Minimap.webp",
+  Chora: "Chora_Minimap.webp",
+  Fallujah: "T_Fallujah_Minimap.webp",
+  FoolsRoad: "Fools_Road_Minimap.webp",
+  GooseBay: "GooseBay_Minimap.webp",
+  Gorodok: "gorodok_minimap.webp",
+  Kamdesh: "Kamdesh_Minimap.webp",
+  Kohat: "kohat_minimap.webp",
+  Kokan: "T_Kokan_Minimap.webp",
+  Lashkar: "T_Lashkar_Minimap.webp",
+  Logar: "Logar_Valley_Minimap.webp",
+  Manicouagan: "T_Manicouagan_Minimap.webp",
+  Mestia: "T_Mestia_Minimap.webp",
+  Mutaha: "Mutaha_Minimap.webp",
+  Narva: "Narva_Minimap.webp",
+  Skorpo: "Skorpo_Minimap.webp",
+  Sumari: "Sumari_Minimap.webp",
+  Tallil: "Tallil_Outskirts_Minimap.webp",
+  Yehorivka: "Yehorivka_Minimap.webp",
+});
 
 const FACTION_FLAG_FILES = Object.freeze({
   ADF: "ADF.PNG",
@@ -420,7 +442,10 @@ async function attachMapMinimapData(model, payload) {
 
 function resolveMinimapPath(payload) {
   const key = resolveMapKey(firstText(payload?.match?.layer, payload?.match?.map));
-  const candidates = [];
+  const mappedFile = MAP_MINIMAP_FILE_BY_KEY[key];
+  const candidates = mappedFile
+    ? [path.resolve(process.cwd(), "web-client", "public", mappedFile)]
+    : [];
   for (const extension of MAP_MINIMAP_EXTENSIONS) {
     candidates.push(path.resolve(process.cwd(), "web-client", "public", `${key}_Minimap${extension}`));
   }
@@ -956,6 +981,7 @@ function resolveLoadingScreenPath(payload) {
   const fileName = MAP_SCENE_FILE_BY_KEY[key] ?? MAP_SCENE_FILE_BY_KEY.Sumari;
   const candidates = [
     path.resolve(process.cwd(), "MapScene", fileName),
+    path.resolve(process.cwd(), "web-client", "dist", "MapScene", fileName),
     path.resolve(process.cwd(), "web-client", "public", "MapScene", fileName),
     path.resolve(process.cwd(), "web-client", "public", fileName),
   ];
@@ -1142,13 +1168,9 @@ async function loadSharp() {
         try {
           return sharpRequire("sharp");
         } catch {}
-        try {
-          return sharpRequire(path.join(SHARP_BUNDLE_ROOT, "sharp"));
-        } catch {
-          const error = new Error(`sharp is unavailable: ${importError?.message ?? importError}`);
-          error.code = "SharpUnavailable";
-          throw error;
-        }
+        const error = new Error(`sharp is unavailable: ${importError?.message ?? importError}`);
+        error.code = "SharpUnavailable";
+        throw error;
       }
     })();
   }

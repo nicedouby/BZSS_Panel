@@ -564,7 +564,6 @@ function loadMicePanelLightWeaponHints() {
   const blueprintFile = ["kill", "manager", "blueprint_types.json"].join("_");
   const candidatePaths = [
     fileURLToPath(new URL(`../../../MicePanel/config/${blueprintFile}`, import.meta.url)),
-    fileURLToPath(new URL(`file:///D:/MicePanel/config/${blueprintFile}`)),
   ];
 
   for (const blueprintPath of candidatePaths) {

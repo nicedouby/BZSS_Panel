@@ -54,6 +54,13 @@ Build a clean portable release directory:
 npm run release:portable
 ```
 
+Build both Linux x64 releases (run this command on Linux):
+
+```bash
+npm run client:build
+npm run release:linux
+```
+
 ## Notes
 
 - Production static hosting serves `web-client/dist`. After pulling frontend source changes, run `npm run client:build` before restarting the backend; `dist` is intentionally not committed.
@@ -61,3 +68,5 @@ npm run release:portable
 - The legacy shell now lives at `app/web/` and should not receive new features.
 - `npm run release:portable` creates `release/portable/`, with runtime data at the root and backend source/dependencies grouped under `app/`.
 - The portable `run.bat` uses the same Node affinity mask as the repository root launcher.
+- `npm run release:linux` creates `release/linux/source/` and `release/linux/single/`. The source package has its files laid out to merge into the Squad server root and starts with `./run-bzss-panel.sh`. The single-file package is `BZSSPanel-Linux-x64.run`; copy it to the Squad root and run it to expand/update the application there while preserving existing configuration and database files.
+- `npm run release:linux:single` rebuilds only the single-file package from the existing Linux source package. Both Linux releases include the Node.js runtime and Linux native dependencies; Python 3 is required for LogPost and BZSS-Core scripts.

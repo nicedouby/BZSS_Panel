@@ -6774,6 +6774,7 @@ function contentType(filePath) {
   if (filePath.endsWith(".js")) return "text/javascript; charset=utf-8";
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   if (filePath.endsWith(".png")) return "image/png";
+  if (filePath.endsWith(".webp")) return "image/webp";
   if (filePath.endsWith(".svg")) return "image/svg+xml";
   if (filePath.endsWith(".csv")) return "text/csv; charset=utf-8";
   if (filePath.endsWith(".md")) return "text/markdown; charset=utf-8";

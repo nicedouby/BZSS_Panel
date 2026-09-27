@@ -14,7 +14,6 @@ const rootDirectories = [
   "config",
   "data",
   "LogPost",
-  "maps",
 ];
 
 const rootCopies = [
@@ -43,7 +42,7 @@ const appFiles = [
 ];
 
 const appCopies = [
-  { source: "web-client/src/shared", target: "app/web-client/src/shared", required: true },
+  { source: "web-client/src/shared", target: "web-client/src/shared", required: true },
 ];
 
 async function main() {
@@ -154,7 +153,7 @@ async function writePortableReadme() {
     "",
     "Structure:",
     "- run.bat: starts the backend from the release root on logical CPUs 26 and 27",
-    "- config/panel, data, LogPost, maps, web-client: runtime files kept at the top level",
+    "- config/panel, data, LogPost, and web-client: runtime files kept at the top level",
     "- app/: backend source code, helper scripts, and Node.js dependencies",
     "",
     "Usage:",

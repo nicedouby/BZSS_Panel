@@ -1,6 +1,7 @@
 // -*- coding: utf-8 -*-
 
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 
@@ -272,6 +273,26 @@ export class PerformanceMonitor {
   }
 
   async #readNetworkCounters() {
+    if (process.platform === "linux") {
+      const lines = (await readFile("/proc/net/dev", "utf8")).trim().split(/\r?\n/u).slice(2);
+      let bytesInTotal = 0;
+      let bytesOutTotal = 0;
+      for (const line of lines) {
+        const separator = line.indexOf(":");
+        if (separator < 0) continue;
+        const counters = line.slice(separator + 1).trim().split(/\s+/u).map(Number);
+        if (counters.length < 9) continue;
+        if (Number.isFinite(counters[0])) bytesInTotal += Math.max(0, counters[0]);
+        if (Number.isFinite(counters[8])) bytesOutTotal += Math.max(0, counters[8]);
+      }
+      return {
+        bytesInTotal,
+        bytesOutTotal,
+        timestamp: Date.now(),
+        source: "/proc/net/dev",
+      };
+    }
+
     if (process.platform !== "win32") {
       return null;
     }

@@ -5,43 +5,43 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { pathToFileURL } from "node:url";
 
 import { handleAstrbotBridgeRoutes } from "./routes.js";
 import { createAstrbotWebSocketGateway } from "./websocket.js";
 
 const MODULE_ID = "module.astrbotBridge";
 const DEFAULT_ALLOWED_ACTIONS = ["bindProfile", "setWarmup", "toggleWarmup"];
-const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const SERVER_INFO_SNAPSHOT_CACHE_DIR = path.resolve(process.cwd(), "data", "astrbot-bridge", "cache");
 const ICON_BASE_DIR = path.resolve(process.cwd(), "web-client/public");
-const PLAYER_SNAPSHOT_LOADING_SCREEN = "MapScene/LoadingScreen_Yehorivka_DQHD.PNG";
+const PLAYER_SNAPSHOT_LOADING_SCREEN = "MapScene/LoadingScreen_Yehorivka_DQHD.webp";
 const FACTION_ASSET_DATA_PATH = path.resolve(process.cwd(), "web-client", "src", "shared", "faction-assets", "faction-data.ts");
 const MAP_SCENE_FILE_BY_KEY = {
-  AlBasrah: "LoadingScreen_AlBasrah_DQHD.PNG",
-  Anvil: "LoadingScreen_Anvil_DQHD.PNG",
-  Belaya_Pass: "LoadingScreen_Belaya_Pass_DQHD.PNG",
-  BlackCoast: "LoadingScreen_BlackCoast_DQHD.PNG",
-  Chora: "LoadingScreen_Chora_DQHD.PNG",
-  Fallujah: "LoadingScreen_Fallujah_DQHD.PNG",
-  FoolsRoad: "LoadingScreen_FoolsRoad_DQHD.PNG",
-  GooseBay: "LoadingScreen_GooseBay_DQHD.PNG",
-  Gorodok: "LoadingScreen_Gorodok_DQHD.PNG",
-  Harju: "LoadingScreen_Harju_DQHD.PNG",
-  JensensRange: "LoadingScreen_JensensRange_DQHD.PNG",
-  Kamdesh: "LoadingScreen_Kamdesh_DQHD.PNG",
-  Kohat: "LoadingScreen_Kohat_DQHD.PNG",
-  Kokan: "LoadingScreen_Kokan_DQHD.PNG",
-  Lashkar: "LoadingScreen_Lashkar_DQHD.PNG",
-  Manicouagan: "LoadingScreen_Manicouagan_DQHD.PNG",
-  Mestia: "LoadingScreen_Mestia_DQHD.PNG",
-  Mutaha: "LoadingScreen_Mutaha_DQHD.PNG",
-  Narva: "LoadingScreen_Narva_DQHD.PNG",
-  PacificProvingGrounds: "LoadingScreen_PacificProvingGrounds_DQHD.PNG",
-  Sanxian: "LoadingScreen_Sanxian_DQHD.PNG",
-  Skorpo: "LoadingScreen_Skorpo_DQHD.PNG",
-  Sumari: "LoadingScreen_Sumari_DQHD.PNG",
-  Tallil: "LoadingScreen_Tallil_DQHD.PNG",
-  Yehorivka: "LoadingScreen_Yehorivka_DQHD.PNG",
+  AlBasrah: "LoadingScreen_AlBasrah_DQHD.webp",
+  Anvil: "LoadingScreen_Anvil_DQHD.webp",
+  Belaya_Pass: "LoadingScreen_Belaya_Pass_DQHD.webp",
+  BlackCoast: "LoadingScreen_BlackCoast_DQHD.webp",
+  Chora: "LoadingScreen_Chora_DQHD.webp",
+  Fallujah: "LoadingScreen_Fallujah_DQHD.webp",
+  FoolsRoad: "LoadingScreen_FoolsRoad_DQHD.webp",
+  GooseBay: "LoadingScreen_GooseBay_DQHD.webp",
+  Gorodok: "LoadingScreen_Gorodok_DQHD.webp",
+  Harju: "LoadingScreen_Harju_DQHD.webp",
+  JensensRange: "LoadingScreen_JensensRange_DQHD.webp",
+  Kamdesh: "LoadingScreen_Kamdesh_DQHD.webp",
+  Kohat: "LoadingScreen_Kohat_DQHD.webp",
+  Kokan: "LoadingScreen_Kokan_DQHD.webp",
+  Lashkar: "LoadingScreen_Lashkar_DQHD.webp",
+  Manicouagan: "LoadingScreen_Manicouagan_DQHD.webp",
+  Mestia: "LoadingScreen_Mestia_DQHD.webp",
+  Mutaha: "LoadingScreen_Mutaha_DQHD.webp",
+  Narva: "LoadingScreen_Narva_DQHD.webp",
+  PacificProvingGrounds: "LoadingScreen_PacificProvingGrounds_DQHD.webp",
+  Sanxian: "LoadingScreen_Sanxian_DQHD.webp",
+  Skorpo: "LoadingScreen_Skorpo_DQHD.webp",
+  Sumari: "LoadingScreen_Sumari_DQHD.webp",
+  Tallil: "LoadingScreen_Tallil_DQHD.webp",
+  Yehorivka: "LoadingScreen_Yehorivka_DQHD.webp",
 };
 const FACTION_FLAG_BY_CODE = {
   ADF: "ADF.PNG",
@@ -1538,7 +1538,7 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       "--force-device-scale-factor=1",
       "--window-size=1600,900",
       `--screenshot=${screenshotPath}`,
-      `file:///${htmlPath.replace(/\\/g, "/")}`,
+      pathToFileURL(htmlPath).href,
     ];
     await new Promise((resolve, reject) => {
       const child = execFile(executablePath, args, { windowsHide: true }, (error, stdout, stderr) => {
@@ -1551,6 +1551,34 @@ export function createAstrbotBridgeModule({ core, modules, config, logger }) {
       });
       child.on("error", reject);
     });
+  }
+
+  async function resolveChromiumExecutablePath() {
+    const configured = String(process.env.CHROME_BIN ?? process.env.CHROMIUM_BIN ?? "").trim();
+    const candidates = [
+      configured,
+      ...(process.platform === "linux"
+        ? ["/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome", "/opt/google/chrome/chrome"]
+        : []),
+      ...(process.platform === "darwin" ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"] : []),
+      ...(process.platform === "win32"
+        ? [
+            path.join(process.env.PROGRAMFILES ?? "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
+            path.join(process.env["PROGRAMFILES(X86)"] ?? "C:\\Program Files (x86)", "Microsoft", "Edge", "Application", "msedge.exe"),
+          ]
+        : []),
+    ].filter(Boolean);
+
+    for (const candidate of candidates) {
+      try {
+        await fs.access(candidate);
+        return candidate;
+      } catch {
+        // Keep checking known browser locations.
+      }
+    }
+
+    return "";
   }
 
   function renderServerInfoFallbackHtml(serverInfo, input = {}) {
@@ -2217,6 +2245,7 @@ async function readAssetDataUri(assetPath) {
     path.join(ICON_BASE_DIR, cleanPath.replace(/\//g, path.sep)),
     path.resolve(process.cwd(), cleanPath.replace(/\//g, path.sep)),
     path.resolve(process.cwd(), "MapScene", path.basename(cleanPath)),
+    path.resolve(process.cwd(), "web-client", "dist", "MapScene", path.basename(cleanPath)),
     path.join(process.cwd(), "web-client", "src", "shared", "faction-assets", path.basename(cleanPath)),
   ];
 
@@ -2240,6 +2269,7 @@ async function readBinaryAsset(assetPath) {
     path.join(ICON_BASE_DIR, cleanPath.replace(/\//g, path.sep)),
     path.resolve(process.cwd(), cleanPath.replace(/\//g, path.sep)),
     path.resolve(process.cwd(), "MapScene", path.basename(cleanPath)),
+    path.resolve(process.cwd(), "web-client", "dist", "MapScene", path.basename(cleanPath)),
     path.join(process.cwd(), "web-client", "src", "shared", "faction-assets", path.basename(cleanPath)),
   ];
 
@@ -2274,7 +2304,7 @@ async function readRemoteImageDataUri(url) {
 function resolveServerInfoBackgroundAssetPath(mapName, layerName) {
   const mapKey = resolveMapSceneKey(mapName, layerName);
   if (!mapKey) return null;
-  return `MapScene/${MAP_SCENE_FILE_BY_KEY[mapKey] ?? `LoadingScreen_${mapKey}_DQHD.PNG`}`;
+  return `MapScene/${MAP_SCENE_FILE_BY_KEY[mapKey] ?? `LoadingScreen_${mapKey}_DQHD.webp`}`;
 }
 
 function resolveMapSceneKey(mapName, layerName) {
@@ -2405,18 +2435,6 @@ async function resolveAvatarDataUrl(url) {
 
 async function loadSharp() {
   if (!sharpLoaderPromise) {
-    const sharpRoots = [
-      String(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES ?? "").trim(),
-      SHARP_BUNDLE_ROOT,
-    ].filter(Boolean);
-    process.env.NODE_PATH = [
-      ...sharpRoots,
-      ...sharpRoots.map((root) => path.join(root, ".pnpm", "node_modules")),
-      process.env.NODE_PATH || "",
-    ]
-      .filter(Boolean)
-      .join(path.delimiter);
-    sharpRequire("module")._initPaths();
     sharpLoaderPromise = Promise.resolve().then(() => sharpRequire("sharp"));
   }
   return sharpLoaderPromise;

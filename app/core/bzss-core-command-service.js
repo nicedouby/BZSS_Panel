@@ -3,6 +3,7 @@
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { resolveSquadServerPath } from "./squad-server-path.js";
+import { resolvePythonExecutable } from "./python-executable.js";
 
 const ALLOWED_DIRECTIVES = new Set([
   "SetTime",
@@ -66,7 +67,8 @@ export class BzssCoreCommandService {
     const resolvedSaveGamePath = resolveSquadServerPath(saveGamePath);
     const startedAt = Date.now();
     try {
-      const output = await this.executor("python", [
+      const pythonExecutable = resolvePythonExecutable(this.config?.get?.("bzssCore.pythonExecutable"));
+      const output = await this.executor(pythonExecutable, [
         resolvedScriptPath,
         resolvedSaveGamePath,
         ...(Array.isArray(command.command) ? command.command : [command.command]),

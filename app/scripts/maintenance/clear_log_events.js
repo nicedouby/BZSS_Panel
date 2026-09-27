@@ -110,6 +110,34 @@ function resolveDbFile(config) {
 }
 
 function ensureServiceStopped() {
+  if (process.platform !== "win32") {
+    let output = "";
+    try {
+      output = execFileSync("ps", ["-eo", "pid=,args="], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      })
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .filter((line) => {
+          const match = line.match(/^(\d+)\s+(.+)$/u);
+          if (!match || Number(match[1]) === process.pid) return false;
+          return /(?:^|\s)(?:\S*\/)?app\/main\.js(?:\s|$)/u.test(match[2]);
+        })
+        .join("\n");
+    } catch (error) {
+      throw new Error(`Failed to inspect running processes: ${error.message}`);
+    }
+
+    if (output) {
+      throw new Error(
+        "BZSS Panel service is still running. Stop the app first, then rerun this script.\n" +
+          output.split(/\r?\n/u).map((line) => `  ${line}`).join("\n"),
+      );
+    }
+    return;
+  }
+
   const command = [
     "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -match 'main\\.js' } | ForEach-Object {",
     '    Write-Output ($_.ProcessId.ToString() + "`t" + ($_.CommandLine -replace "\\r?\\n", " "))',

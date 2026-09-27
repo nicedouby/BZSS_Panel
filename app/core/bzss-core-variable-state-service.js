@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveSquadServerPath } from "./squad-server-path.js";
 import { execFile } from "node:child_process";
+import { resolvePythonExecutable } from "./python-executable.js";
 
 export const BZSS_CORE_BOOL_KEYS = [
   "LocalVOIPEnable",
@@ -237,7 +238,8 @@ export class BzssCoreVariableStateService {
 
   async runPython(args) {
     const scriptPath = args[0];
-    const output = await this.executor("python", args, {
+    const pythonExecutable = resolvePythonExecutable(this.config?.get?.("bzssCore.pythonExecutable"));
+    const output = await this.executor(pythonExecutable, args, {
       cwd: path.dirname(scriptPath),
       timeout: Math.max(1000, Number(this.config?.get?.("bzssCore.timeoutMs", 15000)) || 15000),
       windowsHide: true,

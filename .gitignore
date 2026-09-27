@@ -62,3 +62,6 @@ maps/Game/Maps/Anvil/Minimap/Anvil_Minimap.PNG
 sqlite3-part0.bin
 /鼠鼠姬形象
 /MapScene
+
+# Generated tactical map tile pyramids
+/web-client/public/map-tiles/

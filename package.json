@@ -10,6 +10,8 @@
     "config:migrate": "node app/scripts/config/migrate.js",
     "config:validate": "node app/scripts/config/validate.js",
     "release:portable": "node app/scripts/release/build-portable.mjs",
+    "release:linux": "node app/scripts/release/build-linux.mjs",
+    "release:linux:single": "node app/scripts/release/build-linux.mjs --single-only",
     "auth:user:add": "node app/scripts/auth-users.js add",
     "auth:user:list": "node app/scripts/auth-users.js list",
     "auth:user:disable": "node app/scripts/auth-users.js disable",
@@ -49,14 +51,12 @@
     "test:combat-ws-load": "node app/tests/run-combat-ws-load-test.js"
   },
   "dependencies": {
+    "sharp": "^0.35.4",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
   },
   "engines": {
     "node": ">=18.0.0"
-  },
-  "devDependencies": {
-    "sharp": "^0.35.2"
   },
   "allowScripts": {
     "sqlite3@5.1.7": true

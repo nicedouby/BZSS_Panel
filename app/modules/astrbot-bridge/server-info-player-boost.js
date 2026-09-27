@@ -1,10 +1,8 @@
 // -*- coding: utf-8 -*-
 
 import fs from "node:fs/promises";
-import path from "node:path";
 import { createRequire } from "node:module";
 
-const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
 let sharpLoaderPromise = null;
 
@@ -102,18 +100,6 @@ function normalizePositiveInteger(value) {
 
 async function loadSharp() {
   if (!sharpLoaderPromise) {
-    const sharpRoots = [
-      String(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES ?? "").trim(),
-      SHARP_BUNDLE_ROOT,
-    ].filter(Boolean);
-    process.env.NODE_PATH = [
-      ...sharpRoots,
-      ...sharpRoots.map((root) => path.join(root, ".pnpm", "node_modules")),
-      process.env.NODE_PATH || "",
-    ]
-      .filter(Boolean)
-      .join(path.delimiter);
-    sharpRequire("module")._initPaths();
     sharpLoaderPromise = Promise.resolve().then(() => sharpRequire("sharp"));
   }
   return sharpLoaderPromise;

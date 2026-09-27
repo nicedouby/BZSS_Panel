@@ -233,7 +233,7 @@ function resolveLoadingScreenUrl(mapNameValue: string, layerNameValue: string) {
   for (const candidate of candidates) {
     const key = String(candidate ?? "").trim().split(/[_\s-]/)[0];
     if (!key) continue;
-    return `/MapScene/LoadingScreen_${key}_DQHD.PNG`;
+    return `/MapScene/LoadingScreen_${key}_DQHD.webp`;
   }
   return "";
 }

@@ -13,7 +13,6 @@ const ARTIFACTS = [
   { format: "markdown", extension: ".md", label: "Markdown", contentType: "text/markdown; charset=utf-8" },
 ];
 const FORMAT_ALIASES = { png: "image", svg: "image", md: "markdown" };
-const SHARP_BUNDLE_ROOT = "C:/Users/12703/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules";
 const sharpRequire = createRequire(import.meta.url);
 
 const ROLE_ICON_MATCHES = [
@@ -98,26 +97,26 @@ const MAP_SCENE_MINIMAP_PLACEMENT = {
 };
 
 const TACTICAL_MINIMAP_BY_KEY = {
-  Anvil_RAAS_v1: "Anvil_Minimap.PNG",
-  Belaya_RAAS_v1: "Belaya_Minimap.PNG",
-  Chora_RAAS_v1: "Chora_Minimap.PNG",
-  Fallujah_RAAS_v1: "T_Fallujah_Minimap.PNG",
-  FoolsRoad_RAAS_v1: "Fools_Road_Minimap.PNG",
-  GooseBay_RAAS_v1: "GooseBay_Minimap.PNG",
-  Gorodok_RAAS_v1: "gorodok_minimap.PNG",
-  Kamdesh_RAAS_v1: "Kamdesh_Minimap.PNG",
-  Kohat_RAAS_v1: "kohat_minimap.PNG",
-  Kokan_RAAS_v1: "T_Kokan_Minimap.PNG",
-  Lashkar_RAAS_v1: "T_Lashkar_Minimap.PNG",
-  Logar_RAAS_v1: "Logar_Valley_Minimap.PNG",
-  Manicouagan_RAAS_v1: "T_Manicouagan_Minimap.PNG",
-  Mestia_RAAS_v1: "T_Mestia_Minimap.PNG",
-  Mutaha_RAAS_v1: "Mutaha_Minimap.PNG",
-  Narva_RAAS_v1: "Narva_Minimap.PNG",
-  Skorpo_RAAS_v1: "Skorpo_Minimap.PNG",
-  Sumari_RAAS_v1: "Sumari_Minimap.PNG",
-  Tallil_RAAS_v1: "Tallil_Outskirts_Minimap.PNG",
-  Yehorivka_RAAS_v1: "Yehorivka_Minimap.PNG",
+  Anvil_RAAS_v1: "Anvil_Minimap.webp",
+  Belaya_RAAS_v1: "Belaya_Minimap.webp",
+  Chora_RAAS_v1: "Chora_Minimap.webp",
+  Fallujah_RAAS_v1: "T_Fallujah_Minimap.webp",
+  FoolsRoad_RAAS_v1: "Fools_Road_Minimap.webp",
+  GooseBay_RAAS_v1: "GooseBay_Minimap.webp",
+  Gorodok_RAAS_v1: "gorodok_minimap.webp",
+  Kamdesh_RAAS_v1: "Kamdesh_Minimap.webp",
+  Kohat_RAAS_v1: "kohat_minimap.webp",
+  Kokan_RAAS_v1: "T_Kokan_Minimap.webp",
+  Lashkar_RAAS_v1: "T_Lashkar_Minimap.webp",
+  Logar_RAAS_v1: "Logar_Valley_Minimap.webp",
+  Manicouagan_RAAS_v1: "T_Manicouagan_Minimap.webp",
+  Mestia_RAAS_v1: "T_Mestia_Minimap.webp",
+  Mutaha_RAAS_v1: "Mutaha_Minimap.webp",
+  Narva_RAAS_v1: "Narva_Minimap.webp",
+  Skorpo_RAAS_v1: "Skorpo_Minimap.webp",
+  Sumari_RAAS_v1: "Sumari_Minimap.webp",
+  Tallil_RAAS_v1: "Tallil_Outskirts_Minimap.webp",
+  Yehorivka_RAAS_v1: "Yehorivka_Minimap.webp",
 };
 
 const FACTION_GLOW_BY_CODE = {
@@ -142,31 +141,31 @@ const FACTION_GLOW_BY_CODE = {
 };
 
 const MAP_SCENE_TEMPLATE_ENTRIES = [
-  ["AlBasrah", "LoadingScreen_AlBasrah_DQHD.PNG"],
-  ["Anvil", "LoadingScreen_Anvil_DQHD.PNG"],
-  ["Belaya_Pass", "LoadingScreen_Belaya_Pass_DQHD.PNG"],
-  ["BlackCoast", "LoadingScreen_BlackCoast_DQHD.PNG"],
-  ["Chora", "LoadingScreen_Chora_DQHD.PNG"],
-  ["Fallujah", "LoadingScreen_Fallujah_DQHD.PNG"],
-  ["FoolsRoad", "LoadingScreen_FoolsRoad_DQHD.PNG"],
-  ["GooseBay", "LoadingScreen_GooseBay_DQHD.PNG"],
-  ["Gorodok", "LoadingScreen_Gorodok_DQHD.PNG"],
-  ["Harju", "LoadingScreen_Harju_DQHD.PNG"],
-  ["JensensRange", "LoadingScreen_JensensRange_DQHD.PNG"],
-  ["Kamdesh", "LoadingScreen_Kamdesh_DQHD.PNG"],
-  ["Kohat", "LoadingScreen_Kohat_DQHD.PNG"],
-  ["Kokan", "LoadingScreen_Kokan_DQHD.PNG"],
-  ["Lashkar", "LoadingScreen_Lashkar_DQHD.PNG"],
-  ["Manicouagan", "LoadingScreen_Manicouagan_DQHD.PNG"],
-  ["Mestia", "LoadingScreen_Mestia_DQHD.PNG"],
-  ["Mutaha", "LoadingScreen_Mutaha_DQHD.PNG"],
-  ["Narva", "LoadingScreen_Narva_DQHD.PNG"],
-  ["PacificProvingGrounds", "LoadingScreen_PacificProvingGrounds_DQHD.PNG"],
-  ["Sanxian", "LoadingScreen_Sanxian_DQHD.PNG"],
-  ["Skorpo", "LoadingScreen_Skorpo_DQHD.PNG"],
-  ["Sumari", "LoadingScreen_Sumari_DQHD.PNG"],
-  ["Tallil", "LoadingScreen_Tallil_DQHD.PNG"],
-  ["Yehorivka", "LoadingScreen_Yehorivka_DQHD.PNG"],
+  ["AlBasrah", "LoadingScreen_AlBasrah_DQHD.webp"],
+  ["Anvil", "LoadingScreen_Anvil_DQHD.webp"],
+  ["Belaya_Pass", "LoadingScreen_Belaya_Pass_DQHD.webp"],
+  ["BlackCoast", "LoadingScreen_BlackCoast_DQHD.webp"],
+  ["Chora", "LoadingScreen_Chora_DQHD.webp"],
+  ["Fallujah", "LoadingScreen_Fallujah_DQHD.webp"],
+  ["FoolsRoad", "LoadingScreen_FoolsRoad_DQHD.webp"],
+  ["GooseBay", "LoadingScreen_GooseBay_DQHD.webp"],
+  ["Gorodok", "LoadingScreen_Gorodok_DQHD.webp"],
+  ["Harju", "LoadingScreen_Harju_DQHD.webp"],
+  ["JensensRange", "LoadingScreen_JensensRange_DQHD.webp"],
+  ["Kamdesh", "LoadingScreen_Kamdesh_DQHD.webp"],
+  ["Kohat", "LoadingScreen_Kohat_DQHD.webp"],
+  ["Kokan", "LoadingScreen_Kokan_DQHD.webp"],
+  ["Lashkar", "LoadingScreen_Lashkar_DQHD.webp"],
+  ["Manicouagan", "LoadingScreen_Manicouagan_DQHD.webp"],
+  ["Mestia", "LoadingScreen_Mestia_DQHD.webp"],
+  ["Mutaha", "LoadingScreen_Mutaha_DQHD.webp"],
+  ["Narva", "LoadingScreen_Narva_DQHD.webp"],
+  ["PacificProvingGrounds", "LoadingScreen_PacificProvingGrounds_DQHD.webp"],
+  ["Sanxian", "LoadingScreen_Sanxian_DQHD.webp"],
+  ["Skorpo", "LoadingScreen_Skorpo_DQHD.webp"],
+  ["Sumari", "LoadingScreen_Sumari_DQHD.webp"],
+  ["Tallil", "LoadingScreen_Tallil_DQHD.webp"],
+  ["Yehorivka", "LoadingScreen_Yehorivka_DQHD.webp"],
 ];
 
 const MAP_SCENE_TEMPLATE_LIST = MAP_SCENE_TEMPLATE_ENTRIES.map(([key, fileName], index) => createMapSceneTemplate(key, fileName, index));
@@ -1086,11 +1085,18 @@ async function buildMatchSceneBackground(sharp, layout) {
 }
 
 function getMapSceneAssetPath(layout) {
-  return layout.template?.assetPath
-    ? path.resolve(process.cwd(), layout.template.assetPath)
+  const assetPaths = layout.template?.assetPath
+    ? [
+      path.resolve(process.cwd(), layout.template.assetPath),
+      path.resolve(process.cwd(), "web-client", "dist", layout.template.assetPath),
+    ]
     : layout.template?.fileName
-      ? path.resolve(process.cwd(), "MapScene", layout.template.fileName)
-      : null;
+      ? [
+        path.resolve(process.cwd(), "MapScene", layout.template.fileName),
+        path.resolve(process.cwd(), "web-client", "dist", "MapScene", layout.template.fileName),
+      ]
+      : [];
+  return assetPaths.find((assetPath) => existsSync(assetPath)) ?? assetPaths[0] ?? null;
 }
 
 async function buildMatchSceneLayout(snapshot, options = {}) {
@@ -2018,6 +2024,7 @@ function resolveMinimapAssetPath(fileName) {
     path.resolve(process.cwd(), "web-client", "public", fileName),
     path.resolve(process.cwd(), "public", fileName),
     path.resolve(process.cwd(), "MapScene", fileName),
+    path.resolve(process.cwd(), "web-client", "dist", "MapScene", fileName),
   ];
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate;
@@ -2528,11 +2535,6 @@ let sharpLoaderPromise = null;
 
 async function loadSharp() {
   if (!sharpLoaderPromise) {
-    const bundlePnpmNodeModules = `${SHARP_BUNDLE_ROOT}/.pnpm/node_modules`;
-    process.env.NODE_PATH = [SHARP_BUNDLE_ROOT, bundlePnpmNodeModules, process.env.NODE_PATH || ""]
-      .filter(Boolean)
-      .join(path.delimiter);
-    sharpRequire("module")._initPaths();
     sharpLoaderPromise = Promise.resolve().then(() => sharpRequire("sharp"));
   }
   return sharpLoaderPromise;

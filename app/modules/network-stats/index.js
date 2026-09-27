@@ -60,9 +60,12 @@ function getLocalPhysicalIps() {
 
 function pingIp(targetIp, localIp, timeoutMs = 1500) {
   return new Promise((resolve) => {
-    const args = ["-n", "1", "-w", String(timeoutMs)];
+    const isWindows = process.platform === "win32";
+    const args = isWindows
+      ? ["-n", "1", "-w", String(timeoutMs)]
+      : ["-n", "-c", "1", "-W", String(Math.max(1, Math.ceil(timeoutMs / 1000)))];
     if (localIp) {
-      args.push("-S", localIp);
+      args.push(isWindows ? "-S" : "-I", localIp);
     }
     args.push(targetIp);
 
@@ -79,9 +82,9 @@ function pingIp(targetIp, localIp, timeoutMs = 1500) {
     });
 
     child.on("close", (code) => {
-      const rttMatch = stdout.match(/time[=<](\d+)ms/i) || stdout.match(/时间[=<](\d+)ms/i);
+      const rttMatch = stdout.match(/(?:time|时间)[=<]\s*([\d.]+)\s*(?:ms|毫秒)/i);
       if (rttMatch) {
-        resolve({ success: true, rtt: parseInt(rttMatch[1], 10) });
+        resolve({ success: true, rtt: Number.parseFloat(rttMatch[1]) });
       } else {
         const isUnreachable = stdout.includes("Unreachable") || stdout.includes("无法访问") || stdout.includes("超时") || stdout.includes("timed out");
         resolve({
