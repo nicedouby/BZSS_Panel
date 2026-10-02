@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import stat
 import struct
 import sys
 import tempfile
@@ -516,6 +517,11 @@ def acquire_lock(lock_path: Path, timeout_seconds: float = 30.0) -> int:
 
 
 def atomic_replace(path: Path, data: bytes) -> None:
+    try:
+        original_stat = path.stat()
+    except FileNotFoundError:
+        original_stat = None
+
     fd, temp_name = tempfile.mkstemp(
         prefix=path.name + ".",
         suffix=".tmp",
@@ -527,6 +533,17 @@ def atomic_replace(path: Path, data: bytes) -> None:
         with os.fdopen(fd, "wb") as file:
             file.write(data)
             file.flush()
+            # mkstemp creates files as 0600 on POSIX. Since the panel may run
+            # as root while the game runs as steam, preserve the original
+            # save's ownership and permissions before atomically replacing it.
+            if original_stat is not None and os.name == "posix":
+                try:
+                    os.fchown(file.fileno(), original_stat.st_uid, original_stat.st_gid)
+                except PermissionError:
+                    # Non-root callers can still preserve the mode when the
+                    # target is already owned by that caller.
+                    pass
+                os.fchmod(file.fileno(), stat.S_IMODE(original_stat.st_mode))
             os.fsync(file.fileno())
 
         os.replace(temp_path, path)

@@ -948,6 +948,15 @@ async function testPriFrameAssembler() {
     true,
   );
 
+  // An expired frame must not retain its old chunks or be completed by a late
+  // chunk; that would keep incomplete assemblies and their cloned players in
+  // memory until a later complete frame arrives.
+  assert.equal(partialModule.api.ingestLogLine(chunk2.replace("87654", "90001")).ok, true);
+  assert.equal(partialModule.api.getState().priFrame.complete, false);
+  assert.deepEqual(partialModule.api.getState().priFrame.receivedChunks, [2]);
+  assert.deepEqual(partialModule.api.getState().priFrame.missingChunks, [1]);
+  assert.equal(partialModule.api.getState().priFrame.playerCount, 2);
+
   await module.stop();
   await partialModule.stop();
 }

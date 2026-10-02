@@ -74,8 +74,8 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
       record,
     });
 
-    // insert() updates the in-memory index synchronously before its append
-    // promise yields, so bursts cannot sit outside the collector's memory.
+    // Known recent overlaps update the in-memory index synchronously; new
+    // records are serialized through the disk-backed durable identity index.
     const pendingWrite = store.insert(record, { observedMode: "live" });
     liveQueue = liveQueue
       .then(() => pendingWrite, () => pendingWrite)
@@ -339,7 +339,7 @@ export function createCombatCollectorModule({ core, modules, config, logger }) {
       await importQueue;
       await liveQueue;
       await store.saveState(replayStatus);
-      await store.flush();
+      await store.close();
     },
   };
 }

@@ -5,6 +5,8 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import readline from "node:readline";
 import crypto from "node:crypto";
+import sqlite3 from "sqlite3";
+import { open } from "sqlite";
 
 import {
   combatIdentityKeys,
@@ -21,10 +23,13 @@ export class CombatEventStore {
     this.maxInMemoryRecords = Math.max(500, Number(maxInMemoryRecords) || 10_000);
     this.records = [];
     this.identityIndex = new Map();
-    this.durableIdentityKeys = new Set();
     this.totals = createEmptyTotals();
     this.state = {};
     this.writeQueue = Promise.resolve();
+    this.mutationQueue = Promise.resolve();
+    this.identityDb = null;
+    this.identitySelectStatement = null;
+    this.identityInsertStatement = null;
   }
 
   async load() {
@@ -33,20 +38,33 @@ export class CombatEventStore {
     await cacheHandle.close();
     this.records.splice(0);
     this.identityIndex.clear();
-    this.durableIdentityKeys.clear();
     this.totals = createEmptyTotals();
-    if (fs.existsSync(this.dataPath)) {
-      const input = fs.createReadStream(this.dataPath, { encoding: "utf8" });
-      const lines = readline.createInterface({ input, crlfDelay: Infinity });
-      for await (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          this.registerRecord(normalizeCombatEvent(JSON.parse(line), { observedMode: "cache" }));
-        } catch (error) {
-          this.logger?.warn?.(`战斗缓存忽略损坏记录: ${error?.message ?? error}`);
+    await this.openIdentityIndex();
+    await this.identityDb.exec("BEGIN IMMEDIATE");
+    try {
+      // Rebuild the exact disk index from the source cache on startup. This
+      // keeps the index recoverable and avoids retaining one JS Set entry per
+      // historical event for the lifetime of the panel process.
+      await this.identityDb.run("DELETE FROM durable_identity_keys");
+      if (fs.existsSync(this.dataPath)) {
+        const input = fs.createReadStream(this.dataPath, { encoding: "utf8" });
+        const lines = readline.createInterface({ input, crlfDelay: Infinity });
+        for await (const line of lines) {
+          if (!line.trim()) continue;
+          let record;
+          try {
+            record = normalizeCombatEvent(JSON.parse(line), { observedMode: "cache" });
+          } catch (error) {
+            this.logger?.warn?.(`战斗缓存忽略损坏记录: ${error?.message ?? error}`);
+            continue;
+          }
+          await this.registerLoadedRecord(record);
         }
       }
-      this.trimRecentRecords();
+      await this.identityDb.exec("COMMIT");
+    } catch (error) {
+      await this.identityDb.exec("ROLLBACK").catch(() => {});
+      throw error;
     }
     try {
       this.state = JSON.parse(await fsp.readFile(this.statePath, "utf8"));
@@ -56,38 +74,87 @@ export class CombatEventStore {
     return this.getStats();
   }
 
-  findDuplicate(record) {
-    for (const key of combatIdentityKeys(record)) {
-      const recentRecord = this.identityIndex.get(key);
-      if (recentRecord) return { record: recentRecord, recent: true };
-    }
+  async openIdentityIndex() {
+    if (this.identityDb) return;
+    this.identityDb = await open({
+      filename: path.join(this.directory, "combat-event-identities.sqlite3"),
+      driver: sqlite3.Database,
+    });
+    await this.identityDb.exec("PRAGMA busy_timeout = 5000; PRAGMA cache_size = -8192;");
+    await this.identityDb.exec(`
+      CREATE TABLE IF NOT EXISTS durable_identity_keys (
+        token TEXT PRIMARY KEY
+      ) WITHOUT ROWID;
+    `);
+    this.identitySelectStatement = await this.identityDb.prepare(
+      "SELECT 1 AS found FROM durable_identity_keys WHERE token = ? LIMIT 1",
+    );
+    this.identityInsertStatement = await this.identityDb.prepare(
+      "INSERT OR IGNORE INTO durable_identity_keys (token) VALUES (?)",
+    );
+  }
+
+  async findDuplicate(record, pendingTokens = null) {
+    const recentDuplicate = this.findRecentDuplicate(record);
+    if (recentDuplicate) return recentDuplicate;
     for (const key of durableKeys(record)) {
-      if (this.durableIdentityKeys.has(key)) return { record: null, recent: false };
+      if (pendingTokens?.has(key)) return { record: null, recent: false };
+      const durableRecord = await this.identitySelectStatement.get(key);
+      if (durableRecord) return { record: null, recent: false };
     }
     return null;
   }
 
   async insert(input, options = {}) {
+    const record = normalizeCombatEvent(input, { observedMode: options.observedMode ?? "replay" });
+    const duplicate = this.findRecentDuplicate(record);
+    if (duplicate) {
+      mergeObservation(duplicate.record, record);
+      for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, duplicate.record);
+      const operation = this.mutationQueue.then(() => this.persistIdentityTokens(durableKeys(record)));
+      this.mutationQueue = operation.catch(() => {});
+      return operation.then(() => ({ inserted: 0, duplicates: 1 }));
+    }
     return this.insertBatch([input], options);
   }
 
+  findRecentDuplicate(record) {
+    for (const key of combatIdentityKeys(record)) {
+      const recentRecord = this.identityIndex.get(key);
+      if (recentRecord) return { record: recentRecord, recent: true };
+    }
+    return null;
+  }
+
   async insertBatch(inputs = [], { observedMode = "replay" } = {}) {
+    const operation = this.mutationQueue.then(() => this.insertBatchUnlocked(inputs, observedMode));
+    this.mutationQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async insertBatchUnlocked(inputs = [], observedMode = "replay") {
     const inserted = [];
     let duplicates = 0;
+    const identityTokens = [];
+    const pendingTokens = new Set();
     for (const input of inputs) {
       const record = normalizeCombatEvent(input, { observedMode });
-      const duplicate = this.findDuplicate(record);
+      const duplicate = await this.findDuplicate(record, pendingTokens);
+      const recordTokens = durableKeys(record);
       if (duplicate) {
         duplicates += 1;
         if (duplicate.record) {
           mergeObservation(duplicate.record, record);
           for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, duplicate.record);
         }
-        for (const key of durableKeys(record)) this.durableIdentityKeys.add(key);
+        identityTokens.push(...recordTokens);
+        for (const token of recordTokens) pendingTokens.add(token);
         continue;
       }
       this.registerRecord(record);
       inserted.push(record);
+      identityTokens.push(...recordTokens);
+      for (const token of recordTokens) pendingTokens.add(token);
     }
     this.trimRecentRecords();
     if (inserted.length) {
@@ -98,16 +165,40 @@ export class CombatEventStore {
       });
       await this.writeQueue;
     }
+    await this.persistIdentityTokens(identityTokens);
     return { inserted: inserted.length, duplicates };
   }
 
   registerRecord(record) {
-    if (this.findDuplicate(record)) return false;
     this.records.push(record);
     for (const key of combatIdentityKeys(record)) this.identityIndex.set(key, record);
-    for (const key of durableKeys(record)) this.durableIdentityKeys.add(key);
     updateTotals(this.totals, record, 1);
+    this.trimRecentRecords();
     return true;
+  }
+
+  async registerLoadedRecord(record) {
+    const isRecentDuplicate = combatIdentityKeys(record).some((key) => this.identityIndex.has(key));
+    let isDurableDuplicate = false;
+    for (const token of durableKeys(record)) {
+      const result = await this.identityInsertStatement.run(token);
+      if (!result.changes) isDurableDuplicate = true;
+    }
+    if (isRecentDuplicate || isDurableDuplicate) return false;
+    this.registerRecord(record);
+    return true;
+  }
+
+  async persistIdentityTokens(tokens = []) {
+    if (!tokens.length) return;
+    await this.identityDb.exec("BEGIN");
+    try {
+      for (const token of new Set(tokens)) await this.identityInsertStatement.run(token);
+      await this.identityDb.exec("COMMIT");
+    } catch (error) {
+      await this.identityDb.exec("ROLLBACK").catch(() => {});
+      throw error;
+    }
   }
 
   trimRecentRecords() {
@@ -175,15 +266,22 @@ export class CombatEventStore {
   }
 
   async clear() {
+    const operation = this.mutationQueue.then(() => this.clearUnlocked());
+    this.mutationQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  async clearUnlocked() {
     const cleared = this.totals.count;
     this.records.splice(0);
     this.identityIndex.clear();
-    this.durableIdentityKeys.clear();
     this.totals = createEmptyTotals();
     this.state = {};
     await this.writeQueue;
+    await this.mutationQueue;
     await fsp.mkdir(this.directory, { recursive: true });
     await fsp.writeFile(this.dataPath, "", "utf8");
+    await this.identityDb?.run("DELETE FROM durable_identity_keys");
     await writeJsonAtomic(this.statePath, {
       schema: "combat-collector-state.v1",
       completed: false,
@@ -193,7 +291,20 @@ export class CombatEventStore {
   }
 
   async flush() {
+    await this.mutationQueue;
     await this.writeQueue;
+  }
+
+  async close() {
+    await this.flush();
+    await this.identitySelectStatement?.finalize();
+    await this.identityInsertStatement?.finalize();
+    this.identitySelectStatement = null;
+    this.identityInsertStatement = null;
+    if (this.identityDb) {
+      await this.identityDb.close();
+      this.identityDb = null;
+    }
   }
 }
 
@@ -218,8 +329,8 @@ function durableKeys(record) {
   const preferred = keys.find((key) => /^(?:position|offset-raw|event|raw-fallback):/.test(key));
   const key = preferred ?? keys[0];
   if (!key) return [];
-  // Keep one fixed-size token per on-disk record. Recent records retain their
-  // full flexible keys, while historical replay dedupe stays memory-bounded.
+  // Keep one fixed-size token per on-disk record; the durable index itself is
+  // stored in SQLite, so historical dedupe does not retain keys in JS memory.
   return [crypto.createHash("sha1").update(key).digest("base64url").slice(0, 12)];
 }
 

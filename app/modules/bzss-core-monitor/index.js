@@ -1782,6 +1782,10 @@ function schedulePriFrameTimeout(assembly, publish) {
         missingChunks,
         playerCount: mergedPlayers.length,
       });
+      // The timeout marks this assembly as expired. Keeping its cloned player
+      // chunks would retain one Map entry per incomplete frame until a later
+      // complete frame happens to prune the cache.
+      draft.priFramesById.delete(currentAssembly.frameId);
     });
   }, PRI_FRAME_TIMEOUT_MS);
   assembly.timeoutId = timeoutId;

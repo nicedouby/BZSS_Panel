@@ -147,11 +147,17 @@ async function testDiskBackedStoreBoundsResidentRecords() {
     const diskResult = await store.queryDisk({ limit: 1000 });
     assert.equal(diskResult.total, 600);
     assert.equal(diskResult.records.length, 600);
+    const oldestRecord = records[0];
+    assert.deepEqual(await store.insert(oldestRecord, { observedMode: "replay" }), { inserted: 0, duplicates: 1 }, "disk identity index dedupes records no longer resident in memory");
+    assert.equal(store.getStats().retained, 500);
+    await store.close();
 
     const reloaded = new CombatEventStore({ directory: root, maxInMemoryRecords: 500 });
     await reloaded.load();
     assert.equal(reloaded.getStats().count, 600);
     assert.equal(reloaded.getStats().retained, 500);
+    assert.deepEqual(await reloaded.insert(oldestRecord, { observedMode: "replay" }), { inserted: 0, duplicates: 1 }, "startup rebuilds exact disk index without keeping all keys in JS memory");
+    await reloaded.close();
   });
 }
 
