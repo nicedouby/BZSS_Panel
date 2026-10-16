@@ -61,7 +61,7 @@ function snapshot(entry) {
     isExpired: status === STATUS_EXPIRED, expiresInMs: remaining, expiresInLabel: formatDuration(remaining) };
 }
 
-export function createPlugin({ core, config, logger } = {}) {
+export function createPlugin({ core, modules, config, logger } = {}) {
   const log = logger ?? core?.logger ?? console;
   const runtime = { entries: [], filePath: "", events: [], timer: null, queue: Promise.resolve() };
   const state = { enabled: true, subscribed: true, dataDir: DEFAULT_DATA_DIR,
@@ -100,6 +100,36 @@ export function createPlugin({ core, config, logger } = {}) {
     await deleteRules(entry);
     await runNetsh(["advfirewall", "firewall", "add", "rule", `name=${ruleName(entry)}`,
       "dir=in", "action=block", `remoteip=${entry.ip}`, "protocol=any", "profile=any"]);
+  }
+
+  async function kickSelectedPlayer(entry, target) {
+    const steamId = text(target?.steamId ?? target?.steamID);
+    const eosId = text(target?.eosId ?? target?.eosID);
+    const name = text(target?.name);
+    if (!steamId && !eosId && !name) return;
+    const squadManagement = modules?.squadManagement;
+    if (typeof squadManagement?.requestKick !== "function") {
+      entry.lastKickError = "踢出接口不可用；防火墙规则已生效，玩家下次连接会被阻止。";
+      pushEvent("kick_unavailable", { entryId: entry.id, ip: entry.ip, playerName: name, steamID: steamId, eosID: eosId });
+      return;
+    }
+    const result = await squadManagement.requestKick({
+      serverId: text(target?.serverId),
+      steamId,
+      eosId,
+      name,
+      reason: `网络阻塞：${entry.reason || "管理员已阻止该 IP 连接服务器。"}`,
+      source: `plugin.${PLUGIN_ID}`,
+      system: true,
+    });
+    if (result?.ok === false) {
+      entry.lastKickError = text(result.error ?? result.message, "踢出请求失败；防火墙规则已生效。");
+      pushEvent("kick_failed", { entryId: entry.id, ip: entry.ip, playerName: name, steamID: steamId, eosID: eosId, error: entry.lastKickError });
+      return;
+    }
+    entry.lastKickAt = nowIso();
+    entry.lastKickError = "";
+    pushEvent("kick_success", { entryId: entry.id, ip: entry.ip, playerName: name, steamID: steamId, eosID: eosId });
   }
 
   async function save(reason) {
@@ -173,12 +203,14 @@ export function createPlugin({ core, config, logger } = {}) {
       throw Object.assign(new Error("该 IP 已处于有效网络阻塞中。"), { statusCode: 409, code: "NetworkBlockAlreadyActive" });
     }
     const entry = { id: crypto.randomUUID(), ip, reason: text(input.reason), expiresAt, status: text(input.status, STATUS_ACTIVE),
-      createdAt: nowIso(), createdBy: text(input.createdBy ?? input.actor?.username, "system"), updatedAt: nowIso(), appliedAt: "", lastError: "" };
+      createdAt: nowIso(), createdBy: text(input.createdBy ?? input.actor?.username, "system"), updatedAt: nowIso(), appliedAt: "", lastError: "",
+      lastKickAt: "", lastKickError: "" };
     if (entry.status === STATUS_ACTIVE) {
       await applyRules(entry);
       entry.appliedAt = nowIso(); state.applySuccess += 1;
     }
     runtime.entries.push(entry);
+    await kickSelectedPlayer(entry, input.kickTarget);
     await save("create");
     pushEvent("entry_created", { entryId: entry.id, ip, reason: entry.reason, expiresAt });
     return snapshot(entry);
