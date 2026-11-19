@@ -127,7 +127,7 @@ class UE:
         return self.array_at(obj,p.offset,maximum)
 
     def scalar(self,obj,name):
-        return self.scalar_property(obj,self.prop(obj,name),obj)
+        return self.scalar_property(obj,self.prop(obj,name))
 
     def scalar_property(self,base,p):
         at=base+p.offset
@@ -149,7 +149,7 @@ class UE:
             if prop is None:
                 prop=next((value for key,value in properties.items() if key.casefold()==name.casefold()),None)
             if prop is None:continue
-            try:return self.scalar_property(obj,prop,obj)
+            try:return self.scalar_property(obj,prop)
             except BridgeError:continue
         return None
 
@@ -171,7 +171,7 @@ class UE:
                 kind=self.fname(self.m.u32(self.m.u64(field+8)))
                 offset=self.m.i32(field+0x44);size=self.m.i32(field+0x30)
                 if 0<=offset<prop.size and 0<size<=prop.size-offset:
-                    try:values[key]=self.scalar_property(obj+prop.offset,Property(field_name,kind,offset,size,field),obj+prop.offset)
+                    try:values[key]=self.scalar_property(obj+prop.offset,Property(field_name,kind,offset,size,field))
                     except BridgeError:pass
             field=self.m.u64(field+0x18)
         return values
