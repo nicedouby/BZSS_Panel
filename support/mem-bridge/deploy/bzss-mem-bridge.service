@@ -1,0 +1,21 @@
+[Unit]
+Description=BZSS-MEM-BRIDGE independent read-only memory telemetry
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/bzss-mem-bridge/bzss-mem-bridge.pyz --config /etc/bzss-mem-bridge/config.json serve
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=CAP_SYS_PTRACE CAP_DAC_READ_SEARCH
+RestrictAddressFamilies=AF_INET AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

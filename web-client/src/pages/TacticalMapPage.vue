@@ -547,6 +547,7 @@
         :y="trackedPlayerInfoPanel.y"
         :tone="getPerspectiveTone(trackedPlayerInfoPanel.player.teamId)"
         :speed-text="getPlayerSpeedText(trackedPlayerInfoPanel.player)"
+        :bridge-status-text="memoryBridgeStatusText"
         :rcon-detail="getPlayerRconDetail(trackedPlayerInfoPanel.player)"
         @close="playerInfoPanel = null; selectedPlayerKey = ''"
       />
@@ -631,7 +632,7 @@
         <div class="tactical-command-bar__identity">
           <span class="tactical-command-bar__eyebrow">TACTICAL OPERATIONS</span>
           <strong>{{ serverMapName || detectedMapName || "正在识别地图" }}</strong>
-          <span>{{ matchPhase || statusText || "实时战场态势" }} · 地图 {{ activeMapSizeText }}</span>
+          <span>{{ matchPhase || statusText || "实时战场态势" }} · 地图 {{ activeMapSizeText }} · Memory Bridge {{ memoryBridgeStatusText }}</span>
         </div>
       </header>
 
@@ -851,6 +852,7 @@ import { useTacticalStateStore } from "../stores/tactical-state.store";
 import type { BzssCoreMainZoneInfo } from "../app/bzssCoreApi";
 import { getChineseNameByFaction, getFactionFromTeamName, 获取战斗群旗帜 } from "../shared/faction-assets/faction-data";
 import { apiDelete, apiGet, apiPost } from "../app/apiClient";
+import { memBridgePanelTarget, readMemBridgeSnapshot, type MemBridgePlayer, type MemBridgeSnapshot, type MemBridgeTarget } from "../app/memBridgeApi";
 import { fetchDynamicPressureZoneState, type PressureZoneState } from "../app/dynamicPressureZoneApi";
 import {
   buildSquadMajorGridCells,
@@ -995,6 +997,62 @@ const storeCaptureZones = computed(() => Array.isArray(tacticalStateStore.assets
 const storeFobs = computed(() => Array.isArray(tacticalStateStore.assets?.fobs) ? tacticalStateStore.assets.fobs : []);
 const storeMainZones = computed(() => Array.isArray(tacticalStateStore.assets?.mainZones) ? tacticalStateStore.assets.mainZones : []);
 const storeVehicles = computed(() => Array.isArray(tacticalStateStore.assets?.vehicles) ? tacticalStateStore.assets.vehicles : []);
+const memoryBridgeTarget: MemBridgeTarget = memBridgePanelTarget();
+const memoryBridgeSnapshot = shallowRef<MemBridgeSnapshot | null>(null);
+const memoryBridgeError = ref("");
+let memoryBridgeRefreshTimer: number | null = null;
+let memoryBridgeRequestPending = false;
+let memoryBridgeRequestGeneration = 0;
+
+const memoryBridgeFresh = computed(() => {
+  const current = memoryBridgeSnapshot.value;
+  if (!current || current.target !== memoryBridgeTarget || current.health?.status !== "ok") return false;
+  return Number.isFinite(current.observedAt) && Date.now() / 1000 - current.observedAt <= 4;
+});
+const memoryBridgePlayers = computed(() => memoryBridgeFresh.value ? memoryBridgeSnapshot.value?.players ?? [] : []);
+const memoryBridgeStatusText = computed(() => {
+  if (memoryBridgeError.value) return "不可用";
+  if (!memoryBridgeSnapshot.value) return "连接中";
+  if (!memoryBridgeFresh.value) return "数据过期";
+  return `正常 · ${memoryBridgePlayers.value.length} 名玩家`;
+});
+
+async function refreshMemoryBridgeSnapshot() {
+  if (memoryBridgeRequestPending || !mapPageActive) return;
+  const generation = ++memoryBridgeRequestGeneration;
+  memoryBridgeRequestPending = true;
+  try {
+    const result = await readMemBridgeSnapshot(memoryBridgeTarget);
+    if (generation !== memoryBridgeRequestGeneration || !mapPageActive) return;
+    if (result?.module !== "BZSS-MEM-BRIDGE" || result.target !== memoryBridgeTarget || !Array.isArray(result.players)) {
+      throw new Error("Memory Bridge 返回的数据格式无效");
+    }
+    memoryBridgeSnapshot.value = result;
+    memoryBridgeError.value = result.health?.status === "ok" ? "" : String(result.health?.message ?? "读取失败");
+  } catch (error) {
+    if (generation !== memoryBridgeRequestGeneration || !mapPageActive) return;
+    memoryBridgeSnapshot.value = null;
+    memoryBridgeError.value = error instanceof Error ? error.message : "Memory Bridge 读取失败";
+  } finally {
+    if (generation === memoryBridgeRequestGeneration) memoryBridgeRequestPending = false;
+  }
+}
+
+function startMemoryBridgePolling() {
+  if (memoryBridgeRefreshTimer !== null) window.clearInterval(memoryBridgeRefreshTimer);
+  memoryBridgeRequestPending = false;
+  void refreshMemoryBridgeSnapshot();
+  memoryBridgeRefreshTimer = window.setInterval(() => void refreshMemoryBridgeSnapshot(), 500);
+}
+
+function stopMemoryBridgePolling() {
+  memoryBridgeRequestGeneration += 1;
+  memoryBridgeRequestPending = false;
+  if (memoryBridgeRefreshTimer !== null) {
+    window.clearInterval(memoryBridgeRefreshTimer);
+    memoryBridgeRefreshTimer = null;
+  }
+}
 
 function displayRole(role: string | null | undefined) {
   const raw = String(role ?? "").trim();
@@ -1210,7 +1268,9 @@ function getPlayerRconDetail(player: any) {
     const playtime = steamId
       ? (props.playtimes?.[steamId]?.playtimeHours ?? player?.profile?.playtimeHours ?? null)
       : (player?.profile?.playtimeHours ?? null);
-    return adaptPlayerDetail(rcon, playtime, props.combatStatsLookup ?? {});
+    const detail = adaptPlayerDetail(rcon, playtime, EMPTY_COMBAT_LOOKUP);
+    const { combatStats: _oldCombatStats, statsLabel: _oldStatsLabel, ...identityDetail } = detail;
+    return identityDetail;
   } catch (error) {
     if (import.meta.env.DEV) {
       console.warn("[TacticalMap] failed to adapt player detail", error, player);
@@ -1248,11 +1308,139 @@ const snapshotExplosions = computed(() => {
   if (assetsExplosions.length > 0) return assetsExplosions;
   return Array.isArray(tacticalStateStore.assets?.explosions) ? tacticalStateStore.assets.explosions : [];
 });
-const players = computed(() => {
+const sourcePlayers = computed(() => {
   const propPlayers = Array.isArray(props.players) ? props.players : [];
   if (propPlayers.length > 0 || !isStandaloneMapRoute.value) return propPlayers;
   return storePlayers.value;
 });
+
+function normalizedBridgePlayerName(value: unknown) {
+  return String(value ?? "").trim().toLocaleLowerCase();
+}
+
+function bridgePlayerForSource(source: any, bridgePlayers: MemBridgePlayer[], used: Set<string>) {
+  const name = normalizedBridgePlayerName(getPlayerLabel(source));
+  if (!name) return null;
+  const sourceTeam = Number(source?.teamId);
+  const named = bridgePlayers.filter((player) => !used.has(player.id) && normalizedBridgePlayerName(player.name) === name);
+  const sameTeam = named.filter((player) => Number.isFinite(sourceTeam) && Number(player.teamId) === sourceTeam);
+  if (sameTeam.length === 1) return sameTeam[0];
+  if (named.length === 1) return named[0];
+  const sourceId = Number(source?.playerId ?? source?.playerIndex ?? source?.runtime?.playerID
+    ?? source?.raw?.rcon?.playerId ?? source?.raw?.rcon?.playerID);
+  if (Number.isInteger(sourceId) && sourceId >= 0) {
+    const byId = bridgePlayers.filter((player) => !used.has(player.id) && Number(player.playerId) === sourceId);
+    const byIdAndTeam = byId.filter((player) => Number.isFinite(sourceTeam) && Number(player.teamId) === sourceTeam);
+    if (byIdAndTeam.length === 1) return byIdAndTeam[0];
+    if (byId.length === 1) return byId[0];
+  }
+  return null;
+}
+
+function bridgeStatsForScoreboard(player: MemBridgePlayer) {
+  const combat = player.combat ?? {};
+  return {
+    dataLives: null,
+    numKills: combat.kills ?? null,
+    vehicleKills: combat.vehicleKills ?? null,
+    numDeaths: combat.deaths ?? null,
+    numWoundeds: combat.woundeds ?? null,
+    numWounds: combat.wounds ?? null,
+    numTeamKills: combat.teamKills ?? null,
+    healPoints: combat.healPoints ?? null,
+    revivedPoints: combat.revives ?? null,
+    teamworkScore: combat.teamworkScore ?? null,
+    objectiveScore: combat.objectiveScore ?? null,
+    combatScore: combat.combatScore ?? null,
+  };
+}
+
+function attachMemoryBridgePlayer(source: any, bridge: MemBridgePlayer): TacticalLinkedPlayer {
+  const position = bridge.positionStatus === "ok" && bridge.position
+    && [bridge.position.x, bridge.position.y, bridge.position.z].every(Number.isFinite)
+    ? bridge.position : null;
+  const health = Number.isFinite(bridge.vitals?.percent) ? bridge.vitals.percent : null;
+  const role = String(bridge.role ?? "").trim();
+  const stats = bridgeStatsForScoreboard(bridge);
+  return {
+    ...source,
+    playerName: String(bridge.name ?? source?.playerName ?? "Unknown").trim() || "Unknown",
+    teamId: bridge.teamId ?? source?.teamId ?? null,
+    squadId: bridge.squadId ?? source?.squadId ?? null,
+    role: role || source?.role || "",
+    isLeader: bridge.isLeader ?? source?.isLeader ?? false,
+    health,
+    position,
+    yaw: bridge.yaw,
+    ftIndex: bridge.fireteamIndex,
+    ftPosition: bridge.fireteamPosition,
+    memoryBridge: bridge,
+    telemetry: {
+      ...(source?.telemetry ?? {}),
+      position,
+      health,
+      yaw: bridge.yaw,
+      soldierClass: role || null,
+      fireTeamIndex: bridge.fireteamIndex,
+      fireTeamPosition: bridge.fireteamPosition,
+    },
+    soldierInfo: {
+      ...(source?.soldierInfo ?? {}),
+      soldierClass: role || "",
+      health,
+      position,
+    },
+    playerScoreboard: {
+      ...(source?.playerScoreboard ?? {}),
+      stats,
+    },
+    presenceHint: bridge.hasPawn ? "" : "noPawn",
+    presence: { ...(source?.presence ?? {}), state: bridge.hasPawn ? "online" : "noPawn" },
+  } as TacticalLinkedPlayer;
+}
+
+function createMemoryBridgeMapPlayer(bridge: MemBridgePlayer): TacticalLinkedPlayer {
+  const playerName = String(bridge.name ?? "").trim() || (bridge.playerId == null ? "未知玩家" : `Player ${bridge.playerId}`);
+  const mapped = attachMemoryBridgePlayer({
+    key: `mem-bridge:${bridge.id}`,
+    playerId: null,
+    playerIndex: null,
+    playerName,
+    playerGuid: `mem-bridge:${bridge.id}`,
+    teamId: bridge.teamId,
+    squadId: bridge.squadId,
+    ping: null,
+    playerBaseInfo: { raw: "", fields: [], values: {} },
+    soldierInfo: { raw: "", fields: [], values: {}, soldierClass: "", health: null, weaponClass: "", ammoValues: [], position: null, rotation: null },
+    playerScoreboard: { raw: "", values: [], numericValues: [], stats: {} },
+    rawText: "",
+    raw: {},
+    runtime: null,
+    bzss: {} as any,
+    steamId: null,
+    eosId: null,
+    linkConfidence: "none",
+    linkReason: "Memory Bridge PlayerState",
+  }, bridge);
+  return mapped;
+}
+
+const players = computed<TacticalLinkedPlayer[]>(() => {
+  const source = sourcePlayers.value;
+  const bridgePlayers = memoryBridgePlayers.value;
+  const used = new Set<string>();
+  const result = source.map((player: any) => {
+    const match = bridgePlayerForSource(player, bridgePlayers, used);
+    if (!match) return { ...player, memoryBridge: null, position: null, health: null, yaw: null } as TacticalLinkedPlayer;
+    used.add(match.id);
+    return attachMemoryBridgePlayer(player, match);
+  });
+  for (const bridge of bridgePlayers) {
+    if (!used.has(bridge.id)) result.push(createMemoryBridgeMapPlayer(bridge));
+  }
+  return result;
+});
+
 const captureZones = computed(() => {
   const propZones = Array.isArray(props.captureZones) ? props.captureZones : [];
   if (propZones.length > 0 || !isStandaloneMapRoute.value) return propZones;
@@ -2079,6 +2267,9 @@ watch(
           cachedPlayers.value.set(key, { player, lastSeen: now });
           changed = true;
         }
+      } else if (Object.prototype.hasOwnProperty.call(player as any, "memoryBridge")) {
+        changed = cachedPlayers.value.delete(key) || changed;
+        playerTargets.delete(key);
       } else if (import.meta.env.DEV) {
         console.debug("[TacticalMap] player skipped: invalid position", {
           key,
@@ -3257,7 +3448,8 @@ const trackedPlayerInfoPanel = computed(() => {
   if (!panel) return null;
 
   const playerKey = getPlayerKey(panel.player);
-  const livePlayer = markers.value.find((player) => getPlayerKey(player) === playerKey) ?? panel.player;
+  const livePlayer = markers.value.find((player) => getPlayerKey(player) === playerKey);
+  if (!livePlayer) return null;
   const mapX = Number(livePlayer.mapX);
   const mapY = Number(livePlayer.mapY);
   if (!Number.isFinite(mapX) || !Number.isFinite(mapY)) {
@@ -3907,8 +4099,9 @@ function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
       playerName: String(rconDetail.playerName ?? rconDetail.name ?? displayName).trim() || displayName,
       raw: rconDetail.raw ?? (player as any)?.raw?.rcon ?? rconDetail.raw,
     };
+    detail.memoryBridgePlayerInfo = (player as any).memoryBridge ?? null;
     detail.bzssCorePlayerInfo = player;
-    detail.bzssCoreStatus = "ready";
+    detail.bzssCoreStatus = memoryBridgeFresh.value ? "ready" : "unavailable";
   } else {
     detail = {
       playerId: null,
@@ -3922,15 +4115,9 @@ function showPlayerDetails(player: TacticalLinkedPlayer, event?: MouseEvent) {
       ping: null,
       steamId: player.playerGuid?.length === 17 ? player.playerGuid : null,
       eosId: player.playerGuid?.length === 32 ? player.playerGuid : null,
+      memoryBridgePlayerInfo: (player as any).memoryBridge ?? null,
       bzssCorePlayerInfo: player,
-      bzssCoreStatus: "ready",
-      combatStats: {
-        kills: 0,
-        deaths: 0,
-        downs: 0,
-        tk: 0,
-        revives: 0
-      }
+      bzssCoreStatus: memoryBridgeFresh.value ? "ready" : "unavailable",
     };
   }
 
@@ -4078,6 +4265,9 @@ function resolvePlayerTeamId(player: BzssCoreTrackedPlayerInfo): number {
 
 function getPlayerYaw(player: BzssCoreTrackedPlayerInfo): number | null {
   const source = player as any;
+  if (source && Object.prototype.hasOwnProperty.call(source, "memoryBridge")) {
+    return source.memoryBridge?.yaw != null && Number.isFinite(source.memoryBridge.yaw) ? source.memoryBridge.yaw : null;
+  }
   if (source?.yaw != null) return source.yaw;
   if (source?.telemetry?.yaw != null) return source.telemetry.yaw;
   const rotation = source?.telemetry?.rotation ?? player.soldierInfo?.rotation ?? source?.raw?.bzss?.soldierInfo?.rotation;
@@ -4118,11 +4308,19 @@ function getPlayerLabel(player: BzssCoreTrackedPlayerInfo | null | undefined): s
 
 function getPlayerPosition(player: BzssCoreTrackedPlayerInfo | null | undefined) {
   const source = player as any;
+  if (source && Object.prototype.hasOwnProperty.call(source, "memoryBridge")) {
+    const bridge = source.memoryBridge as MemBridgePlayer | null;
+    return bridge?.positionStatus === "ok" ? bridge.position : null;
+  }
   return source?.telemetry?.position ?? player?.soldierInfo?.position ?? player?.position ?? source?.raw?.bzss?.position ?? source?.raw?.bzss?.soldierInfo?.position ?? null;
 }
 
 function getPlayerHealth(player: BzssCoreTrackedPlayerInfo | null | undefined): number | null {
   const source = player as any;
+  if (source && Object.prototype.hasOwnProperty.call(source, "memoryBridge")) {
+    const value = source.memoryBridge?.vitals?.percent;
+    return value != null && Number.isFinite(value) ? value : null;
+  }
   const value = source?.telemetry?.health ?? player?.soldierInfo?.health ?? source?.raw?.bzss?.soldierInfo?.health;
   return value != null && Number.isFinite(value) ? value : null;
 }

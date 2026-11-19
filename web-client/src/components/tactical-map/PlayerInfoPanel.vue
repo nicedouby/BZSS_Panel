@@ -17,7 +17,7 @@
             v-if="player.ping != null || (rconDetail && rconDetail.ping != null)"
             class="player-ping-badge"
             :class="pingToneClass"
-            :title="player.ping != null ? `BZSS-Core 延迟: ${player.ping}ms` : `RCON 延迟: ${rconDetail.ping}ms`"
+            :title="player.ping != null ? `游戏延迟: ${player.ping}ms` : `RCON 延迟: ${rconDetail.ping}ms`"
           >
             {{ player.ping != null ? player.ping : rconDetail.ping }}ms
           </span>
@@ -63,17 +63,17 @@
     <!-- Health Tracker -->
     <div class="panel-health-tracker">
       <div class="tracker-info font-mono">
-        <span class="tracker-label">HEALTH TELEMETRY</span>
-        <span class="tracker-val" :class="{ 'low-hp': health < 40, 'dead-hp': health <= 0 }">
-          {{ health <= 0 ? 'DOWNED (0%)' : `${health}%` }}
+        <span class="tracker-label">HEALTH · MEMORY BRIDGE</span>
+        <span class="tracker-val" :class="{ 'low-hp': health != null && health < 40, 'dead-hp': health != null && health <= 0 }">
+          {{ health == null ? '未知' : health <= 0 ? 'DOWNED (0%)' : `${health}%` }}
         </span>
       </div>
       <div class="tracker-bar-bg">
         <div
           class="tracker-bar-fill"
           :style="{
-            width: `${health}%`,
-            backgroundColor: health <= 0 ? '#ef5350' : health < 40 ? '#fbbf24' : '#00e5ff'
+            width: `${health ?? 0}%`,
+            backgroundColor: health == null ? '#475569' : health <= 0 ? '#ef5350' : health < 40 ? '#fbbf24' : '#00e5ff'
           }"
         ></div>
       </div>
@@ -101,7 +101,7 @@
       <div class="info-columns-grid">
         <div class="info-cell">
           <span class="cell-label">坐标 POS</span>
-          <span class="cell-val text-cyan">{{ Math.round(gameX) }}, {{ Math.round(gameY) }}</span>
+          <span class="cell-val text-cyan">{{ gameX == null || gameY == null ? '—' : `${Math.round(gameX)}, ${Math.round(gameY)}` }}</span>
         </div>
         <div class="info-cell">
           <span class="cell-label">速度 VEL</span>
@@ -120,21 +120,21 @@
         </div>
       </div>
 
-      <div class="grid-divider" v-if="rconDetail?.combatStats || rconDetail?.steamId || rconDetail?.eosId || player.playerGuid"></div>
+      <div class="grid-divider" v-if="bridgeCombat || rconDetail?.steamId || rconDetail?.eosId || player.playerGuid"></div>
 
       <!-- KDW & Core Status Row -->
-      <div class="grid-row compact-row" v-if="rconDetail?.combatStats">
-        <span class="label">战绩 KDW</span>
+      <div class="grid-row compact-row">
+        <span class="label">战绩 K/D/W</span>
         <span class="val text-cyan">
-          {{ rconDetail.combatStats.kills }} / {{ rconDetail.combatStats.deaths }} / {{ rconDetail.combatStats.downs }}
+          {{ bridgeStat(bridgeCombat?.kills) }} / {{ bridgeStat(bridgeCombat?.deaths) }} / {{ bridgeStat(bridgeCombat?.woundeds) }}
         </span>
       </div>
 
       <div class="grid-row compact-row">
-        <span class="label">BZSS CORE</span>
+        <span class="label">MEMORY BRIDGE</span>
         <span class="val sync-status">
-          <span class="status-dot animate-pulse"></span>
-          {{ coreStatusText || 'ONLINE' }}
+          <span class="status-dot" :class="{ 'animate-pulse': bridgeOnline }"></span>
+          {{ bridgeOnline ? (bridgeStatusText || '正常') : (bridgePlayer?.positionStatus ?? '未读取') }}
         </span>
       </div>
 
@@ -200,7 +200,7 @@ const props = defineProps<{
   y: number;
   tone: "friendly" | "enemy" | "neutral";
   speedText: string;
-  coreStatusText?: string;
+  bridgeStatusText?: string;
   rconDetail?: any;
   linkConfidence?: "exact" | "strong" | "weak" | "none";
   linkReason?: string;
@@ -218,6 +218,13 @@ const banDurationValue = ref(7);
 const banDurationUnit = ref<"minutes" | "hours" | "days" | "weeks">("days");
 const banError = ref("");
 const banSuccess = ref("");
+const bridgePlayer = computed(() => (props.player as any)?.memoryBridge ?? null);
+const bridgeCombat = computed(() => bridgePlayer.value?.combat ?? null);
+const bridgeOnline = computed(() => String(props.bridgeStatusText ?? "").startsWith("正常"));
+
+function bridgeStat(value: unknown) {
+  return value != null && Number.isFinite(Number(value)) ? String(Math.trunc(Number(value))) : "—";
+}
 
 const banIdentity = computed(() => ({
   steamID: String(props.rconDetail?.steamId ?? props.rconDetail?.steamID ?? (props.player as any)?.steamId ?? (props.player as any)?.steamID ?? "").trim(),
@@ -258,12 +265,13 @@ const panelStyle = computed(() => {
 
 // Extract values reactively from player prop
 const health = computed(() => {
-  const hp = props.player.soldierInfo?.health;
-  return hp != null && Number.isFinite(hp) ? hp : 100;
+  const hp = bridgePlayer.value?.vitals?.percent;
+  return hp != null && Number.isFinite(hp) ? hp : null;
 });
 
 const isSL = computed(() => {
   const source = props.player as any;
+  if (source?.memoryBridge?.isLeader === true) return true;
   if (source?.match?.isLeader === true) return true;
   if (source?.isLeader === true) return true;
   if (source?.raw?.rcon?.isLeader === true) return true;
@@ -291,17 +299,17 @@ const bzssCoreFtBadge = computed(() => {
     return {
       label: `FT ${index}`,
       tone: "ft-neutral",
-      title: `BZSS-Core ftIndex: ${index}`,
+      title: `Memory Bridge fireteam: ${index}`,
     };
   }
   return {
     ...badge,
-    title: `BZSS-Core ftIndex: ${index}`,
+    title: `Memory Bridge fireteam: ${index}`,
   };
 });
 
 const roleInfo = computed(() => {
-  if (health.value <= 0) {
+  if (health.value != null && health.value <= 0) {
     return resolveRoleIcon("dead");
   }
   const vehicleInfo = props.player.vehicleInfo;
@@ -389,11 +397,14 @@ const vehicleName = computed(() => {
 });
 
 const gamePosition = computed(() => {
+  if (Object.prototype.hasOwnProperty.call(props.player as any, "memoryBridge")) {
+    return bridgePlayer.value?.positionStatus === "ok" ? bridgePlayer.value.position : null;
+  }
   return props.player.soldierInfo?.position ?? props.player.position ?? { x: 0, y: 0 };
 });
 
-const gameX = computed(() => gamePosition.value.x ?? 0);
-const gameY = computed(() => gamePosition.value.y ?? 0);
+const gameX = computed(() => gamePosition.value?.x ?? null);
+const gameY = computed(() => gamePosition.value?.y ?? null);
 
 function syncPanelPosition() {
   void nextTick(() => {

@@ -405,10 +405,10 @@
                   <div class="mini-bar-track">
                     <div
                       class="mini-bar-fill"
-                      :style="{ width: `${squad.avgHealth}%`, backgroundColor: squad.avgHealth < 50 ? '#ef4444' : squad.avgHealth < 75 ? '#eab308' : '#10b981' }"
+                      :style="{ width: `${squad.avgHealth ?? 0}%`, backgroundColor: squad.avgHealth == null ? '#475569' : squad.avgHealth < 50 ? '#ef4444' : squad.avgHealth < 75 ? '#eab308' : '#10b981' }"
                     ></div>
                   </div>
-                  <span class="health-num font-mono">{{ squad.avgHealth }}%</span>
+                  <span class="health-num font-mono">{{ squad.avgHealth == null ? '—' : `${squad.avgHealth}%` }}</span>
                 </div>
               </div>
             </button>
@@ -447,7 +447,7 @@
                   ></div>
                 </div>
                 <div class="player-status-row">
-                  <span class="player-hp-value font-mono">{{ getPlayerHealth(player) ?? '0' }}% HP</span>
+                  <span class="player-hp-value font-mono">{{ getPlayerHealth(player) == null ? '—' : `${getPlayerHealth(player)}%` }} HP</span>
                   <span v-if="player.soldierInfo?.soldierClass" class="player-kit">{{ player.soldierInfo.soldierClass }}</span>
                   <span v-if="player.vehicleInfo?.vehicleType && player.vehicleInfo.vehicleType !== 'None'" class="player-vehicle-badge">
                     <span class="vehicle-icon-mini">⚡</span>
@@ -674,7 +674,7 @@ interface TacticalTeamSquad {
   teamId: number;
   playersCount: number;
   squadLeaderName: string;
-  avgHealth: number;
+  avgHealth: number | null;
 }
 
 interface TacticalCaptureZoneMarker {
@@ -1035,11 +1035,11 @@ const filteredPlayers = computed(() => {
   const query = normalizeText(props.sidebarSearch);
   const list = props.filteredTeamPlayers.filter((player) => {
     if (props.normalizeTeam(player.teamId) !== teamId) return false;
-    const hp = props.getPlayerHealth(player) ?? 0;
-    if (props.sidebarOnlyAlive && hp <= 0) return false;
+    const hp = props.getPlayerHealth(player);
+    if (props.sidebarOnlyAlive && (hp == null || hp <= 0)) return false;
     if (props.sidebarOnlyVehicle && !player.vehicleInfo?.vehicleType) return false;
     if (sidebarOnlySl.value && !isSquadLeader(player)) return false;
-    if (sidebarOnlyLowHp.value && (hp <= 0 || hp >= 50)) return false;
+    if (sidebarOnlyLowHp.value && (hp == null || hp <= 0 || hp >= 50)) return false;
 
     if (!query) return true;
     const squad = getSquadForPlayer(player);

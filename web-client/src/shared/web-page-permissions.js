@@ -3,6 +3,7 @@
 export const WEB_PAGE_PERMISSION_MATRIX = Object.freeze([
   { route: "/match-status", requiredPermission: "match_state.view" },
   { route: "/match-state", requiredPermission: "match_state.view" },
+  { route: "/mem-bridge", requiredPermission: "match_state.view" },
   { route: "/console", requiredPermission: "console.view", superAdminOnly: true },
   { route: "/chat-monitor", requiredPermission: "chat_monitor.view" },
   { route: "/combat-records", requiredPermission: "combat_manager.view", legacyRequiredPermissions: ["kill_manager.view"] },

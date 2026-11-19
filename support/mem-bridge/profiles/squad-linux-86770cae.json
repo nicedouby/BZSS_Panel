@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "Squad Linux x86-64 86770cae",
+  "gameSha256": "86770cae6d030e37ab9e435e753e7e76ff59e6853190671627af771e02c148d5",
+  "layout": {
+    "gworldAddress": "0xd7052c0",
+    "objectsAddress": "0xd57bcb8",
+    "nameBlocksAddress": "0xd4c7000",
+    "worldGameStateOffset": "0x1e0",
+    "levelActorsOffset": "0xa0",
+    "arrayInnerOffset": "0x78",
+    "componentWorldLocationOffset": "0x200"
+  },
+  "guards": [{
+    "address": "0x7d03f60",
+    "bytes": "488b46204883f8014883d8ff488946200f288700020000f20f108f100200000f1102f20f114a10c3"
+  }]
+}

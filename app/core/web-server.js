@@ -9,6 +9,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { BzssCoreCommandService } from "./bzss-core-command-service.js";
 import { BZSS_CORE_BOOL_KEYS } from "./bzss-core-variable-state-service.js";
 import { DeveloperToolsService } from "./developer-tools-service.js";
+import { MemBridgeService } from "./mem-bridge-service.js";
 
 const requestStorage = new AsyncLocalStorage();
 import { handleSquadManagementRoutes } from "../modules/squad-management/routes.js";
@@ -93,6 +94,7 @@ export class WebServer {
       logger,
     });
     this.developerToolsService = new DeveloperToolsService({ logger });
+    this.memBridgeService = new MemBridgeService();
     this.server = null;
     this.jobs = new Map();
     this.jobCounter = 0;
@@ -664,6 +666,45 @@ export class WebServer {
 
 
     const user = this.core.authManager?.getUserFromRequest(req);
+
+    if (url.pathname === "/api/mem-bridge/snapshot") {
+      if (req.method !== "GET") {
+        return this.json(res, 405, { error: "MethodNotAllowed", message: "只允许读取 Bridge 数据。" });
+      }
+      if (!this.requirePermission(user, "match_state.view", res)) return;
+      try {
+        const target = url.searchParams.get("target") ?? "formal";
+        const snapshot = await this.memBridgeService.getSnapshot(target);
+        return this.json(res, 200, snapshot, { "Cache-Control": "no-store" });
+      } catch (error) {
+        const statusCode = Number(error?.statusCode) || 503;
+        return this.json(res, statusCode, {
+          error: error?.code ?? "MemBridgeUnavailable",
+          message: error?.message ?? "Bridge 当前不可用。",
+        }, { "Cache-Control": "no-store" });
+      }
+    }
+
+    if (url.pathname === "/api/mem-bridge/settings") {
+      if (!this.requirePermission(user, "settings.manage", res)) return;
+      try {
+        if (req.method === "GET") {
+          const target = url.searchParams.get("target") ?? "formal";
+          return this.json(res, 200, await this.memBridgeService.getSettings(target), { "Cache-Control": "no-store" });
+        }
+        if (req.method === "PATCH") {
+          const body = await this.readJsonBody(req);
+          return this.json(res, 200, await this.memBridgeService.updateSettings(body), { "Cache-Control": "no-store" });
+        }
+        return this.json(res, 405, { error: "MethodNotAllowed", message: "仅支持读取或修改采样参数。" });
+      } catch (error) {
+        const statusCode = Number(error?.statusCode) || 503;
+        return this.json(res, statusCode, {
+          error: error?.code ?? "MemBridgeUnavailable",
+          message: error?.message ?? "Bridge 采样参数不可用。",
+        }, { "Cache-Control": "no-store" });
+      }
+    }
 
     if (user && url.pathname === "/api/auth/change-password" && req.method === "POST") {
       const body = await this.readJsonBody(req);
@@ -5246,19 +5287,20 @@ export class WebServer {
   async serveStatic(url, req, res) {
     let filePath = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
     filePath = path.normalize(filePath).replace(/^(\.\.[/\\])+/, "");
+    if (filePath.toLowerCase() === "/index.html") return this.serveIndex(res, req.method);
     const abs = path.join(this.staticDirectory, filePath);
 
     let stat;
     try {
       stat = await fs.stat(abs);
     } catch (error) {
-      if (error?.code === "ENOENT" && !path.extname(filePath)) return this.serveIndex(res);
+      if (error?.code === "ENOENT" && !path.extname(filePath)) return this.serveIndex(res, req.method);
       res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not Found");
       return;
     }
     if (!stat.isFile()) {
-      if (!path.extname(filePath)) return this.serveIndex(res);
+      if (!path.extname(filePath)) return this.serveIndex(res, req.method);
       res.writeHead(404, { ...BASE_SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not Found");
       return;
@@ -5313,11 +5355,11 @@ export class WebServer {
     stream.pipe(res);
   }
 
-  async serveIndex(res) {
+  async serveIndex(res, method = "GET") {
     const indexPath = path.join(this.staticDirectory, "index.html");
-    let data;
+    let html;
     try {
-      data = await fs.readFile(indexPath);
+      html = await fs.readFile(indexPath, "utf8");
     } catch (error) {
       throw createHttpError(
         503,
@@ -5325,6 +5367,12 @@ export class WebServer {
         `Vue client index.html not found at ${indexPath}. Run npm run client:build before using production static hosting.`,
       );
     }
+    const target = process.env.BZSS_NATIVE_TARGET === "test" ? "test" : "formal";
+    const targetMeta = `<meta name="bzss-native-target" content="${target}">`;
+    const metaPattern = /<meta\s+name=["']bzss-native-target["'][^>]*>/i;
+    if (metaPattern.test(html)) html = html.replace(metaPattern, targetMeta);
+    else html = html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${targetMeta}`);
+    const contentLength = Buffer.byteLength(html, "utf8");
     res.writeHead(200, {
       ...BASE_SECURITY_HEADERS,
       "Content-Type": "text/html; charset=utf-8",

@@ -275,7 +275,7 @@
                 <div class="hud-pane-section">
                   <div class="hud-section-header">
                     <span class="hud-section-title">本局战斗表现 / SESSION COMBAT</span>
-                    <span class="hud-section-subtitle">实时对局数据统计 / REAL-TIME STATS</span>
+                    <span class="hud-section-subtitle">{{ hasMemoryBridgePlayerInfo ? "Memory Bridge · 未读取字段显示未知" : "实时对局数据统计 / REAL-TIME STATS" }}</span>
                   </div>
 
                   <div class="player-stat-line scoreboard-line" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0;">
@@ -730,6 +730,11 @@ const loadToken = ref(0);
 const steamFriends = ref<any[]>([]);
 const friendsLoading = ref(false);
 const friendsError = ref("");
+const hasMemoryBridgePlayerInfo = computed(() => Object.prototype.hasOwnProperty.call(props.player ?? {}, "memoryBridgePlayerInfo"));
+const memoryBridgeCombat = computed(() => (props.player as any)?.memoryBridgePlayerInfo?.combat ?? null);
+function memoryBridgeStat(value: unknown) {
+  return value != null && Number.isFinite(Number(value)) ? Math.trunc(Number(value)) : "未知";
+}
 const bzssCoreInfo = computed(() => props.player?.bzssCorePlayerInfo ?? null);
 const bzssCoreStatusText = computed(() => {
   const status = String(props.player?.bzssCoreStatus ?? "").trim();
@@ -866,7 +871,25 @@ const glowShadowStyle = computed(() => {
   return { boxShadow: "0 0 16px rgba(255, 255, 255, 0.1)" };
 });
 
-const combatScoreboardItems = computed(() => buildCombatScoreboardItems(props.player?.combatStats, true).filter(item => item.key !== "latency"));
+const combatScoreboardItems = computed(() => {
+  if (!hasMemoryBridgePlayerInfo.value) {
+    return buildCombatScoreboardItems(props.player?.combatStats, true).filter(item => item.key !== "latency");
+  }
+  const combat = memoryBridgeCombat.value ?? {};
+  return [
+    { key: "numWoundeds", label: "击倒 / Downs", shortLabel: "w", value: memoryBridgeStat(combat.woundeds), tone: "woundeds" },
+    { key: "numKills", label: "击杀 / Kills", shortLabel: "k", value: memoryBridgeStat(combat.kills), tone: "kills" },
+    { key: "vehicleKills", label: "载具击杀 / Vehicle Kills", shortLabel: "vk", value: memoryBridgeStat(combat.vehicleKills), tone: "combat" },
+    { key: "numDeaths", label: "死亡 / Deaths", shortLabel: "d", value: memoryBridgeStat(combat.deaths), tone: "deaths" },
+    { key: "numTeamKills", label: "队友击杀 / TeamKills", shortLabel: "tk", value: memoryBridgeStat(combat.teamKills), tone: "tk" },
+    { key: "revives", label: "复苏数 / Revives", shortLabel: "r", value: memoryBridgeStat(combat.revives), tone: "revived" },
+    { key: "numWounds", label: "受伤次数 / Wounds", shortLabel: "wd", value: memoryBridgeStat(combat.wounds), tone: "wounds" },
+    { key: "healPoints", label: "治疗量 / Heal Points", shortLabel: "h", value: memoryBridgeStat(combat.healPoints), tone: "heal" },
+    { key: "teamworkScore", label: "团队合作分 / Teamwork Score", shortLabel: "t", value: memoryBridgeStat(combat.teamworkScore), tone: "teamwork" },
+    { key: "objectiveScore", label: "目标分数 / Objective Score", shortLabel: "o", value: memoryBridgeStat(combat.objectiveScore), tone: "objective" },
+    { key: "combatScore", label: "战斗分数 / Combat Score", shortLabel: "c", value: memoryBridgeStat(combat.combatScore), tone: "combat" },
+  ];
+});
 
 // KD Computations
 const sessionKd = computed(() => {

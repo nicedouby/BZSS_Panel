@@ -77,6 +77,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "mem-bridge",
+    path: "/mem-bridge",
+    component: () => import("../pages/MemBridgePage.vue"),
+    title: "Bridge 点位与玩家位置",
+    category: "core",
+    refreshPolicy: "polling",
+    nav: { section: "opsLive", label: "Bridge 点位／玩家位置", icon: "📡", order: 11 },
+    requiredPermission: "match_state.view",
+    ...workspacePage,
+  },
+  {
     name: "pressure-zone-simulator",
     path: "/debug/pressure-zone",
     component: () => import("../pages/PressureZoneSimulatorPage.vue"),
