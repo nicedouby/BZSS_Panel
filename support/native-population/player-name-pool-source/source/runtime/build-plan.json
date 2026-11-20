@@ -1,0 +1,1074 @@
+{
+  "schema": 1,
+  "sources": [
+    "admission/admission_plan.c",
+    "admission/admission_plan.h",
+    "admission/fixture_admission.c",
+    "admission/fixture_queue_guard.c",
+    "admission/queue_gate_preimage.generated.h",
+    "admission/queue_guard.c",
+    "admission/queue_guard.h",
+    "admission/score_fixture.S",
+    "admission/score_step_bytes.generated.inc",
+    "admission/selector_preimage.generated.h",
+    "admission/warmup_admission.c",
+    "admission/warmup_admission.h",
+    "common/sha256.c",
+    "common/sha256.h",
+    "core/fixture.c",
+    "core/warmup_core.c",
+    "core/warmup_core.h",
+    "integration/deployment_target.h",
+    "integration/joint_control.h",
+    "integration/joint_dispatch.h",
+    "integration/review_preprocessed.py",
+    "integration/test_gt_schedule.c",
+    "integration/test_joint_dispatch.c",
+    "native/message_contract.generated.h",
+    "native/metadata_anchor_r5.inc",
+    "native/metadata_anchor_r5.types.inc",
+    "native/metadata_sampler_r2.inc",
+    "native/metadata_transition_r4.inc",
+    "native/metadata_transition_r5.inc",
+    "native/repindex_transition_r4.inc",
+    "native/test_adapter.c",
+    "native/test_control_config.c",
+    "native/test_snapshot.c",
+    "native/warmup_control.c",
+    "native/warmup_control.h",
+    "native/warmup_control_config.c",
+    "native/warmup_control_config.h",
+    "native/warmup_gt_schedule.h",
+    "native/warmup_native_snapshot.c",
+    "native/warmup_native_snapshot.h",
+    "native/warmup_pool_adapter.c",
+    "native/warmup_pool_adapter.h",
+    "native/warmup_ue_backend.c",
+    "native/warmup_ue_backend.h",
+    "native/warmup_ue_messages.inc",
+    "native/warmup_ue_pool.inc",
+    "publisher/bootstrap_helpers.inc",
+    "publisher/pinned_abi.h",
+    "publisher/queue_display.c",
+    "publisher/queue_display.h",
+    "publisher/queue_display_abi.generated.h",
+    "publisher/queue_display_bootstrap.inc",
+    "publisher/refresh_cadence.c",
+    "publisher/refresh_cadence.h",
+    "publisher/test_fixed_display_policy.c",
+    "publisher/test_publish_policy.c",
+    "publisher/test_queue_display.c",
+    "publisher/test_queue_display_relay.c",
+    "publisher/test_refresh_cadence.c",
+    "publisher/warmup_publish.c",
+    "publisher/warmup_publish.h",
+    "publisher/warmup_publish_policy.c",
+    "runtime/build_joint_linux.py",
+    "ticket/native_graph.c",
+    "ticket/native_graph.h",
+    "ticket/native_protocol.c",
+    "ticket/native_protocol.h",
+    "ticket/native_runtime.c",
+    "ticket/native_runtime.h",
+    "ticket/sha256.c",
+    "ticket/sha256.h",
+    "ticket/shim.c",
+    "ticket/test_protocol.py",
+    "ticket/test_runtime.py",
+    "ticket/test_runtime_harness.c",
+    "ticket/test_sha256.c",
+    "round/round_cycle.c",
+    "round/round_cycle.h",
+    "round/test_round_cycle.c",
+    "native/identity_recovery.inc",
+    "native/identity_recovery.h",
+    "native/identity_recovery_control.inc"
+  ],
+  "steps": [
+    {
+      "name": "ticket_shipping_preprocess",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-DNT_WITH_GRAPH=1",
+        "-DNT_JOINT_WARMUP=1",
+        "-DWARMUP_JOINT_TICK=1",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-E",
+        "-P",
+        "ticket/shim.c",
+        "-o",
+        "joint-ticket.i"
+      ]
+    },
+    {
+      "name": "control_shipping_preprocess",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-DNT_WITH_GRAPH=1",
+        "-DNT_JOINT_WARMUP=1",
+        "-DWARMUP_JOINT_TICK=1",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-E",
+        "-P",
+        "native/warmup_control.c",
+        "-o",
+        "joint-control.i"
+      ]
+    },
+    {
+      "name": "publish_shipping_preprocess",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-DNT_WITH_GRAPH=1",
+        "-DNT_JOINT_WARMUP=1",
+        "-DWARMUP_JOINT_TICK=1",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-E",
+        "-P",
+        "publisher/warmup_publish.c",
+        "-o",
+        "joint-publish.i"
+      ]
+    },
+    {
+      "name": "joint_shipping_branch_review",
+      "command": [
+        "python3",
+        "-B",
+        "integration/review_preprocessed.py"
+      ]
+    },
+    {
+      "name": "joint_library_strict_link",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fPIC",
+        "-fvisibility=hidden",
+        "-pthread",
+        "-shared",
+        "-Wl,-z,defs",
+        "-Wl,-z,relro,-z,now",
+        "-DNT_WITH_GRAPH=1",
+        "-DNT_JOINT_WARMUP=1",
+        "-DWARMUP_JOINT_TICK=1",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "core/warmup_core.c",
+        "native/warmup_pool_adapter.c",
+        "native/warmup_native_snapshot.c",
+        "native/warmup_ue_backend.c",
+        "native/warmup_control.c",
+        "native/warmup_control_config.c",
+        "publisher/warmup_publish.c",
+        "publisher/refresh_cadence.c",
+        "publisher/warmup_publish_policy.c",
+        "admission/warmup_admission.c",
+        "admission/queue_guard.c",
+        "common/sha256.c",
+        "publisher/queue_display.c",
+        "ticket/shim.c",
+        "ticket/native_graph.c",
+        "ticket/native_runtime.c",
+        "ticket/native_protocol.c",
+        "round/round_cycle.c",
+        "-o",
+        "libsquad_joint_population.so"
+      ]
+    },
+    {
+      "name": "joint_library_dependencies",
+      "command": [
+        "readelf",
+        "-d",
+        "libsquad_joint_population.so"
+      ]
+    },
+    {
+      "name": "joint_library_symbols",
+      "command": [
+        "readelf",
+        "-Ws",
+        "libsquad_joint_population.so"
+      ]
+    },
+    {
+      "name": "joint_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "integration/test_joint_dispatch.c",
+        "-o",
+        "fixture_joint_strict"
+      ]
+    },
+    {
+      "name": "joint_strict_run",
+      "command": [
+        "./fixture_joint_strict"
+      ]
+    },
+    {
+      "name": "joint_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "integration/test_joint_dispatch.c",
+        "-o",
+        "fixture_joint_sanitize"
+      ]
+    },
+    {
+      "name": "joint_sanitize_run",
+      "command": [
+        "./fixture_joint_sanitize"
+      ]
+    },
+    {
+      "name": "control_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "native/warmup_control_config.c",
+        "core/warmup_core.c",
+        "native/test_control_config.c",
+        "-o",
+        "fixture_control_strict"
+      ]
+    },
+    {
+      "name": "control_strict_run",
+      "command": [
+        "./fixture_control_strict"
+      ]
+    },
+    {
+      "name": "control_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "native/warmup_control_config.c",
+        "core/warmup_core.c",
+        "native/test_control_config.c",
+        "-o",
+        "fixture_control_sanitize"
+      ]
+    },
+    {
+      "name": "control_sanitize_run",
+      "command": [
+        "./fixture_control_sanitize"
+      ]
+    },
+    {
+      "name": "core_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "core/warmup_core.c",
+        "core/fixture.c",
+        "-o",
+        "fixture_core_strict"
+      ]
+    },
+    {
+      "name": "core_strict_run",
+      "command": [
+        "./fixture_core_strict"
+      ]
+    },
+    {
+      "name": "core_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "core/warmup_core.c",
+        "core/fixture.c",
+        "-o",
+        "fixture_core_sanitize"
+      ]
+    },
+    {
+      "name": "core_sanitize_run",
+      "command": [
+        "./fixture_core_sanitize"
+      ]
+    },
+    {
+      "name": "adapter_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "core/warmup_core.c",
+        "native/warmup_pool_adapter.c",
+        "native/test_adapter.c",
+        "-o",
+        "fixture_adapter_strict"
+      ]
+    },
+    {
+      "name": "adapter_strict_run",
+      "command": [
+        "./fixture_adapter_strict"
+      ]
+    },
+    {
+      "name": "adapter_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "core/warmup_core.c",
+        "native/warmup_pool_adapter.c",
+        "native/test_adapter.c",
+        "-o",
+        "fixture_adapter_sanitize"
+      ]
+    },
+    {
+      "name": "adapter_sanitize_run",
+      "command": [
+        "./fixture_adapter_sanitize"
+      ]
+    },
+    {
+      "name": "admission_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "admission/warmup_admission.c",
+        "admission/admission_plan.c",
+        "admission/fixture_admission.c",
+        "admission/score_fixture.S",
+        "-o",
+        "fixture_admission_strict"
+      ]
+    },
+    {
+      "name": "admission_strict_run",
+      "command": [
+        "./fixture_admission_strict"
+      ]
+    },
+    {
+      "name": "admission_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "admission/warmup_admission.c",
+        "admission/admission_plan.c",
+        "admission/fixture_admission.c",
+        "admission/score_fixture.S",
+        "-o",
+        "fixture_admission_sanitize"
+      ]
+    },
+    {
+      "name": "admission_sanitize_run",
+      "command": [
+        "./fixture_admission_sanitize"
+      ]
+    },
+    {
+      "name": "queue_guard_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "admission/fixture_queue_guard.c",
+        "-o",
+        "fixture_queue_guard_strict"
+      ]
+    },
+    {
+      "name": "queue_guard_strict_run",
+      "command": [
+        "./fixture_queue_guard_strict"
+      ]
+    },
+    {
+      "name": "queue_guard_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "admission/fixture_queue_guard.c",
+        "-o",
+        "fixture_queue_guard_sanitize"
+      ]
+    },
+    {
+      "name": "queue_guard_sanitize_run",
+      "command": [
+        "./fixture_queue_guard_sanitize"
+      ]
+    },
+    {
+      "name": "publisher_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "publisher/warmup_publish_policy.c",
+        "publisher/test_publish_policy.c",
+        "-o",
+        "fixture_publisher_strict"
+      ]
+    },
+    {
+      "name": "publisher_strict_run",
+      "command": [
+        "./fixture_publisher_strict"
+      ]
+    },
+    {
+      "name": "publisher_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "publisher/warmup_publish_policy.c",
+        "publisher/test_publish_policy.c",
+        "-o",
+        "fixture_publisher_sanitize"
+      ]
+    },
+    {
+      "name": "publisher_sanitize_run",
+      "command": [
+        "./fixture_publisher_sanitize"
+      ]
+    },
+    {
+      "name": "snapshot_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "native/test_snapshot.c",
+        "-o",
+        "fixture_snapshot_strict"
+      ]
+    },
+    {
+      "name": "snapshot_strict_run",
+      "command": [
+        "./fixture_snapshot_strict"
+      ]
+    },
+    {
+      "name": "snapshot_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "native/test_snapshot.c",
+        "-o",
+        "fixture_snapshot_sanitize"
+      ]
+    },
+    {
+      "name": "snapshot_sanitize_run",
+      "command": [
+        "./fixture_snapshot_sanitize"
+      ]
+    },
+    {
+      "name": "queue_display_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "publisher/test_queue_display.c",
+        "publisher/warmup_publish_policy.c",
+        "-o",
+        "fixture_queue_display_strict"
+      ]
+    },
+    {
+      "name": "queue_display_strict_run",
+      "command": [
+        "./fixture_queue_display_strict"
+      ]
+    },
+    {
+      "name": "queue_display_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "publisher/test_queue_display.c",
+        "publisher/warmup_publish_policy.c",
+        "-o",
+        "fixture_queue_display_sanitize"
+      ]
+    },
+    {
+      "name": "queue_display_sanitize_run",
+      "command": [
+        "./fixture_queue_display_sanitize"
+      ]
+    },
+    {
+      "name": "relay_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "publisher/test_queue_display_relay.c",
+        "-o",
+        "fixture_relay_strict"
+      ]
+    },
+    {
+      "name": "relay_strict_run",
+      "command": [
+        "./fixture_relay_strict"
+      ]
+    },
+    {
+      "name": "relay_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "publisher/test_queue_display_relay.c",
+        "-o",
+        "fixture_relay_sanitize"
+      ]
+    },
+    {
+      "name": "relay_sanitize_run",
+      "command": [
+        "./fixture_relay_sanitize"
+      ]
+    },
+    {
+      "name": "sha_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O2",
+        "common/sha256.c",
+        "ticket/test_sha256.c",
+        "-o",
+        "fixture_sha_strict"
+      ]
+    },
+    {
+      "name": "sha_strict_run",
+      "command": [
+        "./fixture_sha_strict"
+      ]
+    },
+    {
+      "name": "sha_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-pthread",
+        "-Icommon",
+        "-Inative",
+        "-Icore",
+        "-Ipublisher",
+        "-Iticket",
+        "-Iintegration",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "common/sha256.c",
+        "ticket/test_sha256.c",
+        "-o",
+        "fixture_sha_sanitize"
+      ]
+    },
+    {
+      "name": "sha_sanitize_run",
+      "command": [
+        "./fixture_sha_sanitize"
+      ]
+    },
+    {
+      "name": "ticket_runtime_strict",
+      "command": [
+        "python3",
+        "-B",
+        "ticket/test_runtime.py"
+      ]
+    },
+    {
+      "name": "ticket_runtime_sanitize",
+      "command": [
+        "python3",
+        "-B",
+        "ticket/test_runtime.py",
+        "--sanitize",
+        "address,undefined"
+      ]
+    },
+    {
+      "name": "gt_schedule_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "integration/test_gt_schedule.c",
+        "-o",
+        "fixture_gt_schedule"
+      ]
+    },
+    {
+      "name": "gt_schedule_run",
+      "command": [
+        "./fixture_gt_schedule"
+      ]
+    },
+    {
+      "name": "gt_schedule_sanitizer_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-O1",
+        "-g",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "integration/test_gt_schedule.c",
+        "-o",
+        "fixture_gt_schedule_san"
+      ]
+    },
+    {
+      "name": "gt_schedule_sanitizer_run",
+      "command": [
+        "./fixture_gt_schedule_san"
+      ]
+    },
+    {
+      "name": "refresh_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wpedantic",
+        "-O2",
+        "publisher/test_refresh_cadence.c",
+        "-o",
+        "fixture_refresh_strict"
+      ]
+    },
+    {
+      "name": "refresh_strict_run",
+      "command": [
+        "./fixture_refresh_strict"
+      ]
+    },
+    {
+      "name": "refresh_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wpedantic",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "publisher/test_refresh_cadence.c",
+        "-o",
+        "fixture_refresh_sanitize"
+      ]
+    },
+    {
+      "name": "refresh_sanitize_run",
+      "command": [
+        "./fixture_refresh_sanitize"
+      ]
+    },
+    {
+      "name": "fixed_display_policy_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wpedantic",
+        "-O2",
+        "publisher/test_fixed_display_policy.c",
+        "publisher/warmup_publish_policy.c",
+        "-o",
+        "fixture_fixed_display_policy"
+      ]
+    },
+    {
+      "name": "fixed_display_policy_strict_run",
+      "command": [
+        "./fixture_fixed_display_policy"
+      ]
+    },
+    {
+      "name": "fixed_display_policy_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wpedantic",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "publisher/test_fixed_display_policy.c",
+        "publisher/warmup_publish_policy.c",
+        "-o",
+        "fixture_fixed_display_policy_san"
+      ]
+    },
+    {
+      "name": "fixed_display_policy_sanitize_run",
+      "command": [
+        "./fixture_fixed_display_policy_san"
+      ]
+    },
+    {
+      "name": "round_strict_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "round/round_cycle.c",
+        "round/test_round_cycle.c",
+        "-o",
+        "fixture_round_strict"
+      ]
+    },
+    {
+      "name": "round_strict_run",
+      "command": [
+        "./fixture_round_strict"
+      ]
+    },
+    {
+      "name": "round_sanitize_compile",
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O1",
+        "-g",
+        "-fsanitize=address,undefined",
+        "-fno-omit-frame-pointer",
+        "round/round_cycle.c",
+        "round/test_round_cycle.c",
+        "-o",
+        "fixture_round_sanitize"
+      ]
+    },
+    {
+      "name": "round_sanitize_run",
+      "command": [
+        "./fixture_round_sanitize"
+      ]
+    }
+  ],
+  "artifacts": [
+    "libsquad_joint_population.so"
+  ],
+  "never_load_artifact": true,
+  "game_used": false
+}

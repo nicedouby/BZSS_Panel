@@ -65,3 +65,7 @@ sqlite3-part0.bin
 
 # Generated tactical map tile pyramids
 /web-client/public/map-tiles/
+# Target-specific native population build receipts and candidates
+/support/native-population/player-name-pool-source/source/runtime/artifacts/
+/support/native-population/player-name-pool-source/source/runtime/evidence/
+/support/native-population/__pycache__/

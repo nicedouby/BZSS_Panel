@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="bzss-native-target" content="formal"><title>占位玩家兵种管理</title>
+<link rel="stylesheet" href="/native-players-live.css"><script defer src="/native-players-live.js"></script>
+</head><body><main class="shell">
+<header class="topbar"><div><p class="eyebrow">BZSS · NATIVE PLACEHOLDERS</p><h1>占位玩家兵种</h1><p class="intro">仅列出原生接口登记的占位玩家。随机兵种从当前阵营可用角色中抽取，并排除 SL。</p></div><button id="refresh" class="button secondary" type="button">读取状态</button></header>
+<section class="notice"><strong>兵种规则</strong><span>新建 Controller 占位按阵营默认兵种初始化；真实玩家仍走游戏原生流程。本页的随机设置只作用于已登记占位。</span></section>
+<p id="status" class="status" role="status" aria-live="polite">正在读取占位状态…</p>
+<section id="players" class="players" aria-label="占位玩家列表"></section>
+<p class="footnote">变更会由服务端执行并回读确认。若服务器返回待核对，请重新读取状态；不要重复点击。</p>
+</main></body></html>
