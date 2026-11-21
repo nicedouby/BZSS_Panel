@@ -131,7 +131,7 @@ class UE:
 
     def scalar_property(self,base,p):
         at=base+p.offset
-        formats={'IntProperty':'i','UInt32Property':'I','ByteProperty':'B','FloatProperty':'f','DoubleProperty':'d','Int64Property':'q','UInt64Property':'Q'}
+        formats={'IntProperty':'i','UInt32Property':'I','UInt16Property':'H','ByteProperty':'B','FloatProperty':'f','DoubleProperty':'d','Int64Property':'q','UInt64Property':'Q'}
         if p.kind=='BoolProperty':
             _,byte,_,mask=self.m.read(p.descriptor+0x70,4);return bool(self.m.read(at+byte,1)[0]&mask)
         fmt=formats.get(p.kind)
@@ -187,6 +187,71 @@ class UE:
         try:return self.scalar(obj,name)
         except BridgeError:return None
 
+    def weak_pointer(self, obj, name):
+        prop = self.prop(obj, name)
+        if prop.kind != 'WeakObjectProperty' or prop.size != 8:
+            raise BridgeError('field_type', 'Expected a weak object reference.')
+        index, serial = struct.unpack('<ii', self.m.read(obj + prop.offset, 8))
+        if not 0 <= index < self.object_count or serial <= 0:
+            return None
+        chunk = index // 65536
+        if chunk not in self.chunks:
+            self.chunks[chunk] = self.m.u64(self.chunk_table + chunk * 8)
+        slot = self.chunks[chunk] + (index % 65536) * 24
+        _, address, current_serial, _ = struct.unpack('<QQii', self.m.read(slot, 24))
+        if not address or current_serial != serial:
+            return None
+        identity = self.info(address)
+        return address if identity.index == index and identity.serial == serial else None
+
+    def optional_weak_pointer(self, obj, name):
+        try:return self.weak_pointer(obj, name)
+        except BridgeError:return None
+
+    def optional_name(self, obj, name):
+        try:
+            prop = self.prop(obj, name)
+            if prop.kind == 'NameProperty' and prop.size == 8:
+                return self.fname(*struct.unpack('<II', self.m.read(obj + prop.offset, 8)))
+        except BridgeError:
+            pass
+        return None
+
+    def property_triple(self, obj, name):
+        prop = self.prop(obj, name)
+        return self.read_triple(obj, prop)
+
+    def read_triple(self, base, prop):
+        if prop.kind != 'StructProperty' or prop.size not in (12, 24):
+            raise BridgeError('field_type', 'Expected a three component struct.')
+        data = self.m.read(base + prop.offset, prop.size)
+        triple = struct.unpack('<3d' if prop.size == 24 else '<3f', data)
+        if not all(math.isfinite(value) and abs(value) <= 100_000_000 for value in triple):
+            raise BridgeError('invalid_vector', 'Invalid relative transform.')
+        return triple
+
+    def struct_triples(self, obj, name, names):
+        result = {}
+        parent = self.prop(obj, name)
+        if parent.kind != 'StructProperty' or parent.size > 4096:
+            return result
+        kind = self.m.u64(parent.descriptor + 0x70)
+        if not kind:
+            return result
+        field = self.m.u64(kind + 0x50)
+        for _ in range(128):
+            if not field:
+                break
+            label = self.fname(self.m.u32(field + 0x20))
+            if label in names:
+                offset, size = self.m.i32(field + 0x44), self.m.i32(field + 0x30)
+                kind_name = self.fname(self.m.u32(self.m.u64(field + 8)))
+                if 0 <= offset < parent.size and size <= parent.size - offset:
+                    prop = Property(label, kind_name, offset, size, field)
+                    result[label] = self.read_triple(obj + parent.offset, prop)
+            field = self.m.u64(field + 0x18)
+        return result
+
     def string(self,obj,name):
         p=self.prop(obj,name)
         if p.kind!='StrProperty':raise BridgeError('field_type','Expected FString.')
@@ -206,6 +271,25 @@ class UE:
                 values[key]=self.fname(ni,nn)
             field=self.m.u64(field+0x18)
         return {'type':self.name(struct_object),'fields':values}
+
+    def component_transform(self, component):
+        offset = int(self.layout['componentWorldLocationOffset'], 0)
+        data = self.m.read(component + offset - 32, 96)
+        x, y, z, w, _, _, _, _, sx, sy, sz, _ = struct.unpack('<12d', data)
+        if not math.isclose(x*x + y*y + z*z + w*w, 1, abs_tol=.005):
+            raise BridgeError('invalid_rotation', 'Component rotation is unavailable.')
+        if not all(math.isfinite(s) and .001 <= abs(s) <= 100 for s in (sx, sy, sz)):
+            raise BridgeError('invalid_scale', 'Component scale is unavailable.')
+        return {'position': vector(data[32:56]), 'quaternion': [x, y, z, w], 'scale': [sx, sy, sz]}
+
+    def actor_transform(self, actor):
+        info = self.info(actor)
+        root = self.pointer(actor, 'RootComponent')
+        root_info = self.info(root)
+        transform = self.component_transform(root)
+        if self.pointer(actor, 'RootComponent') != root or not self.unchanged(root_info) or not self.unchanged(info):
+            raise BridgeError('object_changed', 'Actor transform changed ownership while reading.')
+        return transform
 
     def location(self,actor):
         info=self.info(actor);root=self.pointer(actor,'RootComponent');root_info=self.info(root)

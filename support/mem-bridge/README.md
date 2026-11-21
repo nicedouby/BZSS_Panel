@@ -1,5 +1,13 @@
 # BZSS-MEM-BRIDGE · Linux
 
+## 使用 3D Viewer
+
+Linux Bridge 和 Panel 的查看器通过 `GET /api/mem-bridge/snapshot` 连接。Bridge 采集只读游戏快照，Viewer 按采样频率更新人物、据点、载具和部署物。查看器入口是 Panel 的「Mem Bridge 3D 查看器」或 `/mem-bridge/3d`，账号需要 `match_state.view`。
+
+先按下面的步骤构建并启动 Bridge，然后在仓库的 `web-client` 目录运行 `npm ci` 和 `npm run build`，再按 Panel 的常规方式启动后端。后端通过回环地址 `127.0.0.1:31903` 访问 Bridge。
+
+用本地有权使用的场景导出作为资产。把地形清单 `terrain.json`、`tiles/` 和建筑 `objects.glb` 放在 `web-client/tactical-models/<地图键>-v2/`。对于 `logar`、`anvil`、`jensens`，现有旧版建筑包放在对应的 `<地图键>-v1/objects.glb`。人物、载具及装备的 GLB 文件与 `catalog-v3.json` 放在 `web-client/public/assets/live-models/` 后重新构建前端。请保持清单与导出文件的相对路径一致。
+
 独立运行的 Squad 内存读取程序，提供地图点位、玩家身份与 Pawn 世界坐标，并尽力从 PlayerState/Health Component 反射读取生命值和战绩。使用 Python 3.11 及以上版本的标准库，无需 pip 包，不导入 BZSS Panel 的任何代码，不依赖占位 SO、RCON、MCSM 或它们的状态文件。
 
 读取使用 Linux `process_vm_readv`。程序没有内存写入、注入、GDB、游戏函数调用、暂停或重启游戏的操作。未来占位功能可在独立模块中扩展；这一版只提供读取接口。
@@ -51,25 +59,11 @@ HTTP 200 表示当前数据可用；目标未启动、切图或样本过期时�
 
 默认点位类别是 `capture_zone`、`main_base`、`spawn_point`、`spawn_group`。配置中还可以增加 `vehicle_spawner` 或 `deployable_spawner`。`kind` 过滤只对已配置采集的点位生效。
 
-## 当前服务器部署
+## Linux 服务
 
-容器：`squad-incus-bzss`。程序目录 `/opt/bzss-mem-bridge`，配置 `/etc/bzss-mem-bridge/config.json`，服务名 `bzss-mem-bridge`。两个目标共享独立桥接程序，不修改游戏启动脚本或 Panel。
+`deploy/bzss-mem-bridge.service` 提供 systemd 示例。程序放在 `/opt/bzss-mem-bridge`。从 `config.example.json` 创建 `/etc/bzss-mem-bridge/config.json`，并按实际游戏安装目录设置各目标的可执行文件和版本布局。
 
 ```sh
 systemctl status bzss-mem-bridge
 journalctl -u bzss-mem-bridge -n 30
 ```
-
-从已有 SSH 入口读取容器内接口：
-
-```sh
-ssh squad "incus exec squad-incus-bzss -- curl -s 'http://127.0.0.1:31903/v1/players?target=formal'"
-```
-
-## 检查
-
-```sh
-python3 -m unittest discover -s tests
-```
-
-测试使用合成数据检查身份替换、边界值、快照失效和 API 过滤；真实内存读取结果另存为部署验证记录。

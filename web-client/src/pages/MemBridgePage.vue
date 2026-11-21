@@ -7,6 +7,9 @@
         <p>展示地图点位、玩家位置和载具状态；载具信息复用 Panel 战术状态流。</p>
       </div>
       <div class="bridge-toolbar">
+        <RouterLink :to="{ name: 'mem-bridge-viewer', query: { target } }" class="bridge-refresh">
+          打开 3D 查看器
+        </RouterLink>
         <label class="bridge-target">
           <span>目标服务器</span>
           <select v-model="target" @change="loadSnapshot">

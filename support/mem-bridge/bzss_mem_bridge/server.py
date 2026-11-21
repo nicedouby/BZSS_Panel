@@ -23,14 +23,17 @@ class Sampler:
 
     def unavailable(self,code,message):
         return {'schema':1,'module':'BZSS-MEM-BRIDGE','version':__version__,'readOnly':True,'target':self.target['id'],
-            'observedAt':time.time(),'epoch':None,'map':None,'players':[],'mapPoints':[],
+            'observedAt':time.time(),'epoch':None,'map':None,'players':[],'mapPoints':[],'liveActors':[],'projectiles':[],
             'health':{'status':'unavailable','code':code,'message':message,'lastSuccessAt':self.last_success}}
 
     def run(self):
+        sequence = 0
         while not self.stop_event.is_set():
             began=time.monotonic();delay=self.interval
             try:
                 value=self.reader.snapshot();self.last_success=value['observedAt'];state='ok'
+                sequence += 1
+                value['sampling'] = {'intervalSeconds': delay, 'sequence': sequence}
             except BridgeError as exc:
                 value=self.unavailable(exc.code,str(exc));state=exc.code
                 if exc.code in ('build_mismatch','process_not_unique','permission_denied'):delay=max(5,self.interval)

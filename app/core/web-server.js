@@ -667,6 +667,45 @@ export class WebServer {
 
     const user = this.core.authManager?.getUserFromRequest(req);
 
+    const tacticalModel = /^\/api\/tactical-scene\/(logar|anvil|jensens|sumari|basrah|belaya|chora|fallujah|foolsroad|goosebay|gorodok|kamdesh|kohat|kokan|lashkar|manicouagan|mestia|mutaha|narva|skorpo|tallil|yehorivka|forest|ppg)\/(v1|v2)\/(terrain\.(?:glb|json)|objects\.glb|tiles\/t[0-9]{3,4}\.(?:glb|jpg))$/.exec(url.pathname);
+    if (tacticalModel) {
+      if (req.method !== "GET" && req.method !== "HEAD") {
+        return this.json(res, 405, { error: "MethodNotAllowed" });
+      }
+      if (!this.requirePermission(user, "match_state.view", res)) return;
+      const [, map, version, assetPath] = tacticalModel;
+      const legacyMaps = ["logar", "anvil", "jensens"];
+      const legacyAsset = assetPath === "terrain.glb" || assetPath === "objects.glb";
+      if ((version === "v1" && (!legacyAsset || ![...legacyMaps, "sumari"].includes(map)))
+        || (version === "v2" && assetPath === "terrain.glb")) {
+        return this.json(res, 404, { error: "TacticalSceneModelUnavailable" });
+      }
+      const diskVersion = assetPath === "objects.glb" && legacyMaps.includes(map) ? "v1" : version;
+      const filePath = path.join(path.dirname(this.staticDirectory), "tactical-models", `${map}-${diskVersion}`, assetPath);
+      const info = await fs.stat(filePath).catch((error) => {
+        if (error.code !== "ENOENT") throw error;
+        return null;
+      });
+      if (!info?.isFile()) return this.json(res, 404, { error: "TacticalSceneModelUnavailable" });
+
+      const etag = `W/"${info.size.toString(16)}-${Math.trunc(info.mtimeMs).toString(16)}"`;
+      const headers = { ...BASE_SECURITY_HEADERS, "Cache-Control": "private, no-cache", ETag: etag };
+      if (req.headers["if-none-match"] === etag) {
+        res.writeHead(304, headers);
+        return res.end();
+      }
+      let contentType = "model/gltf-binary";
+      if (assetPath.endsWith(".json")) contentType = "application/json; charset=utf-8";
+      if (assetPath.endsWith(".jpg")) contentType = "image/jpeg";
+      res.writeHead(200, { ...headers, "Content-Type": contentType, "Content-Length": info.size });
+      if (req.method === "HEAD") return res.end();
+      const stream = createReadStream(filePath);
+      stream.on("error", (error) => res.destroy(error));
+      res.on("close", () => stream.destroy());
+      stream.pipe(res);
+      return;
+    }
+
     if (url.pathname === "/api/mem-bridge/snapshot") {
       if (req.method !== "GET") {
         return this.json(res, 405, { error: "MethodNotAllowed", message: "只允许读取 Bridge 数据。" });

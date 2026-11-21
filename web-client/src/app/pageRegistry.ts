@@ -88,6 +88,17 @@ export const pageRegistry: PageDefinition[] = [
     ...workspacePage,
   },
   {
+    name: "mem-bridge-viewer",
+    path: "/mem-bridge/3d",
+    component: () => import("../pages/MemBridgeViewerPage.vue"),
+    title: "Mem Bridge 3D 查看器",
+    category: "core",
+    refreshPolicy: "realtime",
+    nav: { section: "opsLive", label: "Mem Bridge 3D 查看器", icon: "🗺️", order: 13 },
+    requiredPermission: "match_state.view",
+    ...workspacePage,
+  },
+  {
     name: "pressure-zone-simulator",
     path: "/debug/pressure-zone",
     component: () => import("../pages/PressureZoneSimulatorPage.vue"),
