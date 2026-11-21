@@ -3,6 +3,7 @@ import json
 import time
 from . import __version__
 from .capture_geometry import read_capture_volumes
+from .discovery import IncrementalPointDiscovery
 from .memory import RemoteMemory,BridgeError,find_process,start_ticks
 from .ue import UE
 
@@ -34,13 +35,15 @@ class Reader:
     def __init__(self,target,profile):
         self.target=target;self.profile=profile;self.memory=None;self.ue=None
         self.world_key=None;self.epoch=None;self.points=[];self.discovery_at=0
-        self.player_details={};self.player_details_at=0
+        self.discovery=IncrementalPointDiscovery();self.discovery_stats={}
+        self.point_data={};self.player_details={};self.player_details_at=0
 
     def bind(self):
         proc=find_process(self.target)
         if self.memory is None or self.memory.pid!=int(proc.name) or self.memory.start!=start_ticks(proc):
             self.memory=RemoteMemory(self.target,self.profile);self.ue=UE(self.memory)
             self.world_key=None;self.points=[];self.discovery_at=0
+            self.discovery.reset();self.discovery_stats={};self.point_data.clear()
         return self.memory,self.ue
 
     def optional_string(self,obj,name):
@@ -189,27 +192,6 @@ class Reader:
         if 'deployablespawner' in names:return 'deployable_spawner'
         return None
 
-    def discover(self,world,levels):
-        u=self.ue;rows=[];seen=set();actors=0;skipped=0
-        allowed=set(self.target.get('pointKinds',['capture_zone','main_base','spawn_point','spawn_group']))
-        for level in levels:
-            level_info=u.info(level)
-            if not u.is_a(level,'Level'):continue
-            values=u.array_at(level,int(self.profile['layout']['levelActorsOffset'],0),50000)
-            actors+=len(values)
-            if actors>150000:raise BridgeError('actor_limit','Current world exceeds actor discovery limit.')
-            for actor in values:
-                if not actor or actor in seen:continue
-                seen.add(actor)
-                try:
-                    info=u.info(actor)
-                    if info.outer!=level:continue
-                    kind=self.kind(actor)
-                    if kind in allowed:rows.append((info,level_info,kind))
-                except BridgeError:skipped+=1
-            if not u.unchanged(level_info):raise BridgeError('world_changed','Level changed during discovery.')
-        self.points=rows;self.discovery_at=time.monotonic();self.discovery_stats={'actorsScanned':actors,'skippedActors':skipped}
-
     def point(self,entry,current_levels):
         u=self.ue;info,level,kind=entry;actor=info.address
         if level.address not in current_levels or not u.unchanged(level) or not u.unchanged(info):
@@ -244,7 +226,9 @@ class Reader:
         return result
 
     def snapshot(self):
-        started=time.monotonic();m,u=self.bind();m.begin();u.begin();m.validate_process()
+        started=time.monotonic()
+        timings={}
+        m,u=self.bind();m.begin();u.begin();m.validate_process()
         world=m.u64(int(self.profile['layout']['gworldAddress'],0));wi=u.info(world)
         if not u.is_a(world,'World'):raise BridgeError('world_unavailable','Current World is unavailable.')
         game=m.u64(world+int(self.profile['layout']['worldGameStateOffset'],0));gi=u.info(game)
@@ -252,12 +236,43 @@ class Reader:
         persistent=m.u64(world+0x30);li=u.info(persistent)
         key=(wi.key(),gi.key(),li.key())
         if key!=self.world_key:
-            u.reset_metadata();self.points=[];self.discovery_at=0;self.player_details.clear();self.player_details_at=0;self.world_key=key
+            u.reset_metadata();self.points=[];self.discovery_at=0
+            self.discovery.reset();self.discovery_stats={};self.point_data.clear()
+            self.player_details.clear();self.player_details_at=0;self.world_key=key
             self.epoch=hashlib.sha256(json.dumps((m.pid,m.start,key)).encode()).hexdigest()
         levels=u.array(world,'Levels',2048)
         if persistent not in levels:levels.insert(0,persistent)
-        point_interval=self.target.get('pointScanIntervalSeconds',5)
-        if time.monotonic()-self.discovery_at>=point_interval:self.discover(world,levels)
+        timings['worldMs']=round((time.monotonic()-started)*1000,2)
+
+        # Discovery can span several samples. Existing published points remain valid
+        # until an entire new discovery pass has completed successfully.
+        discovery_started=time.monotonic()
+        point_interval=max(1.0,float(self.target.get('pointScanIntervalSeconds',5)))
+        if not self.discovery.active and time.monotonic()-self.discovery_at>=point_interval:
+            self.discovery.begin(levels)
+        discovery_error=None
+        if self.discovery.active:
+            try:
+                result=self.discovery.step(
+                    u,self.profile['layout'],self.kind,
+                    set(self.target.get('pointKinds',['capture_zone','main_base','spawn_point','spawn_group'])),
+                    levels,
+                    max_actors=self.target.get('pointDiscoveryMaxActorsPerSample',1024),
+                    time_budget_ms=self.target.get('pointDiscoveryBudgetMs',10),
+                )
+                if result is not None:
+                    rows,self.discovery_stats=result
+                    self.points=rows;self.discovery_at=time.monotonic()
+                    live_keys={info.key() for info,_,_ in rows}
+                    self.point_data={key:value for key,value in self.point_data.items() if key in live_keys}
+            except BridgeError as exc:
+                discovery_error=exc.code
+                self.discovery.reset()
+                # Back off after a failed pass rather than immediately rescanning.
+                self.discovery_at=time.monotonic()
+        timings['discoveryMs']=round((time.monotonic()-discovery_started)*1000,2)
+
+        player_started=time.monotonic()
         players=[];points=[];errors={}
         stats_due=time.monotonic()-self.player_details_at>=float(self.target.get('playerStatsIntervalSeconds',1))
         live_player_keys=set()
@@ -270,9 +285,34 @@ class Reader:
         if stats_due:
             self.player_details={key:value for key,value in self.player_details.items() if key in live_player_keys}
             self.player_details_at=time.monotonic()
+        timings['playersMs']=round((time.monotonic()-player_started)*1000,2)
+
+        # Dynamic point fields are refreshed independently from full actor discovery.
+        # Keep a bounded number of expensive point reads per sampling cycle.
+        point_started=time.monotonic()
+        current_levels=set(levels)
+        refresh_interval=max(.25,float(self.target.get('pointRefreshIntervalSeconds',1)))
+        max_cache_age=max(refresh_interval,float(self.target.get('pointMaxCacheAgeSeconds',10)))
+        point_budget=max(1,min(int(self.target.get('pointMaxRefreshPerSample',24)),128))
+        refreshed_points=0
+        now=time.monotonic()
         for entry in self.points:
-            try:points.append(self.point(entry,set(levels)))
-            except BridgeError as exc:error(exc.code)
+            point_key=entry[0].key()
+            cached=self.point_data.get(point_key)
+            needs_refresh=cached is None or now-cached[1]>=refresh_interval
+            if needs_refresh and refreshed_points<point_budget:
+                refreshed_points+=1
+                try:
+                    point=self.point(entry,current_levels)
+                    self.point_data[point_key]=(point,time.monotonic())
+                    cached=self.point_data[point_key]
+                except BridgeError as exc:
+                    error(exc.code)
+            if cached is not None and now-cached[1]<=max_cache_age:
+                points.append(cached[0])
+        timings['pointsMs']=round((time.monotonic()-point_started)*1000,2)
+
+        metadata_started=time.monotonic()
         world_name=u.name(world)
         if '_invasion_' in world_name.lower():
             points.sort(key=lambda point: (point['kind'] != 'capture_zone', point['name']))
@@ -284,13 +324,19 @@ class Reader:
         if (m.u64(int(self.profile['layout']['gworldAddress'],0))!=world or not u.unchanged(wi)
             or m.u64(world+int(self.profile['layout']['worldGameStateOffset'],0))!=game or not u.unchanged(gi)):
             raise BridgeError('world_changed','World changed during sampling; snapshot discarded.')
+        timings['validationMs']=round((time.monotonic()-metadata_started)*1000,2)
+
         return {'schema':1,'module':'BZSS-MEM-BRIDGE','version':__version__,'readOnly':True,'target':self.target['id'],
             'observedAt':time.time(),'epoch':self.epoch,'process':{'pid':m.pid,'startTicks':m.start,'gameSha256':m.sha256},
             'map':map_data,
             'players':players,'mapPoints':points,
             'health':{'status':'ok','consistency':'world_validated_non_atomic','readDurationMs':round((time.monotonic()-started)*1000,2),
-                'readCalls':m.read_calls,'readBytes':m.read_bytes,'levels':len(levels),'playerStates':len(players),
+                'phaseDurationsMs':timings,'readCalls':m.read_calls,'readBytes':m.read_bytes,
+                'levels':len(levels),'playerStates':len(players),
                 'playersWithPosition':sum(p['positionStatus']=='ok' for p in players),'mapPointCount':len(points),
                 'playersWithVitals':sum(p['vitals']['status']=='ok' for p in players),
                 'playersWithCombatStats':sum(p['combatStatus']=='ok' for p in players),
-                'discoveryAgeSeconds':round(time.monotonic()-self.discovery_at,3),'skipped':errors,**self.discovery_stats}}
+                'discoveryAgeSeconds':round(time.monotonic()-self.discovery_at,3) if self.discovery_at else None,
+                'discovery':self.discovery.progress(),'discoveryError':discovery_error,
+                'refreshedPoints':refreshed_points,'cachedPoints':len(self.point_data),
+                'skipped':errors,**self.discovery_stats}}
