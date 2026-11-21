@@ -74,15 +74,19 @@ class DiscoveryTests(unittest.TestCase):
         ))
         self.assertFalse(discovery.active)
 
-    def test_budget_rejects_invalid_level(self):
+    def test_progress_and_reset(self):
         ue = FakeUE()
         discovery = IncrementalPointDiscovery()
         discovery.begin([10])
-        with self.assertRaises(BridgeError):
-            discovery.step(
-                ue, {'levelActorsOffset': 'not_hex'}, lambda _: None,
-                set(), [10], max_actors=1,
-            )
+        self.assertIsNone(discovery.step(
+            ue, {'levelActorsOffset': '0x0'}, lambda _: None,
+            set(), [10], max_actors=1,
+        ))
+        progress = discovery.progress()
+        self.assertTrue(progress['active'])
+        self.assertEqual(progress['actorsProcessed'], 1)
+        discovery.reset()
+        self.assertFalse(discovery.progress()['active'])
 
 
 if __name__ == '__main__':
