@@ -73,3 +73,15 @@ python3 -m unittest discover -s tests
 ```
 
 测试使用合成数据检查身份替换、边界值、快照失效和 API 过滤；真实内存读取结果另存为部署验证记录。
+
+## 增量采样与结构调整
+
+当前 Python 版本支持分批 Actor 发现、独立点位字段刷新、采样阶段耗时统计和有限时长的降级缓存。结构、已实现内容、后续焦点调度和数据协议的边界，请参见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+离线单元测试（不连接运行中的 Squad 服务器）：
+
+```bash
+cd support/mem-bridge
+python3 -m unittest discover -s tests -v
+```
+
