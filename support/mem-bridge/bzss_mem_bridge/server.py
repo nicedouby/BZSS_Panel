@@ -17,6 +17,7 @@ class Sampler:
         self.target=target;self.reader=Reader(target,profile);self.interval=interval;self.max_age=max_age
         self.lock=threading.Lock();self.stop_event=threading.Event();self.data=None;self.published=0
         self.last_success=None;self.last_state=None
+        self.last_good=None;self.last_good_at=0.0
 
     def start(self):
         self.thread=threading.Thread(target=self.run,name='read-'+self.target['id'],daemon=True);self.thread.start()
@@ -26,29 +27,72 @@ class Sampler:
             'observedAt':time.time(),'epoch':None,'map':None,'players':[],'mapPoints':[],
             'health':{'status':'unavailable','code':code,'message':message,'lastSuccessAt':self.last_success}}
 
+    INVALIDATING_ERRORS={
+        'build_mismatch','elf_mismatch','layout_guard_mismatch',
+        'process_not_unique','process_changed','permission_denied',
+        'world_changed','world_unavailable','object_table_unavailable',
+    }
+
+    def sample_once(self):
+        """One complete sampling transaction, separated from the timer loop."""
+        try:
+            value=self.reader.snapshot();state='ok'
+        except BridgeError as exc:
+            value=self.unavailable(exc.code,str(exc));state=exc.code
+        except (OSError,ValueError,struct.error):
+            value=self.unavailable('read_unavailable','Game data changed or became unavailable.')
+            state='read_unavailable'
+        except Exception:
+            value=self.unavailable('reader_error','Reader could not produce a complete snapshot.')
+            state='reader_error'
+
+        now=time.monotonic()
+        with self.lock:
+            if state=='ok':
+                self.last_success=value['observedAt']
+                self.last_good=value
+                self.last_good_at=now
+            elif state in self.INVALIDATING_ERRORS:
+                self.last_good=None
+                self.last_good_at=0.0
+            elif self.last_good is not None:
+                age=now-self.last_good_at
+                if age<=self.max_age:
+                    value={**self.last_good,'health':{
+                        **self.last_good['health'],'status':'degraded',
+                        'code':state,'message':value['health'].get('message'),
+                        'lastSuccessAt':self.last_success,
+                        'staleAgeSeconds':round(age,3),
+                    }}
+
+            self.data=value
+            self.published=now
+        return state
+
     def run(self):
         while not self.stop_event.is_set():
-            began=time.monotonic();delay=self.interval
-            try:
-                value=self.reader.snapshot();self.last_success=value['observedAt'];state='ok'
-            except BridgeError as exc:
-                value=self.unavailable(exc.code,str(exc));state=exc.code
-                if exc.code in ('build_mismatch','process_not_unique','permission_denied'):delay=max(5,self.interval)
-            except (OSError,ValueError,struct.error):
-                value=self.unavailable('read_unavailable','Game data changed or became unavailable.');state='read_unavailable'
-            except Exception:
-                value=self.unavailable('reader_error','Reader could not produce a complete snapshot.');state='reader_error'
-            with self.lock:self.data=value;self.published=time.monotonic()
+            began=time.monotonic()
+            state=self.sample_once()
             if state!=self.last_state:
                 print(json.dumps({'module':'BZSS-MEM-BRIDGE','target':self.target['id'],'status':state}),flush=True)
                 self.last_state=state
-            self.stop_event.wait(max(.001,delay-(time.monotonic()-began)))
+
+            delay=self.interval
+            if state in ('build_mismatch','process_not_unique','permission_denied'):
+                delay=max(5,delay)
+            # Always yield after an over-budget sample; never spin continuously
+            # when a single snapshot exceeds the requested interval.
+            minimum_rest=max(.02,min(.1,delay*.1))
+            self.stop_event.wait(max(minimum_rest,delay-(time.monotonic()-began)))
 
     def latest(self):
         with self.lock:
             data=self.data;age=time.monotonic()-self.published
+            last_good_age=time.monotonic()-self.last_good_at
         if data is None:return self.unavailable('warming_up','Initial memory read is in progress.')
         if age>self.max_age:return self.unavailable('snapshot_stale','Latest sample exceeded the freshness limit.')
+        if data['health']['status']=='degraded' and last_good_age>self.max_age:
+            return self.unavailable('snapshot_stale','Last successful sample exceeded the freshness limit.')
         return data
 
 
@@ -173,7 +217,7 @@ def serve(config,profiles):
             target=query.get('target',[config.get('defaultTarget')])[0]
             if target not in samplers:return self.send_json(404,{'error':'unknown_target'})
             data=samplers[target].latest()
-            return self.send_json(200 if data['health']['status']=='ok' else 503,
+            return self.send_json(200 if data['health']['status'] in ('ok','degraded') else 503,
                 select_payload(data,url.path,query.get('kind',[None])[0]))
         def do_POST(self):self.send_json(405,{'error':'read_only','message':'Only GET endpoints and local sampler settings are available.'})
         def do_PATCH(self):

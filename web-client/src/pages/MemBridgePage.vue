@@ -417,8 +417,16 @@ const vehiclesByOccupantId = computed(() => {
 const positionedPlayersOnMap = computed<BridgeMapPlayer[]>(() => positionedPlayers.value
   .filter((player) => player.position && inMapBounds(player.position))
   .map((player) => ({ ...player, ...mapPercent(player.position!) })));
-const statusClass = computed(() => errorText.value ? "is-error" : snapshot.value?.health?.status === "ok" ? "is-ready" : "is-waiting");
-const statusLabel = computed(() => errorText.value ? "Bridge 不可用" : snapshot.value?.health?.status === "ok" ? "Bridge 在线 · 只读" : "等待 Bridge 数据");
+const statusClass = computed(() => {
+  if (errorText.value) return "is-error";
+  if (snapshot.value?.health?.status === "degraded") return "is-degraded";
+  return snapshot.value?.health?.status === "ok" ? "is-ready" : "is-waiting";
+});
+const statusLabel = computed(() => {
+  if (errorText.value) return "Bridge 不可用";
+  if (snapshot.value?.health?.status === "degraded") return "Bridge 采样异常 · 显示最近有效数据";
+  return snapshot.value?.health?.status === "ok" ? "Bridge 在线 · 只读" : "等待 Bridge 数据";
+});
 
 function inMapBounds(position: Vec3) {
   const bounds = mapConfig.value?.bounds;
@@ -686,7 +694,7 @@ onBeforeUnmount(() => {
 .bridge-settings-actions .is-ok{color:#6ee7b7;font-size:11px}.bridge-settings-actions .is-error{color:#fda4af;font-size:11px}
 .bridge-settings-note{margin:0;padding:0 15px 12px;color:#72869d;font-size:10px;line-height:1.6}
 .bridge-status-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;max-width:1680px;margin:0 auto 14px;color:#91a3b8;font-size:11px}
-.bridge-status{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid #263449;border-radius:99px;background:#101827;color:#cbd5e1}.bridge-status i{width:7px;height:7px;border-radius:50%;background:#94a3b8}.bridge-status.is-ready i{background:#34d399;box-shadow:0 0 8px #34d399}.bridge-status.is-error i{background:#fb7185}.bridge-error{color:#fda4af}
+.bridge-status{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid #263449;border-radius:99px;background:#101827;color:#cbd5e1}.bridge-status i{width:7px;height:7px;border-radius:50%;background:#94a3b8}.bridge-status.is-ready i{background:#34d399;box-shadow:0 0 8px #34d399}.bridge-status.is-error i{background:#fb7185}.bridge-status.is-degraded i{background:#fbbf24;box-shadow:0 0 8px #fbbf24}.bridge-error{color:#fda4af}
 .bridge-map-card,.bridge-data-card{max-width:1680px;margin:0 auto 14px;border:1px solid #1d2a3a;border-radius:12px;background:linear-gradient(150deg,rgba(16,26,41,.97),rgba(10,17,28,.97));box-shadow:0 10px 30px #0002}
 .bridge-map-heading,.bridge-card-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:13px 15px;border-bottom:1px solid #1c2939}.bridge-map-heading h2,.bridge-card-heading h2{margin:0 0 3px;font-size:14px}.bridge-map-controls{align-items:center;color:#b8c6d7;font-size:11px}.bridge-map-controls label{display:flex;align-items:center;gap:5px}.bridge-map-controls input{accent-color:#22d3ee}
 .bridge-map-stage{position:relative;width:min(100%,780px);aspect-ratio:1;margin:14px auto;overflow:hidden;border:1px solid #334155;border-radius:8px;background:#070d16;isolation:isolate}
